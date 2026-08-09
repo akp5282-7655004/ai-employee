@@ -1,0 +1,20 @@
+{
+  "name": "ai-employee",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A horizontal AI marketing employee sold through vertical doors — a shared engine plus category-specific command packs. Working name; see docs/VISION.md.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5"
+  }
+}
