@@ -101,13 +101,22 @@ stubbed with a clear TODO — the action-run docs weren't reachable from the bui
 environment, so it's left explicit rather than shipped half-known; the mock
 implements it for now.
 
+## Web preview
+
+[`web/index.html`](web/index.html) is a **self-contained web chat surface** — open
+it in a browser (or serve the folder) and talk to the employee. It runs a
+browser port of the same mock engine (packs + planner + interpreter + connector),
+so it needs no server and no keys: chat → plan card → **Approve & launch** →
+channels run, and any unconnected app comes back with a Connect button.
+
 ## What's next
 
-The engine, connector, and agent loop all exist and run offline. The remaining
-big pieces (VISION §8, §11):
+The engine, connector, agent loop, and a web surface all exist and run offline.
+The remaining pieces to make it *live* (VISION §8, §11):
 
-- **A surface** — a web or Slack front end over the agent loop, so a real person
-  can chat with it (the loop is already surface-agnostic).
+- **Wire the surface to the real backend** — the page currently runs the mock
+  engine in-browser; point it at the TypeScript engine over HTTP for one source
+  of truth.
 - **The LLM interpreter** — swap `MockInterpreter` for a Claude-backed one (needs
   an `ANTHROPIC_API_KEY`); the loop, planner, and connector stay unchanged.
 - **Live Pipedream `runAction`** — fill in the one stubbed method once its docs

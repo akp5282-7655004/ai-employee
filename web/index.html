@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>the·employee — live preview</title>
+</head>
+<body>
+<style>
+  :root{
+    --bg:#eef1f4; --surface:#ffffff; --surface-2:#f5f8fa; --ink:#14202b; --muted:#5c6b78;
+    --line:#dbe2e8; --line-soft:#e7ecf1;
+    --brand:#0f8b8d; --brand-ink:#0a6d6f; --brand-tint:rgba(15,139,141,.10);
+    --good:#1f9d61; --good-tint:rgba(31,157,97,.12);
+    --warn:#b9760a; --warn-tint:rgba(185,118,10,.12);
+    --user-bubble:#0f8b8d; --user-ink:#ffffff;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --shadow:0 1px 2px rgba(20,32,43,.06),0 8px 24px rgba(20,32,43,.06);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#0b131a; --surface:#131e27; --surface-2:#0f1922; --ink:#e6edf2; --muted:#8ea0ad;
+      --line:#243441; --line-soft:#1c2a35;
+      --brand:#3bb7b8; --brand-ink:#63cccd; --brand-tint:rgba(59,183,184,.15);
+      --good:#3ecb84; --good-tint:rgba(62,203,132,.16);
+      --warn:#e0a53a; --warn-tint:rgba(224,165,58,.16);
+      --user-bubble:#0f7f81; --user-ink:#f2fbfb;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b131a; --surface:#131e27; --surface-2:#0f1922; --ink:#e6edf2; --muted:#8ea0ad;
+    --line:#243441; --line-soft:#1c2a35;
+    --brand:#3bb7b8; --brand-ink:#63cccd; --brand-tint:rgba(59,183,184,.15);
+    --good:#3ecb84; --good-tint:rgba(62,203,132,.16);
+    --warn:#e0a53a; --warn-tint:rgba(224,165,58,.16);
+    --user-bubble:#0f7f81; --user-ink:#f2fbfb;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;
+    -webkit-font-smoothing:antialiased;}
+  .app{max-width:780px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;
+    background:var(--bg);}
+
+  /* top bar */
+  .bar{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);
+    background:var(--surface);}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-weight:600;letter-spacing:-.01em;}
+  .dot{width:22px;height:22px;border-radius:6px;background:var(--brand);display:grid;place-items:center;
+    color:#fff;font-family:var(--mono);font-size:13px;font-weight:700;}
+  .brand b{font-weight:600;}
+  .brand span{color:var(--muted);}
+  .bar .spacer{flex:1;}
+  .chip{font-family:var(--mono);font-size:11px;letter-spacing:.02em;color:var(--muted);
+    border:1px solid var(--line);border-radius:999px;padding:4px 10px;white-space:nowrap;
+    display:flex;align-items:center;gap:6px;}
+  .chip .live{width:6px;height:6px;border-radius:50%;background:var(--good);}
+  .icon-btn{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:8px;
+    width:34px;height:34px;display:grid;place-items:center;cursor:pointer;font-size:15px;}
+  .icon-btn:hover{color:var(--ink);border-color:var(--brand);}
+  .icon-btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px;}
+
+  /* chat */
+  .chat{flex:1;overflow-y:auto;padding:22px 18px;display:flex;flex-direction:column;gap:16px;}
+  .row{display:flex;gap:10px;align-items:flex-end;max-width:100%;}
+  .row.user{flex-direction:row-reverse;}
+  .av{width:26px;height:26px;border-radius:7px;flex:none;display:grid;place-items:center;
+    font-family:var(--mono);font-size:12px;font-weight:700;}
+  .av.emp{background:var(--brand);color:#fff;}
+  .av.you{background:var(--surface-2);color:var(--muted);border:1px solid var(--line);}
+  .bubble{padding:11px 14px;border-radius:14px;max-width:min(560px,82%);white-space:pre-wrap;
+    word-wrap:break-word;}
+  .user .bubble{background:var(--user-bubble);color:var(--user-ink);border-bottom-right-radius:5px;}
+  .emp .bubble{background:var(--surface);border:1px solid var(--line);border-bottom-left-radius:5px;
+    box-shadow:var(--shadow);}
+
+  /* plan card */
+  .card{margin-top:10px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface-2);}
+  .card h4{margin:0;padding:11px 14px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line-soft);
+    display:flex;justify-content:space-between;}
+  .allocs{padding:6px 14px 10px;display:flex;flex-direction:column;gap:9px;}
+  .alloc{display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center;padding-top:8px;}
+  .alloc .name{font-size:14px;}
+  .alloc .amt{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink);}
+  .alloc .amt.free{color:var(--muted);}
+  .track{grid-column:1 / -1;height:6px;border-radius:4px;background:var(--line-soft);overflow:hidden;margin-top:3px;}
+  .fill{height:100%;background:var(--brand);border-radius:4px;}
+  .offers{padding:0 14px 12px;display:flex;flex-wrap:wrap;gap:6px;}
+  .offer{font-size:12px;color:var(--brand-ink);background:var(--brand-tint);border:1px solid transparent;
+    border-radius:999px;padding:4px 10px;}
+  .card .foot{padding:12px 14px;border-top:1px solid var(--line-soft);display:flex;gap:10px;align-items:center;
+    flex-wrap:wrap;}
+  .approve{font-family:var(--sans);font-weight:600;font-size:14px;color:#fff;background:var(--good);
+    border:none;border-radius:9px;padding:9px 16px;cursor:pointer;}
+  .approve:hover{filter:brightness(1.05);}
+  .approve:disabled{opacity:.5;cursor:default;}
+  .approve:focus-visible{outline:2px solid var(--good);outline-offset:2px;}
+  .card .note{font-size:12.5px;color:var(--muted);}
+
+  /* result rows */
+  .result{margin-top:10px;display:flex;flex-direction:column;gap:7px;}
+  .res-row{display:flex;align-items:center;gap:9px;font-size:13.5px;}
+  .badge{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.04em;padding:3px 7px;
+    border-radius:6px;flex:none;}
+  .badge.ok{background:var(--good-tint);color:var(--good);}
+  .badge.hold{background:var(--warn-tint);color:var(--warn);}
+  .connect{margin-top:4px;align-self:flex-start;font-family:var(--sans);font-weight:600;font-size:13px;
+    color:var(--brand-ink);background:var(--brand-tint);border:1px solid transparent;border-radius:8px;
+    padding:8px 13px;cursor:pointer;}
+  .connect:hover{border-color:var(--brand);}
+  .connect:focus-visible{outline:2px solid var(--brand);outline-offset:2px;}
+
+  /* composer */
+  .composer{border-top:1px solid var(--line);background:var(--surface);padding:12px 18px 16px;}
+  .quick{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;}
+  .quick button{flex:none;font-family:var(--mono);font-size:11.5px;color:var(--muted);background:var(--surface-2);
+    border:1px solid var(--line);border-radius:999px;padding:6px 11px;cursor:pointer;white-space:nowrap;}
+  .quick button:hover{color:var(--ink);border-color:var(--brand);}
+  .field{display:flex;gap:10px;align-items:flex-end;}
+  textarea{flex:1;resize:none;font-family:var(--sans);font-size:15px;color:var(--ink);background:var(--surface-2);
+    border:1px solid var(--line);border-radius:11px;padding:11px 13px;line-height:1.4;max-height:120px;}
+  textarea:focus{outline:none;border-color:var(--brand);background:var(--surface);}
+  .send{flex:none;width:44px;height:44px;border-radius:11px;border:none;background:var(--brand);color:#fff;
+    font-size:17px;cursor:pointer;display:grid;place-items:center;}
+  .send:hover{background:var(--brand-ink);}
+  .send:focus-visible{outline:2px solid var(--brand);outline-offset:2px;}
+  .hint{font-size:11px;color:var(--muted);margin-top:8px;font-family:var(--mono);}
+  @media (max-width:520px){ .bubble{max-width:86%;} .chip.wide{display:none;} }
+</style>
+
+<div class="app">
+  <header class="bar">
+    <div class="brand"><span class="dot">e</span><b>the·employee</b><span>/ marketing</span></div>
+    <div class="spacer"></div>
+    <div class="chip wide" id="conns"><span class="live"></span><span id="conns-text">—</span></div>
+    <button class="icon-btn" id="theme" title="Toggle theme" aria-label="Toggle theme">◑</button>
+  </header>
+
+  <main class="chat" id="chat" aria-live="polite"></main>
+
+  <div class="composer">
+    <div class="quick" id="quick"></div>
+    <div class="field">
+      <textarea id="input" rows="1" placeholder="Tell the employee about the business…"></textarea>
+      <button class="send" id="send" aria-label="Send">↑</button>
+    </div>
+    <div class="hint">Runs entirely in your browser — mock interpreter + mock connector, no keys. Same engine as <b>npm run demo:agent</b>.</div>
+  </div>
+</div>
+
+<script>
+// Browser engine — a faithful port of the TS mock engine (packs + planner +
+// interpreter + connector + loop). No imports, so it runs in node (for testing)
+// and inline in the artifact. Keep logic identical to src/*.
+
+const PACKS = {
+  home_services: {
+    id: 'home_services',
+    label: 'Home Services',
+    categories: {
+      plumbing: 0.9, hvac: 0.85, water_damage: 0.95, electrical: 0.8, garage_door: 0.7,
+      roofing: 0.55, pest_control: 0.6, landscaping: 0.4, remodeling: 0.3, other: 0.6,
+    },
+    baseUrgency: 0.6,
+    nearMeDominant: true,
+    budgetBands: { growth: 1500, scale: 4000 },
+    bandWeights: {
+      starter: { lsa: 0.8, search: 0.2, social: 0.0 },
+      growth: { lsa: 0.55, search: 0.3, social: 0.15 },
+      scale: { lsa: 0.4, search: 0.35, social: 0.25 },
+    },
+    offers: [
+      { headline: '$49 drain clearing, same-day', category: 'plumbing' },
+      { headline: 'Same-day diagnostic visit, waived with repair' },
+      { headline: '$79 AC tune-up before summer', category: 'hvac' },
+      { headline: 'Free roof inspection + storm-damage report', category: 'roofing' },
+    ],
+  },
+  dental: {
+    id: 'dental',
+    label: 'Dental',
+    categories: { emergency_dental: 0.85, general: 0.45, cosmetic: 0.35, orthodontics: 0.3, implants: 0.3, other: 0.4 },
+    baseUrgency: 0.45,
+    nearMeDominant: false,
+    budgetBands: { growth: 3000, scale: 8000 },
+    bandWeights: {
+      starter: { lsa: 0.3, search: 0.5, social: 0.2 },
+      growth: { lsa: 0.2, search: 0.45, social: 0.35 },
+      scale: { lsa: 0.15, search: 0.45, social: 0.4 },
+    },
+    offers: [
+      { headline: '$99 new-patient exam, cleaning & X-rays' },
+      { headline: 'Free whitening with new-patient exam', category: 'cosmetic' },
+      { headline: 'Free Invisalign consult + scan', category: 'orthodontics' },
+      { headline: 'Complimentary implant consultation & 3D scan', category: 'implants' },
+    ],
+  },
+};
+
+const PAID = ['lsa', 'search', 'social'];
+const CHANNEL_LABEL = { lsa: 'Local Services Ads', managed_profile: 'Managed Business Profile', search: 'Search', social: 'Social (Meta/Instagram)' };
+const CHANNEL_APP = {
+  managed_profile: { app: 'google_my_business', actionId: 'google_my_business-optimize-profile' },
+  lsa: { app: 'google_lsa', actionId: 'google_lsa-create-campaign' },
+  search: { app: 'google_ads', actionId: 'google_ads-create-campaign' },
+  social: { app: 'facebook_ads', actionId: 'facebook_ads-create-campaign' },
+};
+const DEFAULT_SERVICES = {
+  plumbing: ['drain cleaning', 'water heater', 'sewer line', 'leak repair'],
+  hvac: ['ac repair', 'furnace repair', 'ac install', 'tune-up'],
+  electrical: ['panel upgrade', 'wiring', 'ev charger', 'lighting'],
+  roofing: ['roof repair', 'roof replacement', 'storm damage', 'inspection'],
+  general: ['cleanings', 'fillings', 'crowns', 'exams'],
+  cosmetic: ['veneers', 'whitening', 'bonding'],
+  orthodontics: ['braces', 'invisalign', 'retainers'],
+  implants: ['implants', 'all-on-4', 'bone grafting'],
+};
+
+function getPack(id) { return PACKS[id] || PACKS.home_services; }
+function budgetBand(pack, b) { return b < pack.budgetBands.growth ? 'starter' : b < pack.budgetBands.scale ? 'growth' : 'scale'; }
+function resolveUrgency(pack, cat) { return pack.categories[cat] != null ? pack.categories[cat] : pack.baseUrgency; }
+
+function channelWeights(pack, req) {
+  const band = budgetBand(pack, req.monthlyBudget);
+  const base = Object.assign({}, pack.bandWeights[band]);
+  const urgency = resolveUrgency(pack, req.category);
+  const boost = (urgency - 0.5) * 0.4;
+  base.lsa += boost * 0.6; base.search += boost * 0.4; base.social -= boost;
+  if (req.goal === 'awareness') { base.social += 0.15; base.lsa -= 0.1; base.search -= 0.05; }
+  else if (req.goal === 'higher_ticket') { base.search += 0.1; base.social += 0.05; base.lsa -= 0.15; }
+  else if (req.goal === 'fill_schedule' || req.goal === 'more_calls') { base.lsa += 0.1; base.social -= 0.1; }
+  if (req.emergency) { base.lsa += 0.05; base.search += 0.05; base.social -= 0.1; }
+  for (const c of PAID) base[c] = Math.max(0, base[c]);
+  const total = PAID.reduce((s, c) => s + base[c], 0) || 1;
+  for (const c of PAID) base[c] = base[c] / total;
+  return base;
+}
+
+function suggestOffers(pack, cat) {
+  const scoped = pack.offers.filter((o) => o.category === cat);
+  const general = pack.offers.filter((o) => o.category === undefined);
+  return scoped.concat(general).slice(0, 3);
+}
+
+function featuredServices(intake) {
+  const services = intake.services || DEFAULT_SERVICES[intake.category] || [intake.category];
+  const more = intake.wantMoreOf || [];
+  const rest = services.filter((s) => !more.includes(s));
+  return more.concat(rest);
+}
+
+function planCampaign(intake) {
+  const pack = getPack(intake.vertical);
+  const weights = channelWeights(pack, intake);
+  const band = budgetBand(pack, intake.monthlyBudget);
+  const featured = featuredServices(intake);
+  const allocations = [{
+    channel: 'managed_profile', label: CHANNEL_LABEL.managed_profile, monthlyBudget: 0, share: 0,
+    targets: featured.slice(0, 5),
+  }];
+  const paid = PAID.filter((c) => weights[c] > 0.001).sort((a, b) => weights[b] - weights[a]);
+  for (const c of paid) {
+    allocations.push({
+      channel: c, label: CHANNEL_LABEL[c], monthlyBudget: Math.round(intake.monthlyBudget * weights[c]),
+      share: weights[c], targets: c === 'social' ? featured.slice(0, 4) : featured.slice(0, 3),
+    });
+  }
+  const paidRows = allocations.filter((a) => a.monthlyBudget > 0);
+  const lead = paidRows[0] ? paidRows[0].label : 'Search';
+  const top = featured[0];
+  const split = paidRows.map((a) => `${a.label} ${Math.round(a.share * 100)}% (${a.monthlyBudget})`).join(', ');
+  const summary = `On a ${intake.monthlyBudget}/mo (${band}) budget for a ${intake.category} business, lead with ${lead} and a fully-managed business profile. Featuring ${top} first. Split: ${split}. Nothing publishes without your approval.`;
+  return { businessName: intake.businessName, vertical: pack.id, category: intake.category, monthlyBudget: intake.monthlyBudget, band, allocations, featuredServices: featured, suggestedOffers: suggestOffers(pack, intake.category), summary };
+}
+
+function proposeActions(plan) {
+  const out = [];
+  for (const a of plan.allocations) {
+    const map = CHANNEL_APP[a.channel];
+    if (!map) continue;
+    out.push({ actionId: map.actionId, app: map.app, channel: a.channel, monthlyBudget: a.monthlyBudget,
+      label: `${a.label}${a.monthlyBudget > 0 ? ` (${a.monthlyBudget}/mo)` : ''}` });
+  }
+  return out;
+}
+
+// ── interpreter ──
+const CATEGORY_KEYWORDS = [
+  [/\b(invisalign|braces|orthodont)/i, ['dental', 'orthodontics']],
+  [/\bimplant/i, ['dental', 'implants']],
+  [/\b(veneer|whiten|cosmetic dent)/i, ['dental', 'cosmetic']],
+  [/\bemergency (dentist|dental)/i, ['dental', 'emergency_dental']],
+  [/\b(dentist|dental|teeth|tooth)/i, ['dental', 'general']],
+  [/\b(water damage|restoration|flood)/i, ['home_services', 'water_damage']],
+  [/\b(plumb|drain|sewer|water heater)/i, ['home_services', 'plumbing']],
+  [/\b(hvac|air.?condition|\bac\b|furnace|heating|cooling)/i, ['home_services', 'hvac']],
+  [/\b(electric|panel upgrade|wiring)/i, ['home_services', 'electrical']],
+  [/\broof/i, ['home_services', 'roofing']],
+];
+
+function parseBudget(low) {
+  const m = low.match(/\$\s?(\d[\d,]*(?:\.\d+)?)\s*(k)?/i) ||
+    low.match(/(\d[\d,]*(?:\.\d+)?)\s*(k)?\s*(?:\/\s*mo|per month|a month|monthly|month|budget)/i);
+  if (!m) return undefined;
+  let n = parseFloat(m[1].replace(/,/g, ''));
+  if (m[2]) n *= 1000;
+  return Math.round(n);
+}
+function parseCities(t) {
+  const m = t.match(/\bin ([A-Z][a-zA-Z.-]+(?:\s+[A-Z][a-zA-Z.-]+)*(?:,\s*[A-Z][a-zA-Z.-]+)*)/);
+  if (!m) return [];
+  return m[1].split(/,|\band\b/).map((s) => s.trim()).filter(Boolean).slice(0, 3);
+}
+function interpret(message) {
+  const t = message.trim(); const low = t.toLowerCase();
+  if (/^(y|yes|yep|approve|approved|launch it|do it|go ahead|ship it|confirm)\b/.test(low)) return { intent: 'approve', fields: {} };
+  if (/\bconnect\b/.test(low)) return { intent: 'connect', fields: {} };
+  const fields = {};
+  for (const [re, cat] of CATEGORY_KEYWORDS) { if (re.test(low)) { fields.vertical = cat[0]; fields.category = cat[1]; break; } }
+  const b = parseBudget(low); if (b !== undefined) fields.monthlyBudget = b;
+  if (/higher.?ticket|bigger job|high.?value|expensive job|more revenue/.test(low)) fields.goal = 'higher_ticket';
+  else if (/\b(brand|awareness)\b/.test(low)) fields.goal = 'awareness';
+  else if (/fill (the )?(schedule|calendar)|keep .*busy|book(ings)?\b/.test(low)) fields.goal = 'fill_schedule';
+  else if (/more (call|lead|job|customer|client)|phone .*ring/.test(low)) fields.goal = 'more_calls';
+  if (/24\s*\/?\s*7|emergency|same.?day|urgent/.test(low)) fields.emergency = true;
+  const cities = parseCities(t); if (cities.length) fields.cities = cities;
+  return { intent: Object.keys(fields).length ? 'plan' : 'unknown', fields };
+}
+
+// ── mock connector ──
+function makeConnector(seed) {
+  const accounts = {};
+  for (const u in (seed || {})) accounts[u] = seed[u].slice();
+  let seq = 0;
+  return {
+    createConnectToken(user) { const token = `mocktok_${user}_${++seq}`; return { token, connectUrl: `https://connect.example/connect?token=${token}` }; },
+    connect(user, app) { (accounts[user] = accounts[user] || []); if (!accounts[user].includes(app)) accounts[user].push(app); },
+    listAccounts(user) { return accounts[user] || []; },
+    runAction(user, actionId) {
+      const app = actionId.split('-')[0];
+      const connected = (accounts[user] || []).includes(app);
+      return { ok: connected, app, actionId };
+    },
+  };
+}
+
+// ── loop ──
+function missingFields(i) { const out = []; if (!i.category) out.push('category'); if (i.monthlyBudget === undefined) out.push('monthlyBudget'); return out; }
+function buildIntake(i) {
+  return { businessName: i.businessName || 'Your business', vertical: i.vertical || 'home_services', category: i.category,
+    services: i.services || DEFAULT_SERVICES[i.category] || [i.category], cities: i.cities || [],
+    monthlyBudget: i.monthlyBudget, goal: i.goal || 'more_calls', emergency: i.emergency || false };
+}
+
+function makeAgent(connector, user) {
+  const session = { user, intake: {}, pending: null };
+  return {
+    session,
+    handle(message) {
+      const interp = interpret(message);
+      if (interp.intent === 'approve') {
+        if (!session.pending) return { text: "There's nothing waiting for approval yet. Tell me about the business first." };
+        const launched = [], blocked = [];
+        for (const a of session.pending.actions) { const r = connector.runAction(user, a.actionId); (r.ok ? launched : blocked).push(a); }
+        let connectUrl = null; let text = launched.length ? `Launched: ${launched.map((a) => a.label).join(', ')}.` : 'Nothing launched yet.';
+        if (blocked.length) { const apps = [...new Set(blocked.map((b) => b.app))]; connectUrl = connector.createConnectToken(user).connectUrl;
+          text += `\nStill need you to connect ${apps.join(', ')} before I can run ${blocked.map((b) => b.label).join(', ')}.`; }
+        session.pending = null;
+        return { text, connectUrl, launched: launched.map((a) => a.label), blocked: blocked.map((a) => a.label) };
+      }
+      if (interp.intent === 'connect') { const u = connector.createConnectToken(user).connectUrl; return { text: 'To connect an app, open the link.', connectUrl: u }; }
+      Object.assign(session.intake, interp.fields);
+      if (interp.intent === 'unknown' && missingFields(session.intake).length) {
+        return { text: 'I\'m your marketing employee — tell me about the business and I\'ll build a plan. For example: "I run a plumbing shop in Chicago, $3k/month, I want more calls."' };
+      }
+      const missing = missingFields(session.intake);
+      if (missing.length) {
+        const bits = [];
+        if (missing.includes('category')) bits.push('what kind of business is it (e.g. plumbing, HVAC, dental)?');
+        if (missing.includes('monthlyBudget')) bits.push("what's your monthly ad budget?");
+        const ack = session.intake.category ? `Got it — ${session.intake.category}. ` : '';
+        return { text: `${ack}A couple things so I can build the plan: ${bits.join(' And ')}` };
+      }
+      const plan = planCampaign(buildIntake(session.intake));
+      const actions = proposeActions(plan);
+      session.pending = { plan, actions };
+      return { text: plan.summary, plan, actions };
+    },
+  };
+}
+
+
+
+// ── UI ──────────────────────────────────────────────────────────────────────
+const USER = 'preview-shop';
+const connector = makeConnector({ [USER]: ['google_ads', 'google_my_business'] });
+const agent = makeAgent(connector, USER);
+
+const chat = document.getElementById('chat');
+const input = document.getElementById('input');
+const APP_LABEL = { google_ads:'Google Ads', google_my_business:'Business Profile', google_lsa:'Local Services Ads', facebook_ads:'Meta Ads' };
+
+function refreshConns(){
+  const apps = connector.listAccounts(USER).map(a => APP_LABEL[a] || a);
+  document.getElementById('conns-text').textContent = apps.length ? apps.join(' · ') + ' connected' : 'no apps connected';
+}
+
+function el(tag, cls, text){ const e=document.createElement(tag); if(cls)e.className=cls; if(text!=null)e.textContent=text; return e; }
+
+function addRow(role){
+  const row = el('div','row '+(role==='user'?'user':'emp'));
+  const av = el('div','av '+(role==='user'?'you':'emp'), role==='user'?'you':'e');
+  const bubble = el('div','bubble');
+  row.append(av,bubble); chat.append(row);
+  chat.scrollTop = chat.scrollHeight;
+  return bubble;
+}
+
+function say(role, text){ const b=addRow(role); b.textContent=text; chat.scrollTop=chat.scrollHeight; return b; }
+
+function renderPlan(reply){
+  const b = addRow('emp');
+  b.append(el('div',null,reply.text));
+  const plan = reply.plan;
+  const card = el('div','card');
+  const h = el('h4'); h.append(el('span',null,'Proposed plan'), el('span',null,plan.band+' · $'+plan.monthlyBudget.toLocaleString()+'/mo')); card.append(h);
+  const allocs = el('div','allocs');
+  for(const a of plan.allocations){
+    const row = el('div','alloc');
+    row.append(el('div','name',a.label));
+    const amt = el('div','amt'+(a.monthlyBudget?'':' free'), a.monthlyBudget? '$'+a.monthlyBudget.toLocaleString()+'/mo' : 'managed · $0');
+    row.append(amt);
+    if(a.monthlyBudget>0){ const t=el('div','track'); const f=el('div','fill'); f.style.width=Math.round(a.share*100)+'%'; t.append(f); row.append(t); }
+    allocs.append(row);
+  }
+  card.append(allocs);
+  if(plan.suggestedOffers.length){ const o=el('div','offers'); for(const of of plan.suggestedOffers) o.append(el('span','offer',of.headline)); card.append(o); }
+  const foot = el('div','foot');
+  const btn = el('button','approve','Approve & launch');
+  const note = el('span','note','Nothing runs until you approve.');
+  btn.onclick = ()=>{ btn.disabled=true; note.textContent='Approved.'; send('approve', true); };
+  foot.append(btn, note); card.append(foot);
+  b.append(card);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function renderResult(reply){
+  const b = addRow('emp');
+  const res = el('div','result');
+  for(const l of reply.launched) { const r=el('div','res-row'); r.append(el('span','badge ok','LAUNCHED'), el('span',null,l)); res.append(r); }
+  for(const l of reply.blocked) { const r=el('div','res-row'); r.append(el('span','badge hold','NEEDS APP'), el('span',null,l)); res.append(r); }
+  b.append(el('div',null, reply.launched.length ? 'Done — here’s what went live:' : 'Here’s where things stand:'), res);
+  if(reply.blockedApps && reply.blockedApps.length){
+    const names = reply.blockedApps.map(a=>APP_LABEL[a]||a).join(', ');
+    const cbtn = el('button','connect','Connect '+names);
+    cbtn.onclick = ()=>{
+      cbtn.disabled = true;
+      for(const app of reply.blockedApps) connector.connect(USER, app);
+      refreshConns();
+      const relaunched = reply.blockedActions.map(a=>{ connector.runAction(USER,a.actionId); return a.label; });
+      say('emp', 'Connected '+names+'. Launched: '+relaunched.join(', ')+'. Your employee is now running the full plan.');
+    };
+    b.append(cbtn);
+  }
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function send(text, silent){
+  const msg = (text!=null?text:input.value).trim();
+  if(!msg) return;
+  if(!silent) say('user', msg);
+  input.value=''; autoResize();
+  const reply = agent.handle(msg);
+  // classify
+  if(reply.plan){ renderPlan(reply); }
+  else if(reply.launched!==undefined){
+    // annotate blocked apps/actions for the connect button
+    reply.blockedApps = [...new Set((agent.__lastBlocked||[]).map(a=>a.app))];
+    reply.blockedActions = agent.__lastBlocked||[];
+    renderResult(reply);
+  }
+  else { say('emp', reply.text); }
+}
+
+// capture blocked action objects from the agent for the connect button
+const _handle = agent.handle;
+agent.handle = function(m){
+  const before = agent.session.pending;
+  const r = _handle(m);
+  if(r.launched!==undefined && before){ agent.__lastBlocked = before.actions.filter(a=> !connector.listAccounts(USER).includes(a.app)); }
+  return r;
+};
+
+function autoResize(){ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,120)+'px'; }
+input.addEventListener('input', autoResize);
+input.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
+document.getElementById('send').onclick=()=>send();
+
+// quick starts
+const QUICK = [
+  ['Plumbing · Chicago · $3k', 'I run a plumbing shop in Chicago, 24/7 emergency service, $3k a month, I want more calls'],
+  ['Cosmetic dentist · $6k', 'cosmetic dentist in Austin, veneers and implants, $6k a month, higher ticket jobs'],
+  ['HVAC · $2k', 'hvac company, $2,000 a month, more calls'],
+  ['Roofing · $5k', 'roofing company in Dallas, $5k/month, higher ticket'],
+];
+const quick = document.getElementById('quick');
+for(const [label,msg] of QUICK){ const btn=el('button',null,label); btn.onclick=()=>send(msg); quick.append(btn); }
+
+// theme toggle (cycles through system default)
+document.getElementById('theme').onclick=()=>{
+  const cur = document.documentElement.getAttribute('data-theme');
+  document.documentElement.setAttribute('data-theme', cur==='dark'?'light':'dark');
+};
+
+// greeting
+refreshConns();
+say('emp', "Hi — I’m your marketing employee. Tell me about the business and I’ll build a campaign plan, then run it once you approve. Try a starter below, or just type.");
+</script>
+</body>
+</html>
