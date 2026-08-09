@@ -12,6 +12,11 @@ services:
     envVars:
       - key: NODE_VERSION
         value: '22'
+      # Real durability — accounts + customer profiles survive restarts/deploys.
+      # Paste a Postgres connection string (Supabase or Neon, both free). Without
+      # it the app falls back to in-memory storage, which resets on every restart.
+      - key: DATABASE_URL
+        sync: false
       # Optional — add later to switch on real language understanding:
       # - key: ANTHROPIC_API_KEY
       #   sync: false
