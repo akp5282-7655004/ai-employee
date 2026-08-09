@@ -70,12 +70,18 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   });
 
   // Mint a Pipedream connect link the customer opens to connect an app account.
-  app.post<{ Body: { sessionId?: string } }>('/api/connect-token', async (req, reply) => {
+  // Pipedream requires the target app in the Connect URL, so we append it.
+  app.post<{ Body: { sessionId?: string; app?: string } }>('/api/connect-token', async (req, reply) => {
     const sessionId = req.body?.sessionId;
+    const app = req.body?.app;
     if (!sessionId) return reply.code(400).send({ error: 'sessionId required' });
     try {
       const token = await connector.createConnectToken(sessionId);
-      return token;
+      let connectUrl = token.connectUrl;
+      if (app && connectUrl) {
+        connectUrl += (connectUrl.includes('?') ? '&' : '?') + 'app=' + encodeURIComponent(app);
+      }
+      return { ...token, connectUrl };
     } catch (err) {
       return reply.code(503).send({ error: String((err as Error).message) });
     }

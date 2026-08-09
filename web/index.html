@@ -695,10 +695,11 @@ const INTS=[
   {key:'servicetitan',icon:'🔧',bg:'#eef1f4',nm:'ServiceTitan ERP',ds:'Job Scheduling & Dispatch'},
   {key:'hubspot',icon:'🟠',bg:'#ffefe0',nm:'HubSpot Marketing',ds:'Enterprise CRM Sync'},
 ];
+const PD_SLUG = { google_ads:'google_ads', facebook_ads:'facebook', gohighlevel:'gohighlevel', servicetitan:'servicetitan', hubspot:'hubspot', _pd:'' };
 async function connectApp(appKey){
   if(!(CONN.pipedream && CONN.pipedream.configured)){ setPage('chat'); chat.innerHTML=''; say('emp',"Pipedream isn't set up yet. Add PIPEDREAM_PROJECT_ID / _CLIENT_ID / _CLIENT_SECRET and CONNECTOR=pipedream, then this opens a secure link to connect the app."); return; }
   try{
-    const r = await fetch('/api/connect-token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId})});
+    const r = await fetch('/api/connect-token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId, app: PD_SLUG[appKey]||appKey})});
     const t = await r.json().catch(()=>({}));
     if(!r.ok || !t.connectUrl){ setPage('chat'); chat.innerHTML=''; say('emp','⚠️ Couldn’t start the connection. '+(t.error||('HTTP '+r.status))+'  — check your Render Logs and tell me the error.'); return; }
     const w = window.open(t.connectUrl,'_blank','noopener');
