@@ -7,6 +7,7 @@ import { LlmInterpreter } from './agent/llm.js';
 import { getConnector, type Connector } from './connectors/index.js';
 import { loadConfig, pipedreamReady } from './config.js';
 import { getPack, listPacks, validateIntake } from './packs/index.js';
+import { fetchDemographics } from './research/census.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
 
 /**
@@ -108,6 +109,19 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       return { apps };
     } catch (err) {
       return { apps: [], error: String((err as Error).message) };
+    }
+  });
+
+  // Market research — real US Census demographics for a ZIP (VISION §5 / #11).
+  app.get<{ Querystring: { zip?: string } }>('/api/research', async (req, reply) => {
+    const zip = req.query?.zip;
+    if (!zip) return reply.code(400).send({ error: 'zip required' });
+    try {
+      const d = await fetchDemographics(zip);
+      if (!d) return reply.code(404).send({ error: 'No Census data for that ZIP — try a 5-digit US ZIP.' });
+      return d;
+    } catch (err) {
+      return reply.code(502).send({ error: String((err as Error).message) });
     }
   });
 

@@ -33,6 +33,7 @@ const CATEGORY_KEYWORDS: Array<[RegExp, { vertical: string; category: string }]>
   [/\b(plumb|drain|sewer|water heater)/i, { vertical: 'home_services', category: 'plumbing' }],
   [/\b(hvac|air.?condition|\bac\b|furnace|heating|cooling)/i, { vertical: 'home_services', category: 'hvac' }],
   [/\b(electric|panel upgrade|wiring)/i, { vertical: 'home_services', category: 'electrical' }],
+  [/\b(paint|painter)/i, { vertical: 'home_services', category: 'painting' }],
   [/\broof/i, { vertical: 'home_services', category: 'roofing' }],
   [/\bgarage door/i, { vertical: 'home_services', category: 'garage_door' }],
   [/\b(pest|extermin)/i, { vertical: 'home_services', category: 'pest_control' }],
@@ -44,7 +45,8 @@ export class MockInterpreter implements Interpreter {
   readonly name = 'mock';
 
   interpret(message: string, _session: Session): Interpretation {
-    const t = message.trim();
+    // Strip URLs so a pasted website doesn't drown out the real signal.
+    const t = message.replace(/https?:\/\/\S+/gi, ' ').trim();
     const low = t.toLowerCase();
 
     if (/^(y|yes|yep|approve|approved|launch it|do it|go ahead|ship it|confirm)\b/.test(low)) {

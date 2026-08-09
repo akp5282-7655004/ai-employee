@@ -21,6 +21,7 @@ export const homeServicesPack: CommandPack = {
     { id: 'roofing', label: 'Roofing', urgency: 0.55 },
     { id: 'pest_control', label: 'Pest Control', urgency: 0.6 },
     { id: 'landscaping', label: 'Landscaping', urgency: 0.4 },
+    { id: 'painting', label: 'Painting', urgency: 0.35 },
     { id: 'remodeling', label: 'Remodeling', urgency: 0.3 },
     { id: 'other', label: 'Other', urgency: 0.6 },
   ],

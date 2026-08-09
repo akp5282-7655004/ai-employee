@@ -23,6 +23,7 @@ const DEFAULT_SERVICES: Record<string, string[]> = {
   water_damage: ['water extraction', 'mold remediation', 'restoration'],
   pest_control: ['general pest', 'termite', 'rodent'],
   landscaping: ['lawn care', 'design', 'cleanup'],
+  painting: ['interior painting', 'exterior painting', 'cabinet refinishing'],
   remodeling: ['kitchen', 'bathroom', 'basement'],
   general: ['cleanings', 'fillings', 'crowns', 'exams'],
   cosmetic: ['veneers', 'whitening', 'bonding'],
@@ -62,13 +63,15 @@ export class Agent {
     // Merge anything we learned.
     Object.assign(s.intake, prune(interp.fields));
 
-    if (interp.intent === 'unknown' && !hasEnough(s.intake)) {
+    // Only give the generic intro when we truly have nothing yet. Once the user
+    // has told us anything, fall through and ask for the specific missing piece.
+    if (interp.intent === 'unknown' && Object.keys(prune(s.intake)).length === 0) {
       return {
         session: s,
         reply: {
           text:
-            "I'm your marketing employee — tell me about the business and I'll build a plan. " +
-            'For example: "I run a plumbing shop in Chicago, $3k/month, I want more calls."',
+            "I didn't quite catch that. Tell me the trade and budget and I'll build a plan — " +
+            'for example: "I run a painting company in Philadelphia, $2k/month, I want more calls."',
         },
       };
     }

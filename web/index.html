@@ -200,6 +200,7 @@
       <a data-page="agents"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/></svg> Agents &amp; Specialists</a>
       <a data-page="skills"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 2.2 5.6L20 9l-4.3 3.8L17 19l-5-3-5 3 1.3-6.2L4 9l5.8-.4Z"/></svg> Skills &amp; Playbooks</a>
       <a data-page="meters"><svg class="ico" viewBox="0 0 24 24"><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 12 15 9M4 12a8 8 0 0 1 16 0"/></svg> Meters &amp; Analytics</a>
+      <a data-page="research"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg> Research</a>
       <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
     </nav>
     <div class="glabel">PROJECTS</div>
@@ -269,6 +270,20 @@
       </div>
     </section>
 
+    <!-- RESEARCH -->
+    <section class="page" id="page-research">
+      <div class="mcard" style="max-width:1000px">
+        <h3>Customer &amp; Market Research</h3>
+        <p class="mdesc">Real US Census demographics for any ZIP — population, income, homeownership — so a plan fits the market.</p>
+        <div style="display:flex;gap:10px;max-width:420px;margin-bottom:6px">
+          <input class="f" id="r-zip" placeholder="Enter a 5-digit ZIP (e.g. 19104)" style="margin:0" inputmode="numeric">
+          <button class="go" id="r-go" style="flex:none">Research</button>
+        </div>
+        <div id="r-note" class="appsub" style="margin-top:8px">Powered by the US Census American Community Survey.</div>
+        <div id="r-results" style="margin-top:20px"></div>
+      </div>
+    </section>
+
     <!-- INTEGRATIONS -->
     <section class="page" id="page-int">
       <p class="mdesc" style="margin:-8px 0 16px">Connect the tools you use and let Miles run tasks across them — powered by Pipedream's 3,000+ apps.</p>
@@ -301,7 +316,7 @@ const PACKS = {
     label: 'Home Services',
     categories: {
       plumbing: 0.9, hvac: 0.85, water_damage: 0.95, electrical: 0.8, garage_door: 0.7,
-      roofing: 0.55, pest_control: 0.6, landscaping: 0.4, remodeling: 0.3, other: 0.6,
+      roofing: 0.55, pest_control: 0.6, landscaping: 0.4, painting: 0.35, remodeling: 0.3, other: 0.6,
     },
     baseUrgency: 0.6,
     nearMeDominant: true,
@@ -388,6 +403,7 @@ const DEFAULT_SERVICES = {
   hvac: ['ac repair', 'furnace repair', 'ac install', 'tune-up'],
   electrical: ['panel upgrade', 'wiring', 'ev charger', 'lighting'],
   roofing: ['roof repair', 'roof replacement', 'storm damage', 'inspection'],
+  painting: ['interior painting','exterior painting','cabinet refinishing'],
   general: ['cleanings', 'fillings', 'crowns', 'exams'],
   cosmetic: ['veneers', 'whitening', 'bonding'],
   orthodontics: ['braces', 'invisalign', 'retainers'],
@@ -487,6 +503,7 @@ const CATEGORY_KEYWORDS = [
   [/\bemergency (dentist|dental)/i, ['dental', 'emergency_dental']],
   [/\b(dentist|dental|teeth|tooth)/i, ['dental', 'general']],
   [/\b(solar|photovolt|battery storage|energy storage)/i, ['solar', 'residential']],
+  [/\b(paint|painter)/i, ['home_services', 'painting']],
   [/\b(roof|hail|storm damage|shingle)/i, ['roofing', 'storm_damage']],
   [/\b(water damage|restoration|flood)/i, ['home_services', 'water_damage']],
   [/\b(plumb|drain|sewer|water heater)/i, ['home_services', 'plumbing']],
@@ -509,7 +526,7 @@ function parseCities(t) {
   return m[1].split(/,|\band\b/).map((s) => s.trim()).filter(Boolean).slice(0, 3);
 }
 function interpret(message) {
-  const t = message.trim(); const low = t.toLowerCase();
+  const t = message.replace(/https?:\/\/\S+/gi,' ').trim(); const low = t.toLowerCase();
   if (/^(y|yes|yep|approve|approved|launch it|do it|go ahead|ship it|confirm)\b/.test(low)) return { intent: 'approve', fields: {} };
   if (/\bconnect\b/.test(low)) return { intent: 'connect', fields: {} };
   const fields = {};
@@ -638,13 +655,14 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters & Analytics',integrations:'Integrations',chat:'Ask Miles'};
+const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters & Analytics',research:'Research',integrations:'Integrations',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
   const homeIds=['dashboard','agents','skills'];
   $('#page-home').classList.toggle('on',homeIds.includes(id));
   $('#page-meters').classList.toggle('on',id==='meters');
+  $('#page-research').classList.toggle('on',id==='research');
   $('#page-int').classList.toggle('on',id==='integrations');
   $('#page-chat').classList.toggle('on',id==='chat');
   if(id==='skills'){ activeCat='Math Skills'; renderTabs(); renderCards(); }
@@ -694,6 +712,36 @@ async function runValidate(){
   box.textContent=`${icon} ${v.message}`;
 }
 $('#v-budget').addEventListener('input',runValidate); $('#v-leads').addEventListener('input',runValidate);
+
+// ═══ research (real US Census) ═══
+function statCard(lab,val){ const c=el('div','stat'); c.append(el('div','lab',lab), el('div','val',val)); return c; }
+function renderResearch(d){
+  const box=$('#r-results'); box.innerHTML='';
+  box.append(el('div','sect-label', (d.name||'').toUpperCase()));
+  const grid=el('div','stats'); grid.style.marginBottom='16px';
+  grid.append(
+    statCard('Population', (d.population||0).toLocaleString()),
+    statCard('Median household income', d.medianIncome? '$'+d.medianIncome.toLocaleString() : '—'),
+    statCard('Median home value', d.medianHomeValue? '$'+d.medianHomeValue.toLocaleString() : '—'),
+    statCard('Homeownership', d.homeownershipPct? d.homeownershipPct+'%' : '—')
+  );
+  box.append(grid);
+  const ins=el('div','verdict ok'); ins.textContent='💡 '+(d.insight||''); box.append(ins);
+}
+async function runResearch(){
+  const zip=(($('#r-zip').value)||'').replace(/\D/g,'').slice(0,5);
+  const box=$('#r-results'); box.innerHTML='';
+  if(zip.length!==5){ box.append(el('div','verdict tight','Enter a 5-digit US ZIP code.')); return; }
+  if(!REMOTE){ box.append(el('div','verdict tight','Live Census data loads on the deployed app (it needs the server).')); return; }
+  box.append(el('div','appsub','Looking up '+zip+'…'));
+  try{
+    const r=await fetch('/api/research?zip='+zip); const d=await r.json().catch(()=>({}));
+    if(!r.ok){ box.innerHTML=''; box.append(el('div','verdict tight', d.error||('HTTP '+r.status))); return; }
+    renderResearch(d);
+  }catch(e){ box.innerHTML=''; box.append(el('div','verdict tight','Error: '+e.message)); }
+}
+$('#r-go').onclick=runResearch;
+$('#r-zip').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); runResearch(); } });
 
 // ═══ integrations (honest, backend-driven) ═══
 let CONN = { pipedream:{configured:false}, connectedApps:[] };
