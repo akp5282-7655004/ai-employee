@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "demo": "tsx scripts/demo.ts",
     "demo:connect": "tsx scripts/demo-connect.ts",
     "demo:agent": "tsx scripts/demo-agent.ts",

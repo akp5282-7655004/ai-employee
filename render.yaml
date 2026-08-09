@@ -1,0 +1,17 @@
+# One-click deploy to Render (free). In Render: New + → Blueprint → connect this
+# repo → Apply. The app runs on the mock engine until you add keys, so it works
+# with zero configuration.
+services:
+  - type: web
+    name: miles
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: '22'
+      # Optional — add later to switch on real language understanding:
+      # - key: ANTHROPIC_API_KEY
+      #   sync: false
