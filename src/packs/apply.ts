@@ -86,6 +86,37 @@ export function suggestOffers(pack: CommandPack, category: string, limit = 4): O
   return [...scoped, ...general].slice(0, limit);
 }
 
+export interface IntakeValidation {
+  /** Implied cost per lead = budget ÷ target leads. */
+  cpl: number;
+  low: number;
+  median: number;
+  high: number;
+  status: 'ok' | 'tight' | 'unrealistic';
+  /** Budget that would hit the target at the market median CPL. */
+  recommendedBudget: number;
+  message: string;
+}
+
+/**
+ * The intake math validator (docs/VISION.md §5, feature #14). Checks a budget +
+ * lead-goal against the vertical's real cost-per-lead benchmark and pushes back on
+ * impossible asks — "1,000 leads at $100 isn't possible."
+ */
+export function validateIntake(pack: CommandPack, monthlyBudget: number, targetLeads: number): IntakeValidation {
+  const { low, median, high } = pack.economics.cpaBenchmark;
+  const cpl = targetLeads > 0 ? Math.round((monthlyBudget / targetLeads) * 100) / 100 : 0;
+  const recommendedBudget = Math.round(targetLeads * median);
+  const status: IntakeValidation['status'] = cpl >= median ? 'ok' : cpl >= low ? 'tight' : 'unrealistic';
+  const message =
+    status === 'ok'
+      ? `$${cpl}/lead is on-market for ${pack.label} (median ~$${median}). This plan is achievable.`
+      : status === 'tight'
+        ? `$${cpl}/lead is tight for ${pack.label} ($${low}–$${high} range) — possible, but expect a slower ramp.`
+        : `$${cpl}/lead is below the $${low}–$${high} range for ${pack.label}. For ${targetLeads} leads, budget ~$${recommendedBudget.toLocaleString()} (at the $${median} median).`;
+  return { cpl, low, median, high, status, recommendedBudget, message };
+}
+
 export interface ClaimsCheck {
   ok: boolean;
   violations: string[];

@@ -46,6 +46,8 @@ export interface CommandPack {
     bandWeights: Record<BudgetBand, Record<Channel, number>>;
     /** Typical average-ticket range ($) — feeds benchmarks and the trust meters (§5). */
     avgTicketRange: { low: number; high: number };
+    /** Cost-per-lead benchmark ($) for this vertical — powers the CPA meter + intake validator (§5). */
+    cpaBenchmark: { low: number; median: number; high: number };
   };
   /** Extra ad-claim rules on top of the universal checklist (HIPAA, board rules, …). */
   compliance: ComplianceProfile;

@@ -8,6 +8,7 @@ import {
   budgetBand,
   suggestOffers,
   checkClaims,
+  validateIntake,
 } from '../src/packs/index.js';
 
 describe('pack registry', () => {
@@ -26,6 +27,26 @@ describe('pack registry', () => {
         expect(w.managed_profile).toBe(0);
       }
       expect(pack.categories.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('intake math validator (feature #14)', () => {
+  it('flags an impossible ask and recommends the median-based budget', () => {
+    const v = validateIntake(getPack('solar'), 3500, 80); // $43.75/lead vs $110 median
+    expect(v.status).toBe('unrealistic');
+    expect(v.cpl).toBe(43.75);
+    expect(v.recommendedBudget).toBe(8800); // 80 × $110
+    expect(v.message).toMatch(/8,800/);
+  });
+  it('passes an on-market ask', () => {
+    const v = validateIntake(getPack('home_services'), 4200, 80); // $52.50/lead vs $42 median
+    expect(v.status).toBe('ok');
+  });
+  it('ships four verticals, each with a CPA benchmark', () => {
+    expect(listPacks().length).toBe(4);
+    for (const p of listPacks()) {
+      expect(p.economics.cpaBenchmark.low).toBeLessThan(p.economics.cpaBenchmark.high);
     }
   });
 });

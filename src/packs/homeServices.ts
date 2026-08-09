@@ -49,6 +49,7 @@ export const homeServicesPack: CommandPack = {
       scale: { lsa: 0.4, search: 0.35, social: 0.25, managed_profile: 0 },
     },
     avgTicketRange: { low: 150, high: 1200 },
+    cpaBenchmark: { low: 25, median: 42, high: 70 },
   },
   compliance: {
     // Home services adds nothing beyond the universal checklist; licensing/insurance

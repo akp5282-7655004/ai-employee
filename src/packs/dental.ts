@@ -50,6 +50,7 @@ export const dentalPack: CommandPack = {
       scale: { lsa: 0.15, search: 0.45, social: 0.4, managed_profile: 0 },
     },
     avgTicketRange: { low: 200, high: 6000 },
+    cpaBenchmark: { low: 45, median: 78, high: 130 },
   },
   compliance: {
     // Health-outcome claims a dental ad must not make.

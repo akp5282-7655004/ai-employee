@@ -5,6 +5,7 @@ import { Agent } from './agent/index.js';
 import { MockInterpreter } from './agent/intent.js';
 import { LlmInterpreter } from './agent/llm.js';
 import { getConnector, type Connector } from './connectors/index.js';
+import { getPack, listPacks, validateIntake } from './packs/index.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
 
 /**
@@ -45,6 +46,30 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   app.get('/', async (_req, reply) => reply.type('text/html').send(page));
   app.get('/favicon.ico', async (_req, reply) => reply.code(204).send());
   app.get('/health', async () => ({ ok: true, interpreter: interpreter.name, connector: connector.name }));
+
+  // The vertical roster — verticals, their categories, and CPA benchmarks (for
+  // the tabs + the Meters page).
+  app.get('/api/packs', async () =>
+    listPacks().map((p) => ({
+      id: p.id,
+      label: p.label,
+      description: p.description,
+      cpa: p.economics.cpaBenchmark,
+      categories: p.categories.map((c) => ({ id: c.id, label: c.label })),
+    })),
+  );
+
+  // The intake math validator (VISION §5 / feature #14).
+  app.post<{ Body: { vertical?: string; monthlyBudget?: number; targetLeads?: number } }>(
+    '/api/validate',
+    async (req, reply) => {
+      const { vertical, monthlyBudget, targetLeads } = req.body ?? {};
+      if (typeof monthlyBudget !== 'number' || typeof targetLeads !== 'number') {
+        return reply.code(400).send({ error: 'monthlyBudget and targetLeads (numbers) required' });
+      }
+      return validateIntake(getPack(vertical), monthlyBudget, targetLeads);
+    },
+  );
 
   // One turn of the conversation.
   app.post<{ Body: { sessionId?: string; text?: string } }>('/api/message', async (req, reply) => {

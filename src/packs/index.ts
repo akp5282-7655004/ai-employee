@@ -1,5 +1,7 @@
 import { homeServicesPack } from './homeServices.js';
 import { dentalPack } from './dental.js';
+import { roofingPack } from './roofing.js';
+import { solarPack } from './solar.js';
 import type { CommandPack } from './types.js';
 
 export * from './types.js';
@@ -13,6 +15,8 @@ export * from './apply.js';
 export const PACKS: Record<string, CommandPack> = {
   [homeServicesPack.id]: homeServicesPack,
   [dentalPack.id]: dentalPack,
+  [roofingPack.id]: roofingPack,
+  [solarPack.id]: solarPack,
 };
 
 export const DEFAULT_PACK_ID = homeServicesPack.id;
