@@ -76,17 +76,24 @@ export class PipedreamConnector implements Connector {
     }));
   }
 
-  async listApps(query?: string, limit = 60): Promise<AppInfo[]> {
+  async listApps(query?: string, limit = 48, after?: string): Promise<{ apps: AppInfo[]; after?: string }> {
     const pd = await this.backend();
-    const res = await pd.apps.list({ q: query || undefined, limit, hasActions: true });
+    const res = await pd.apps.list({ q: query || undefined, limit, after, hasActions: true });
     const rows: any[] = res?.data ?? (Array.isArray(res) ? res : (res?.items ?? []));
-    return rows.map((a) => ({
+    const apps = rows.map((a) => ({
       slug: a.nameSlug ?? a.name_slug,
       name: a.name,
       description: a.description,
       img: a.imgSrc ?? a.img_src,
       categories: a.categories ?? [],
     }));
+    let next: string | undefined;
+    try {
+      if (res?.hasNextPage?.()) next = res?.response?.pageInfo?.endCursor ?? res?.response?.page_info?.end_cursor;
+    } catch {
+      /* no cursor */
+    }
+    return { apps, after: next };
   }
 
   async runAction(req: RunActionRequest): Promise<RunActionResult> {

@@ -813,10 +813,21 @@ const FALLBACK_APPS=[
   {slug:'stripe',name:'Stripe'},{slug:'notion',name:'Notion'},{slug:'zoom',name:'Zoom'},{slug:'linkedin',name:'LinkedIn'},
   {slug:'google_analytics',name:'Google Analytics'},{slug:'quickbooks',name:'QuickBooks'},
 ];
-let APPS=[];
-async function fetchApps(q){
-  if(REMOTE){ try{ const r=await fetch('/api/apps?q='+encodeURIComponent(q||'')+'&limit=48').then(r=>r.json()); APPS=r.apps||[]; return; }catch(e){} }
-  const s=(q||'').toLowerCase(); APPS = s ? FALLBACK_APPS.filter(a=>a.name.toLowerCase().includes(s)||a.slug.includes(s)) : FALLBACK_APPS;
+let APPS=[], APP_CURSOR=null, APP_LOADING=false, APP_QUERY='';
+async function fetchApps(q, more){
+  if(APP_LOADING) return; APP_LOADING=true;
+  if(!more){ APP_QUERY=q||''; APPS=[]; APP_CURSOR=null; }
+  try{
+    if(REMOTE){
+      const url='/api/apps?q='+encodeURIComponent(APP_QUERY)+'&limit=48'+((more&&APP_CURSOR)?'&after='+encodeURIComponent(APP_CURSOR):'');
+      const r=await fetch(url).then(r=>r.json());
+      APPS = more ? APPS.concat(r.apps||[]) : (r.apps||[]);
+      APP_CURSOR = r.after||null;
+    } else {
+      const s=APP_QUERY.toLowerCase(); APPS = s?FALLBACK_APPS.filter(a=>a.name.toLowerCase().includes(s)||a.slug.includes(s)):FALLBACK_APPS; APP_CURSOR=null;
+    }
+  }catch(e){}
+  APP_LOADING=false;
 }
 async function connectApp(slug){
   if(!(CONN.pipedream && CONN.pipedream.configured)){ setPage('chat'); chat.innerHTML=''; say('emp',"Pipedream isn't set up yet. Add PIPEDREAM_PROJECT_ID / _CLIENT_ID / _CLIENT_SECRET and CONNECTOR=pipedream, then this opens a secure link to connect the app."); return; }
@@ -864,6 +875,12 @@ function renderInts(){
 }
 async function loadIntegrations(){ await fetchConnections(); await fetchApps($('#app-search').value); renderInts(); updateConnStat(); }
 let searchT; $('#app-search').addEventListener('input',()=>{ clearTimeout(searchT); searchT=setTimeout(async()=>{ await fetchApps($('#app-search').value); renderInts(); }, 250); });
+// Infinite scroll: load more apps as you reach the bottom of the Integrations catalog.
+document.querySelector('.main').addEventListener('scroll', async (e)=>{
+  const m=e.target; if(!$('#page-int').classList.contains('on')) return;
+  if(!REMOTE || !APP_CURSOR || APP_LOADING) return;
+  if(m.scrollTop + m.clientHeight >= m.scrollHeight - 320){ await fetchApps(APP_QUERY, true); renderInts(); }
+});
 
 // ═══ chat ═══
 const chat=$('#chat'), cinput=$('#cinput');
@@ -884,8 +901,24 @@ function renderResult(reply){
   const b=addRow('emp');const res=el('div','result');
   for(const l of(reply.launched||[])){const r=el('div','res-row');r.append(el('span','rbadge ok','LAUNCHED'),el('span',null,l));res.append(r);}
   for(const bl of(reply.blocked||[])){const r=el('div','res-row');r.append(el('span','rbadge hold','NEEDS APP'),el('span',null,bl.label));res.append(r);}
-  b.append(el('div',null,(reply.launched&&reply.launched.length)?"Done — here's what went live:":"Here's where things stand:"),res);
-  if(reply.blocked&&reply.blocked.length){const apps=[...new Set(reply.blocked.map(x=>x.app))];const names=apps.map(a=>APP_LABEL[a]||a).join(', ');const cb=el('button','connect','Connect '+names);cb.onclick=async()=>{cb.disabled=true;const rr=await apiConnectRun(reply.blocked);say('emp','Connected '+names+'. Launched: '+((rr.launched||[]).join(', ')||'—')+'. Miles is running the full plan.');};b.append(cb);}
+  const launchedAny = reply.launched && reply.launched.length;
+  b.append(el('div',null, launchedAny ? "Done — here's what went live:" : "Before I can launch, you'll need to connect the accounts below:"),res);
+  if(reply.blocked&&reply.blocked.length){
+    const apps=[...new Set(reply.blocked.map(x=>x.app))];
+    const names=apps.map(a=>APP_LABEL[a]||a).join(', ');
+    const cb=el('button','connect','Connect '+names+' →');
+    cb.onclick=async()=>{
+      if(REMOTE){
+        // Real connection happens through Pipedream on the Integrations page.
+        say('emp','To launch this, connect '+names+' first. Taking you to Integrations — connect each account, then come back to Ask Miles and tap "Approve & launch" again.');
+        setTimeout(()=>setPage('integrations'), 700);
+      } else {
+        cb.disabled=true; const rr=await apiConnectRun(reply.blocked);
+        say('emp','Connected '+names+'. Launched: '+((rr.launched||[]).join(', ')||names)+'. Miles is running the full plan.');
+      }
+    };
+    b.append(cb);
+  }
   chat.scrollTop=chat.scrollHeight;
 }
 function dispatch(r){ if(r.plan)renderPlan(r); else if(r.launched!==undefined)renderResult(r); else say('emp',r.text); }

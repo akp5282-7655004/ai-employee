@@ -189,13 +189,12 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     })),
   );
 
-  // Browse/search the connector's app catalog (Pipedream's ~3,000 apps).
-  app.get<{ Querystring: { q?: string; limit?: string } }>('/api/apps', async (req) => {
+  // Browse/search the connector's app catalog (Pipedream's ~3,000 apps), paginated.
+  app.get<{ Querystring: { q?: string; limit?: string; after?: string } }>('/api/apps', async (req) => {
     const q = req.query?.q;
-    const limit = req.query?.limit ? Math.min(Number(req.query.limit) || 60, 100) : 60;
+    const limit = req.query?.limit ? Math.min(Number(req.query.limit) || 48, 100) : 48;
     try {
-      const apps = connector.listApps ? await connector.listApps(q, limit) : [];
-      return { apps };
+      return connector.listApps ? await connector.listApps(q, limit, req.query?.after) : { apps: [] };
     } catch (err) {
       return { apps: [], error: String((err as Error).message) };
     }

@@ -78,10 +78,10 @@ export class MockConnector implements Connector {
     return app ? list.filter((a) => a.app === app) : list;
   }
 
-  async listApps(query?: string, limit = 60): Promise<AppInfo[]> {
+  async listApps(query?: string, limit = 60): Promise<{ apps: AppInfo[]; after?: string }> {
     const q = (query ?? '').trim().toLowerCase();
     const rows = q ? MOCK_APPS.filter((a) => a.name.toLowerCase().includes(q) || a.slug.includes(q)) : MOCK_APPS;
-    return rows.slice(0, limit);
+    return { apps: rows.slice(0, limit) };
   }
 
   async runAction(req: RunActionRequest): Promise<RunActionResult> {
