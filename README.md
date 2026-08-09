@@ -53,14 +53,25 @@ turns it into real output — all offline, no API keys:
   (Pipedream Connect via `@pipedream/sdk/server`). Mock by default; set
   `CONNECTOR=pipedream` + credentials to go live. The engine talks only to the
   seam and never knows which is behind it.
+- **`src/agent/`** — the **agent loop**, the spine that makes it an *employee*:
+  plain-English message → intake → clarifying question or plan → proposed
+  connector actions → **approval** → execute. The interpreter is a seam
+  (`MockInterpreter` today, an LLM one later — same loop underneath), so it runs
+  fully offline now and upgrades to real Claude understanding when a key is added.
 
 ```bash
 npm install
+npm run demo:agent    # the whole thing: chat → plan → "approve" → actions run through the connector
 npm run demo          # two businesses, two verticals, one engine → two plans + the guardrail
 npm run demo:connect  # the connector seam: connect link → accounts → run an action (mock)
-npm test              # 20 tests: packs, the four knobs, compliance, the planner, connectors
+npm test              # 27 tests: packs, planner, connectors, interpreter, agent loop
 npm run typecheck
 ```
+
+`npm run demo:agent` holds a real conversation offline: *"I run a plumbing shop
+in Chicago, 24/7, $3k/month, more calls"* → a plan + the actions it will run →
+`approve` → Google Ads + Business Profile launch, and LSA comes back with a
+connect link because that app isn't connected yet.
 
 `npm run demo` runs a plumbing shop and a dental practice through the same engine
 and prints their (different) plans — then shows the claims checklist rejecting a
@@ -92,7 +103,12 @@ implements it for now.
 
 ## What's next
 
-The hard 70% (VISION §8) is the **LLM agent loop** — plain-English request → plan
-→ tool calls (through the connector) → approval → post back — wrapping this
-deterministic planner, plus the first **surface** (Slack or web). See the
-checklist in [`docs/VISION.md`](docs/VISION.md) §11.
+The engine, connector, and agent loop all exist and run offline. The remaining
+big pieces (VISION §8, §11):
+
+- **A surface** — a web or Slack front end over the agent loop, so a real person
+  can chat with it (the loop is already surface-agnostic).
+- **The LLM interpreter** — swap `MockInterpreter` for a Claude-backed one (needs
+  an `ANTHROPIC_API_KEY`); the loop, planner, and connector stay unchanged.
+- **Live Pipedream `runAction`** — fill in the one stubbed method once its docs
+  are reachable, then flip `CONNECTOR=pipedream`.
