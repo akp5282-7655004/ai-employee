@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import Fastify, { type FastifyInstance } from 'fastify';
-import { Agent } from './agent/index.js';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import { Agent, newSession } from './agent/index.js';
 import { MockInterpreter } from './agent/intent.js';
 import { LlmInterpreter } from './agent/llm.js';
 import { getConnector, type Connector } from './connectors/index.js';
@@ -9,6 +9,8 @@ import { loadConfig, pipedreamReady } from './config.js';
 import { getPack, listPacks, validateIntake } from './packs/index.js';
 import { fetchDemographics } from './research/census.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
+import { hashPassword, verifyPassword, newToken, newUserId, parseCookies } from './auth.js';
+import { MemoryStore, type Store, type User } from './db/index.js';
 
 /**
  * The real backend — one engine, one source of truth. It serves the app and
@@ -22,7 +24,12 @@ import { MemorySessionStore, type SessionStore } from './session.js';
 export interface ServerDeps {
   store?: SessionStore;
   connector?: Connector;
+  /** Persistent store for accounts, sessions, and customer profiles. Pass one
+   * already `init()`-ed (Postgres in prod); defaults to in-memory. */
+  authStore?: Store;
 }
+
+const SESSION_DAYS = 30;
 
 // Served from the repo root (npm start / npm run dev both run from there).
 const WEB_DIR = join(process.cwd(), 'web');
@@ -34,20 +41,102 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   const interpreter = process.env.ANTHROPIC_API_KEY ? new LlmInterpreter() : new MockInterpreter();
   const agent = new Agent({ connector, interpreter });
 
-  const page = (() => {
+  const authStore = deps.authStore ?? new MemoryStore();
+
+  const readWeb = (name: string, fallback: string) => {
     try {
-      const html = readFileSync(join(WEB_DIR, 'index.html'), 'utf8');
-      // Tell the page it's server-backed so it calls the real API instead of the
-      // inline fallback engine.
+      const html = readFileSync(join(WEB_DIR, name), 'utf8');
       return html.replace('<body>', '<body>\n<script>window.MILES_SERVER=true;</script>');
     } catch {
-      return '<!doctype html><title>Miles</title><p>Build the web/ dir.</p>';
+      return fallback;
     }
-  })();
+  };
+  const dashboardPage = readWeb('index.html', '<!doctype html><title>Miles</title><p>Build the web/ dir.</p>');
+  const loginPage = readWeb('login.html', '<!doctype html><title>Miles — Sign in</title><p>Login page missing.</p>');
 
-  app.get('/', async (_req, reply) => reply.type('text/html').send(page));
+  // ── auth helpers ──
+  const cookie = (token: string, maxAge: number) =>
+    `miles_session=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}`;
+  const startSession = async (reply: FastifyReply, userId: string) => {
+    const token = newToken();
+    await authStore.createSession({ token, userId, expiresAt: Date.now() + SESSION_DAYS * 86400_000 });
+    reply.header('set-cookie', cookie(token, SESSION_DAYS * 86400));
+  };
+  const getUser = async (req: FastifyRequest): Promise<User | null> => {
+    const token = parseCookies(req.headers.cookie)['miles_session'];
+    if (!token) return null;
+    const s = await authStore.getSession(token);
+    return s ? authStore.getUserById(s.userId) : null;
+  };
+  const requireUser = async (req: FastifyRequest, reply: FastifyReply): Promise<User | null> => {
+    const u = await getUser(req);
+    if (!u) reply.code(401).send({ error: 'not signed in' });
+    return u;
+  };
+
+  // ── pages (gated: no account → login) ──
+  app.get('/', async (req, reply) => {
+    const u = await getUser(req);
+    return reply.type('text/html').send(u ? dashboardPage : loginPage);
+  });
+  app.get('/login', async (_req, reply) => reply.type('text/html').send(loginPage));
   app.get('/favicon.ico', async (_req, reply) => reply.code(204).send());
-  app.get('/health', async () => ({ ok: true, interpreter: interpreter.name, connector: connector.name }));
+  app.get('/health', async () => ({ ok: true, interpreter: interpreter.name, connector: connector.name, store: authStore.name }));
+
+  // ── auth ──
+  app.post('/auth/signup', async (req, reply) => {
+    const b = (req.body ?? {}) as { email?: string; password?: string; name?: string };
+    if (!b.email || !b.password || b.password.length < 6)
+      return reply.code(400).send({ error: 'Enter an email and a password of at least 6 characters.' });
+    if (await authStore.getUserByEmail(b.email))
+      return reply.code(409).send({ error: 'An account with that email already exists — try logging in.' });
+    const user: User = {
+      id: newUserId(),
+      email: b.email.toLowerCase(),
+      name: b.name,
+      passwordHash: hashPassword(b.password),
+      createdAt: new Date().toISOString(),
+    };
+    await authStore.createUser(user);
+    await startSession(reply, user.id);
+    return { ok: true, user: { id: user.id, email: user.email, name: user.name } };
+  });
+  app.post('/auth/login', async (req, reply) => {
+    const b = (req.body ?? {}) as { email?: string; password?: string };
+    const u = b.email ? await authStore.getUserByEmail(b.email) : null;
+    if (!u || !verifyPassword(b.password ?? '', u.passwordHash))
+      return reply.code(401).send({ error: 'Wrong email or password.' });
+    await startSession(reply, u.id);
+    return { ok: true, user: { id: u.id, email: u.email, name: u.name } };
+  });
+  app.post('/auth/logout', async (req, reply) => {
+    const token = parseCookies(req.headers.cookie)['miles_session'];
+    if (token) await authStore.deleteSession(token);
+    reply.header('set-cookie', cookie('', 0));
+    return { ok: true };
+  });
+  app.get('/auth/me', async (req, reply) => {
+    const u = await getUser(req);
+    if (!u) return reply.code(401).send({ error: 'not signed in' });
+    const data = await authStore.getUserData(u.id);
+    return { user: { id: u.id, email: u.email, name: u.name }, profile: data.profile ?? null };
+  });
+
+  // ── customer profile (the onboarding intake, saved + editable) ──
+  app.get('/api/profile', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return { profile: data.profile ?? null };
+  });
+  app.put('/api/profile', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    data.profile = { ...((data.profile as object) ?? {}), ...((req.body as object) ?? {}), updatedAt: new Date().toISOString() };
+    await authStore.setUserData(u.id, data);
+    return { ok: true, profile: data.profile };
+  });
 
   // Honest integration status — the Integrations page reads this instead of
   // hard-coded "Connected" badges. Real apps connect through Pipedream, so their
@@ -145,6 +234,15 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const res = await agent.handle(session, text);
     store.save(sessionId, res.session);
     return res.reply;
+  });
+
+  // Start a fresh conversation (clears the stored intake/pending for this user).
+  app.post<{ Body: { sessionId?: string } }>('/api/reset', async (req, reply) => {
+    const u = await getUser(req);
+    const id = u?.id ?? req.body?.sessionId;
+    if (!id) return reply.code(400).send({ error: 'no session' });
+    store.save(id, newSession(id));
+    return { ok: true };
   });
 
   // Connect one or more apps for the user, then run the actions that were blocked.

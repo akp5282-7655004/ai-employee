@@ -139,6 +139,19 @@
   .racebar .rt{height:10px;border-radius:5px;background:var(--line-soft);overflow:hidden;}
   .racebar .rf{height:100%;border-radius:5px;background:var(--brand);}
   .racebar .rp{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px;text-align:right;}
+  .overlay{position:fixed;inset:0;background:rgba(8,11,15,.55);display:none;place-items:center;z-index:60;padding:24px;overflow-y:auto;}
+  .overlay.on{display:grid;}
+  .sheet{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);max-width:640px;width:100%;padding:28px;max-height:92dvh;overflow-y:auto;}
+  .sheet h2{margin:0 0 4px;font-size:21px;font-weight:800;letter-spacing:-.02em;}
+  .sheet .sd{color:var(--muted);font-size:13.5px;margin:0 0 20px;}
+  .pf-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px 14px;}
+  .pf-grid .full{grid-column:1/-1;}
+  .pf label{display:block;font-size:12px;color:var(--muted);margin:0 0 5px;font-weight:600;}
+  .pf input,.pf select,.pf textarea{width:100%;border:1px solid var(--line);background:var(--panel-2);border-radius:9px;padding:10px 12px;font-size:14px;color:var(--ink);font-family:var(--sans);}
+  .pf input:focus,.pf select:focus,.pf textarea:focus{outline:none;border-color:var(--accent);background:var(--card);}
+  .pf textarea{resize:vertical;min-height:58px;}
+  .pf-save{margin-top:20px;background:var(--primary);color:var(--primary-ink);border:none;border-radius:11px;padding:12px 22px;font-size:14px;font-weight:700;cursor:pointer;}
+  .pf-save:disabled{opacity:.5;}
 
   /* integrations */
   .intwrap{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow);max-width:1040px;}
@@ -208,6 +221,7 @@
       <a data-page="meters"><svg class="ico" viewBox="0 0 24 24"><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 12 15 9M4 12a8 8 0 0 1 16 0"/></svg> Meters &amp; Analytics</a>
       <a data-page="research"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg> Research</a>
       <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
+      <a data-page="profile"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
     </nav>
     <div class="glabel">PROJECTS</div>
     <div class="pill newproj"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New project</div>
@@ -217,7 +231,7 @@
     <div class="pill playbook"><span class="em">🦷</span> Dental Practice</div>
     <div class="pill playbook"><span class="em">☀️</span> Solar Energy</div>
     <div class="grow"></div>
-    <div class="ws" style="margin:0"><span class="sq">AP</span><b>Akhil Paul</b></div>
+    <div class="ws" style="margin:0"><span class="sq" id="user-av">·</span><div style="min-width:0"><b id="user-email" style="display:block;overflow:hidden;text-overflow:ellipsis">—</b></div><span class="cx" id="logout" title="Log out" style="cursor:pointer"><svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></span></div>
   </aside>
 
   <main class="main">
@@ -229,8 +243,7 @@
 
     <!-- HOME (dashboard / agents / skills share this) -->
     <section class="page on" id="page-home">
-      <div class="stats">
-        <div class="stat"><div class="lab">Credits available <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg></div><div class="val">195.3k credits</div></div>
+      <div class="stats" style="grid-template-columns:repeat(3,1fr)">
         <div class="stat"><div class="lab">Active specialists <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/></svg></div><div class="val">4 Deployments Active</div></div>
         <div class="stat"><div class="lab">Connected integrations <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div><div class="val" id="stat-conn">—</div></div>
         <div class="stat"><div class="lab">Verified market CPA <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 16 0"/></svg></div><div class="val" id="stat-cpa">$110 Market Median</div></div>
@@ -300,6 +313,17 @@
       <div class="appgrid" id="int-catalog"></div>
     </section>
 
+    <!-- BUSINESS PROFILE -->
+    <section class="page" id="page-profile">
+      <div class="mcard" style="max-width:760px">
+        <h3>Business Profile</h3>
+        <p class="mdesc">Everything Miles needs to run marketing for you. Update anytime — plans use these details.</p>
+        <div class="pf"><div class="pf-grid" id="profile-form"></div></div>
+        <button class="pf-save" id="profile-save">Save changes</button>
+        <span id="profile-note" class="appsub" style="margin-left:12px"></span>
+      </div>
+    </section>
+
     <!-- CHAT -->
     <section class="page" id="page-chat">
       <div class="chatview on">
@@ -309,6 +333,16 @@
       </div>
     </section>
   </main>
+
+  <!-- ONBOARDING (first login) -->
+  <div class="overlay" id="onboard">
+    <div class="sheet">
+      <h2>Let's set up your business</h2>
+      <p class="sd">Miles needs to understand your business before it can run marketing for you. This becomes your customer profile — you can edit it anytime.</p>
+      <div class="pf"><div class="pf-grid" id="onboard-form"></div></div>
+      <button class="pf-save" id="onboard-save">Save &amp; get started</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -661,7 +695,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters & Analytics',research:'Research',integrations:'Integrations',chat:'Ask Miles'};
+const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters & Analytics',research:'Research',integrations:'Integrations',profile:'Business Profile',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
@@ -670,7 +704,9 @@ function setPage(id){
   $('#page-meters').classList.toggle('on',id==='meters');
   $('#page-research').classList.toggle('on',id==='research');
   $('#page-int').classList.toggle('on',id==='integrations');
+  $('#page-profile').classList.toggle('on',id==='profile');
   $('#page-chat').classList.toggle('on',id==='chat');
+  if(id==='profile') loadProfile();
   if(id==='skills'){ activeCat='Math Skills'; renderTabs(); renderCards(); }
   if(homeIds.includes(id) && id!=='skills' && activeCat==='Math Skills'){ activeCat='Popular tasks'; renderTabs(); renderCards(); }
   if(id==='meters') renderMeters();
@@ -854,7 +890,8 @@ function renderResult(reply){
 }
 function dispatch(r){ if(r.plan)renderPlan(r); else if(r.launched!==undefined)renderResult(r); else say('emp',r.text); }
 async function send(text,silent){const msg=(text!=null?text:cinput.value).trim();if(!msg)return;if(!silent)say('user',msg);cinput.value='';try{dispatch(await apiMessage(msg));}catch(e){say('emp','Sorry — I couldn’t reach the server just now.');}}
-async function openChat(seed){ if(REMOTE)sessionId=newId(); else {connector.reset&&connector.reset();agent=makeAgent(connector,USER);} chat.innerHTML=''; setPage('chat'); if(seed){say('user',seed);try{dispatch(await apiMessage(seed));}catch(e){say('emp','Sorry — I couldn’t reach the server.');}} else { say('emp',"Hi — I'm Miles. Tell me about the business and I'll build a plan you can approve."); } }
+async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId})}); }catch(e){} } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER); } }
+async function openChat(seed){ await resetSession(); chat.innerHTML=''; setPage('chat'); if(seed){say('user',seed);try{dispatch(await apiMessage(seed));}catch(e){say('emp','Sorry — I couldn’t reach the server.');}} else { say('emp',"Hi — I'm Miles. Tell me about the business and I'll build a plan you can approve."); } }
 
 $('#back').onclick=()=>setPage('dashboard');
 $('#hgo').onclick=()=>{const v=$('#hprompt').value.trim();if(v)openChat(v);};
@@ -865,8 +902,50 @@ cinput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.prevent
 cinput.addEventListener('input',()=>{cinput.style.height='auto';cinput.style.height=Math.min(cinput.scrollHeight,120)+'px';});
 $('#theme').onclick=()=>{const c=document.documentElement.getAttribute('data-theme');document.documentElement.setAttribute('data-theme',c==='dark'?'light':'dark');};
 
+// ═══ auth + customer profile ═══
+const PROFILE_FIELDS=[
+  {k:'businessName',label:'Business name',type:'text',full:true,ph:'e.g. Rapid Response Plumbing'},
+  {k:'industry',label:'Industry',type:'select',options:['Home Services','Roofing','Dental','Solar','Other']},
+  {k:'services',label:'What services do you offer?',type:'textarea',full:true,ph:'e.g. drain cleaning, water heaters, sewer line…'},
+  {k:'employees',label:'How many employees?',type:'number'},
+  {k:'yearStarted',label:'Year founded',type:'number',ph:'e.g. 2012'},
+  {k:'serviceAreas',label:'Areas you service',type:'text',full:true,ph:'cities / neighborhoods'},
+  {k:'zip',label:'ZIP code',type:'text',ph:'e.g. 19104'},
+  {k:'monthlyBudget',label:'Monthly marketing budget ($)',type:'number'},
+  {k:'goal',label:'Your marketing goal / plan',type:'textarea',full:true,ph:'e.g. more calls for high-ticket jobs'},
+  {k:'existingMarketing',label:'Where have you marketed before?',type:'textarea',full:true,ph:'Google, Facebook, mailers, none yet…'},
+];
+function buildProfileForm(container,vals){
+  container.innerHTML=''; vals=vals||{};
+  for(const f of PROFILE_FIELDS){
+    const w=el('div',f.full?'full':''); w.append(el('label',null,f.label));
+    let inp;
+    if(f.type==='select'){ inp=el('select'); for(const o of f.options){ const op=el('option',null,o); op.value=o; if(vals[f.k]===o)op.selected=true; inp.append(op);} }
+    else if(f.type==='textarea'){ inp=el('textarea'); inp.value=vals[f.k]||''; if(f.ph)inp.placeholder=f.ph; }
+    else { inp=el('input'); inp.type=f.type; inp.value=(vals[f.k]!=null?vals[f.k]:''); if(f.ph)inp.placeholder=f.ph; }
+    inp.dataset.k=f.k; w.append(inp); container.append(w);
+  }
+}
+function readProfileForm(container){ const out={}; container.querySelectorAll('[data-k]').forEach(i=>{ let v=(i.value||'').trim(); if(i.type==='number') v=v?Number(v):''; out[i.dataset.k]=v; }); return out; }
+async function saveProfile(vals){ try{ const r=await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(vals)}); return r.ok?(await r.json()).profile:null; }catch(e){ return null; } }
+async function loadProfile(){ if(!REMOTE)return; try{ const r=await fetch('/api/profile'); const d=await r.json(); buildProfileForm($('#profile-form'), d.profile||{}); }catch(e){} }
+$('#profile-save').onclick=async()=>{ const btn=$('#profile-save'); btn.disabled=true; const p=await saveProfile(readProfileForm($('#profile-form'))); $('#profile-note').textContent=p?'Saved ✓':'Could not save.'; btn.disabled=false; setTimeout(()=>{$('#profile-note').textContent='';},2500); };
+$('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=readProfileForm($('#onboard-form')); if(!vals.businessName){ alert('Please enter your business name.'); return; } btn.disabled=true; await saveProfile(vals); $('#onboard').classList.remove('on'); btn.disabled=false; };
+$('#logout').onclick=async()=>{ try{ await fetch('/auth/logout',{method:'POST'}); }catch(e){} window.location='/login'; };
+async function authInit(){
+  if(!REMOTE) return;
+  try{
+    const r=await fetch('/auth/me'); if(!r.ok){ window.location='/login'; return; }
+    const d=await r.json(); const u=d.user||{};
+    sessionId = u.id || sessionId;
+    $('#user-email').textContent = u.email||'';
+    $('#user-av').textContent = ((u.name||u.email||'?')[0]||'?').toUpperCase();
+    if(!d.profile){ buildProfileForm($('#onboard-form'),{}); $('#onboard').classList.add('on'); }
+  }catch(e){}
+}
+
 // init
-(async()=>{ await loadPacks(); await fetchConnections(); const solar=PACKMETA.find(p=>p.id==='solar'); if(solar)$('#stat-cpa').textContent=money(solar.cpa.median)+' Market Median'; updateConnStat(); renderTabs(); renderCards(); })();
+(async()=>{ await authInit(); await loadPacks(); await fetchConnections(); const solar=PACKMETA.find(p=>p.id==='solar'); if(solar)$('#stat-cpa').textContent=money(solar.cpa.median)+' Market Median'; updateConnStat(); renderTabs(); renderCards(); })();
 </script>
 </body>
 </html>
