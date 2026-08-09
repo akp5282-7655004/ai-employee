@@ -101,13 +101,26 @@ stubbed with a clear TODO — the action-run docs weren't reachable from the bui
 environment, so it's left explicit rather than shipped half-known; the mock
 implements it for now.
 
-## Web preview
+## Run the app (real backend)
 
-[`web/index.html`](web/index.html) is a **self-contained web chat surface** — open
-it in a browser (or serve the folder) and talk to the employee. It runs a
-browser port of the same mock engine (packs + planner + interpreter + connector),
-so it needs no server and no keys: chat → plan card → **Approve & launch** →
-channels run, and any unconnected app comes back with a Connect button.
+```bash
+npm install
+npm run build && npm start      # or: npm run dev
+# open http://localhost:3000
+```
+
+The server ([`src/server.ts`](src/server.ts)) serves the dashboard and runs the
+**actual TypeScript engine** over HTTP — one source of truth, no browser copy:
+
+- `POST /api/message {sessionId, text}` → the agent loop (plan / clarify / approve)
+- `POST /api/connect-and-run {sessionId, actions}` → connect apps, run the blocked actions
+- `GET /health` → which interpreter + connector are live
+
+It upgrades in place: **Claude** understanding when `ANTHROPIC_API_KEY` is set
+(else the deterministic mock), **Pipedream** actions when its credentials are set
+(else the mock). The dashboard ([`web/index.html`](web/index.html)) calls this API
+when served, and falls back to an inline copy of the engine only when opened as a
+standalone file (the shareable demo).
 
 ## What's next
 

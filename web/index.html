@@ -471,7 +471,7 @@ function makeAgent(connector, user) {
         if (blocked.length) { const apps = [...new Set(blocked.map((b) => b.app))]; connectUrl = connector.createConnectToken(user).connectUrl;
           text += `\nStill need you to connect ${apps.join(', ')} before I can run ${blocked.map((b) => b.label).join(', ')}.`; }
         session.pending = null;
-        return { text, connectUrl, launched: launched.map((a) => a.label), blocked: blocked.map((a) => a.label) };
+        return { text, connectUrl, launched: launched.map((a) => a.label), blocked: blocked.map((a) => ({ label: a.label, app: a.app, actionId: a.actionId })) };
       }
       if (interp.intent === 'connect') { const u = connector.createConnectToken(user).connectUrl; return { text: 'To connect an app, open the link.', connectUrl: u }; }
       Object.assign(session.intake, interp.fields);
@@ -530,10 +530,25 @@ function renderCards(){
 }
 renderTabs(); renderCards();
 
-// ── chat wiring (reuses the engine) ──
+// ── chat wiring: real backend when served (window.MILES_SERVER), inline engine when standalone ──
+const REMOTE = !!window.MILES_SERVER;
+const newId = () => (self.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'sess-'+Math.random().toString(36).slice(2);
+let sessionId = newId();
+
+// inline engine — the offline/artifact fallback; the server is authoritative when REMOTE.
 const USER='workspace';
 const connector = makeConnector({ [USER]:['google_ads','google_my_business'] });
 let agent = makeAgent(connector, USER);
+
+async function apiMessage(text){
+  if(REMOTE){ const r=await fetch('/api/message',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId,text})}); if(!r.ok) throw new Error('server error'); return await r.json(); }
+  return agent.handle(text);
+}
+async function apiConnectRun(actions){
+  if(REMOTE){ const r=await fetch('/api/connect-and-run',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId,actions})}); return await r.json(); }
+  const launched=[]; for(const a of actions){ connector.connect(USER,a.app); const rr=connector.runAction(USER,a.actionId); if(rr.ok) launched.push(a.label); } return { launched };
+}
+
 const chat = $('#chat'), cinput = $('#cinput');
 const APP_LABEL={google_ads:'Google Ads',google_my_business:'Business Profile',google_lsa:'Local Services Ads',facebook_ads:'Meta Ads'};
 
@@ -554,32 +569,35 @@ function renderPlan(reply){
 }
 function renderResult(reply){
   const b=addRow('emp'); const res=el('div','result');
-  for(const l of reply.launched){const r=el('div','res-row');r.append(el('span','badge ok','LAUNCHED'),el('span',null,l));res.append(r);}
-  for(const l of reply.blocked){const r=el('div','res-row');r.append(el('span','badge hold','NEEDS APP'),el('span',null,l));res.append(r);}
-  b.append(el('div',null,reply.launched.length?"Done — here's what went live:":"Here's where things stand:"),res);
-  if(reply.blockedApps&&reply.blockedApps.length){ const names=reply.blockedApps.map(a=>APP_LABEL[a]||a).join(', '); const cb=el('button','connect','Connect '+names);
-    cb.onclick=()=>{cb.disabled=true;for(const app of reply.blockedApps)connector.connect(USER,app);const re=reply.blockedActions.map(a=>{connector.runAction(USER,a.actionId);return a.label;});say('emp','Connected '+names+'. Launched: '+re.join(', ')+'. Miles is now running the full plan.');}; b.append(cb);}
+  for(const l of (reply.launched||[])){const r=el('div','res-row');r.append(el('span','badge ok','LAUNCHED'),el('span',null,l));res.append(r);}
+  for(const bl of (reply.blocked||[])){const r=el('div','res-row');r.append(el('span','badge hold','NEEDS APP'),el('span',null,bl.label));res.append(r);}
+  b.append(el('div',null,(reply.launched&&reply.launched.length)?"Done — here's what went live:":"Here's where things stand:"),res);
+  if(reply.blocked&&reply.blocked.length){
+    const apps=[...new Set(reply.blocked.map(x=>x.app))];
+    const names=apps.map(a=>APP_LABEL[a]||a).join(', ');
+    const cb=el('button','connect','Connect '+names);
+    cb.onclick=async ()=>{ cb.disabled=true; const rr=await apiConnectRun(reply.blocked); say('emp','Connected '+names+'. Launched: '+((rr.launched||[]).join(', ')||'—')+'. Miles is now running the full plan.'); };
+    b.append(cb);
+  }
   chat.scrollTop=chat.scrollHeight;
 }
-const _h=agent.handle;
-agent.handle=function(m){const before=agent.session.pending;const r=_h(m);if(r.launched!==undefined&&before){agent.__lastBlocked=before.actions.filter(a=>!connector.listAccounts(USER).includes(a.app));}return r;};
-function dispatch(reply){ if(reply.plan)renderPlan(reply); else if(reply.launched!==undefined){reply.blockedApps=[...new Set((agent.__lastBlocked||[]).map(a=>a.app))];reply.blockedActions=agent.__lastBlocked||[];renderResult(reply);} else say('emp',reply.text); }
-function send(text,silent){ const msg=(text!=null?text:cinput.value).trim(); if(!msg)return; if(!silent)say('user',msg); cinput.value=''; dispatch(agent.handle(msg)); }
+function dispatch(reply){ if(reply.plan)renderPlan(reply); else if(reply.launched!==undefined)renderResult(reply); else say('emp',reply.text); }
+async function send(text,silent){ const msg=(text!=null?text:cinput.value).trim(); if(!msg)return; if(!silent)say('user',msg); cinput.value=''; try{ dispatch(await apiMessage(msg)); }catch(e){ say('emp','Sorry — I couldn’t reach the server just now.'); } }
 
-function openChat(seed){
-  chat.innerHTML=''; connector.reset && connector.reset();
-  agent=makeAgent(connector, USER);
-  agent.handle=function(m){const before=agent.session.pending;const r=_h.call(agent,m);if(r.launched!==undefined&&before){agent.__lastBlocked=before.actions.filter(a=>!connector.listAccounts(USER).includes(a.app));}return r;};
-  showChat(true);
-  say('emp','On it. Give me a moment…');
+async function openChat(seed){
+  // Fresh session per task.
+  if(REMOTE){ sessionId=newId(); } else { connector.reset && connector.reset(); agent=makeAgent(connector, USER); }
+  chat.innerHTML=''; showChat(true);
   say('user',seed);
-  setTimeout(()=>dispatch(agent.handle(seed)),120);
+  try{ dispatch(await apiMessage(seed)); }catch(e){ say('emp','Sorry — I couldn’t reach the server just now.'); }
 }
+
+function openBlank(){ if(REMOTE){ sessionId=newId(); } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER);} chat.innerHTML=''; showChat(true); say('emp',"Hi — I'm Miles, your marketing employee. Tell me about the business and I'll build a plan you can approve."); }
 
 $('#back').onclick=()=>showChat(false);
 $('#hgo').onclick=()=>{const v=$('#hprompt').value.trim();if(v)openChat(v);};
 $('#hprompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#hgo').click();}});
-document.querySelectorAll('[data-open]').forEach(n=>n.onclick=()=>{showChat(true);chat.innerHTML='';say('emp',"Hi — I'm Miles, your marketing employee. Tell me about the business and I'll build a plan you can approve.");});
+document.querySelectorAll('[data-open]').forEach(n=>n.onclick=openBlank);
 $('#csend').onclick=()=>send();
 cinput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
 cinput.addEventListener('input',()=>{cinput.style.height='auto';cinput.style.height=Math.min(cinput.scrollHeight,120)+'px';});

@@ -54,4 +54,10 @@ export interface Connector {
   listAccounts(externalUserId: string, app?: string): Promise<ConnectedAccount[]>;
   /** Run an app action on the user's behalf — the "hands". */
   runAction(req: RunActionRequest): Promise<RunActionResult>;
+  /**
+   * Mark an app connected for a user. Present on the mock (a demo shortcut); on
+   * live Pipedream the real connection happens through the connect-token flow, so
+   * this is optional.
+   */
+  connect?(externalUserId: string, app: string): void;
 }

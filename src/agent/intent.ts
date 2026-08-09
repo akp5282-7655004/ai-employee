@@ -19,6 +19,8 @@ export interface Interpretation {
 export interface Interpreter {
   readonly name: string;
   interpret(message: string, session: Session): Interpretation;
+  /** Optional async path (e.g. an LLM). The loop prefers it when present. */
+  interpretAsync?(message: string, session: Session): Promise<Interpretation>;
 }
 
 const CATEGORY_KEYWORDS: Array<[RegExp, { vertical: string; category: string }]> = [

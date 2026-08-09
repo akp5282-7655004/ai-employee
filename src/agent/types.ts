@@ -36,6 +36,9 @@ export interface AgentReply {
   plan?: CampaignPlan;
   actions?: ProposedAction[];
   connectUrl?: string;
+  /** After an approval: which actions ran, and which need an app connected. */
+  launched?: string[];
+  blocked?: Array<{ label: string; app: string; actionId: string }>;
 }
 
 export function newSession(externalUserId: string): Session {

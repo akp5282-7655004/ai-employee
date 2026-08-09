@@ -52,7 +52,9 @@ export class Agent {
 
   async handle(session: Session, message: string): Promise<{ session: Session; reply: AgentReply }> {
     const s: Session = { ...session, intake: { ...session.intake } };
-    const interp = this.interpreter.interpret(message, s);
+    const interp = this.interpreter.interpretAsync
+      ? await this.interpreter.interpretAsync(message, s)
+      : this.interpreter.interpret(message, s);
 
     if (interp.intent === 'approve') return this.approve(s);
     if (interp.intent === 'connect') return this.connect(s, interp.connectApp);
@@ -111,7 +113,15 @@ export class Agent {
         `${blocked.map((b) => b.label).join(', ')}.\nConnect here: ${connectUrl}`;
     }
     s.pending = undefined;
-    return { session: s, reply: { text, connectUrl } };
+    return {
+      session: s,
+      reply: {
+        text,
+        connectUrl,
+        launched: launched,
+        blocked: blocked.map((b) => ({ label: b.label, app: b.app, actionId: b.actionId })),
+      },
+    };
   }
 
   private async connect(s: Session, app?: string): Promise<{ session: Session; reply: AgentReply }> {
