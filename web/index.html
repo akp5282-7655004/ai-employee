@@ -214,7 +214,7 @@
       <div class="stats">
         <div class="stat"><div class="lab">Credits available <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg></div><div class="val">195.3k credits</div></div>
         <div class="stat"><div class="lab">Active specialists <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/></svg></div><div class="val">4 Deployments Active</div></div>
-        <div class="stat"><div class="lab">Connected integrations <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div><div class="val">10 · GHL, Meta, Google +</div></div>
+        <div class="stat"><div class="lab">Connected integrations <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div><div class="val" id="stat-conn">—</div></div>
         <div class="stat"><div class="lab">Verified market CPA <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 16 0"/></svg></div><div class="val" id="stat-cpa">$110 Market Median</div></div>
       </div>
       <div class="hero">
@@ -263,6 +263,7 @@
       <div class="intwrap">
         <h3>Connected Integrations &amp; Channels</h3>
         <p class="idesc">Manage webhooks, CRMs, and ad channel API credentials</p>
+        <div id="int-banner"></div>
         <div class="intgrid" id="intgrid"></div>
       </div>
     </section>
@@ -638,6 +639,12 @@ function setPage(id){
   if(id==='skills'){ activeCat='Math Skills'; renderTabs(); renderCards(); }
   if(homeIds.includes(id) && id!=='skills' && activeCat==='Math Skills'){ activeCat='Popular tasks'; renderTabs(); renderCards(); }
   if(id==='meters') renderMeters();
+  if(id==='integrations'){ fetchConnections().then(()=>{ renderInts(); updateConnStat(); }); }
+}
+function updateConnStat(){
+  const configured = !!(CONN.pipedream && CONN.pipedream.configured);
+  const n = configured ? Object.values(CONN.apps||{}).filter(Boolean).length : 0;
+  $('#stat-conn').textContent = configured ? (n+' connected') : 'Demo mode · not live';
 }
 document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>setPage(a.dataset.page));
 
@@ -677,16 +684,29 @@ async function runValidate(){
 }
 $('#v-budget').addEventListener('input',runValidate); $('#v-leads').addEventListener('input',runValidate);
 
-// ═══ integrations ═══
+// ═══ integrations (honest, backend-driven) ═══
+let CONN = { pipedream:{configured:false}, apps:{} };
+async function fetchConnections(){ if(REMOTE){ try{ CONN = await fetch('/api/connections').then(r=>r.json()); }catch(e){} } }
 const INTS=[
-  {icon:'⚡',bg:'#fff3d6',nm:'GoHighLevel CRM',ds:'Pipeline & Lead Sync',state:'connected'},
-  {icon:'🔁',bg:'#e6effe',nm:'Pipedream Integration Engine',ds:'3,000+ App Webhooks',state:'webhook'},
-  {icon:'🎯',bg:'#fde8e8',nm:'Google Ads & LSA',ds:'Search & Call Bidding',state:'connected'},
-  {icon:'📱',bg:'#eef1f4',nm:'Meta Ads Manager',ds:'Facebook & Instagram',state:'connected'},
-  {icon:'🔧',bg:'#eef1f4',nm:'ServiceTitan ERP',ds:'Job Scheduling & Dispatch',state:'connect'},
-  {icon:'🟠',bg:'#ffefe0',nm:'HubSpot Marketing',ds:'Enterprise CRM Sync',state:'connect'},
+  {key:'_pd',icon:'🔁',bg:'#e6effe',nm:'Pipedream Integration Engine',ds:'3,000+ App Webhooks'},
+  {key:'gohighlevel',icon:'⚡',bg:'#fff3d6',nm:'GoHighLevel CRM',ds:'Pipeline & Lead Sync'},
+  {key:'google_ads',icon:'🎯',bg:'#fde8e8',nm:'Google Ads & LSA',ds:'Search & Call Bidding'},
+  {key:'facebook_ads',icon:'📱',bg:'#eef1f4',nm:'Meta Ads Manager',ds:'Facebook & Instagram'},
+  {key:'servicetitan',icon:'🔧',bg:'#eef1f4',nm:'ServiceTitan ERP',ds:'Job Scheduling & Dispatch'},
+  {key:'hubspot',icon:'🟠',bg:'#ffefe0',nm:'HubSpot Marketing',ds:'Enterprise CRM Sync'},
 ];
+async function connectApp(){
+  if(!CONN.pipedream.configured){ setPage('chat'); chat.innerHTML=''; say('emp',"To connect real apps, Pipedream needs to be set up first with your account credentials. Ask your admin to add PIPEDREAM_PROJECT_ID, PIPEDREAM_CLIENT_ID and PIPEDREAM_CLIENT_SECRET (and set CONNECTOR=pipedream). Once that's live, this button opens a secure link to connect the app."); return; }
+  try{ const t = await fetch('/api/connect-token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId})}).then(r=>r.json()); if(t.connectUrl) window.open(t.connectUrl,'_blank'); }catch(e){}
+}
 function renderInts(){
+  const configured = !!(CONN.pipedream && CONN.pipedream.configured);
+  const banner=$('#int-banner'); banner.innerHTML='';
+  if(!configured){
+    const b=el('div','verdict tight'); b.style.marginBottom='16px';
+    b.textContent='⚠️ Pipedream isn’t connected yet. Integrations are in demo mode until your Pipedream credentials are added (CONNECTOR=pipedream + PIPEDREAM_* keys). Until then, plans build and preview, but nothing runs on real accounts.';
+    banner.append(b);
+  }
   const g=$('#intgrid'); g.innerHTML='';
   for(const it of INTS){
     const row=el('div','introw');
@@ -694,9 +714,14 @@ function renderInts(){
     const mid=el('div'); mid.append(el('div','nm',it.nm),el('div','ds',it.ds));
     row.append(ig,mid,el('div','sp'));
     let btn;
-    if(it.state==='connected'){ btn=el('button','badge2 connected','Connected'); }
-    else if(it.state==='webhook'){ btn=el('button','badge2 webhook'); btn.append(document.createTextNode('⚡ Test Webhook')); btn.onclick=()=>openChat('test the pipedream webhook for my google ads account'); }
-    else { btn=el('button','badge2 connect','Connect'); btn.onclick=()=>{it.state='connected';renderInts();}; }
+    if(it.key==='_pd'){
+      if(configured){ btn=el('button','badge2 connected','Connected'); }
+      else { btn=el('button','badge2 connect','Set up'); btn.onclick=connectApp; }
+    } else {
+      const on = !!(CONN.apps && CONN.apps[it.key]);
+      if(on){ btn=el('button','badge2 connected','Connected'); }
+      else { btn=el('button','badge2 connect','Connect'); btn.onclick=connectApp; }
+    }
     row.append(btn); g.append(row);
   }
 }
@@ -738,7 +763,7 @@ cinput.addEventListener('input',()=>{cinput.style.height='auto';cinput.style.hei
 $('#theme').onclick=()=>{const c=document.documentElement.getAttribute('data-theme');document.documentElement.setAttribute('data-theme',c==='dark'?'light':'dark');};
 
 // init
-(async()=>{ await loadPacks(); const solar=PACKMETA.find(p=>p.id==='solar'); if(solar)$('#stat-cpa').textContent=money(solar.cpa.median)+' Market Median'; renderTabs(); renderCards(); renderInts(); })();
+(async()=>{ await loadPacks(); await fetchConnections(); const solar=PACKMETA.find(p=>p.id==='solar'); if(solar)$('#stat-cpa').textContent=money(solar.cpa.median)+' Market Median'; updateConnStat(); renderTabs(); renderCards(); renderInts(); })();
 </script>
 </body>
 </html>

@@ -5,6 +5,7 @@ import { Agent } from './agent/index.js';
 import { MockInterpreter } from './agent/intent.js';
 import { LlmInterpreter } from './agent/llm.js';
 import { getConnector, type Connector } from './connectors/index.js';
+import { loadConfig, pipedreamReady } from './config.js';
 import { getPack, listPacks, validateIntake } from './packs/index.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
 
@@ -46,6 +47,38 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   app.get('/', async (_req, reply) => reply.type('text/html').send(page));
   app.get('/favicon.ico', async (_req, reply) => reply.code(204).send());
   app.get('/health', async () => ({ ok: true, interpreter: interpreter.name, connector: connector.name }));
+
+  // Honest integration status — the Integrations page reads this instead of
+  // hard-coded "Connected" badges. Real apps connect through Pipedream, so their
+  // status follows whether Pipedream itself is configured.
+  app.get('/api/connections', async () => {
+    const cfg = loadConfig();
+    const pdReady = pipedreamReady(cfg);
+    return {
+      connector: connector.name,
+      pipedream: { configured: pdReady },
+      // Apps connect via Pipedream; until it's configured they're not connected.
+      apps: {
+        gohighlevel: pdReady,
+        google_ads: pdReady,
+        facebook_ads: pdReady,
+        servicetitan: false,
+        hubspot: false,
+      },
+    };
+  });
+
+  // Mint a Pipedream connect link the customer opens to connect an app account.
+  app.post<{ Body: { sessionId?: string } }>('/api/connect-token', async (req, reply) => {
+    const sessionId = req.body?.sessionId;
+    if (!sessionId) return reply.code(400).send({ error: 'sessionId required' });
+    try {
+      const token = await connector.createConnectToken(sessionId);
+      return token;
+    } catch (err) {
+      return reply.code(503).send({ error: String((err as Error).message) });
+    }
+  });
 
   // The vertical roster — verticals, their categories, and CPA benchmarks (for
   // the tabs + the Meters page).

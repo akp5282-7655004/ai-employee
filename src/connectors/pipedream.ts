@@ -34,40 +34,41 @@ export class PipedreamConnector implements Connector {
     if (!projectId || !clientId || !clientSecret) {
       throw new Error('Pipedream not configured — set PIPEDREAM_PROJECT_ID / _CLIENT_ID / _CLIENT_SECRET.');
     }
-    // Hidden from the static module graph so tsc/npm don't require the package
-    // until the connector actually goes live.
+    // Dynamic import keeps tsc uncoupled from the SDK's generated types.
     const importDynamic = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
     let sdk: any;
     try {
-      sdk = await importDynamic('@pipedream/sdk/server');
+      sdk = await importDynamic('@pipedream/sdk');
     } catch {
       throw new Error('Live Pipedream connector needs the SDK — run: npm install @pipedream/sdk');
     }
-    this.client = sdk.createBackendClient({
-      environment,
+    // v3 SDK: a single PipedreamClient with clientId/clientSecret/projectId.
+    this.client = new sdk.PipedreamClient({
+      clientId,
+      clientSecret,
       projectId,
-      credentials: { clientId, clientSecret },
+      projectEnvironment: environment,
     });
     return this.client;
   }
 
   async createConnectToken(externalUserId: string): Promise<ConnectTokenResult> {
     const pd = await this.backend();
-    const res = await pd.createConnectToken({ external_user_id: externalUserId });
+    const res = await pd.tokens.create({ externalUserId });
     return {
       token: res.token,
-      expiresAt: res.expires_at,
-      connectUrl: res.connect_link_url,
+      expiresAt: res.expiresAt ?? res.expires_at,
+      connectUrl: res.connectLinkUrl ?? res.connect_link_url,
     };
   }
 
   async listAccounts(externalUserId: string, app?: string): Promise<ConnectedAccount[]> {
     const pd = await this.backend();
-    const res = await pd.getAccounts({ external_user_id: externalUserId, app });
-    const rows: any[] = res?.data ?? res?.accounts ?? res ?? [];
+    const res = await pd.accounts.list({ externalUserId, app });
+    const rows: any[] = res?.data ?? res?.accounts ?? (Array.isArray(res) ? res : []);
     return rows.map((a) => ({
       id: a.id,
-      app: a.app?.name_slug ?? a.app?.name ?? a.app ?? 'unknown',
+      app: a.app?.nameSlug ?? a.app?.name_slug ?? a.app?.name ?? a.app ?? 'unknown',
       name: a.name,
       externalUserId,
       healthy: a.healthy ?? true,
@@ -78,9 +79,9 @@ export class PipedreamConnector implements Connector {
     const app = req.actionId.split('-')[0] ?? 'unknown';
     const pd = await this.backend();
     try {
-      // Connect's runAction: execute a component on the user's behalf.
-      // `id` is the component key (e.g. "google_ads-create-campaign").
-      const res = await pd.runAction({
+      // v3: actions.run executes a component on the user's behalf. `id` is the
+      // component key (e.g. "google_ads-create-campaign").
+      const res = await pd.actions.run({
         externalUserId: req.externalUserId,
         id: req.actionId,
         configuredProps: req.configuredProps ?? {},
