@@ -48,10 +48,17 @@ turns it into real output — all offline, no API keys:
   plain-English summary. This is the "brain"; an LLM planner can later emit the
   same `CampaignPlan` with richer copy (VISION §3, §8).
 
+- **`src/connectors/`** — the connector seam (the "hands"): a `Connector`
+  interface, an offline `MockConnector`, and a live `PipedreamConnector`
+  (Pipedream Connect via `@pipedream/sdk/server`). Mock by default; set
+  `CONNECTOR=pipedream` + credentials to go live. The engine talks only to the
+  seam and never knows which is behind it.
+
 ```bash
 npm install
-npm run demo      # two businesses, two verticals, one engine → two plans + the guardrail
-npm test          # 15 tests: packs, the four knobs, per-vertical compliance, the planner
+npm run demo          # two businesses, two verticals, one engine → two plans + the guardrail
+npm run demo:connect  # the connector seam: connect link → accounts → run an action (mock)
+npm test              # 20 tests: packs, the four knobs, compliance, the planner, connectors
 npm run typecheck
 ```
 
@@ -59,9 +66,33 @@ npm run typecheck
 and prints their (different) plans — then shows the claims checklist rejecting a
 `"pain-free, guaranteed results, #1 dentist"` ad.
 
+## Going live with Pipedream (the "hands")
+
+The connector is coded against Pipedream Connect and ships mock-first. To switch
+it live:
+
+1. Install the CLI and run the setup on **your** machine (it authenticates to your
+   Pipedream account and creates a project):
+   ```bash
+   curl https://cli.pipedream.com/install | sh
+   pd init connect
+   ```
+2. Put the project's Connect credentials in `.env` (see [`.env.example`](.env.example))
+   and install the SDK:
+   ```bash
+   npm install @pipedream/sdk
+   ```
+3. Set `CONNECTOR=pipedream`. `getConnector()` now returns the live client.
+
+`createConnectToken` and `listAccounts` are implemented against the published
+Connect API reference. `runAction` (running a component on a user's behalf) is
+stubbed with a clear TODO — the action-run docs weren't reachable from the build
+environment, so it's left explicit rather than shipped half-known; the mock
+implements it for now.
+
 ## What's next
 
 The hard 70% (VISION §8) is the **LLM agent loop** — plain-English request → plan
-→ tool calls → approval → post back — wrapping this deterministic planner, plus
-the first **surface** (Slack or web) and first **connector** (Pipedream). See the
+→ tool calls (through the connector) → approval → post back — wrapping this
+deterministic planner, plus the first **surface** (Slack or web). See the
 checklist in [`docs/VISION.md`](docs/VISION.md) §11.
