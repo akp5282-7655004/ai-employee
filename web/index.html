@@ -133,6 +133,12 @@
   .verdict.ok{background:var(--good-soft);color:var(--good);}
   .verdict.tight{background:var(--warn-soft);color:var(--warn);}
   .verdict.unrealistic{background:var(--warn-soft);color:var(--warn);}
+  .demo-map{width:100%;height:260px;border:1px solid var(--line);border-radius:12px;margin-bottom:16px;}
+  .racebar{display:grid;grid-template-columns:130px 1fr 50px;align-items:center;gap:10px;margin:8px 0;}
+  .racebar .rl{font-size:13px;color:var(--muted);}
+  .racebar .rt{height:10px;border-radius:5px;background:var(--line-soft);overflow:hidden;}
+  .racebar .rf{height:100%;border-radius:5px;background:var(--brand);}
+  .racebar .rp{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px;text-align:right;}
 
   /* integrations */
   .intwrap{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow);max-width:1040px;}
@@ -717,8 +723,14 @@ $('#v-budget').addEventListener('input',runValidate); $('#v-leads').addEventList
 function statCard(lab,val){ const c=el('div','stat'); c.append(el('div','lab',lab), el('div','val',val)); return c; }
 function renderResearch(d){
   const box=$('#r-results'); box.innerHTML='';
-  box.append(el('div','sect-label', (d.name||'').toUpperCase()));
-  const grid=el('div','stats'); grid.style.marginBottom='16px';
+  box.append(el('div','sect-label', ((d.place||d.name||'')+' · '+d.zip).toUpperCase()));
+  if(d.lat && d.lng){
+    const dl=0.12, bbox=(d.lng-dl)+','+(d.lat-dl)+','+(d.lng+dl)+','+(d.lat+dl);
+    const ifr=el('iframe'); ifr.className='demo-map'; ifr.loading='lazy';
+    ifr.src='https://www.openstreetmap.org/export/embed.html?bbox='+bbox+'&marker='+d.lat+','+d.lng+'&layer=mapnik';
+    box.append(ifr);
+  }
+  const grid=el('div','stats'); grid.style.marginBottom='18px';
   grid.append(
     statCard('Population', (d.population||0).toLocaleString()),
     statCard('Median household income', d.medianIncome? '$'+d.medianIncome.toLocaleString() : '—'),
@@ -726,7 +738,17 @@ function renderResearch(d){
     statCard('Homeownership', d.homeownershipPct? d.homeownershipPct+'%' : '—')
   );
   box.append(grid);
-  const ins=el('div','verdict ok'); ins.textContent='💡 '+(d.insight||''); box.append(ins);
+  const R=d.race||{};
+  box.append(el('div','sect-label','RACE & ETHNICITY'));
+  const rw=el('div');
+  const rows=[['White',R.white],['Hispanic',R.hispanic],['Black',R.black],['Asian',R.asian],['Multi-racial',R.multiRacial],['American Indian',R.americanIndian],['Nonwhite',R.nonwhite]];
+  for(const [lab,val] of rows){ if(val==null) continue;
+    const row=el('div','racebar'); row.append(el('div','rl',lab));
+    const t=el('div','rt'), f=el('div','rf'); f.style.width=Math.min(100,val)+'%'; if(lab==='Nonwhite') f.style.background='var(--warn)'; t.append(f); row.append(t);
+    row.append(el('div','rp',(val||0)+'%')); rw.append(row);
+  }
+  box.append(rw);
+  const ins=el('div','verdict ok'); ins.style.marginTop='18px'; ins.textContent='💡 '+(d.insight||''); box.append(ins);
 }
 async function runResearch(){
   const zip=(($('#r-zip').value)||'').replace(/\D/g,'').slice(0,5);

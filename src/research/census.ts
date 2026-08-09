@@ -4,20 +4,55 @@
  * saturation/competitor meter (docs/VISION.md §5, feature #11). No API key
  * required for this volume. Called server-side; the app never needs the raw API.
  */
+export interface RaceBreakdown {
+  white: number;
+  hispanic: number;
+  black: number;
+  asian: number;
+  americanIndian: number;
+  islander: number;
+  multiRacial: number;
+  nonwhite: number;
+}
+
 export interface Demographics {
   zip: string;
   name: string;
+  place?: string;
+  lat?: number;
+  lng?: number;
   population: number;
   households: number;
   medianIncome: number;
   medianHomeValue: number;
   medianAge: number;
   homeownershipPct: number;
+  race: RaceBreakdown;
   insight: string;
 }
 
-// population, median household income, median home value, median age, occupied units, owner-occupied
-const VARS = ['B01003_001E', 'B19013_001E', 'B25077_001E', 'B01002_001E', 'B25003_001E', 'B25003_002E'];
+// population, income, home value, age, occupancy, and race/ethnicity (B03002, not-Hispanic breakdown).
+const VARS = [
+  'B01003_001E', // total population
+  'B19013_001E', // median household income
+  'B25077_001E', // median home value
+  'B01002_001E', // median age
+  'B25003_001E', // occupied housing units
+  'B25003_002E', // owner-occupied
+  'B03002_001E', // race universe (total)
+  'B03002_003E', // White, not Hispanic
+  'B03002_004E', // Black, not Hispanic
+  'B03002_005E', // American Indian, not Hispanic
+  'B03002_006E', // Asian, not Hispanic
+  'B03002_007E', // Native Hawaiian / Pacific Islander, not Hispanic
+  'B03002_009E', // Two or more races, not Hispanic
+  'B03002_012E', // Hispanic or Latino
+];
+
+const num = (s: string | undefined): number => {
+  const n = Number(s);
+  return Number.isFinite(n) && n > -1_000_000 ? Math.max(0, Math.round(n)) : 0;
+};
 
 export async function fetchDemographics(zipInput: string): Promise<Demographics | null> {
   const zip = (zipInput || '').replace(/\D/g, '').slice(0, 5);
@@ -30,32 +65,60 @@ export async function fetchDemographics(zipInput: string): Promise<Demographics 
   if (!res.ok) return null;
   const data = (await res.json()) as string[][];
   if (!Array.isArray(data) || data.length < 2) return null;
+  const r = data[1]!;
 
-  const row = data[1]!;
-  // Census uses large negative sentinels (e.g. -666666666) for suppressed values.
-  const num = (s: string | undefined) => {
-    const n = Number(s);
-    return Number.isFinite(n) && n > -1_000_000 ? Math.max(0, Math.round(n)) : 0;
+  // r[0] is NAME; values follow in VARS order.
+  const [pop, income, homeValue, age, occ, owner, raceTotal, white, black, amInd, asian, islander, multi, hisp] = [
+    num(r[1]), num(r[2]), num(r[3]), num(r[4]), num(r[5]), num(r[6]),
+    num(r[7]), num(r[8]), num(r[9]), num(r[10]), num(r[11]), num(r[12]), num(r[13]), num(r[14]),
+  ];
+  const pct = (v: number) => (raceTotal ? Math.round((v / raceTotal) * 1000) / 10 : 0);
+  const race: RaceBreakdown = {
+    white: pct(white),
+    hispanic: pct(hisp),
+    black: pct(black),
+    asian: pct(asian),
+    americanIndian: pct(amInd),
+    islander: pct(islander),
+    multiRacial: pct(multi),
+    nonwhite: raceTotal ? Math.round((1 - white / raceTotal) * 1000) / 10 : 0,
   };
-  const population = num(row[1]);
-  const medianIncome = num(row[2]);
-  const medianHomeValue = num(row[3]);
-  const medianAge = num(row[4]);
-  const households = num(row[5]);
-  const owner = num(row[6]);
-  const homeownershipPct = households ? Math.round((owner / households) * 100) : 0;
+
+  const geo = await geocodeZip(zip);
 
   return {
     zip,
-    name: (row[0] ?? `ZCTA ${zip}`).replace(/^ZCTA5\s*/, 'ZIP '),
-    population,
-    households,
-    medianIncome,
-    medianHomeValue,
-    medianAge,
-    homeownershipPct,
-    insight: insightFor(medianIncome, medianHomeValue, homeownershipPct),
+    name: (r[0] ?? `ZCTA ${zip}`).replace(/^ZCTA5\s*/, 'ZIP '),
+    place: geo?.place,
+    lat: geo?.lat,
+    lng: geo?.lng,
+    population: pop,
+    households: occ,
+    medianIncome: income,
+    medianHomeValue: homeValue,
+    medianAge: age,
+    homeownershipPct: occ ? Math.round((owner / occ) * 100) : 0,
+    race,
+    insight: insightFor(income, homeValue, occ ? Math.round((owner / occ) * 100) : 0),
   };
+}
+
+/** Free ZIP → lat/lng + place name for the map (no key). Best-effort. */
+async function geocodeZip(zip: string): Promise<{ lat: number; lng: number; place: string } | undefined> {
+  try {
+    const res = await fetch(`https://api.zippopotam.us/us/${zip}`);
+    if (!res.ok) return undefined;
+    const j = (await res.json()) as any;
+    const p = j?.places?.[0];
+    if (!p) return undefined;
+    return {
+      lat: Number(p.latitude),
+      lng: Number(p.longitude),
+      place: `${p['place name']}, ${p['state abbreviation'] ?? p.state ?? ''}`.trim().replace(/,\s*$/, ''),
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function insightFor(income: number, homeValue: number, ownership: number): string {
