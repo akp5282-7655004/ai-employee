@@ -156,7 +156,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
         /* leave empty on any error */
       }
     }
-    return { connector: connector.name, pipedream: { configured: pdReady }, connectedApps };
+    return { connector: connector.name, hub: { ready: pdReady }, connectedApps };
   });
 
   // Mint a Pipedream connect link the customer opens to connect an app account.
