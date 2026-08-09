@@ -147,6 +147,17 @@
   .badge2.connected{background:var(--primary);color:var(--primary-ink);}
   .badge2.connect{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);}
   .badge2.webhook{background:var(--primary);color:var(--primary-ink);display:inline-flex;align-items:center;gap:6px;}
+  .searchbar{width:100%;max-width:1040px;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:12px 15px;font-size:14px;color:var(--ink);font-family:var(--sans);margin-bottom:18px;box-shadow:var(--shadow);}
+  .searchbar:focus{outline:none;border-color:var(--accent);}
+  .sect-label{font-size:11px;letter-spacing:.05em;color:var(--faint);font-weight:700;margin:14px 0 10px;}
+  .appgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:1040px;}
+  .appcard{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:13px 15px;cursor:pointer;box-shadow:var(--shadow);}
+  .appcard:hover{border-color:var(--accent);transform:translateY(-1px);}
+  .applogo{width:34px;height:34px;border-radius:9px;flex:none;display:grid;place-items:center;background:var(--panel-2);font-weight:800;font-size:14px;overflow:hidden;color:var(--muted);}
+  .applogo img{width:22px;height:22px;object-fit:contain;}
+  .appname{font-size:14px;font-weight:600;line-height:1.2;}
+  .appsub{font-size:11.5px;color:var(--muted);margin-top:2px;}
+  .appcard .cdot{width:7px;height:7px;border-radius:50%;background:var(--good);margin-left:auto;flex:none;}
 
   /* chat */
   .chatview{display:none;max-width:820px;margin:0 auto;} .chatview.on{display:flex;flex-direction:column;height:calc(100dvh - 120px);}
@@ -260,12 +271,12 @@
 
     <!-- INTEGRATIONS -->
     <section class="page" id="page-int">
-      <div class="intwrap">
-        <h3>Connected Integrations &amp; Channels</h3>
-        <p class="idesc">Manage webhooks, CRMs, and ad channel API credentials</p>
-        <div id="int-banner"></div>
-        <div class="intgrid" id="intgrid"></div>
-      </div>
+      <p class="mdesc" style="margin:-8px 0 16px">Connect the tools you use and let Miles run tasks across them — powered by Pipedream's 3,000+ apps.</p>
+      <div id="int-banner"></div>
+      <input class="searchbar" id="app-search" placeholder="Search from 3,000+ integrations…" autocomplete="off">
+      <div id="int-connected"></div>
+      <div class="sect-label" id="cat-label">POPULAR</div>
+      <div class="appgrid" id="int-catalog"></div>
     </section>
 
     <!-- CHAT -->
@@ -639,7 +650,7 @@ function setPage(id){
   if(id==='skills'){ activeCat='Math Skills'; renderTabs(); renderCards(); }
   if(homeIds.includes(id) && id!=='skills' && activeCat==='Math Skills'){ activeCat='Popular tasks'; renderTabs(); renderCards(); }
   if(id==='meters') renderMeters();
-  if(id==='integrations'){ fetchConnections().then(()=>{ renderInts(); updateConnStat(); }); }
+  if(id==='integrations'){ loadIntegrations(); }
 }
 function updateConnStat(){
   const configured = !!(CONN.pipedream && CONN.pipedream.configured);
@@ -687,55 +698,66 @@ $('#v-budget').addEventListener('input',runValidate); $('#v-leads').addEventList
 // ═══ integrations (honest, backend-driven) ═══
 let CONN = { pipedream:{configured:false}, connectedApps:[] };
 async function fetchConnections(){ if(REMOTE){ try{ CONN = await fetch('/api/connections?sessionId='+encodeURIComponent(sessionId)).then(r=>r.json()); }catch(e){} } }
-const INTS=[
-  {key:'_pd',icon:'🔁',bg:'#e6effe',nm:'Pipedream Integration Engine',ds:'3,000+ App Webhooks'},
-  {key:'gohighlevel',icon:'⚡',bg:'#fff3d6',nm:'GoHighLevel CRM',ds:'Pipeline & Lead Sync'},
-  {key:'google_ads',icon:'🎯',bg:'#fde8e8',nm:'Google Ads & LSA',ds:'Search & Call Bidding'},
-  {key:'facebook_ads',icon:'📱',bg:'#eef1f4',nm:'Meta Ads Manager',ds:'Facebook & Instagram'},
-  {key:'servicetitan',icon:'🔧',bg:'#eef1f4',nm:'ServiceTitan ERP',ds:'Job Scheduling & Dispatch'},
-  {key:'hubspot',icon:'🟠',bg:'#ffefe0',nm:'HubSpot Marketing',ds:'Enterprise CRM Sync'},
+// Offline/standalone fallback catalogue (the real list comes from /api/apps → Pipedream).
+const FALLBACK_APPS=[
+  {slug:'google_ads',name:'Google Ads'},{slug:'facebook',name:'Meta Ads'},{slug:'google_my_business',name:'Google Business Profile'},
+  {slug:'gohighlevel',name:'GoHighLevel'},{slug:'hubspot',name:'HubSpot'},{slug:'salesforce_rest_api',name:'Salesforce'},
+  {slug:'servicetitan',name:'ServiceTitan'},{slug:'slack',name:'Slack'},{slug:'gmail',name:'Gmail'},{slug:'google_sheets',name:'Google Sheets'},
+  {slug:'google_calendar',name:'Google Calendar'},{slug:'calendly',name:'Calendly'},{slug:'twilio',name:'Twilio'},{slug:'mailchimp',name:'Mailchimp'},
+  {slug:'stripe',name:'Stripe'},{slug:'notion',name:'Notion'},{slug:'zoom',name:'Zoom'},{slug:'linkedin',name:'LinkedIn'},
+  {slug:'google_analytics',name:'Google Analytics'},{slug:'quickbooks',name:'QuickBooks'},
 ];
-const PD_SLUG = { google_ads:'google_ads', facebook_ads:'facebook', gohighlevel:'gohighlevel', servicetitan:'servicetitan', hubspot:'hubspot', _pd:'' };
-async function connectApp(appKey){
+let APPS=[];
+async function fetchApps(q){
+  if(REMOTE){ try{ const r=await fetch('/api/apps?q='+encodeURIComponent(q||'')+'&limit=48').then(r=>r.json()); APPS=r.apps||[]; return; }catch(e){} }
+  const s=(q||'').toLowerCase(); APPS = s ? FALLBACK_APPS.filter(a=>a.name.toLowerCase().includes(s)||a.slug.includes(s)) : FALLBACK_APPS;
+}
+async function connectApp(slug){
   if(!(CONN.pipedream && CONN.pipedream.configured)){ setPage('chat'); chat.innerHTML=''; say('emp',"Pipedream isn't set up yet. Add PIPEDREAM_PROJECT_ID / _CLIENT_ID / _CLIENT_SECRET and CONNECTOR=pipedream, then this opens a secure link to connect the app."); return; }
   try{
-    const r = await fetch('/api/connect-token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId, app: PD_SLUG[appKey]||appKey})});
+    const r = await fetch('/api/connect-token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId, app: slug})});
     const t = await r.json().catch(()=>({}));
     if(!r.ok || !t.connectUrl){ setPage('chat'); chat.innerHTML=''; say('emp','⚠️ Couldn’t start the connection. '+(t.error||('HTTP '+r.status))+'  — check your Render Logs and tell me the error.'); return; }
     const w = window.open(t.connectUrl,'_blank','noopener');
     if(!w){ setPage('chat'); chat.innerHTML=''; say('emp','I opened your Pipedream connect link, but your browser blocked the pop-up. Allow pop-ups for this site, or open it manually: '+t.connectUrl); }
   }catch(e){ setPage('chat'); chat.innerHTML=''; say('emp','⚠️ Connection error: '+e.message); }
 }
+function appLogo(a){ const l=el('div','applogo'); if(a.img){ const im=el('img'); im.src=a.img; im.alt=''; im.onerror=()=>{l.textContent=(a.name||'?')[0];im.remove();}; l.append(im);} else { l.textContent=(a.name||'?')[0]; } return l; }
+function appCard(a, connected){
+  const c=el('div','appcard'); const mid=el('div'); mid.append(el('div','appname',a.name));
+  if(connected) mid.append(el('div','appsub','1 account connected'));
+  c.append(appLogo(a), mid);
+  if(connected) c.append(el('div','cdot'));
+  c.onclick=()=>connectApp(a.slug);
+  return c;
+}
 function renderInts(){
   const configured = !!(CONN.pipedream && CONN.pipedream.configured);
   const connected = new Set(CONN.connectedApps||[]);
   const banner=$('#int-banner'); banner.innerHTML='';
-  if(!configured){
-    const b=el('div','verdict tight'); b.style.marginBottom='16px';
-    b.textContent='⚠️ Pipedream isn’t connected yet. Integrations are in demo mode until your Pipedream credentials are added (CONNECTOR=pipedream + PIPEDREAM_* keys). Until then, plans build and preview, but nothing runs on real accounts.';
-    banner.append(b);
-  } else {
-    const b=el('div','verdict ok'); b.style.marginBottom='16px';
-    b.textContent='✅ Pipedream is connected. Click “Connect” on an app to link your real account through Pipedream. Apps show “Connected” only once you’ve linked them.';
-    banner.append(b);
+  const b=el('div','verdict '+(configured?'ok':'tight')); b.style.marginBottom='16px';
+  b.textContent = configured
+    ? '✅ Pipedream is connected. Search 3,000+ apps below and click one to link your real account. Apps show a green dot once linked.'
+    : '⚠️ Pipedream isn’t connected yet — add your credentials (CONNECTOR=pipedream + PIPEDREAM_* keys). Until then this is a preview of the catalogue.';
+  banner.append(b);
+
+  // Connected section
+  const cwrap=$('#int-connected'); cwrap.innerHTML='';
+  const connList=[...connected];
+  if(connList.length){
+    cwrap.append(el('div','sect-label','CONNECTED · '+connList.length));
+    const g=el('div','appgrid');
+    for(const slug of connList){ const meta=APPS.find(x=>x.slug===slug)||{slug,name:slug}; g.append(appCard(meta,true)); }
+    cwrap.append(g);
   }
-  const g=$('#intgrid'); g.innerHTML='';
-  for(const it of INTS){
-    const row=el('div','introw');
-    const ig=el('div','ig',it.icon); ig.style.background=it.bg;
-    const mid=el('div'); mid.append(el('div','nm',it.nm),el('div','ds',it.ds));
-    row.append(ig,mid,el('div','sp'));
-    let btn;
-    if(it.key==='_pd'){
-      if(configured){ btn=el('button','badge2 connected','Connected'); }
-      else { btn=el('button','badge2 connect','Set up'); btn.onclick=()=>connectApp('_pd'); }
-    } else {
-      if(connected.has(it.key)){ btn=el('button','badge2 connected','Connected'); }
-      else { btn=el('button','badge2 connect','Connect'); btn.onclick=()=>connectApp(it.key); }
-    }
-    row.append(btn); g.append(row);
-  }
+  // Catalogue
+  $('#cat-label').textContent = $('#app-search').value.trim() ? 'RESULTS' : 'POPULAR';
+  const cat=$('#int-catalog'); cat.innerHTML='';
+  for(const a of APPS){ if(connected.has(a.slug)) continue; cat.append(appCard(a,false)); }
+  if(!APPS.length) cat.append(el('div','appsub','No apps found.'));
 }
+async function loadIntegrations(){ await fetchConnections(); await fetchApps($('#app-search').value); renderInts(); updateConnStat(); }
+let searchT; $('#app-search').addEventListener('input',()=>{ clearTimeout(searchT); searchT=setTimeout(async()=>{ await fetchApps($('#app-search').value); renderInts(); }, 250); });
 
 // ═══ chat ═══
 const chat=$('#chat'), cinput=$('#cinput');
@@ -774,7 +796,7 @@ cinput.addEventListener('input',()=>{cinput.style.height='auto';cinput.style.hei
 $('#theme').onclick=()=>{const c=document.documentElement.getAttribute('data-theme');document.documentElement.setAttribute('data-theme',c==='dark'?'light':'dark');};
 
 // init
-(async()=>{ await loadPacks(); await fetchConnections(); const solar=PACKMETA.find(p=>p.id==='solar'); if(solar)$('#stat-cpa').textContent=money(solar.cpa.median)+' Market Median'; updateConnStat(); renderTabs(); renderCards(); renderInts(); })();
+(async()=>{ await loadPacks(); await fetchConnections(); const solar=PACKMETA.find(p=>p.id==='solar'); if(solar)$('#stat-cpa').textContent=money(solar.cpa.median)+' Market Median'; updateConnStat(); renderTabs(); renderCards(); })();
 </script>
 </body>
 </html>

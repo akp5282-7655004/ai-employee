@@ -46,6 +46,16 @@ export interface RunActionResult {
   note?: string;
 }
 
+/** One app in the connector's catalog (Pipedream's ~3,000-app registry). */
+export interface AppInfo {
+  slug: string;
+  name: string;
+  description?: string;
+  /** Logo URL. */
+  img?: string;
+  categories?: string[];
+}
+
 export interface Connector {
   readonly name: string;
   /** Mint a short-lived token so an end-user can connect an app account. */
@@ -54,6 +64,8 @@ export interface Connector {
   listAccounts(externalUserId: string, app?: string): Promise<ConnectedAccount[]>;
   /** Run an app action on the user's behalf — the "hands". */
   runAction(req: RunActionRequest): Promise<RunActionResult>;
+  /** Browse/search the connector's app catalog (Pipedream's registry). */
+  listApps?(query?: string, limit?: number): Promise<AppInfo[]>;
   /**
    * Mark an app connected for a user. Present on the mock (a demo shortcut); on
    * live Pipedream the real connection happens through the connect-token flow, so

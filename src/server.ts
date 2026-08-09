@@ -99,6 +99,18 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     })),
   );
 
+  // Browse/search the connector's app catalog (Pipedream's ~3,000 apps).
+  app.get<{ Querystring: { q?: string; limit?: string } }>('/api/apps', async (req) => {
+    const q = req.query?.q;
+    const limit = req.query?.limit ? Math.min(Number(req.query.limit) || 60, 100) : 60;
+    try {
+      const apps = connector.listApps ? await connector.listApps(q, limit) : [];
+      return { apps };
+    } catch (err) {
+      return { apps: [], error: String((err as Error).message) };
+    }
+  });
+
   // The intake math validator (VISION §5 / feature #14).
   app.post<{ Body: { vertical?: string; monthlyBudget?: number; targetLeads?: number } }>(
     '/api/validate',

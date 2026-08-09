@@ -1,10 +1,35 @@
 import type {
+  AppInfo,
   ConnectedAccount,
   ConnectTokenResult,
   Connector,
   RunActionRequest,
   RunActionResult,
 } from './types.js';
+
+/** A curated slice of the app catalog for offline/demo mode. */
+const MOCK_APPS: AppInfo[] = [
+  { slug: 'google_ads', name: 'Google Ads', categories: ['Advertising'] },
+  { slug: 'facebook', name: 'Meta Ads', categories: ['Advertising'] },
+  { slug: 'google_my_business', name: 'Google Business Profile', categories: ['Marketing'] },
+  { slug: 'gohighlevel', name: 'GoHighLevel', categories: ['CRM'] },
+  { slug: 'hubspot', name: 'HubSpot', categories: ['CRM'] },
+  { slug: 'salesforce_rest_api', name: 'Salesforce', categories: ['CRM'] },
+  { slug: 'servicetitan', name: 'ServiceTitan', categories: ['Field Service'] },
+  { slug: 'slack', name: 'Slack', categories: ['Communication'] },
+  { slug: 'gmail', name: 'Gmail', categories: ['Email'] },
+  { slug: 'google_sheets', name: 'Google Sheets', categories: ['Productivity'] },
+  { slug: 'google_calendar', name: 'Google Calendar', categories: ['Productivity'] },
+  { slug: 'calendly', name: 'Calendly', categories: ['Scheduling'] },
+  { slug: 'twilio', name: 'Twilio', categories: ['Communication'] },
+  { slug: 'mailchimp', name: 'Mailchimp', categories: ['Email'] },
+  { slug: 'stripe', name: 'Stripe', categories: ['Payments'] },
+  { slug: 'notion', name: 'Notion', categories: ['Productivity'] },
+  { slug: 'zoom', name: 'Zoom', categories: ['Communication'] },
+  { slug: 'linkedin', name: 'LinkedIn', categories: ['Social'] },
+  { slug: 'google_analytics', name: 'Google Analytics', categories: ['Analytics'] },
+  { slug: 'quickbooks', name: 'QuickBooks', categories: ['Accounting'] },
+];
 
 /**
  * The offline connector — the default, no Pipedream account required. It
@@ -51,6 +76,12 @@ export class MockConnector implements Connector {
   async listAccounts(externalUserId: string, app?: string): Promise<ConnectedAccount[]> {
     const list = this.accounts.get(externalUserId) ?? [];
     return app ? list.filter((a) => a.app === app) : list;
+  }
+
+  async listApps(query?: string, limit = 60): Promise<AppInfo[]> {
+    const q = (query ?? '').trim().toLowerCase();
+    const rows = q ? MOCK_APPS.filter((a) => a.name.toLowerCase().includes(q) || a.slug.includes(q)) : MOCK_APPS;
+    return rows.slice(0, limit);
   }
 
   async runAction(req: RunActionRequest): Promise<RunActionResult> {

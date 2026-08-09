@@ -1,5 +1,6 @@
 import type { Config } from '../config.js';
 import type {
+  AppInfo,
   ConnectedAccount,
   ConnectTokenResult,
   Connector,
@@ -72,6 +73,19 @@ export class PipedreamConnector implements Connector {
       name: a.name,
       externalUserId,
       healthy: a.healthy ?? true,
+    }));
+  }
+
+  async listApps(query?: string, limit = 60): Promise<AppInfo[]> {
+    const pd = await this.backend();
+    const res = await pd.apps.list({ q: query || undefined, limit, hasActions: true });
+    const rows: any[] = res?.data ?? (Array.isArray(res) ? res : (res?.items ?? []));
+    return rows.map((a) => ({
+      slug: a.nameSlug ?? a.name_slug,
+      name: a.name,
+      description: a.description,
+      img: a.imgSrc ?? a.img_src,
+      categories: a.categories ?? [],
     }));
   }
 
