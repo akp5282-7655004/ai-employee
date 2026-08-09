@@ -643,8 +643,8 @@ function setPage(id){
 }
 function updateConnStat(){
   const configured = !!(CONN.pipedream && CONN.pipedream.configured);
-  const n = configured ? Object.values(CONN.apps||{}).filter(Boolean).length : 0;
-  $('#stat-conn').textContent = configured ? (n+' connected') : 'Demo mode · not live';
+  const n = (CONN.connectedApps||[]).length;
+  $('#stat-conn').textContent = configured ? (n===0 ? 'Pipedream ready · link apps' : n+' apps connected') : 'Demo mode · not live';
 }
 document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>setPage(a.dataset.page));
 
@@ -685,8 +685,8 @@ async function runValidate(){
 $('#v-budget').addEventListener('input',runValidate); $('#v-leads').addEventListener('input',runValidate);
 
 // ═══ integrations (honest, backend-driven) ═══
-let CONN = { pipedream:{configured:false}, apps:{} };
-async function fetchConnections(){ if(REMOTE){ try{ CONN = await fetch('/api/connections').then(r=>r.json()); }catch(e){} } }
+let CONN = { pipedream:{configured:false}, connectedApps:[] };
+async function fetchConnections(){ if(REMOTE){ try{ CONN = await fetch('/api/connections?sessionId='+encodeURIComponent(sessionId)).then(r=>r.json()); }catch(e){} } }
 const INTS=[
   {key:'_pd',icon:'🔁',bg:'#e6effe',nm:'Pipedream Integration Engine',ds:'3,000+ App Webhooks'},
   {key:'gohighlevel',icon:'⚡',bg:'#fff3d6',nm:'GoHighLevel CRM',ds:'Pipeline & Lead Sync'},
@@ -695,16 +695,27 @@ const INTS=[
   {key:'servicetitan',icon:'🔧',bg:'#eef1f4',nm:'ServiceTitan ERP',ds:'Job Scheduling & Dispatch'},
   {key:'hubspot',icon:'🟠',bg:'#ffefe0',nm:'HubSpot Marketing',ds:'Enterprise CRM Sync'},
 ];
-async function connectApp(){
-  if(!CONN.pipedream.configured){ setPage('chat'); chat.innerHTML=''; say('emp',"To connect real apps, Pipedream needs to be set up first with your account credentials. Ask your admin to add PIPEDREAM_PROJECT_ID, PIPEDREAM_CLIENT_ID and PIPEDREAM_CLIENT_SECRET (and set CONNECTOR=pipedream). Once that's live, this button opens a secure link to connect the app."); return; }
-  try{ const t = await fetch('/api/connect-token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId})}).then(r=>r.json()); if(t.connectUrl) window.open(t.connectUrl,'_blank'); }catch(e){}
+async function connectApp(appKey){
+  if(!(CONN.pipedream && CONN.pipedream.configured)){ setPage('chat'); chat.innerHTML=''; say('emp',"Pipedream isn't set up yet. Add PIPEDREAM_PROJECT_ID / _CLIENT_ID / _CLIENT_SECRET and CONNECTOR=pipedream, then this opens a secure link to connect the app."); return; }
+  try{
+    const r = await fetch('/api/connect-token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId})});
+    const t = await r.json().catch(()=>({}));
+    if(!r.ok || !t.connectUrl){ setPage('chat'); chat.innerHTML=''; say('emp','⚠️ Couldn’t start the connection. '+(t.error||('HTTP '+r.status))+'  — check your Render Logs and tell me the error.'); return; }
+    const w = window.open(t.connectUrl,'_blank','noopener');
+    if(!w){ setPage('chat'); chat.innerHTML=''; say('emp','I opened your Pipedream connect link, but your browser blocked the pop-up. Allow pop-ups for this site, or open it manually: '+t.connectUrl); }
+  }catch(e){ setPage('chat'); chat.innerHTML=''; say('emp','⚠️ Connection error: '+e.message); }
 }
 function renderInts(){
   const configured = !!(CONN.pipedream && CONN.pipedream.configured);
+  const connected = new Set(CONN.connectedApps||[]);
   const banner=$('#int-banner'); banner.innerHTML='';
   if(!configured){
     const b=el('div','verdict tight'); b.style.marginBottom='16px';
     b.textContent='⚠️ Pipedream isn’t connected yet. Integrations are in demo mode until your Pipedream credentials are added (CONNECTOR=pipedream + PIPEDREAM_* keys). Until then, plans build and preview, but nothing runs on real accounts.';
+    banner.append(b);
+  } else {
+    const b=el('div','verdict ok'); b.style.marginBottom='16px';
+    b.textContent='✅ Pipedream is connected. Click “Connect” on an app to link your real account through Pipedream. Apps show “Connected” only once you’ve linked them.';
     banner.append(b);
   }
   const g=$('#intgrid'); g.innerHTML='';
@@ -716,11 +727,10 @@ function renderInts(){
     let btn;
     if(it.key==='_pd'){
       if(configured){ btn=el('button','badge2 connected','Connected'); }
-      else { btn=el('button','badge2 connect','Set up'); btn.onclick=connectApp; }
+      else { btn=el('button','badge2 connect','Set up'); btn.onclick=()=>connectApp('_pd'); }
     } else {
-      const on = !!(CONN.apps && CONN.apps[it.key]);
-      if(on){ btn=el('button','badge2 connected','Connected'); }
-      else { btn=el('button','badge2 connect','Connect'); btn.onclick=connectApp; }
+      if(connected.has(it.key)){ btn=el('button','badge2 connected','Connected'); }
+      else { btn=el('button','badge2 connect','Connect'); btn.onclick=()=>connectApp(it.key); }
     }
     row.append(btn); g.append(row);
   }

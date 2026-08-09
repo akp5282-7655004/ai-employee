@@ -51,21 +51,22 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   // Honest integration status — the Integrations page reads this instead of
   // hard-coded "Connected" badges. Real apps connect through Pipedream, so their
   // status follows whether Pipedream itself is configured.
-  app.get('/api/connections', async () => {
+  app.get<{ Querystring: { sessionId?: string } }>('/api/connections', async (req) => {
     const cfg = loadConfig();
     const pdReady = pipedreamReady(cfg);
-    return {
-      connector: connector.name,
-      pipedream: { configured: pdReady },
-      // Apps connect via Pipedream; until it's configured they're not connected.
-      apps: {
-        gohighlevel: pdReady,
-        google_ads: pdReady,
-        facebook_ads: pdReady,
-        servicetitan: false,
-        hubspot: false,
-      },
-    };
+    // An app is "connected" only if the user has actually linked that account —
+    // we ask the connector for their real accounts, never assume.
+    let connectedApps: string[] = [];
+    const sessionId = req.query?.sessionId;
+    if (sessionId) {
+      try {
+        const accts = await connector.listAccounts(sessionId);
+        connectedApps = [...new Set(accts.map((a) => a.app))];
+      } catch {
+        /* leave empty on any error */
+      }
+    }
+    return { connector: connector.name, pipedream: { configured: pdReady }, connectedApps };
   });
 
   // Mint a Pipedream connect link the customer opens to connect an app account.
