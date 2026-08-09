@@ -32,27 +32,36 @@ against (VISION §6).
 
 ## What's built (v0)
 
-The command-pack foundation — the moat artifact — is in place and tested:
+The command-pack foundation (the moat artifact) **and a runnable planner** that
+turns it into real output — all offline, no API keys:
 
-- **`src/packs/types.ts`** — the `CommandPack` format (the four knobs).
-- **`src/packs/homeServices.ts`**, **`dental.ts`** — the first two verticals.
-  Dental proves the pattern: a considered-purchase channel mix (Search-led, not
-  LSA-led), dental offers, and health-claim compliance (`pain-free`,
-  guaranteed-outcome, HIPAA) the trades never see.
-- **`src/packs/apply.ts`** — the universal math: `channelWeights`, `budgetBand`,
-  `suggestOffers`, and the `checkClaims` honesty guardrail (universal rules +
-  each pack's own compliance patterns).
-- **`src/packs/index.ts`** — the registry (`getPack` / `listPacks`).
+- **`src/packs/`** — the `CommandPack` format (the four knobs), the first two
+  verticals (home services + dental), the universal math (`channelWeights`,
+  `budgetBand`, `suggestOffers`, `checkClaims`), and the registry. Dental proves
+  the pattern: a considered-purchase mix (Search-led, not LSA-led), dental offers,
+  and health-claim compliance (`pain-free`, guaranteed-outcome, HIPAA) the trades
+  never see.
+- **`src/intake.ts`** — the strict intake; the category is validated against the
+  chosen vertical.
+- **`src/plan/`** — the deterministic planner: intake → channel mix + budget split
+  + featured services + proven offers + **claims-checked ad drafts** + a
+  plain-English summary. This is the "brain"; an LLM planner can later emit the
+  same `CampaignPlan` with richer copy (VISION §3, §8).
 
 ```bash
 npm install
-npm test        # 9 tests: registry, the four knobs moving the mix, per-vertical compliance
+npm run demo      # two businesses, two verticals, one engine → two plans + the guardrail
+npm test          # 15 tests: packs, the four knobs, per-vertical compliance, the planner
 npm run typecheck
 ```
 
+`npm run demo` runs a plumbing shop and a dental practice through the same engine
+and prints their (different) plans — then shows the claims checklist rejecting a
+`"pain-free, guaranteed results, #1 dentist"` ad.
+
 ## What's next
 
-The hard 70% (VISION §8) is the **agent loop** — plain-English request → plan →
-tool calls → approval → post back — plus the first **surface** (Slack or web) and
-first **connector** (Pipedream). See the checklist in
-[`docs/VISION.md`](docs/VISION.md) §11.
+The hard 70% (VISION §8) is the **LLM agent loop** — plain-English request → plan
+→ tool calls → approval → post back — wrapping this deterministic planner, plus
+the first **surface** (Slack or web) and first **connector** (Pipedream). See the
+checklist in [`docs/VISION.md`](docs/VISION.md) §11.
