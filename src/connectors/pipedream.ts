@@ -17,10 +17,10 @@ import type {
  *  - The SDK is loaded dynamically at first use, so the offline project ships with
  *    no extra dependency and no typecheck coupling. Install it to go live:
  *      npm install @pipedream/sdk
- *  - `runAction` is left as an explicit TODO. The connect-token and accounts calls
- *    are verified against the public API reference; the action-run surface was not
- *    reachable from the build environment (pipedream.com egress is blocked), so it
- *    is not shipped half-known. The mock connector implements it for now.
+ *  - `runAction` executes a Connect component (`id` = the component key) on the
+ *    user's behalf. It's implemented against the documented RunActionOpts shape;
+ *    because it runs real API calls, test it against a sandbox account before
+ *    trusting it in production.
  */
 export class PipedreamConnector implements Connector {
   readonly name = 'pipedream';
@@ -74,11 +74,21 @@ export class PipedreamConnector implements Connector {
     }));
   }
 
-  async runAction(_req: RunActionRequest): Promise<RunActionResult> {
-    // Intentionally not implemented against the live API yet — see class docstring.
-    throw new Error(
-      'PipedreamConnector.runAction is not wired to the live API yet. Verify the ' +
-        'runAction/component-run surface against the Connect API reference, then implement here.',
-    );
+  async runAction(req: RunActionRequest): Promise<RunActionResult> {
+    const app = req.actionId.split('-')[0] ?? 'unknown';
+    const pd = await this.backend();
+    try {
+      // Connect's runAction: execute a component on the user's behalf.
+      // `id` is the component key (e.g. "google_ads-create-campaign").
+      const res = await pd.runAction({
+        externalUserId: req.externalUserId,
+        id: req.actionId,
+        configuredProps: req.configuredProps ?? {},
+      });
+      const output = (res && (res.ret ?? res.exports ?? res)) ?? null;
+      return { ok: true, actionId: req.actionId, app, output };
+    } catch (err) {
+      return { ok: false, actionId: req.actionId, app, output: null, note: String((err as Error).message) };
+    }
   }
 }
