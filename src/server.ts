@@ -144,6 +144,22 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { ok: true, profile: data.profile };
   });
 
+  // Installed skills (Marketplace bundles) for the workspace.
+  app.get('/api/skills', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return { installed: (data.skills as string[]) ?? [] };
+  });
+  app.put<{ Body: { installed?: string[] } }>('/api/skills', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    data.skills = Array.isArray(req.body?.installed) ? req.body!.installed!.slice(0, 200) : [];
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+
   // ── settings: account, API keys, team, usage ──
   app.get('/api/settings', async (req, reply) => {
     const u = await requireUser(req, reply);

@@ -313,6 +313,7 @@
       <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
       <a data-page="profile"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
       <a data-page="settings"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg> Settings</a>
+      <a data-page="market"><svg class="ico" viewBox="0 0 24 24"><path d="M3 9h18l-1.4-5.3A1 1 0 0 0 18.6 3H5.4a1 1 0 0 0-1 .7L3 9Z"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9M9 13h6"/></svg> Marketplace</a>
     </nav>
     <div class="glabel">PROJECTS</div>
     <div class="pill newproj"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New project</div>
@@ -486,6 +487,16 @@
     <section class="page" id="page-settings">
       <div class="subtabs" id="set-subtabs"></div>
       <div id="settings-body"></div>
+    </section>
+
+    <!-- SKILLS -->
+    <section class="page" id="page-skills">
+      <div id="skills-body"></div>
+    </section>
+
+    <!-- MARKETPLACE -->
+    <section class="page" id="page-market">
+      <div id="market-body"></div>
     </section>
 
     <!-- generic modal -->
@@ -897,12 +908,14 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',hub:'Marketing Hub',assets:'Brand Assets',deploy:'Deploy',integrations:'Integrations',profile:'Business Profile',settings:'Settings',chat:'Ask Miles'};
+const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',hub:'Marketing Hub',assets:'Brand Assets',deploy:'Deploy',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
-  const homeIds=['dashboard','agents','skills'];
+  const homeIds=['dashboard','agents'];
   $('#page-home').classList.toggle('on',homeIds.includes(id));
+  $('#page-skills').classList.toggle('on',id==='skills');
+  $('#page-market').classList.toggle('on',id==='market');
   $('#page-meters').classList.toggle('on',id==='meters');
   $('#page-analytics').classList.toggle('on',id==='analytics');
   $('#page-research').classList.toggle('on',id==='research');
@@ -916,8 +929,9 @@ function setPage(id){
   $('#page-profile').classList.toggle('on',id==='profile');
   $('#page-chat').classList.toggle('on',id==='chat');
   if(id==='profile') loadProfile();
-  if(id==='skills'){ activeCat='Math Skills'; renderTabs(); renderCards(); }
-  if(homeIds.includes(id) && id!=='skills' && activeCat==='Math Skills'){ activeCat='Popular tasks'; renderTabs(); renderCards(); }
+  if(id==='skills') openSkills();
+  if(id==='market') openMarket();
+  if(homeIds.includes(id) && activeCat==='Math Skills'){ activeCat='Popular tasks'; renderTabs(); renderCards(); }
   if(id==='meters') renderMeters();
   if(id==='analytics') renderAnalytics();
   if(id==='weather') openWeather();
@@ -1545,6 +1559,61 @@ function setBilling(box){
   const plan=el('div','acard'); plan.style.marginTop='8px'; plan.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div><b>Free plan</b><div class="mdesc" style="margin:2px 0 0">Full access while Miles is in early access.</div></div><span class="apill active">CURRENT</span></div>';
   card.append(plan); card.append(el('div','verdict tight','💳 Paid plans & Stripe billing are coming soon — you’ll manage your subscription here.'));
   box.append(card);
+}
+
+// ═══ skills + marketplace ═══
+const MARKET=[
+  {id:'google-ads',name:'Google Ads Toolkit',skills:27,cat:'Advertising',author:'Miles',featured:true,desc:'Search, Shopping, PMax, YouTube, Demand Gen, bidding, budgets, and creative — with Google Ads Editor-ready outputs.'},
+  {id:'meta-ads',name:'Meta Ads Toolkit',skills:28,cat:'Advertising',author:'Miles',featured:true,desc:'Full Meta Ads execution — campaign creation, audience management, automated rules, A/B testing, CAPI events, and creative strategy.'},
+  {id:'lsa',name:'Local Services Ads Pack',skills:12,cat:'Advertising',author:'Miles',desc:'Google LSA setup, lead disputes, budget pacing, and review management tuned for the trades.'},
+  {id:'seo-local',name:'Local SEO & Google Business Profile',skills:15,cat:'SEO',author:'Miles',desc:'GBP optimization, local citations, and map-pack ranking playbooks.'},
+  {id:'reviews',name:'Review Booster',skills:8,cat:'Reputation',author:'Miles',desc:'Automated review requests, response templates, and reputation monitoring.'},
+  {id:'weather',name:'Weather-Triggered Ads',skills:6,cat:'Automation',author:'Miles',desc:'Turn weather into demand — heat, cold, and storm triggers that boost the right campaigns.'},
+  {id:'email-sms',name:'Email & SMS Nurture',skills:10,cat:'CRM',author:'Miles',desc:'Win-back, appointment reminders, and seasonal offers across email and text.'},
+  {id:'call-recovery',name:'Call Tracking & Lead Recovery',skills:9,cat:'CRM',author:'Miles',desc:'Missed-call text-back, call scoring, and lead-recovery automations.'},
+];
+let SKILLS_INSTALLED=[], SKILLS_LOADED=false, MARKET_Q='';
+async function loadSkills(){ if(!REMOTE){ SKILLS_LOADED=true; return; } try{ const r=await fetch('/api/skills'); const d=await r.json(); SKILLS_INSTALLED=d.installed||[]; }catch(e){} SKILLS_LOADED=true; }
+async function saveSkills(){ if(!REMOTE) return; try{ await fetch('/api/skills',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({installed:SKILLS_INSTALLED})}); }catch(e){} }
+function isInstalled(id){ return SKILLS_INSTALLED.includes(id); }
+function installSkill(id){ const m=MARKET.find(x=>x.id===id); if(!m||isInstalled(id)) return; SKILLS_INSTALLED.push(id); saveSkills(); queueChange('skill','Installed skill: '+m.name); toast('Installed '+m.name); }
+function uninstallSkill(id){ SKILLS_INSTALLED=SKILLS_INSTALLED.filter(x=>x!==id); saveSkills(); }
+function skillCard(m,installed){
+  const card=el('div','acard'); card.style.margin='0';
+  card.innerHTML='<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><b>'+esc(m.name)+'</b><span class="apill" style="background:var(--panel-2);color:var(--muted)">'+m.skills+' skills</span></div><div class="mdesc" style="margin:6px 0 12px">'+esc(m.desc)+'</div>';
+  const foot=el('div'); foot.style.cssText='display:flex;gap:8px;align-items:center';
+  foot.append(el('span','appsub',m.cat+' · by '+m.author));
+  const btn=el('button',installed?'adsave':'go', installed?'✓ Installed':'Install'); btn.style.marginLeft='auto';
+  btn.onclick=()=>{ if(installed) uninstallSkill(m.id); else installSkill(m.id); if($('#page-skills').classList.contains('on')) renderSkills(); if($('#page-market').classList.contains('on')) renderMarket(); };
+  foot.append(btn); card.append(foot); return card;
+}
+async function openSkills(){ if(!SKILLS_LOADED) await loadSkills(); renderSkills(); }
+function renderSkills(){
+  const box=$('#skills-body'); box.innerHTML='';
+  const h=el('div'); h.innerHTML='<h3 style="margin:0">Skills & Playbooks</h3><p class="mdesc" style="margin:4px 0 0;max-width:700px">Manage the skills installed in your workspace and keep them up to date. Find new ones in the Marketplace.</p>'; box.append(h);
+  const banner=el('div','acard'); banner.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0';
+  banner.innerHTML='<div><b>🛍️ Discover more in the Marketplace</b><div class="mdesc" style="margin:2px 0 0">Browse bundles, featured picks, and the full catalog of skills to install.</div></div>';
+  const br=el('button','go','Browse →'); br.onclick=()=>setPage('market'); banner.append(br); box.append(banner);
+  box.append(el('div','sect-label','INSTALLED SKILLS'));
+  const installed=MARKET.filter(m=>isInstalled(m.id));
+  if(!installed.length){ box.append(el('div','verdict tight','No skills installed yet. Open the Marketplace to add capabilities like Google Ads, Meta Ads, or Local SEO.')); return; }
+  const g=el('div','folgrid'); for(const m of installed) g.append(skillCard(m,true)); box.append(g);
+}
+async function openMarket(){ if(!SKILLS_LOADED) await loadSkills(); renderMarket(); }
+function renderMarket(){
+  const box=$('#market-body'); box.innerHTML='';
+  const h=el('div'); h.innerHTML='<h3 style="margin:0">Marketplace</h3><p class="mdesc" style="margin:4px 0 0;max-width:700px">New abilities for Miles, one click away. Install ready-made skill bundles to give Miles specialized knowledge and put recurring work on autopilot.</p>'; box.append(h);
+  const sb=el('input','searchbar'); sb.id='market-search'; sb.placeholder='Search the Marketplace…'; sb.value=MARKET_Q; sb.style.margin='16px 0'; sb.oninput=()=>{ MARKET_Q=sb.value; renderMarketList(); }; box.append(sb);
+  const wrap=el('div'); wrap.id='market-list'; box.append(wrap); renderMarketList();
+}
+function renderMarketList(){
+  const wrap=$('#market-list'); if(!wrap) return; wrap.innerHTML='';
+  const q=MARKET_Q.trim().toLowerCase();
+  const items=MARKET.filter(m=>!q||m.name.toLowerCase().includes(q)||m.desc.toLowerCase().includes(q)||m.cat.toLowerCase().includes(q));
+  if(!q){ const feat=items.filter(m=>m.featured); if(feat.length){ wrap.append(el('div','sect-label','FEATURED')); const fg=el('div','folgrid'); for(const m of feat) fg.append(skillCard(m,isInstalled(m.id))); wrap.append(fg); } }
+  wrap.append(el('div','sect-label', q?'RESULTS':'ALL SKILLS'));
+  const g=el('div','folgrid'); for(const m of items) g.append(skillCard(m,isInstalled(m.id))); wrap.append(g);
+  if(!items.length) g.append(el('div','appsub','No skills match that search.'));
 }
 
 function renderBenchmarks(){
