@@ -12,6 +12,7 @@ import { generateAdCopy, type CreativeRequest } from './creative/creative.js';
 import { falReady, falGenerateImage } from './creative/fal.js';
 import { fetchDemographics } from './research/census.js';
 import { fetchWeather, evaluateWeatherTriggers } from './research/weather.js';
+import { importSite } from './research/site.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
 import { hashPassword, verifyPassword, newToken, newUserId, parseCookies } from './auth.js';
 import { MemoryStore, type Store, type User } from './db/index.js';
@@ -173,6 +174,21 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     data.assets = (req.body as { assets?: unknown })?.assets ?? { photos: [] };
     await authStore.setUserData(u.id, data);
     return { ok: true };
+  });
+
+  // Import brand data from a customer's website to pre-fill their Assets.
+  app.post<{ Body: { url?: string } }>('/api/import-site', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const url = req.body?.url;
+    if (!url) return reply.code(400).send({ error: 'url required' });
+    try {
+      const d = await importSite(url);
+      if (!d) return reply.code(404).send({ error: 'Couldn’t read that site — check the URL and try again.' });
+      return d;
+    } catch (err) {
+      return reply.code(502).send({ error: String((err as Error).message) });
+    }
   });
 
   // Persisted chat history, per workspace (last 200 turns).

@@ -167,6 +167,8 @@
   .adimg{aspect-ratio:16/9;background:linear-gradient(135deg,#7c5cff,#3b82f6);display:grid;place-items:center;position:relative;}
   .adimg img{width:100%;height:100%;object-fit:cover;display:block;}
   .adimg .ph{color:#fff;font-size:12.5px;font-weight:600;text-align:center;padding:12px;opacity:.95;}
+  .logobadge{position:absolute;left:9px;bottom:9px;height:24px;max-width:96px;background:rgba(255,255,255,.94);border-radius:6px;padding:3px 7px;display:flex;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.18);}
+  .logobadge img{height:100%;width:auto;object-fit:contain;}
   .adbody{padding:14px 16px;display:flex;flex-direction:column;gap:8px;flex:1;}
   .adangle{font-size:10px;font-weight:800;letter-spacing:.05em;color:var(--muted);text-transform:uppercase;}
   .adhead{font-weight:750;font-size:15.5px;line-height:1.28;}
@@ -185,7 +187,8 @@
   .folder .meta{font-size:12px;color:var(--faint);}
   .itemgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;}
   .item{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;}
-  .item img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:var(--panel-2);}
+  .item .imgwrap{position:relative;}
+  .item .mainimg{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:var(--panel-2);}
   .item .ibody{padding:13px 15px;display:flex;flex-direction:column;gap:6px;flex:1;}
   .item .ihead{font-weight:700;font-size:14px;}
   .item .itext{font-size:12.5px;color:var(--muted);line-height:1.5;flex:1;}
@@ -434,6 +437,10 @@
       <div class="mcard pf" style="max-width:900px">
         <h3>Brand Assets</h3>
         <p class="mdesc">Your logo, brand details, and photos — Miles uses these as first-party data to generate on-brand ads that actually look like your business.</p>
+        <div style="display:flex;gap:8px;margin:14px 0 18px;max-width:540px">
+          <input id="as-import-url" placeholder="Import from your website — paste a URL" style="flex:1">
+          <button class="go" id="as-import" style="flex:none">Import ↓</button>
+        </div>
         <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;margin:6px 0 4px">
           <div>
             <label>Logo</label>
@@ -1184,6 +1191,7 @@ function renderAdCards(cr){
     const card=el('div','adcard'); const img=el('div','adimg');
     if(c.imageUrl){ const im=el('img'); im.src=c.imageUrl; im.alt=''; im.onerror=()=>{img.innerHTML='';img.append(el('div','ph','📷 Ad photo'));}; img.append(im); }
     else img.append(el('div','ph','📷 Ad photo generates here'));
+    if(ASSETS&&ASSETS.logo){ c.logoUrl=ASSETS.logo; const b=el('div','logobadge'); const li=el('img'); li.src=ASSETS.logo; li.alt='logo'; li.onerror=()=>b.remove(); b.append(li); img.append(b); }
     const body=el('div','adbody');
     body.append(el('div','adangle',c.angle), el('div','adhead',c.headline), el('div','adtext',c.body));
     const foot=el('div','adfoot'); foot.append(el('span','biz',biz));
@@ -1197,6 +1205,7 @@ async function generateAds(){
   const box=$('#ad-results'), note=$('#ad-note');
   if(!REMOTE){ box.innerHTML=''; box.append(el('div','verdict tight','Ad generation runs on the deployed app (it needs the server).')); return; }
   const btn=$('#ad-go'); btn.disabled=true; note.textContent='Miles is writing your ads…'; box.innerHTML='';
+  if(!ASSETS_LOADED) await loadAssets();
   try{
     const payload={vertical:adVert,category:$('#ad-cat').value,offer:($('#ad-offer').value||'').trim(),businessName:(PROFILE&&PROFILE.businessName)||'',city:(PROFILE&&PROFILE.serviceAreas)||'',services:(ASSETS&&ASSETS.services)||(PROFILE&&PROFILE.services)||''};
     const r=await fetch('/api/creative',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
@@ -1251,7 +1260,7 @@ function renderCampaign(box, cid){
 }
 function renderItem(c,it){
   const card=el('div','item');
-  if(it.imageUrl){ const im=el('img'); im.src=it.imageUrl; im.alt=''; im.onerror=()=>im.remove(); card.append(im); }
+  if(it.imageUrl){ const wrap=el('div','imgwrap'); const im=el('img','mainimg'); im.src=it.imageUrl; im.alt=''; im.onerror=()=>wrap.remove(); wrap.append(im); if(it.logoUrl){ const b=el('div','logobadge'); const li=el('img'); li.src=it.logoUrl; b.append(li); wrap.append(b); } card.append(wrap); }
   const body=el('div','ibody');
   if(it.type==='copy'){ body.append(el('div','ihead',it.headline||''), el('div','itext',it.body||'')); if(it.cta){ const cb=el('div','',('CTA: '+it.cta)); cb.style.cssText='font-size:11px;color:var(--faint)'; body.append(cb); } }
   else if(it.type==='note'){ body.append(el('div','itext',it.text||'')); }
@@ -1272,7 +1281,7 @@ async function pickCampaign(cb){ if(!HUB_LOADED) await loadHub();
   showModal('<h3 style="margin:0 0 14px">Save to campaign</h3><div style="display:flex;flex-direction:column;gap:8px;max-height:230px;overflow:auto">'+(list||'<div class="appsub">No campaigns yet — create one below.</div>')+'</div><div style="display:flex;gap:8px;margin-top:14px"><input class="f" id="pc-new" placeholder="New campaign…" style="margin:0;flex:1"><button class="go" id="pc-go" style="flex:none">Create</button></div>');
   $('#modal').querySelectorAll('[data-cid]').forEach(b=>b.onclick=()=>{ closeModal(); cb(b.dataset.cid); });
   $('#pc-go').onclick=()=>{ const n=$('#pc-new').value.trim(); if(!n) return; const c={id:newId(),name:n,createdAt:new Date().toISOString(),items:[]}; HUB.campaigns.unshift(c); closeModal(); cb(c.id); }; }
-function saveCreativeToCampaign(cr){ pickCampaign((cid)=>{ const c=HUB.campaigns.find(x=>x.id===cid); if(!c) return; c.items.unshift({id:newId(),type:'copy',angle:cr.angle,headline:cr.headline,body:cr.body,cta:cr.cta,imageUrl:cr.imageUrl,createdAt:new Date().toISOString()}); saveHub(); toast('Saved to “'+c.name+'”'); }); }
+function saveCreativeToCampaign(cr){ pickCampaign((cid)=>{ const c=HUB.campaigns.find(x=>x.id===cid); if(!c) return; c.items.unshift({id:newId(),type:'copy',angle:cr.angle,headline:cr.headline,body:cr.body,cta:cr.cta,imageUrl:cr.imageUrl,logoUrl:cr.logoUrl,createdAt:new Date().toISOString()}); saveHub(); toast('Saved to “'+c.name+'”'); }); }
 
 // ═══ brand assets (first-party data) ═══
 function downscaleImage(file, maxDim, type){ return new Promise((resolve,reject)=>{ const fr=new FileReader(); fr.onload=()=>{ const img=new Image(); img.onload=()=>{ let w=img.width,h=img.height; const s=Math.min(1,maxDim/Math.max(w,h)); w=Math.round(w*s); h=Math.round(h*s); const cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h); resolve(type==='image/png'?cv.toDataURL('image/png'):cv.toDataURL('image/jpeg',0.82)); }; img.onerror=reject; img.src=fr.result; }; fr.onerror=reject; fr.readAsDataURL(file); }); }
@@ -1297,6 +1306,20 @@ $('#logo-remove').onclick=async()=>{ delete ASSETS.logo; await saveAssets(); ren
 $('#photo-add').onclick=()=>$('#photo-input').click();
 $('#photo-input').onchange=async(e)=>{ const files=[...e.target.files]; for(const f of files){ try{ const url=await downscaleImage(f,1024,'image/jpeg'); (ASSETS.photos=ASSETS.photos||[]).push({id:newId(),url,caption:''}); }catch(err){} } await saveAssets(); renderAssets(); e.target.value=''; };
 $('#assets-save').onclick=async()=>{ ASSETS.tagline=$('#as-tagline').value.trim(); ASSETS.services=$('#as-services').value.trim(); ASSETS.brandColor=$('#as-color').value.trim(); ASSETS.phone=$('#as-phone').value.trim(); ASSETS.website=$('#as-website').value.trim(); ASSETS.differentiators=$('#as-diff').value.trim(); const btn=$('#assets-save'); btn.disabled=true; await saveAssets(); $('#assets-note').textContent='Saved ✓'; btn.disabled=false; setTimeout(()=>{$('#assets-note').textContent='';},2200); };
+$('#as-import').onclick=async()=>{ const url=$('#as-import-url').value.trim(); if(!url) return; if(!REMOTE){ $('#assets-note').textContent='Website import runs on the deployed app.'; return; }
+  // capture whatever they've already typed so we don't overwrite it
+  ASSETS.tagline=$('#as-tagline').value.trim(); ASSETS.services=$('#as-services').value.trim(); ASSETS.brandColor=$('#as-color').value.trim(); ASSETS.phone=$('#as-phone').value.trim(); ASSETS.website=$('#as-website').value.trim(); ASSETS.differentiators=$('#as-diff').value.trim();
+  const btn=$('#as-import'); btn.disabled=true; $('#assets-note').textContent='Reading your site…';
+  try{ const r=await fetch('/api/import-site',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url})}); const d=await r.json().catch(()=>({}));
+    if(!r.ok){ $('#assets-note').textContent=d.error||'Could not import.'; btn.disabled=false; return; }
+    if(d.logo) ASSETS.logo=d.logo;
+    if(d.services && !ASSETS.services) ASSETS.services=d.services;
+    if(d.brandColor && !ASSETS.brandColor) ASSETS.brandColor=d.brandColor;
+    if(d.website && !ASSETS.website) ASSETS.website=d.website;
+    if(d.tagline && !ASSETS.tagline) ASSETS.tagline=d.tagline;
+    await saveAssets(); renderAssets(); $('#assets-note').textContent='Imported ✓ — review and Save any edits.';
+  }catch(e){ $('#assets-note').textContent='Error: '+e.message; }
+  btn.disabled=false; };
 
 // Ad Studio image source (AI vs the customer's own uploaded photos)
 let ADIMG={mode:'ai',url:null};
