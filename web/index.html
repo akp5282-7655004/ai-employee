@@ -137,6 +137,25 @@
   .verdict.wx-watch{background:var(--panel-2);color:var(--ink);}
   .verdict.wx-act{background:var(--warn-soft);color:var(--warn);}
   .verdict.wx-urgent{background:rgba(164,83,89,.14);color:#a45359;}
+  /* analytics suite */
+  .subtabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;}
+  .subtabs .tab.on{background:var(--ink);color:var(--panel);border-color:var(--ink);font-weight:600;}
+  .acard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow);margin-bottom:16px;}
+  .ah{font-weight:700;font-size:15px;margin-bottom:14px;}
+  .agrid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px;}
+  .stat .delta{font-size:11px;font-weight:700;margin-top:6px;}
+  .delta.up{color:var(--good);} .delta.down{color:#c2564d;}
+  .arow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 0;border-top:1px solid var(--line-soft);font-size:13.5px;}
+  .arow:first-child{border-top:0;}
+  .arow .rl{display:flex;flex-direction:column;gap:2px;}
+  .arow .rl b{font-weight:650;} .arow .rl span{font-size:11.5px;color:var(--faint);}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+  .apill{font-size:10px;font-weight:800;padding:2px 8px;border-radius:6px;letter-spacing:.03em;}
+  .apill.active{background:var(--good-soft);color:var(--good);} .apill.paused{background:var(--warn-soft);color:var(--warn);}
+  .aempty{display:flex;flex-direction:column;align-items:center;gap:12px;padding:32px;color:var(--faint);text-align:center;font-size:13px;}
+  .abtn{background:var(--accent);color:#fff;border:0;padding:9px 16px;border-radius:9px;font-weight:600;cursor:pointer;font-size:13px;}
+  @media (max-width:1000px){ .agrid2,.statgrid{grid-template-columns:1fr;} }
   .demo-map{width:100%;height:260px;border:1px solid var(--line);border-radius:12px;margin-bottom:16px;}
   .racebar{display:grid;grid-template-columns:130px 1fr 50px;align-items:center;gap:10px;margin:8px 0;}
   .racebar .rl{font-size:13px;color:var(--muted);}
@@ -222,7 +241,8 @@
       <a data-page="dashboard" class="on"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg> Dashboard</a>
       <a data-page="agents"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/></svg> Agents &amp; Specialists</a>
       <a data-page="skills"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 2.2 5.6L20 9l-4.3 3.8L17 19l-5-3-5 3 1.3-6.2L4 9l5.8-.4Z"/></svg> Skills &amp; Playbooks</a>
-      <a data-page="meters"><svg class="ico" viewBox="0 0 24 24"><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 12 15 9M4 12a8 8 0 0 1 16 0"/></svg> Meters &amp; Analytics</a>
+      <a data-page="meters"><svg class="ico" viewBox="0 0 24 24"><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 12 15 9M4 12a8 8 0 0 1 16 0"/></svg> Meters</a>
+      <a data-page="analytics"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Analytics</a>
       <a data-page="research"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg> Research</a>
       <a data-page="weather"><svg class="ico" viewBox="0 0 24 24"><path d="M17 14a4 4 0 0 0-1-7.87A6 6 0 0 0 4 8a4 4 0 0 0 .5 8H17Z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/></svg> Weather Triggers</a>
       <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
@@ -292,6 +312,12 @@
           <div class="verdict" id="verdict"></div>
         </div>
       </div>
+    </section>
+
+    <!-- ANALYTICS -->
+    <section class="page" id="page-analytics">
+      <div class="subtabs" id="a-subtabs"></div>
+      <div id="analytics-body"></div>
     </section>
 
     <!-- RESEARCH -->
@@ -717,13 +743,14 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters & Analytics',research:'Research',weather:'Weather Triggers',integrations:'Integrations',profile:'Business Profile',chat:'Ask Miles'};
+const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',integrations:'Integrations',profile:'Business Profile',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
   const homeIds=['dashboard','agents','skills'];
   $('#page-home').classList.toggle('on',homeIds.includes(id));
   $('#page-meters').classList.toggle('on',id==='meters');
+  $('#page-analytics').classList.toggle('on',id==='analytics');
   $('#page-research').classList.toggle('on',id==='research');
   $('#page-weather').classList.toggle('on',id==='weather');
   $('#page-int').classList.toggle('on',id==='integrations');
@@ -733,6 +760,7 @@ function setPage(id){
   if(id==='skills'){ activeCat='Math Skills'; renderTabs(); renderCards(); }
   if(homeIds.includes(id) && id!=='skills' && activeCat==='Math Skills'){ activeCat='Popular tasks'; renderTabs(); renderCards(); }
   if(id==='meters') renderMeters();
+  if(id==='analytics') renderAnalytics();
   if(id==='weather') openWeather();
   if(id==='integrations'){ loadIntegrations(); }
 }
@@ -877,6 +905,127 @@ function openWeather(){
 }
 $('#w-go').onclick=()=>{ WX_LOADED=($('#w-zip').value||'').replace(/\D/g,'').slice(0,5); runWeather(); };
 $('#w-zip').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#w-go').click(); } });
+
+// ═══ analytics suite ═══
+const AC={v:'#7c5cff',b:'#3b82f6',g:'#1b8552',a:'#d1932b',r:'#c2564d',t:'#14b8a6',p:'#db4d8a'};
+function smoothPath(pts){ if(!pts.length) return ''; let d='M'+pts[0][0].toFixed(1)+','+pts[0][1].toFixed(1);
+  for(let i=0;i<pts.length-1;i++){ const p0=pts[i],p1=pts[i+1],cx=((p0[0]+p1[0])/2).toFixed(1); d+=' C'+cx+','+p0[1].toFixed(1)+' '+cx+','+p1[1].toFixed(1)+' '+p1[0].toFixed(1)+','+p1[1].toFixed(1); } return d; }
+function axisGrid(pad,iw,ih,W,max){ let g=''; for(let k=0;k<=4;k++){ const y=pad.t+ih*k/4, val=Math.round(max*(1-k/4)); g+=`<line x1="${pad.l}" y1="${y}" x2="${W-pad.r}" y2="${y}" stroke="var(--line-soft)"/><text x="${pad.l-6}" y="${y+3}" text-anchor="end" font-size="9" fill="var(--faint)">${val}</text>`; } return g; }
+function areaChart(labels, series, opt){ opt=opt||{}; const W=680,H=opt.height||220,pad={l:38,r:12,t:12,b:26},iw=W-pad.l-pad.r,ih=H-pad.t-pad.b;
+  const max=opt.yMax||Math.max(1,...series.flatMap(s=>s.data)), n=labels.length, X=i=>pad.l+(n<=1?0:iw*i/(n-1)), Y=v=>pad.t+ih*(1-v/max);
+  let g=axisGrid(pad,iw,ih,W,max);
+  series.forEach(s=>{ const pts=s.data.map((v,i)=>[X(i),Y(v)]), line=smoothPath(pts), area=line+` L${X(n-1).toFixed(1)},${(pad.t+ih)} L${X(0).toFixed(1)},${(pad.t+ih)} Z`;
+    g+=`<path d="${area}" fill="${s.color}" fill-opacity="0.14"/><path d="${line}" fill="none" stroke="${s.color}" stroke-width="2.5"/>`; });
+  labels.forEach((l,i)=>{ g+=`<text x="${X(i).toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="9.5" fill="var(--faint)">${l}</text>`; });
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%">${g}</svg>`; }
+function lineChart(labels, series, opt){ opt=opt||{}; const W=680,H=opt.height||220,pad={l:38,r:12,t:12,b:26},iw=W-pad.l-pad.r,ih=H-pad.t-pad.b;
+  const max=opt.yMax||Math.max(1,...series.flatMap(s=>s.data)), n=labels.length, X=i=>pad.l+(n<=1?0:iw*i/(n-1)), Y=v=>pad.t+ih*(1-v/max);
+  let g=axisGrid(pad,iw,ih,W,max);
+  series.forEach(s=>{ const pts=s.data.map((v,i)=>[X(i),Y(v)]); g+=`<path d="${smoothPath(pts)}" fill="none" stroke="${s.color}" stroke-width="2.5"/>`; pts.forEach(p=>g+=`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.2" fill="${s.color}"/>`); });
+  labels.forEach((l,i)=>{ g+=`<text x="${X(i).toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="9.5" fill="var(--faint)">${l}</text>`; });
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%">${g}</svg>`; }
+function barChart(labels, groups, opt){ opt=opt||{}; const W=680,H=opt.height||220,pad={l:40,r:12,t:12,b:26},iw=W-pad.l-pad.r,ih=H-pad.t-pad.b;
+  const max=opt.yMax||Math.max(1,...groups.flatMap(g=>g.data)), n=labels.length, slot=iw/n, m=groups.length, bw=Math.min(46,slot*0.62/m);
+  let g=axisGrid(pad,iw,ih,W,max);
+  labels.forEach((lab,i)=>{ const cx=pad.l+slot*(i+0.5); groups.forEach((gr,j)=>{ const v=gr.data[i]||0, h=ih*v/max, x=cx-(m*bw)/2+j*bw; g+=`<rect x="${x.toFixed(1)}" y="${(pad.t+ih-h).toFixed(1)}" width="${(bw-3).toFixed(1)}" height="${Math.max(0,h).toFixed(1)}" rx="3" fill="${gr.color}"/>`; });
+    g+=`<text x="${cx.toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="9.5" fill="var(--faint)">${lab}</text>`; });
+  if(opt.line){ const lmax=opt.lineMax||Math.max(1,...opt.line), pts=opt.line.map((v,i)=>[pad.l+slot*(i+0.5),pad.t+ih*(1-v/lmax)]); g+=`<path d="${smoothPath(pts)}" fill="none" stroke="${AC.g}" stroke-width="2.5"/>`; pts.forEach(p=>g+=`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.2" fill="${AC.g}"/>`); }
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%">${g}</svg>`; }
+function donut(slices){ const cx=90,cy=90,r=72,rin=44,tot=slices.reduce((s,x)=>s+x.value,0)||1; let a=-Math.PI/2,g='';
+  slices.forEach(s=>{ const ang=s.value/tot*Math.PI*2,a2=a+ang,x1=cx+r*Math.cos(a),y1=cy+r*Math.sin(a),x2=cx+r*Math.cos(a2),y2=cy+r*Math.sin(a2),lg=ang>Math.PI?1:0;
+    g+=`<path d="M${cx},${cy} L${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 ${lg} 1 ${x2.toFixed(1)},${y2.toFixed(1)} Z" fill="${s.color}"/>`; a=a2; });
+  g+=`<circle cx="${cx}" cy="${cy}" r="${rin}" fill="var(--card)"/>`;
+  const leg=slices.map(s=>`<div class="arow" style="padding:5px 0;border:0"><span><span class="dot" style="background:${s.color};margin-right:7px"></span>${s.name}</span><b>${Math.round(s.value/tot*100)}%</b></div>`).join('');
+  return `<div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap"><svg viewBox="0 0 180 180" width="170" height="170">${g}</svg><div style="flex:1;min-width:190px">${leg}</div></div>`; }
+function kpi(lab,val,delta){ const up=delta&&!String(delta).startsWith('-'); return `<div class="stat"><div class="lab">${lab}</div><div class="val">${val}</div>${delta?`<div class="delta ${up?'up':'down'}">${up?'▲':'▼'} ${String(delta).replace('-','')}</div>`:''}</div>`; }
+function kpis(arr){ return `<div class="stats">${arr.map(k=>kpi(k[0],k[1],k[2])).join('')}</div>`; }
+function card(title,inner){ return `<div class="acard"><div class="ah">${title}</div>${inner}</div>`; }
+function listRows(items){ return items.map(it=>`<div class="arow"><div class="rl"><b>${it.name}</b>${it.sub?`<span>${it.sub}</span>`:''}</div><div style="text-align:right"><b style="color:${it.valColor||'inherit'}">${it.val||''}</b>${it.sub2?`<div style="font-size:11px;color:var(--faint)">${it.sub2}</div>`:''}</div></div>`).join(''); }
+function statusCard(title,items){ return card(title, items.map(it=>`<div class="arow" style="padding:8px 0"><span>${it.name}</span><span style="display:flex;align-items:center;gap:9px"><span style="font-size:12px;color:var(--faint)">${it.metric}</span><span class="dot" style="background:${it.ok?'var(--good)':'var(--warn)'}"></span></span></div>`).join('')); }
+const SAMPLE_NOTE='<div class="verdict tight" style="margin-bottom:18px">Preview with sample data — connect your sources (analytics, ad platforms, CRM) to replace these with your live numbers.</div>';
+function connDot(slug){ return (CONN.connectedApps||[]).includes(slug); }
+
+function dashOverview(){
+  const trends=areaChart(['Jan','Feb','Mar','Apr','May','Jun'],[{color:AC.v,data:[3200,2400,2100,2600,2200,2500]}],{yMax:4000});
+  const sources=donut([{name:'Google Ads',value:28,color:AC.g},{name:'Facebook/Instagram',value:22,color:AC.b},{name:'YouTube',value:18,color:AC.r},{name:'Organic Search',value:15,color:AC.v},{name:'Email Marketing',value:10,color:AC.a},{name:'TikTok',value:7,color:AC.p}]);
+  const cross=card('Cross-Platform Performance', listRows([
+    {name:'YouTube Channel',sub:'Content',val:'2.3M views',sub2:'▲ 15.2%'},
+    {name:'Google Ads Campaign',sub:'Paid Ads',val:'4.2x ROAS',sub2:'▲ 8.7%'},
+    {name:'TikTok Videos',sub:'Social Media',val:'892K views',sub2:'▲ 23.4%'},
+    {name:'Podcast (Spotify)',sub:'Audio',val:'45K downloads',sub2:'▲ 12.1%'},
+    {name:'Facebook Ads',sub:'Paid Social',val:'$0.89 CPA',sub2:'▼ 5.3%'},
+    {name:'Google Business Profile',sub:'Local Search',val:'1.2K views',sub2:'▲ 9.8%'}]));
+  const status='<div class="ah" style="margin:6px 0 12px">Platform Integration Status</div><div class="statgrid">'+[
+    statusCard('Search Engines',[{name:'Google',metric:'145K organic',ok:true},{name:'Bing',metric:'12K organic',ok:false},{name:'DuckDuckGo',metric:'3K organic',ok:false}]),
+    statusCard('Social Media',[{name:'Facebook',metric:'12.5K followers',ok:connDot('facebook')},{name:'Instagram',metric:'8.3K followers',ok:false},{name:'TikTok',metric:'25.1K followers',ok:false},{name:'LinkedIn',metric:'5.2K followers',ok:false}]),
+    statusCard('Paid Ads',[{name:'Google Ads',metric:'$3.2K spend',ok:connDot('google_ads')},{name:'Meta Ads',metric:'$2.1K spend',ok:false},{name:'Microsoft Ads',metric:'$450 spend',ok:false}]),
+    statusCard('Messaging & Email',[{name:'Mailchimp',metric:'28K subscribers',ok:false},{name:'GoHighLevel',metric:'15K contacts',ok:connDot('gohighlevel')},{name:'Twilio SMS',metric:'8K contacts',ok:false}]),
+    statusCard('Content Platforms',[{name:'YouTube',metric:'156K subs',ok:false},{name:'Spotify Podcasts',metric:'12K followers',ok:false}]),
+    statusCard('Local & Reviews',[{name:'Google Business Profile',metric:'1.2K views',ok:connDot('google_my_business')},{name:'Podium',metric:'340 reviews',ok:connDot('podium')}])
+  ].join('')+'</div>';
+  return SAMPLE_NOTE+kpis([['Total Visitors','45,231','12.5%'],['Conversion Rate','3.24%','0.8%'],['Revenue','$12,234','8.2%'],['Page Views','89,543','5.1%']])
+    +'<div class="agrid2">'+card('Performance Trends',trends)+card('Traffic Sources',sources)+'</div>'+cross+status;
+}
+function dashAds(){
+  const trend=barChart(['Week 1','Week 2','Week 3','Week 4','Week 5'],[{color:AC.v,data:[1150,980,1850,1700,2100]}],{line:[46,42,72,66,88],lineMax:100,yMax:3600});
+  const plat=barChart(['Google Ads','Facebook','Instagram','LinkedIn'],[{color:AC.v,data:[8500,6200,4800,3200]}],{yMax:10000});
+  const roas=card('ROAS by Platform', listRows([
+    {name:'Google Ads',sub:'$8,500 spend · 156 conversions',val:'4.2x',valColor:'var(--good)',sub2:'ROAS'},
+    {name:'Facebook',sub:'$6,200 spend · 134 conversions',val:'3.8x',valColor:'var(--good)',sub2:'ROAS'},
+    {name:'Instagram',sub:'$4,800 spend · 89 conversions',val:'3.1x',valColor:'var(--good)',sub2:'ROAS'},
+    {name:'LinkedIn',sub:'$3,200 spend · 67 conversions',val:'5.2x',valColor:'var(--good)',sub2:'ROAS'}]));
+  const active=card('Active Campaigns',[
+    ['Summer Sale Campaign','Google Ads','$1,234','45','3.2%','$2,000','active'],
+    ['Brand Awareness','Facebook','$892','23','2.8%','$1,500','active'],
+    ['Product Launch','Instagram','$456','12','1.9%','$800','paused'],
+    ['B2B Lead Gen','LinkedIn','$678','34','4.1%','$1,200','active']
+  ].map(c=>`<div class="arow"><div class="rl"><b>${c[0]}</b><span>${c[1]}</span></div><div style="display:flex;gap:16px;align-items:center;font-size:12px;color:var(--muted)"><span>${c[2]} spend</span><span>${c[3]} conv</span><span>${c[4]} CTR</span><span>${c[5]} budget</span><span class="apill ${c[6]}">${c[6].toUpperCase()}</span></div></div>`).join(''));
+  return SAMPLE_NOTE+kpis([['Total Ad Spend','$12.4K','18.2%'],['Total Conversions','307','24.7%'],['Average ROAS','4.1x','0.3x'],['Click-through Rate','3.2%','0.5%']])
+    +card('Campaign Performance Trends',trend)+'<div class="agrid2">'+card('Platform Performance',plat)+roas+'</div>'+active;
+}
+function dashWeb(){
+  const traf=areaChart(['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],[{color:AC.b,data:[2600,3000,3400,3900,4200,3400,2900]},{color:AC.v,data:[1500,1700,1800,2000,2100,1700,1500]}],{yMax:6000});
+  const bounce=lineChart(['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],[{color:AC.a,data:[45,43,39,37,31,39,44]}],{yMax:60});
+  const dev=card('Device Breakdown', listRows([{name:'Desktop',sub:'8,400 sessions',val:'52%'},{name:'Mobile',sub:'6,200 sessions',val:'38%'},{name:'Tablet',sub:'1,600 sessions',val:'10%'}])+barChart(['Desktop','Mobile','Tablet'],[{color:AC.v,data:[8400,6200,1600]}],{yMax:10000,height:150}));
+  const top=card('Top Pages', listRows([{name:'/',sub:'Avg. time 2:34',val:'12,500',sub2:'views'},{name:'/products',sub:'Avg. time 3:12',val:'8,900',sub2:'views'},{name:'/about',sub:'Avg. time 1:45',val:'6,700',sub2:'views'},{name:'/contact',sub:'Avg. time 1:23',val:'4,300',sub2:'views'},{name:'/blog',sub:'Avg. time 4:56',val:'3,800',sub2:'views'}]));
+  return SAMPLE_NOTE+kpis([['Sessions','16.2K','8.4%'],['Avg. Session','2m 45s','12s'],['Bounce Rate','38.2%','-3.2%'],['Page Views','48.3K','15.7%']])
+    +card('Traffic Overview',traf)+'<div class="agrid2">'+dev+top+'</div>'+card('Bounce Rate Trend',bounce);
+}
+function dashSocial(){
+  const plat=barChart(['Facebook','Instagram','Twitter','LinkedIn'],[{color:AC.v,data:[12500,8300,5600,3200]}],{yMax:14000});
+  const eng=lineChart(['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],[{color:AC.v,data:[250,310,160,420,370,290,220]},{color:AC.g,data:[90,120,100,150,130,110,95]},{color:AC.b,data:[60,80,70,110,95,80,65]}],{yMax:600});
+  const ins=card('Platform Insights', listRows([{name:'Facebook',sub:'12.5K followers',val:'4.2%',valColor:'var(--good)',sub2:'Engagement'},{name:'Instagram',sub:'8.3K followers',val:'6.8%',valColor:'var(--good)',sub2:'Engagement'},{name:'Twitter',sub:'5.6K followers',val:'3.1%',valColor:'var(--good)',sub2:'Engagement'},{name:'LinkedIn',sub:'3.2K followers',val:'5.4%',valColor:'var(--good)',sub2:'Engagement'}]));
+  return SAMPLE_NOTE+kpis([['Total Followers','29.6K','8.2%'],['Avg. Engagement','4.9%','1.2%'],['Total Posts','209','12'],['Shares','1,234','23%']])
+    +card('Platform Performance',plat)+'<div class="agrid2">'+card('Weekly Engagement',eng)+ins+'</div>';
+}
+function dashEmail(){
+  const trend=areaChart(['Week 1','Week 2','Week 3','Week 4','Week 5'],[{color:AC.v,data:[600,900,9800,3800,4600]},{color:AC.b,data:[300,500,4900,2600,2900]},{color:AC.g,data:[80,150,700,500,600]}],{yMax:10000});
+  const camp=barChart(['Newsletter','Promo','Welcome','Abandoned'],[{color:AC.v,data:[24,17,41,29]},{color:AC.b,data:[6,7,11,13]}],{yMax:60});
+  const recent=card('Recent Campaigns', listRows([{name:'Summer Sale Newsletter',sub:'2 hours ago',val:'2,341 opens · 456 clicks',valColor:'var(--good)',sub2:'Sent'},{name:'Product Launch Announcement',sub:'Tomorrow, 9:00 AM',val:'— opens · — clicks',sub2:'Scheduled'},{name:'Weekly Digest',sub:'1 day ago',val:'1,892 opens · 234 clicks',valColor:'var(--good)',sub2:'Sent'},{name:'Abandoned Cart Recovery',sub:'3 days ago',val:'892 opens · 178 clicks',valColor:'var(--warn)',sub2:'Active'}]));
+  return SAMPLE_NOTE+kpis([['Total Subscribers','25.9K','5.2%'],['Open Rate','28.4%','2.1%'],['Click Rate','7.8%','1.3%'],['Emails Sent','45.2K','12.8%']])
+    +card('Email Performance Trends',trend)+'<div class="agrid2">'+card('Campaign Performance',camp)+recent+'</div>';
+}
+function emptyState(msg){ return `<div class="aempty"><div style="font-size:22px">⃝</div><div>${msg}</div><button class="abtn" data-goint>Go to Integrations</button></div>`; }
+function dashRoi(){
+  return '<div class="mdesc" style="margin:-4px 0 18px">Attributed revenue from your CRM matched to ad spend by UTM campaign. This reads your real connected data — no sample numbers.</div>'
+    +kpis([['Total Spend','$0'],['Attributed Revenue','$0'],['Blended ROAS','—'],['Won Deals','0']])
+    +card('By Platform',emptyState('No campaigns or deals yet. Connect an ad platform and a CRM to see attributed ROAS.'))
+    +card('By Campaign',emptyState('No campaigns or deals yet. Connect an ad platform and a CRM to see attributed ROAS.'));
+}
+function dashCrm(){
+  return '<div class="mdesc" style="margin:-4px 0 18px">Deals synced from your connected CRMs. The UTM source on each deal powers attributed ROAS. Reads real data — no sample numbers.</div>'
+    +kpis([['Total Deals','0'],['Won','0'],['Won Revenue','$0.00']])
+    +card('Recent Deals',emptyState('No deals yet. Connect a CRM (GoHighLevel, ServiceTitan, HubSpot, Salesforce) to start syncing.'));
+}
+const A_TABS=[['overview','Overview'],['ads','Ad Campaigns'],['web','Web'],['social','Social'],['email','Email'],['roi','ROI / ROAS'],['crm','CRM Deals']];
+const A_RENDER={overview:dashOverview,ads:dashAds,web:dashWeb,social:dashSocial,email:dashEmail,roi:dashRoi,crm:dashCrm};
+let aTab='overview';
+function renderAnalytics(){
+  const bar=$('#a-subtabs'); bar.innerHTML=A_TABS.map(t=>`<button class="tab${t[0]===aTab?' on':''}" data-atab="${t[0]}">${t[1]}</button>`).join('');
+  bar.querySelectorAll('[data-atab]').forEach(b=>b.onclick=()=>{ aTab=b.dataset.atab; renderAnalytics(); });
+  const body=$('#analytics-body'); body.innerHTML=(A_RENDER[aTab]||dashOverview)();
+  body.querySelectorAll('[data-goint]').forEach(b=>b.onclick=()=>setPage('integrations'));
+}
 
 // ═══ integrations (honest, backend-driven) ═══
 let CONN = { hub:{ready:false}, connectedApps:[] };
