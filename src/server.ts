@@ -209,6 +209,24 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     }
   });
 
+  // Deploy queue — staged marketing changes + auto-deploy flag, per workspace.
+  app.get('/api/deploy', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return { deploy: data.deploy ?? { auto: false, queue: [] } };
+  });
+  app.put('/api/deploy', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const d = (req.body as { deploy?: any })?.deploy ?? { auto: false, queue: [] };
+    if (Array.isArray(d.queue)) d.queue = d.queue.slice(0, 300);
+    data.deploy = d;
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+
   // Persisted chat history, per workspace (last 200 turns).
   app.get('/api/chat', async (req, reply) => {
     const u = await requireUser(req, reply);

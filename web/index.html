@@ -62,6 +62,13 @@
   .nav a.on{background:var(--panel-2);color:var(--ink);font-weight:600;}
   .nav a.sub{margin-left:20px;padding-left:12px;border-left:1.5px solid var(--line);font-size:13px;border-radius:0 8px 8px 0;}
   .nav a.sub .ico{width:15px;height:15px;}
+  .navbadge{background:#c2564d;color:#fff;font-size:10px;font-weight:800;border-radius:10px;padding:1px 7px;margin-left:auto;}
+  .switch{position:relative;display:inline-block;width:44px;height:24px;flex:none;}
+  .switch input{display:none;}
+  .switch .sl{position:absolute;inset:0;background:var(--line);border-radius:999px;transition:.2s;cursor:pointer;}
+  .switch .sl:before{content:'';position:absolute;height:18px;width:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;}
+  .switch input:checked + .sl{background:var(--good);}
+  .switch input:checked + .sl:before{transform:translateX(20px);}
   .glabel{font-size:10.5px;letter-spacing:.05em;color:var(--faint);padding:12px 10px 4px;font-weight:700;}
   .side .grow{flex:1;}
   .pill{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;color:var(--muted);font-size:13px;cursor:pointer;}
@@ -302,6 +309,7 @@
       <a data-page="hub"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg> Marketing Hub</a>
       <a data-page="adstudio" class="sub"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
       <a data-page="assets" class="sub"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/><path d="M3 3l18 18" opacity="0"/></svg> Assets</a>
+      <a data-page="deploy"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 21h14"/></svg> Deploy <span id="deploy-badge" class="navbadge" style="display:none"></span></a>
       <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
       <a data-page="profile"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
     </nav>
@@ -466,6 +474,11 @@
         <button class="go" id="photo-add">+ Upload photos</button>
         <div id="photo-grid" class="photogrid" style="margin-top:16px"></div>
       </div>
+    </section>
+
+    <!-- DEPLOY -->
+    <section class="page" id="page-deploy">
+      <div id="deploy-body"></div>
     </section>
 
     <!-- generic modal -->
@@ -877,7 +890,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',hub:'Marketing Hub',assets:'Brand Assets',integrations:'Integrations',profile:'Business Profile',chat:'Ask Miles'};
+const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',hub:'Marketing Hub',assets:'Brand Assets',deploy:'Deploy',integrations:'Integrations',profile:'Business Profile',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
@@ -890,6 +903,7 @@ function setPage(id){
   $('#page-adstudio').classList.toggle('on',id==='adstudio');
   $('#page-hub').classList.toggle('on',id==='hub');
   $('#page-assets').classList.toggle('on',id==='assets');
+  $('#page-deploy').classList.toggle('on',id==='deploy');
   $('#page-int').classList.toggle('on',id==='integrations');
   $('#page-profile').classList.toggle('on',id==='profile');
   $('#page-chat').classList.toggle('on',id==='chat');
@@ -902,6 +916,7 @@ function setPage(id){
   if(id==='adstudio') openAdStudio();
   if(id==='hub') openHub();
   if(id==='assets') openAssets();
+  if(id==='deploy') openDeploy();
   if(id==='integrations'){ loadIntegrations(); }
 }
 function updateConnStat(){
@@ -1089,7 +1104,7 @@ function suggestCard(s){
   const card=el('div','acard'); card.style.margin='0';
   const firing=matchRule(WX_LAST,s);
   card.innerHTML='<b>'+esc(s.name)+'</b>'+(firing?' <span class="apill active">WOULD FIRE NOW</span>':'')+'<div class="mdesc" style="margin:6px 0 10px">'+condText(s)+' → '+esc(s.action)+'</div>';
-  const add=el('button','go','+ Add'); add.style.padding='7px 14px'; add.onclick=()=>{ WRULES.push(Object.assign({id:newId(),enabled:true},s)); saveWRules(); reRenderWeather(); toast('Trigger added'); };
+  const add=el('button','go','+ Add'); add.style.padding='7px 14px'; add.onclick=()=>{ WRULES.push(Object.assign({id:newId(),enabled:true},s)); saveWRules(); queueChange('trigger','Weather trigger: '+s.name); reRenderWeather(); toast('Trigger added'); };
   card.append(add); return card;
 }
 function renderWeatherManage(box){
@@ -1114,7 +1129,7 @@ function newWeatherRule(){
   $('#wr-save').onclick=()=>{ const name=$('#wr-name').value.trim(), metric=ms.value, val=vi.value.trim(), action=$('#wr-action').value.trim();
     if(!name||!val||!action){ alert('Please fill in name, value, and action.'); return; }
     WRULES.push({id:newId(),name,metric,op:metric==='alert'?'contains':os.value,value:metric==='alert'?val:Number(val),action,intensity:$('#wr-intensity').value,enabled:true});
-    saveWRules(); closeModal(); reRenderWeather(); toast('Trigger created'); };
+    saveWRules(); queueChange('trigger','Weather trigger: '+name); closeModal(); reRenderWeather(); toast('Trigger created'); };
 }
 async function runWeather(){
   const zip=(($('#w-zip').value)||'').replace(/\D/g,'').slice(0,5);
@@ -1365,7 +1380,7 @@ function renderItem(c,it){
   foot.append(d); body.append(foot); card.append(body); return card;
 }
 function newCampaign(){ showModal('<h3 style="margin:0 0 14px">New campaign</h3><input class="f" id="nc-name" placeholder="e.g. Summer AC Push" style="margin:0"><button class="go" id="nc-go" style="margin-top:14px;width:100%">Create campaign</button>');
-  const go=()=>{ const n=$('#nc-name').value.trim(); if(!n) return; HUB.campaigns.unshift({id:newId(),name:n,createdAt:new Date().toISOString(),items:[]}); saveHub(); closeModal(); renderHub(); };
+  const go=()=>{ const n=$('#nc-name').value.trim(); if(!n) return; HUB.campaigns.unshift({id:newId(),name:n,createdAt:new Date().toISOString(),items:[]}); saveHub(); queueChange('campaign','New campaign: '+n); closeModal(); renderHub(); };
   $('#nc-go').onclick=go; $('#nc-name').addEventListener('keydown',e=>{ if(e.key==='Enter') go(); }); setTimeout(()=>$('#nc-name').focus(),40); }
 function addImageItem(cid){ showModal('<h3 style="margin:0 0 14px">Add image</h3><input class="f" id="im-url" placeholder="Image URL (https://…)" style="margin:0"><input class="f" id="im-cap" placeholder="Caption (optional)" style="margin:8px 0 0"><button class="go" id="im-go" style="margin-top:14px;width:100%">Add image</button>');
   $('#im-go').onclick=()=>{ const url=$('#im-url').value.trim(); if(!url) return; const c=HUB.campaigns.find(x=>x.id===cid); c.items.unshift({id:newId(),type:'image',imageUrl:url,caption:$('#im-cap').value.trim(),createdAt:new Date().toISOString()}); saveHub(); closeModal(); renderHub(); }; setTimeout(()=>$('#im-url').focus(),40); }
@@ -1376,7 +1391,7 @@ async function pickCampaign(cb){ if(!HUB_LOADED) await loadHub();
   showModal('<h3 style="margin:0 0 14px">Save to campaign</h3><div style="display:flex;flex-direction:column;gap:8px;max-height:230px;overflow:auto">'+(list||'<div class="appsub">No campaigns yet — create one below.</div>')+'</div><div style="display:flex;gap:8px;margin-top:14px"><input class="f" id="pc-new" placeholder="New campaign…" style="margin:0;flex:1"><button class="go" id="pc-go" style="flex:none">Create</button></div>');
   $('#modal').querySelectorAll('[data-cid]').forEach(b=>b.onclick=()=>{ closeModal(); cb(b.dataset.cid); });
   $('#pc-go').onclick=()=>{ const n=$('#pc-new').value.trim(); if(!n) return; const c={id:newId(),name:n,createdAt:new Date().toISOString(),items:[]}; HUB.campaigns.unshift(c); closeModal(); cb(c.id); }; }
-function saveCreativeToCampaign(cr){ pickCampaign((cid)=>{ const c=HUB.campaigns.find(x=>x.id===cid); if(!c) return; c.items.unshift({id:newId(),type:'copy',angle:cr.angle,headline:cr.headline,body:cr.body,cta:cr.cta,imageUrl:cr.imageUrl,logoUrl:cr.logoUrl,createdAt:new Date().toISOString()}); saveHub(); toast('Saved to “'+c.name+'”'); }); }
+function saveCreativeToCampaign(cr){ pickCampaign((cid)=>{ const c=HUB.campaigns.find(x=>x.id===cid); if(!c) return; c.items.unshift({id:newId(),type:'copy',angle:cr.angle,headline:cr.headline,body:cr.body,cta:cr.cta,imageUrl:cr.imageUrl,logoUrl:cr.logoUrl,createdAt:new Date().toISOString()}); saveHub(); queueChange('creative','Ad “'+(cr.headline||'').slice(0,40)+'” → '+c.name); toast('Saved to “'+c.name+'”'); }); }
 
 // ═══ brand assets (first-party data) ═══
 function downscaleImage(file, maxDim, type){ return new Promise((resolve,reject)=>{ const fr=new FileReader(); fr.onload=()=>{ const img=new Image(); img.onload=()=>{ let w=img.width,h=img.height; const s=Math.min(1,maxDim/Math.max(w,h)); w=Math.round(w*s); h=Math.round(h*s); const cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h); resolve(type==='image/png'?cv.toDataURL('image/png'):cv.toDataURL('image/jpeg',0.82)); }; img.onerror=reject; img.src=fr.result; }; fr.onerror=reject; fr.readAsDataURL(file); }); }
@@ -1400,7 +1415,7 @@ $('#logo-input').onchange=async(e)=>{ const f=e.target.files[0]; if(!f)return; t
 $('#logo-remove').onclick=async()=>{ delete ASSETS.logo; await saveAssets(); renderAssets(); };
 $('#photo-add').onclick=()=>$('#photo-input').click();
 $('#photo-input').onchange=async(e)=>{ const files=[...e.target.files]; for(const f of files){ try{ const url=await downscaleImage(f,1024,'image/jpeg'); (ASSETS.photos=ASSETS.photos||[]).push({id:newId(),url,caption:''}); }catch(err){} } await saveAssets(); renderAssets(); e.target.value=''; };
-$('#assets-save').onclick=async()=>{ ASSETS.tagline=$('#as-tagline').value.trim(); ASSETS.services=$('#as-services').value.trim(); ASSETS.brandColor=$('#as-color').value.trim(); ASSETS.phone=$('#as-phone').value.trim(); ASSETS.website=$('#as-website').value.trim(); ASSETS.differentiators=$('#as-diff').value.trim(); const btn=$('#assets-save'); btn.disabled=true; await saveAssets(); $('#assets-note').textContent='Saved ✓'; btn.disabled=false; setTimeout(()=>{$('#assets-note').textContent='';},2200); };
+$('#assets-save').onclick=async()=>{ ASSETS.tagline=$('#as-tagline').value.trim(); ASSETS.services=$('#as-services').value.trim(); ASSETS.brandColor=$('#as-color').value.trim(); ASSETS.phone=$('#as-phone').value.trim(); ASSETS.website=$('#as-website').value.trim(); ASSETS.differentiators=$('#as-diff').value.trim(); const btn=$('#assets-save'); btn.disabled=true; await saveAssets(); queueChange('assets','Brand assets updated'); $('#assets-note').textContent='Saved ✓'; btn.disabled=false; setTimeout(()=>{$('#assets-note').textContent='';},2200); };
 $('#as-import').onclick=async()=>{ const url=$('#as-import-url').value.trim(); if(!url) return; if(!REMOTE){ $('#assets-note').textContent='Website import runs on the deployed app.'; return; }
   // capture whatever they've already typed so we don't overwrite it
   ASSETS.tagline=$('#as-tagline').value.trim(); ASSETS.services=$('#as-services').value.trim(); ASSETS.brandColor=$('#as-color').value.trim(); ASSETS.phone=$('#as-phone').value.trim(); ASSETS.website=$('#as-website').value.trim(); ASSETS.differentiators=$('#as-diff').value.trim();
@@ -1425,6 +1440,43 @@ async function renderAdPhotoStrip(){
   for(const p of photos){ const d=el('div','pickphoto'+(ADIMG.url===p.url?' sel':'')); const im=el('img'); im.src=p.url; im.alt=''; d.append(im); d.onclick=()=>{ ADIMG.url=(ADIMG.url===p.url?null:p.url); renderAdPhotoStrip(); }; strip.append(d); }
 }
 document.querySelectorAll('input[name="adimg"]').forEach(r=>r.onchange=()=>{ ADIMG.mode=r.value; const strip=$('#ad-photostrip'); if(r.value==='mine'){ strip.style.display='grid'; renderAdPhotoStrip(); } else { strip.style.display='none'; ADIMG.url=null; } });
+
+// ═══ deploy (stage marketing changes → push live together, or auto) ═══
+let DEPLOY={auto:false,queue:[]}, DEPLOY_LOADED=false;
+async function loadDeploy(){ if(!REMOTE){ DEPLOY_LOADED=true; return; } try{ const r=await fetch('/api/deploy'); const d=await r.json(); DEPLOY=d.deploy||{auto:false,queue:[]}; if(!DEPLOY.queue) DEPLOY.queue=[]; }catch(e){} DEPLOY_LOADED=true; updateDeployBadge(); }
+async function saveDeploy(){ if(!REMOTE) return; try{ await fetch('/api/deploy',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({deploy:DEPLOY})}); }catch(e){} }
+function pendingCount(){ return (DEPLOY.queue||[]).filter(c=>c.status==='pending').length; }
+function updateDeployBadge(){ const b=$('#deploy-badge'); if(!b) return; const n=pendingCount(); if(n){ b.textContent=n; b.style.display=''; } else b.style.display='none'; }
+function queueChange(type,label){ if(!REMOTE) return; DEPLOY.queue=DEPLOY.queue||[]; DEPLOY.queue.unshift({id:newId(),type,label,ts:new Date().toISOString(),status:DEPLOY.auto?'live':'pending'}); if(DEPLOY.queue.length>300) DEPLOY.queue=DEPLOY.queue.slice(0,300); saveDeploy(); updateDeployBadge(); if($('#page-deploy')&&$('#page-deploy').classList.contains('on')) renderDeploy(); }
+const DEP_ICON={campaign:'📁',creative:'🖼️',trigger:'⛅',profile:'🏢',assets:'🎨',asset:'📎',change:'•'};
+function fmtWhen(iso){ try{ return new Date(iso).toLocaleString(); }catch(e){ return ''; } }
+function openDeploy(){ if(!DEPLOY_LOADED){ loadDeploy().then(renderDeploy); } else renderDeploy(); }
+function deployAll(){ const n=pendingCount(); if(!n) return; const now=new Date().toISOString(); DEPLOY.queue.forEach(c=>{ if(c.status==='pending'){ c.status='live'; c.deployedAt=now; } }); DEPLOY.lastDeployedAt=now; saveDeploy(); updateDeployBadge(); renderDeploy(); toast(n+' change'+(n===1?'':'s')+' deployed live'); }
+function deployRow(c){
+  const row=el('div','arow'); const left=el('div','rl');
+  left.append(el('b','',(DEP_ICON[c.type]||'•')+'  '+(c.label||c.type))); left.append(el('span','',fmtWhen(c.ts)));
+  const st=el('span','apill '+(c.status==='live'?'active':'paused')); st.textContent=c.status==='live'?'LIVE':'PENDING';
+  row.append(left,st); return row;
+}
+function renderDeploy(){
+  const box=$('#deploy-body'); if(!box) return; box.innerHTML='';
+  const head=el('div'); head.innerHTML='<h3 style="margin:0">Deploy</h3><p class="mdesc" style="margin:4px 0 0;max-width:660px">Every change you make — campaigns, ads, triggers, brand data — is staged here. Push them all live at once, or turn on auto-deploy to have changes go live the moment you make them.</p>';
+  box.append(head);
+  const auto=el('div','acard'); auto.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0';
+  const al=el('div'); al.innerHTML='<b>Auto-deploy</b><div class="mdesc" style="margin:2px 0 0">'+(DEPLOY.auto?'On — changes go live instantly.':'Off — changes wait in the queue until you deploy.')+'</div>';
+  const sw=el('label','switch'); const ci=el('input'); ci.type='checkbox'; ci.checked=!!DEPLOY.auto; const sl=el('span','sl'); sw.append(ci,sl);
+  ci.onchange=()=>{ DEPLOY.auto=ci.checked; if(DEPLOY.auto){ DEPLOY.queue.forEach(c=>{ if(c.status==='pending') c.status='live'; }); } saveDeploy(); updateDeployBadge(); renderDeploy(); };
+  auto.append(al,sw); box.append(auto);
+  const n=pendingCount();
+  const bar=el('div'); bar.style.cssText='display:flex;align-items:center;gap:14px;margin-bottom:18px';
+  const btn=el('button','pf-save',(n? ('Deploy '+n+' change'+(n===1?'':'s')+' live') : 'Nothing to deploy')); btn.style.marginTop='0'; btn.disabled=!n; btn.onclick=deployAll;
+  bar.append(btn); if(DEPLOY.lastDeployedAt){ bar.append(el('span','appsub','Last deployed '+fmtWhen(DEPLOY.lastDeployedAt))); }
+  box.append(bar);
+  const q=DEPLOY.queue||[];
+  if(!q.length){ box.append(el('div','verdict ok','No changes yet. As you build campaigns, generate ads, and set triggers, they’ll appear here ready to deploy.')); return; }
+  box.append(el('div','sect-label', n? ('PENDING · '+n) : 'ALL DEPLOYED'));
+  for(const c of q) box.append(deployRow(c));
+}
 
 function renderBenchmarks(){
   const host=$('#bench'); if(!host) return;
@@ -1655,7 +1707,7 @@ function buildProfileForm(container,vals){
 function readProfileForm(container){ const out={}; container.querySelectorAll('[data-k]').forEach(i=>{ let v=(i.value||'').trim(); if(i.type==='number') v=v?Number(v):''; out[i.dataset.k]=v; }); return out; }
 async function saveProfile(vals){ try{ const r=await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(vals)}); return r.ok?(await r.json()).profile:null; }catch(e){ return null; } }
 async function loadProfile(){ if(!REMOTE)return; try{ const r=await fetch('/api/profile'); const d=await r.json(); PROFILE=d.profile||{}; buildProfileForm($('#profile-form'), d.profile||{}); }catch(e){} }
-$('#profile-save').onclick=async()=>{ const btn=$('#profile-save'); btn.disabled=true; const p=await saveProfile(readProfileForm($('#profile-form'))); if(p){ PROFILE=p; applyIdentity(); } $('#profile-note').textContent=p?'Saved ✓':'Could not save.'; btn.disabled=false; setTimeout(()=>{$('#profile-note').textContent='';},2500); };
+$('#profile-save').onclick=async()=>{ const btn=$('#profile-save'); btn.disabled=true; const p=await saveProfile(readProfileForm($('#profile-form'))); if(p){ PROFILE=p; applyIdentity(); queueChange('profile','Business profile updated'); } $('#profile-note').textContent=p?'Saved ✓':'Could not save.'; btn.disabled=false; setTimeout(()=>{$('#profile-note').textContent='';},2500); };
 $('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=readProfileForm($('#onboard-form')); if(!vals.businessName){ alert('Please enter your business name.'); return; } btn.disabled=true; const p=await saveProfile(vals); if(p){ PROFILE=p; applyIdentity(); } $('#onboard').classList.remove('on'); btn.disabled=false; };
 $('#logout').onclick=async()=>{ try{ await fetch('/auth/logout',{method:'POST'}); }catch(e){} window.location='/login'; };
 async function authInit(){
@@ -1665,6 +1717,7 @@ async function authInit(){
     const d=await r.json(); const u=d.user||{};
     sessionId = u.id || sessionId;
     ME = u; PROFILE = d.profile||{};
+    loadDeploy();
     $('#user-email').textContent = u.email||'';
     $('#user-av').textContent = ((u.name||u.email||'?')[0]||'?').toUpperCase();
     applyIdentity();
