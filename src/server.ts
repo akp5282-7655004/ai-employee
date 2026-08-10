@@ -7,6 +7,7 @@ import { LlmInterpreter } from './agent/llm.js';
 import { getConnector, type Connector } from './connectors/index.js';
 import { loadConfig, pipedreamReady } from './config.js';
 import { getPack, listPacks, validateIntake } from './packs/index.js';
+import { LSA_TRADES, LSA_BLENDED, LSA_VS_GOOGLE, BENCHMARK_META } from './packs/benchmarks.js';
 import { fetchDemographics } from './research/census.js';
 import { fetchWeather, evaluateWeatherTriggers } from './research/weather.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
@@ -213,6 +214,14 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       return reply.code(502).send({ error: String((err as Error).message) });
     }
   });
+
+  // Real observed LSA economics (SearchLight benchmark) + the breakeven math.
+  app.get('/api/benchmarks', async () => ({
+    trades: LSA_TRADES,
+    blended: LSA_BLENDED,
+    vsGoogle: LSA_VS_GOOGLE,
+    meta: BENCHMARK_META,
+  }));
 
   // Weather-triggered marketing — live conditions for a ZIP + the campaign
   // actions Miles recommends when weather fires (native, no third-party platform).

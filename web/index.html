@@ -156,6 +156,9 @@
   .aempty{display:flex;flex-direction:column;align-items:center;gap:12px;padding:32px;color:var(--faint);text-align:center;font-size:13px;}
   .abtn{background:var(--accent);color:#fff;border:0;padding:9px 16px;border-radius:9px;font-weight:600;cursor:pointer;font-size:13px;}
   @media (max-width:1000px){ .agrid2,.statgrid{grid-template-columns:1fr;} }
+  .btable{width:100%;border-collapse:collapse;font-size:13px;}
+  .btable th{font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);font-weight:700;text-align:center;padding:0 10px 10px;}
+  .btable td{text-align:center;padding:11px 10px;border-top:1px solid var(--line-soft);white-space:nowrap;}
   .demo-map{width:100%;height:260px;border:1px solid var(--line);border-radius:12px;margin-bottom:16px;}
   .racebar{display:grid;grid-template-columns:130px 1fr 50px;align-items:center;gap:10px;margin:8px 0;}
   .racebar .rl{font-size:13px;color:var(--muted);}
@@ -312,6 +315,7 @@
           <div class="verdict" id="verdict"></div>
         </div>
       </div>
+      <div id="bench" style="margin-top:16px"></div>
     </section>
 
     <!-- ANALYTICS -->
@@ -797,6 +801,7 @@ function renderMeters(){
     <span><span class="d" style="background:var(--teal)"></span>Typical (${money(pack.cpa.low)}–${money(pack.cpa.high)})</span>
     <span><span class="d" style="background:var(--warn)"></span>High (>${money(pack.cpa.high)})</span>`;
   runValidate();
+  renderBenchmarks();
 }
 async function runValidate(){
   const b=Number($('#v-budget').value)||0, l=Number($('#v-leads').value)||0;
@@ -1025,6 +1030,36 @@ function renderAnalytics(){
   bar.querySelectorAll('[data-atab]').forEach(b=>b.onclick=()=>{ aTab=b.dataset.atab; renderAnalytics(); });
   const body=$('#analytics-body'); body.innerHTML=(A_RENDER[aTab]||dashOverview)();
   body.querySelectorAll('[data-goint]').forEach(b=>b.onclick=()=>setPage('integrations'));
+}
+
+// ═══ real LSA benchmarks (SearchLight, Feb 2026) ═══
+const LSA_TRADES=[
+  {trade:'Electrical',cpl:39,bookRate:43.4,avgTicket:1434,roas:8.52},
+  {trade:'HVAC',cpl:51,bookRate:44.0,avgTicket:2110,roas:9.55},
+  {trade:'General / All Trades',cpl:54,bookRate:43.9,avgTicket:1831,roas:7.84},
+  {trade:'Plumbing',cpl:57,bookRate:44.5,avgTicket:1714,roas:6.85},
+  {trade:'Drain / Sewer',cpl:59,bookRate:39.5,avgTicket:1521,roas:5.50},
+  {trade:'Water Heater',cpl:71,bookRate:35.0,avgTicket:2484,roas:5.13},
+];
+const LSA_MATCH=42.8; // blended match rate
+function breakevenCpl(avgTicket,bookRate,marginPct){ const l2c=(bookRate/100)*(LSA_MATCH/100); return Math.round(avgTicket*(marginPct/100)*l2c); }
+function renderBenchmarks(){
+  const host=$('#bench'); if(!host) return;
+  const margin=25;
+  const rows=LSA_TRADES.map(t=>{ const be=breakevenCpl(t.avgTicket,t.bookRate,margin); const safe=t.cpl<=be*0.85, tight=t.cpl<=be;
+    const badge=safe?'<span class="apill active">HEALTHY</span>':tight?'<span class="apill paused">TIGHT</span>':'<span class="apill" style="background:rgba(164,83,89,.14);color:#a45359">OVER</span>';
+    return `<tr>
+      <td style="text-align:left;font-weight:600">${t.trade}</td>
+      <td>$${t.cpl}</td><td>${t.bookRate}%</td><td>$${t.avgTicket.toLocaleString()}</td><td style="color:var(--good);font-weight:700">${t.roas}x</td>
+      <td>$${be}</td><td>${badge}</td></tr>`; }).join('');
+  host.innerHTML=`<div class="acard">
+    <div class="ah">LSA Benchmarks — What a Lead Really Costs <span style="font-weight:500;color:var(--faint);font-size:12px">· by trade, 2026</span></div>
+    <div class="mdesc" style="margin:-8px 0 14px">CPL alone is the wrong metric. A lead is only worth its price if enough leads become paying customers at a high enough ticket. <b>Breakeven CPL</b> = profit-per-job × book rate × match rate (at ${margin}% margin). Green means your target CPL sits safely below breakeven.</div>
+    <div style="overflow-x:auto"><table class="btable">
+      <thead><tr><th style="text-align:left">Trade</th><th>CPL</th><th>Book rate</th><th>Avg ticket</th><th>ROAS</th><th>Breakeven CPL</th><th>Headroom</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <div class="appsub" style="margin-top:12px">Source: SearchLight Home Services LSA Benchmark · Feb 2026 · 888 contractors · $6.72M tracked spend · 126,650 leads.</div>
+  </div>`;
 }
 
 // ═══ integrations (honest, backend-driven) ═══
