@@ -159,6 +159,19 @@
   .btable{width:100%;border-collapse:collapse;font-size:13px;}
   .btable th{font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);font-weight:700;text-align:center;padding:0 10px 10px;}
   .btable td{text-align:center;padding:11px 10px;border-top:1px solid var(--line-soft);white-space:nowrap;}
+  /* ad studio */
+  .adgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px;}
+  .adcard{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;}
+  .adimg{aspect-ratio:16/9;background:linear-gradient(135deg,#7c5cff,#3b82f6);display:grid;place-items:center;position:relative;}
+  .adimg img{width:100%;height:100%;object-fit:cover;display:block;}
+  .adimg .ph{color:#fff;font-size:12.5px;font-weight:600;text-align:center;padding:12px;opacity:.95;}
+  .adbody{padding:14px 16px;display:flex;flex-direction:column;gap:8px;flex:1;}
+  .adangle{font-size:10px;font-weight:800;letter-spacing:.05em;color:var(--muted);text-transform:uppercase;}
+  .adhead{font-weight:750;font-size:15.5px;line-height:1.28;}
+  .adtext{font-size:13px;color:var(--muted);line-height:1.5;flex:1;}
+  .adfoot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:10px;border-top:1px solid var(--line-soft);}
+  .adfoot .biz{font-size:12px;color:var(--faint);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .adcta{background:var(--ink);color:var(--panel);border:0;border-radius:8px;padding:7px 14px;font-weight:600;font-size:12.5px;cursor:pointer;flex:none;}
   .demo-map{width:100%;height:260px;border:1px solid var(--line);border-radius:12px;margin-bottom:16px;}
   .racebar{display:grid;grid-template-columns:130px 1fr 50px;align-items:center;gap:10px;margin:8px 0;}
   .racebar .rl{font-size:13px;color:var(--muted);}
@@ -248,6 +261,7 @@
       <a data-page="analytics"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Analytics</a>
       <a data-page="research"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg> Research</a>
       <a data-page="weather"><svg class="ico" viewBox="0 0 24 24"><path d="M17 14a4 4 0 0 0-1-7.87A6 6 0 0 0 4 8a4 4 0 0 0 .5 8H17Z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/></svg> Weather Triggers</a>
+      <a data-page="adstudio"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
       <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
       <a data-page="profile"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
     </nav>
@@ -349,6 +363,22 @@
         </div>
         <div id="w-note" class="appsub" style="margin-top:8px">Live conditions from the US National Weather Service.</div>
         <div id="w-results" style="margin-top:20px"></div>
+      </div>
+    </section>
+
+    <!-- AD STUDIO -->
+    <section class="page" id="page-adstudio">
+      <div class="mcard" style="max-width:1050px">
+        <h3>Ad Studio</h3>
+        <p class="mdesc">Miles writes ready-to-run ad creative for your service — headline, copy, and a photo — in seconds. Pick a service and (optionally) an offer, then generate variations to launch.</p>
+        <div class="vpick" id="ad-vpick"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px">
+          <div><label class="f" style="display:block">Service</label><select class="f" id="ad-cat" style="margin:0;min-width:180px"></select></div>
+          <div style="flex:1;min-width:220px"><label class="f" style="display:block">Offer (optional)</label><input class="f" id="ad-offer" placeholder="e.g. $79 AC tune-up" style="margin:0"></div>
+          <button class="go" id="ad-go" style="flex:none">Generate ads ✨</button>
+        </div>
+        <div id="ad-note" class="appsub" style="margin-top:8px"></div>
+        <div id="ad-results" class="adgrid" style="margin-top:20px"></div>
       </div>
     </section>
 
@@ -758,7 +788,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',integrations:'Integrations',profile:'Business Profile',chat:'Ask Miles'};
+const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',integrations:'Integrations',profile:'Business Profile',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
@@ -768,6 +798,7 @@ function setPage(id){
   $('#page-analytics').classList.toggle('on',id==='analytics');
   $('#page-research').classList.toggle('on',id==='research');
   $('#page-weather').classList.toggle('on',id==='weather');
+  $('#page-adstudio').classList.toggle('on',id==='adstudio');
   $('#page-int').classList.toggle('on',id==='integrations');
   $('#page-profile').classList.toggle('on',id==='profile');
   $('#page-chat').classList.toggle('on',id==='chat');
@@ -777,6 +808,7 @@ function setPage(id){
   if(id==='meters') renderMeters();
   if(id==='analytics') renderAnalytics();
   if(id==='weather') openWeather();
+  if(id==='adstudio') openAdStudio();
   if(id==='integrations'){ loadIntegrations(); }
 }
 function updateConnStat(){
@@ -1054,6 +1086,41 @@ const LSA_TRADES=[
 ];
 const LSA_MATCH=42.8; // blended match rate
 function breakevenCpl(avgTicket,bookRate,marginPct){ const l2c=(bookRate/100)*(LSA_MATCH/100); return Math.round(avgTicket*(marginPct/100)*l2c); }
+// ═══ ad studio (creative engine) ═══
+let adVert='home_services';
+function adCats(){ const p=PACKMETA.find(x=>x.id===adVert)||PACKMETA[0]; return (p&&p.categories&&p.categories.length)?p.categories:[{id:'',label:'General'}]; }
+function fillAdCats(){ const sel=$('#ad-cat'); if(!sel)return; sel.innerHTML=adCats().filter(c=>c&&c.label).map(c=>`<option value="${c.id}">${c.label}</option>`).join(''); }
+function renderAdVpick(){ const vp=$('#ad-vpick'); if(!vp)return; vp.innerHTML=''; for(const p of PACKMETA){ const b=el('button',p.id===adVert?'on':'',p.label); b.onclick=()=>{ adVert=p.id; renderAdVpick(); fillAdCats(); }; vp.append(b); } }
+function openAdStudio(){ if(!PACKMETA.length){ loadPacks().then(()=>{ renderAdVpick(); fillAdCats(); }); return; } renderAdVpick(); fillAdCats(); }
+function renderAdCards(cr){
+  const box=$('#ad-results'); box.innerHTML=''; const biz=(PROFILE&&PROFILE.businessName)||'Your Company';
+  if(!cr.length){ box.append(el('div','verdict tight','No creative returned — try again.')); return; }
+  for(const c of cr){
+    const card=el('div','adcard'); const img=el('div','adimg');
+    if(c.imageUrl){ const im=el('img'); im.src=c.imageUrl; im.alt=''; im.onerror=()=>{img.innerHTML='';img.append(el('div','ph','📷 Ad photo'));}; img.append(im); }
+    else img.append(el('div','ph','📷 Ad photo generates here'));
+    const body=el('div','adbody');
+    body.append(el('div','adangle',c.angle), el('div','adhead',c.headline), el('div','adtext',c.body));
+    const foot=el('div','adfoot'); foot.append(el('span','biz',biz)); foot.append(el('button','adcta',c.cta));
+    body.append(foot); card.append(img,body); box.append(card);
+  }
+}
+async function generateAds(){
+  const box=$('#ad-results'), note=$('#ad-note');
+  if(!REMOTE){ box.innerHTML=''; box.append(el('div','verdict tight','Ad generation runs on the deployed app (it needs the server).')); return; }
+  const btn=$('#ad-go'); btn.disabled=true; note.textContent='Miles is writing your ads…'; box.innerHTML='';
+  try{
+    const payload={vertical:adVert,category:$('#ad-cat').value,offer:($('#ad-offer').value||'').trim(),businessName:(PROFILE&&PROFILE.businessName)||'',city:(PROFILE&&PROFILE.serviceAreas)||''};
+    const r=await fetch('/api/creative',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ note.textContent=d.error||('HTTP '+r.status); btn.disabled=false; return; }
+    note.textContent = d.imagesLive ? 'Generated with live photos.' : 'Copy is real. Add a fal.ai key (FAL_KEY) to generate real photos — until then the photo area is a placeholder.';
+    renderAdCards(d.creatives||[]);
+  }catch(e){ note.textContent='Error: '+e.message; }
+  btn.disabled=false;
+}
+$('#ad-go').onclick=generateAds;
+
 function renderBenchmarks(){
   const host=$('#bench'); if(!host) return;
   const margin=25;

@@ -8,6 +8,8 @@ import { getConnector, type Connector } from './connectors/index.js';
 import { loadConfig, pipedreamReady } from './config.js';
 import { getPack, listPacks, validateIntake } from './packs/index.js';
 import { LSA_TRADES, LSA_BLENDED, LSA_VS_GOOGLE, BENCHMARK_META } from './packs/benchmarks.js';
+import { generateAdCopy, type CreativeRequest } from './creative/creative.js';
+import { falReady, falGenerateImage } from './creative/fal.js';
 import { fetchDemographics } from './research/census.js';
 import { fetchWeather, evaluateWeatherTriggers } from './research/weather.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
@@ -213,6 +215,21 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     } catch (err) {
       return reply.code(502).send({ error: String((err as Error).message) });
     }
+  });
+
+  // Creative engine — generate ad copy (always) + a real photo when fal.ai is set.
+  app.post<{ Body: CreativeRequest }>('/api/creative', async (req) => {
+    const body = req.body ?? {};
+    const creatives = generateAdCopy(body);
+    if (falReady()) {
+      await Promise.all(
+        creatives.map(async (c) => {
+          const url = await falGenerateImage(c.imagePrompt);
+          if (url) c.imageUrl = url;
+        }),
+      );
+    }
+    return { creatives, imagesLive: falReady() };
   });
 
   // Real observed LSA economics (SearchLight benchmark) + the breakeven math.
