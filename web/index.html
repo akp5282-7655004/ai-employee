@@ -306,8 +306,10 @@
 
     <!-- INTEGRATIONS -->
     <section class="page" id="page-int">
-      <p class="mdesc" style="margin:-8px 0 16px">Connect the tools you use and let Miles run tasks across them — 3,000+ apps at your fingertips.</p>
+      <p class="mdesc" style="margin:-8px 0 16px">Connect your CRM, call tracking, ad channels, and booking tools — one click each. No emailing credentials, no waiting on a specialist. Miles runs across all of them.</p>
       <div id="int-banner"></div>
+      <div id="int-stack"></div>
+      <div class="sect-label" style="margin-top:22px">BROWSE ALL 3,000+ APPS</div>
       <input class="searchbar" id="app-search" placeholder="Search from 3,000+ integrations…" autocomplete="off">
       <div id="int-connected"></div>
       <div class="sect-label" id="cat-label">POPULAR</div>
@@ -849,9 +851,44 @@ function appCard(a, connected){
   c.onclick=()=>connectApp(a.slug);
   return c;
 }
+// The home-services revenue stack — the tools this segment actually runs, grouped
+// like an onboarding checklist. Each connects through the same one-click flow.
+const STACK=[
+  {cat:'CRM & Field Service', apps:[
+    {slug:'servicetitan',name:'ServiceTitan'},{slug:'housecall_pro',name:'Housecall Pro'},
+    {slug:'jobber',name:'Jobber'},{slug:'service_fusion',name:'Service Fusion'},
+  ]},
+  {cat:'Call Tracking', apps:[
+    {slug:'callrail',name:'CallRail'},{slug:'whatconverts',name:'WhatConverts'},
+    {slug:'calltrackingmetrics',name:'CallTrackingMetrics'},
+  ]},
+  {cat:'Ad Channels', apps:[
+    {slug:'google_ads',name:'Google Ads'},{slug:'facebook',name:'Meta Ads'},
+    {slug:'microsoft_ads',name:'Microsoft Ads'},{slug:'google_my_business',name:'Google Business Profile'},
+  ]},
+  {cat:'Booking & Conversion', apps:[
+    {slug:'gohighlevel',name:'GoHighLevel'},{slug:'podium',name:'Podium'},{slug:'calendly',name:'Calendly'},
+  ]},
+];
+function renderStack(connected){
+  const host=$('#int-stack'); host.innerHTML='';
+  host.append(el('div','sect-label','RECOMMENDED FOR YOUR BUSINESS — CONNECT YOUR STACK'));
+  const sub=el('div','appsub'); sub.style.cssText='margin:-6px 0 14px;max-width:640px';
+  sub.textContent='The tools home-services businesses run to turn marketing into booked revenue. One click each — Miles connects on your behalf.';
+  host.append(sub);
+  for(const group of STACK){
+    host.append(el('div','sect-label',group.cat));
+    const g=el('div','appgrid');
+    for(const a of group.apps) g.append(appCard(a, connected.has(a.slug)));
+    host.append(g);
+  }
+}
 function renderInts(){
   const configured = !!(CONN.hub && CONN.hub.ready);
   const connected = new Set(CONN.connectedApps||[]);
+  const q=$('#app-search').value.trim();
+  $('#int-stack').style.display=q?'none':'';
+  if(!q) renderStack(connected);
   const banner=$('#int-banner'); banner.innerHTML='';
   const b=el('div','verdict '+(configured?'ok':'tight')); b.style.marginBottom='16px';
   b.textContent = configured
