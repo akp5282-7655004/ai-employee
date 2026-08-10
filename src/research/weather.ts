@@ -148,6 +148,38 @@ const RULES: Array<{ verticals: string[]; test: (w: WeatherNow) => FiredTrigger 
   },
 ];
 
+/** A customer-defined weather trigger: "when <metric> <op> <value> → <action>". */
+export interface WeatherRule {
+  id: string;
+  name: string;
+  metric: 'feelsLike' | 'temp' | 'wind' | 'humidity' | 'alert';
+  op: '>=' | '<=' | 'contains';
+  /** Number for numeric metrics; a keyword (e.g. "storm") for `alert`. */
+  value: number | string;
+  action: string;
+  category?: string;
+  intensity?: 'watch' | 'act' | 'urgent';
+  enabled?: boolean;
+}
+
+/** Does a custom rule fire against the current weather? Pure + testable. */
+export function matchWeatherRule(w: WeatherNow, rule: WeatherRule): boolean {
+  if (rule.enabled === false) return false;
+  if (rule.metric === 'alert') {
+    const kw = String(rule.value ?? '').toLowerCase();
+    return !!kw && w.alerts.some((a) => (a.event || '').toLowerCase().includes(kw));
+  }
+  const v =
+    rule.metric === 'feelsLike' ? w.feelsLikeF :
+    rule.metric === 'temp' ? w.tempF :
+    rule.metric === 'wind' ? (w.windMph ?? NaN) :
+    rule.metric === 'humidity' ? (w.humidity ?? NaN) : NaN;
+  if (!Number.isFinite(v)) return false;
+  const t = Number(rule.value);
+  if (!Number.isFinite(t)) return false;
+  return rule.op === '>=' ? v >= t : rule.op === '<=' ? v <= t : false;
+}
+
 /** Evaluate all rules against current weather, optionally filtered to a vertical. */
 export function evaluateWeatherTriggers(w: WeatherNow, vertical?: string): FiredTrigger[] {
   const out: FiredTrigger[] = [];

@@ -176,6 +176,23 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { ok: true };
   });
 
+  // Customer-defined weather triggers (condition → action), per workspace.
+  app.get('/api/weather-rules', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return { rules: (data.weatherRules as unknown[]) ?? [] };
+  });
+  app.put('/api/weather-rules', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const rules = (req.body as { rules?: unknown[] })?.rules ?? [];
+    data.weatherRules = Array.isArray(rules) ? rules.slice(0, 100) : [];
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+
   // Import brand data from a customer's website to pre-fill their Assets.
   app.post<{ Body: { url?: string } }>('/api/import-site', async (req, reply) => {
     const u = await requireUser(req, reply);

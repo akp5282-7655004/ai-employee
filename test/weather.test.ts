@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeFeelsLike, evaluateWeatherTriggers, type WeatherNow } from '../src/research/weather.js';
+import { computeFeelsLike, evaluateWeatherTriggers, matchWeatherRule, type WeatherNow, type WeatherRule } from '../src/research/weather.js';
 
 const base = (over: Partial<WeatherNow>): WeatherNow => ({
   zip: '19104',
@@ -64,5 +64,25 @@ describe('evaluateWeatherTriggers', () => {
 
   it('stays quiet in mild weather', () => {
     expect(evaluateWeatherTriggers(base({ feelsLikeF: 68 }))).toHaveLength(0);
+  });
+});
+
+describe('matchWeatherRule (custom triggers)', () => {
+  const rule = (o: Partial<WeatherRule>): WeatherRule => ({ id: 'r', name: 'r', metric: 'feelsLike', op: '>=', value: 90, action: 'a', ...o });
+  it('fires a numeric >= rule when met', () => {
+    expect(matchWeatherRule(base({ feelsLikeF: 92 }), rule({}))).toBe(true);
+    expect(matchWeatherRule(base({ feelsLikeF: 80 }), rule({}))).toBe(false);
+  });
+  it('fires a <= rule', () => {
+    expect(matchWeatherRule(base({ feelsLikeF: 20 }), rule({ op: '<=', value: 32 }))).toBe(true);
+  });
+  it('matches an alert keyword', () => {
+    const w = base({ alerts: [{ event: 'High Wind Warning', severity: 'Severe' }] });
+    expect(matchWeatherRule(w, rule({ metric: 'alert', op: 'contains', value: 'wind' }))).toBe(true);
+    expect(matchWeatherRule(w, rule({ metric: 'alert', op: 'contains', value: 'flood' }))).toBe(false);
+  });
+  it('respects the enabled flag and missing metrics', () => {
+    expect(matchWeatherRule(base({ feelsLikeF: 99 }), rule({ enabled: false }))).toBe(false);
+    expect(matchWeatherRule(base({ windMph: undefined }), rule({ metric: 'wind', value: 20 }))).toBe(false);
   });
 });

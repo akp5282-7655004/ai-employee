@@ -130,8 +130,9 @@
   .legend{display:flex;gap:16px;justify-content:center;margin-top:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);}
   .legend .d{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:middle;}
   label.f{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 5px;}
-  input.f{width:100%;border:1px solid var(--line);background:var(--panel-2);border-radius:9px;padding:10px 12px;font-size:14px;color:var(--ink);font-family:var(--sans);}
-  input.f:focus{outline:none;border-color:var(--accent);background:var(--card);}
+  input.f,select.f,textarea.f{width:100%;border:1px solid var(--line);background:var(--panel-2);border-radius:9px;padding:10px 12px;font-size:14px;color:var(--ink);font-family:var(--sans);}
+  input.f:focus,select.f:focus,textarea.f:focus{outline:none;border-color:var(--accent);background:var(--card);}
+  textarea.f{resize:vertical;min-height:58px;}
   .verdict{margin-top:14px;font-size:13.5px;line-height:1.5;padding:12px 14px;border-radius:10px;}
   .verdict.ok{background:var(--good-soft);color:var(--good);}
   .verdict.tight{background:var(--warn-soft);color:var(--warn);}
@@ -1005,9 +1006,21 @@ $('#r-zip').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefaul
 
 // ═══ weather triggers ═══
 const WX_INTENSITY={watch:{cls:'wx-watch',tag:'WATCH'},act:{cls:'wx-act',tag:'ACT NOW'},urgent:{cls:'wx-urgent',tag:'URGENT'}};
+let WX_LAST=null, WX_BUILTIN=[], WRULES=[], WRULES_LOADED=false;
+function matchRule(w,r){ if(!w||r.enabled===false) return false;
+  if(r.metric==='alert'){ const kw=String(r.value||'').toLowerCase(); return !!kw && (w.alerts||[]).some(a=>String(a.event||'').toLowerCase().includes(kw)); }
+  const v=r.metric==='feelsLike'?w.feelsLikeF:r.metric==='temp'?w.tempF:r.metric==='wind'?w.windMph:r.metric==='humidity'?w.humidity:undefined;
+  if(v==null||!isFinite(v)) return false; const t=Number(r.value); if(!isFinite(t)) return false;
+  return r.op==='>='?v>=t:r.op==='<='?v<=t:false; }
+async function loadWRules(){ if(!REMOTE){ WRULES_LOADED=true; return; } try{ const r=await fetch('/api/weather-rules'); const d=await r.json(); WRULES=d.rules||[]; }catch(e){} WRULES_LOADED=true; }
+async function saveWRules(){ if(!REMOTE) return; try{ await fetch('/api/weather-rules',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({rules:WRULES})}); }catch(e){} }
+function firingCustom(){ return WRULES.filter(r=>matchRule(WX_LAST,r)).map(r=>({label:r.name,action:r.action,intensity:r.intensity||'act',custom:true})); }
+const WX_UNIT={feelsLike:'°F',temp:'°F',wind:' mph',humidity:'%',alert:''};
+const WX_MLABEL={feelsLike:'Feels-like',temp:'Temperature',wind:'Wind',humidity:'Humidity',alert:'Severe alert'};
+function condText(r){ if(r.metric==='alert') return 'When a severe alert mentions “'+r.value+'”'; return 'When '+WX_MLABEL[r.metric]+' '+(r.op==='>='?'≥':'≤')+' '+r.value+WX_UNIT[r.metric]; }
 function renderWeather(data){
   const box=$('#w-results'); box.innerHTML='';
-  const w=data.weather||{}, trigs=data.triggers||[];
+  const w=data.weather||{}; WX_LAST=w; WX_BUILTIN=data.triggers||[];
   box.append(el('div','sect-label', ((w.place||'')+' · '+(w.zip||'')).toUpperCase()));
   const grid=el('div','stats'); grid.style.marginBottom='18px';
   grid.append(
@@ -1019,25 +1032,76 @@ function renderWeather(data){
   box.append(grid);
   if(w.shortForecast){ const s=el('div','appsub'); s.style.margin='-8px 0 16px'; s.textContent='Now: '+w.shortForecast; box.append(s); }
   box.append(el('div','sect-label','ACTIVE TRIGGERS'));
-  if(!trigs.length){
-    box.append(el('div','verdict ok','✅ No weather triggers firing right now — conditions are mild. Miles keeps watching and will flag the moment demand-driving weather hits your area.'));
-    return;
-  }
+  const trigs=(WX_BUILTIN||[]).concat(firingCustom());
+  if(!trigs.length){ box.append(el('div','verdict ok','✅ No triggers firing right now — conditions are mild. Miles keeps watching and flags the moment demand-driving weather hits.')); }
   for(const t of trigs){
     const meta=WX_INTENSITY[t.intensity]||WX_INTENSITY.act;
     const card=el('div','verdict '+meta.cls); card.style.marginBottom='12px';
     const head=el('div'); head.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:6px';
     const tag=el('span'); tag.style.cssText='font-size:10px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:5px;background:rgba(0,0,0,.14)'; tag.textContent=meta.tag;
-    head.append(tag, el('strong',null,t.label));
+    head.append(tag, el('strong',null,t.label)); if(t.custom){ const c=el('span','appsub','· your trigger'); c.style.fontSize='11px'; head.append(c); }
     card.append(head, el('div',null,t.action));
     box.append(card);
   }
+  renderWeatherManage(box);
+}
+function reRenderWeather(){ if(WX_LAST) renderWeather({weather:WX_LAST,triggers:WX_BUILTIN}); else { const box=$('#w-results'); box.innerHTML=''; renderWeatherManage(box); } }
+function ruleRow(r){
+  const row=el('div','acard'); row.style.marginBottom='10px';
+  const top=el('div'); top.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:10px';
+  const nm=el('div'); nm.innerHTML='<b>'+esc(r.name)+'</b>'+(matchRule(WX_LAST,r)?' <span class="apill active">FIRING NOW</span>':'')+(r.enabled===false?' <span class="apill paused">OFF</span>':'');
+  const ctrl=el('div'); ctrl.style.cssText='display:flex;gap:8px;align-items:center';
+  const tg=el('button','adsave',r.enabled===false?'Turn on':'Turn off'); tg.onclick=()=>{ r.enabled=(r.enabled===false); saveWRules(); reRenderWeather(); };
+  const dl=el('button','idel','Delete'); dl.onclick=()=>{ WRULES=WRULES.filter(x=>x.id!==r.id); saveWRules(); reRenderWeather(); };
+  ctrl.append(tg,dl); top.append(nm,ctrl); row.append(top);
+  const d=el('div','mdesc',condText(r)+' → '+r.action); d.style.margin='8px 0 0'; row.append(d);
+  return row;
+}
+function suggestWeatherRules(){ return [
+  {name:'Heat wave — push AC repair', metric:'feelsLike', op:'>=', value:90, action:'Boost AC-repair & emergency-cooling ads; raise bids on “AC not working”.', category:'hvac', intensity:'urgent'},
+  {name:'Cold snap — push heating', metric:'feelsLike', op:'<=', value:32, action:'Boost furnace & heating-repair ads.', category:'hvac', intensity:'act'},
+  {name:'Muggy day — AC & dehumidifiers', metric:'humidity', op:'>=', value:75, action:'Promote AC tune-ups and dehumidifier installs.', category:'hvac', intensity:'watch'},
+  {name:'Storm — roofing surge', metric:'alert', op:'contains', value:'storm', action:'Activate storm-damage roofing & emergency-repair ads; raise budget.', category:'roofing', intensity:'urgent'},
+  {name:'High wind — roof inspections', metric:'wind', op:'>=', value:30, action:'Promote free roof inspections after high winds.', category:'roofing', intensity:'act'},
+  {name:'Hard freeze — frozen pipes', metric:'feelsLike', op:'<=', value:20, action:'Run frozen-pipe emergency plumbing ads.', category:'plumbing', intensity:'urgent'},
+]; }
+function suggestCard(s){
+  const card=el('div','acard'); card.style.margin='0';
+  const firing=matchRule(WX_LAST,s);
+  card.innerHTML='<b>'+esc(s.name)+'</b>'+(firing?' <span class="apill active">WOULD FIRE NOW</span>':'')+'<div class="mdesc" style="margin:6px 0 10px">'+condText(s)+' → '+esc(s.action)+'</div>';
+  const add=el('button','go','+ Add'); add.style.padding='7px 14px'; add.onclick=()=>{ WRULES.push(Object.assign({id:newId(),enabled:true},s)); saveWRules(); reRenderWeather(); toast('Trigger added'); };
+  card.append(add); return card;
+}
+function renderWeatherManage(box){
+  const head=el('div'); head.style.cssText='display:flex;align-items:center;justify-content:space-between;margin:28px 0 12px';
+  head.append(el('div','sect-label','YOUR TRIGGERS')); const nb=el('button','go','+ New trigger'); nb.style.padding='7px 14px'; nb.onclick=newWeatherRule; head.append(nb);
+  box.append(head);
+  if(!WRULES.length) box.append(el('div','appsub','No custom triggers yet — create one, or add a suggestion below.'));
+  else for(const r of WRULES) box.append(ruleRow(r));
+  const sugg=suggestWeatherRules().filter(s=>!WRULES.some(r=>r.name===s.name));
+  if(sugg.length){ box.append(el('div','sect-label','SUGGESTED FOR YOU')); const g=el('div'); g.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px'; for(const s of sugg) g.append(suggestCard(s)); box.append(g); }
+}
+function newWeatherRule(){
+  showModal('<h3 style="margin:0 0 14px">New weather trigger</h3>'+
+    '<label class="f" style="margin:0 0 4px">Name</label><input class="f" id="wr-name" placeholder="e.g. Heat wave AC boost" style="margin:0 0 12px">'+
+    '<label class="f" style="margin:0 0 4px">When…</label><div style="display:flex;gap:8px;margin-bottom:12px"><select class="f" id="wr-metric" style="flex:1"><option value="feelsLike">Feels-like temp</option><option value="temp">Temperature</option><option value="wind">Wind speed</option><option value="humidity">Humidity</option><option value="alert">Severe alert</option></select><select class="f" id="wr-op" style="width:64px"><option value="&gt;=">≥</option><option value="&lt;=">≤</option></select><input class="f" id="wr-value" placeholder="value" style="width:96px"></div>'+
+    '<label class="f" style="margin:0 0 4px">Then — what should Miles do?</label><textarea class="f" id="wr-action" placeholder="e.g. Boost AC-repair ads and raise bids" style="margin:0 0 12px"></textarea>'+
+    '<label class="f" style="margin:0 0 4px">Urgency</label><select class="f" id="wr-intensity" style="margin:0 0 16px"><option value="watch">Watch</option><option value="act" selected>Act now</option><option value="urgent">Urgent</option></select>'+
+    '<button class="go" id="wr-save" style="width:100%">Create trigger</button>');
+  const ms=$('#wr-metric'), os=$('#wr-op'), vi=$('#wr-value');
+  const sync=()=>{ if(ms.value==='alert'){ os.style.display='none'; vi.placeholder='keyword e.g. storm'; } else { os.style.display=''; vi.placeholder='value'; } };
+  ms.onchange=sync; sync(); setTimeout(()=>$('#wr-name').focus(),40);
+  $('#wr-save').onclick=()=>{ const name=$('#wr-name').value.trim(), metric=ms.value, val=vi.value.trim(), action=$('#wr-action').value.trim();
+    if(!name||!val||!action){ alert('Please fill in name, value, and action.'); return; }
+    WRULES.push({id:newId(),name,metric,op:metric==='alert'?'contains':os.value,value:metric==='alert'?val:Number(val),action,intensity:$('#wr-intensity').value,enabled:true});
+    saveWRules(); closeModal(); reRenderWeather(); toast('Trigger created'); };
 }
 async function runWeather(){
   const zip=(($('#w-zip').value)||'').replace(/\D/g,'').slice(0,5);
   const box=$('#w-results'); box.innerHTML='';
   if(zip.length!==5){ box.append(el('div','verdict tight','Enter a 5-digit US ZIP code.')); return; }
   if(!REMOTE){ box.append(el('div','verdict tight','Live weather loads on the deployed app (it needs the server).')); return; }
+  if(!WRULES_LOADED) await loadWRules();
   box.append(el('div','appsub','Checking conditions for '+zip+'…'));
   try{
     const r=await fetch('/api/weather?zip='+zip); const d=await r.json().catch(()=>({}));
@@ -1046,12 +1110,13 @@ async function runWeather(){
   }catch(e){ box.innerHTML=''; box.append(el('div','verdict tight','Error: '+e.message)); }
 }
 let WX_LOADED='';
-function openWeather(){
+async function openWeather(){
+  if(!WRULES_LOADED) await loadWRules();
   const zip=(PROFILE.zip||'').toString().replace(/\D/g,'').slice(0,5);
   if(zip && !$('#w-zip').value) $('#w-zip').value=zip;
-  // Auto-run once for the profile ZIP so the page isn't empty on first open.
   const cur=($('#w-zip').value||'').replace(/\D/g,'').slice(0,5);
   if(cur.length===5 && WX_LOADED!==cur){ WX_LOADED=cur; runWeather(); }
+  else if(!WX_LAST){ const box=$('#w-results'); box.innerHTML=''; renderWeatherManage(box); }
 }
 $('#w-go').onclick=()=>{ WX_LOADED=($('#w-zip').value||'').replace(/\D/g,'').slice(0,5); runWeather(); };
 $('#w-zip').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#w-go').click(); } });
