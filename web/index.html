@@ -134,6 +134,9 @@
   .verdict.ok{background:var(--good-soft);color:var(--good);}
   .verdict.tight{background:var(--warn-soft);color:var(--warn);}
   .verdict.unrealistic{background:var(--warn-soft);color:var(--warn);}
+  .verdict.wx-watch{background:var(--panel-2);color:var(--ink);}
+  .verdict.wx-act{background:var(--warn-soft);color:var(--warn);}
+  .verdict.wx-urgent{background:rgba(164,83,89,.14);color:#a45359;}
   .demo-map{width:100%;height:260px;border:1px solid var(--line);border-radius:12px;margin-bottom:16px;}
   .racebar{display:grid;grid-template-columns:130px 1fr 50px;align-items:center;gap:10px;margin:8px 0;}
   .racebar .rl{font-size:13px;color:var(--muted);}
@@ -221,6 +224,7 @@
       <a data-page="skills"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 2.2 5.6L20 9l-4.3 3.8L17 19l-5-3-5 3 1.3-6.2L4 9l5.8-.4Z"/></svg> Skills &amp; Playbooks</a>
       <a data-page="meters"><svg class="ico" viewBox="0 0 24 24"><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 12 15 9M4 12a8 8 0 0 1 16 0"/></svg> Meters &amp; Analytics</a>
       <a data-page="research"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg> Research</a>
+      <a data-page="weather"><svg class="ico" viewBox="0 0 24 24"><path d="M17 14a4 4 0 0 0-1-7.87A6 6 0 0 0 4 8a4 4 0 0 0 .5 8H17Z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/></svg> Weather Triggers</a>
       <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
       <a data-page="profile"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
     </nav>
@@ -301,6 +305,20 @@
         </div>
         <div id="r-note" class="appsub" style="margin-top:8px">Powered by the US Census American Community Survey.</div>
         <div id="r-results" style="margin-top:20px"></div>
+      </div>
+    </section>
+
+    <!-- WEATHER TRIGGERS -->
+    <section class="page" id="page-weather">
+      <div class="mcard" style="max-width:1000px">
+        <h3>Weather Triggers</h3>
+        <p class="mdesc">Weather is the #1 demand driver for HVAC and storm-exposed trades. Miles watches your ZIP's live conditions and tells you exactly when to boost — AC repair in a heat wave, roofing after a storm, heating in a freeze. No third-party platform, no extra subscription.</p>
+        <div style="display:flex;gap:10px;max-width:420px;margin-bottom:6px">
+          <input class="f" id="w-zip" placeholder="Enter a 5-digit ZIP (e.g. 19104)" style="margin:0" inputmode="numeric">
+          <button class="go" id="w-go" style="flex:none">Check</button>
+        </div>
+        <div id="w-note" class="appsub" style="margin-top:8px">Live conditions from the US National Weather Service.</div>
+        <div id="w-results" style="margin-top:20px"></div>
       </div>
     </section>
 
@@ -654,6 +672,7 @@ function makeAgent(connector, user) {
 const REMOTE = !!window.MILES_SERVER;
 const newId = () => (self.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'sess-'+Math.random().toString(36).slice(2);
 let sessionId = newId();
+let PROFILE = {};
 const USER='workspace';
 const connector = makeConnector({ [USER]:['google_ads','google_my_business','gohighlevel','facebook_ads'] });
 let agent = makeAgent(connector, USER);
@@ -698,7 +717,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters & Analytics',research:'Research',integrations:'Integrations',profile:'Business Profile',chat:'Ask Miles'};
+const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters & Analytics',research:'Research',weather:'Weather Triggers',integrations:'Integrations',profile:'Business Profile',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
@@ -706,6 +725,7 @@ function setPage(id){
   $('#page-home').classList.toggle('on',homeIds.includes(id));
   $('#page-meters').classList.toggle('on',id==='meters');
   $('#page-research').classList.toggle('on',id==='research');
+  $('#page-weather').classList.toggle('on',id==='weather');
   $('#page-int').classList.toggle('on',id==='integrations');
   $('#page-profile').classList.toggle('on',id==='profile');
   $('#page-chat').classList.toggle('on',id==='chat');
@@ -713,6 +733,7 @@ function setPage(id){
   if(id==='skills'){ activeCat='Math Skills'; renderTabs(); renderCards(); }
   if(homeIds.includes(id) && id!=='skills' && activeCat==='Math Skills'){ activeCat='Popular tasks'; renderTabs(); renderCards(); }
   if(id==='meters') renderMeters();
+  if(id==='weather') openWeather();
   if(id==='integrations'){ loadIntegrations(); }
 }
 function updateConnStat(){
@@ -803,6 +824,59 @@ async function runResearch(){
 }
 $('#r-go').onclick=runResearch;
 $('#r-zip').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); runResearch(); } });
+
+// ═══ weather triggers ═══
+const WX_INTENSITY={watch:{cls:'wx-watch',tag:'WATCH'},act:{cls:'wx-act',tag:'ACT NOW'},urgent:{cls:'wx-urgent',tag:'URGENT'}};
+function renderWeather(data){
+  const box=$('#w-results'); box.innerHTML='';
+  const w=data.weather||{}, trigs=data.triggers||[];
+  box.append(el('div','sect-label', ((w.place||'')+' · '+(w.zip||'')).toUpperCase()));
+  const grid=el('div','stats'); grid.style.marginBottom='18px';
+  grid.append(
+    statCard('Temperature', w.tempF!=null? w.tempF+'°F':'—'),
+    statCard('Feels like', w.feelsLikeF!=null? w.feelsLikeF+'°F':'—'),
+    statCard('Humidity', w.humidity!=null? w.humidity+'%':'—'),
+    statCard('Wind', w.windMph!=null? w.windMph+' mph':'—')
+  );
+  box.append(grid);
+  if(w.shortForecast){ const s=el('div','appsub'); s.style.margin='-8px 0 16px'; s.textContent='Now: '+w.shortForecast; box.append(s); }
+  box.append(el('div','sect-label','ACTIVE TRIGGERS'));
+  if(!trigs.length){
+    box.append(el('div','verdict ok','✅ No weather triggers firing right now — conditions are mild. Miles keeps watching and will flag the moment demand-driving weather hits your area.'));
+    return;
+  }
+  for(const t of trigs){
+    const meta=WX_INTENSITY[t.intensity]||WX_INTENSITY.act;
+    const card=el('div','verdict '+meta.cls); card.style.marginBottom='12px';
+    const head=el('div'); head.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:6px';
+    const tag=el('span'); tag.style.cssText='font-size:10px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:5px;background:rgba(0,0,0,.14)'; tag.textContent=meta.tag;
+    head.append(tag, el('strong',null,t.label));
+    card.append(head, el('div',null,t.action));
+    box.append(card);
+  }
+}
+async function runWeather(){
+  const zip=(($('#w-zip').value)||'').replace(/\D/g,'').slice(0,5);
+  const box=$('#w-results'); box.innerHTML='';
+  if(zip.length!==5){ box.append(el('div','verdict tight','Enter a 5-digit US ZIP code.')); return; }
+  if(!REMOTE){ box.append(el('div','verdict tight','Live weather loads on the deployed app (it needs the server).')); return; }
+  box.append(el('div','appsub','Checking conditions for '+zip+'…'));
+  try{
+    const r=await fetch('/api/weather?zip='+zip); const d=await r.json().catch(()=>({}));
+    if(!r.ok){ box.innerHTML=''; box.append(el('div','verdict tight', d.error||('HTTP '+r.status))); return; }
+    renderWeather(d);
+  }catch(e){ box.innerHTML=''; box.append(el('div','verdict tight','Error: '+e.message)); }
+}
+let WX_LOADED='';
+function openWeather(){
+  const zip=(PROFILE.zip||'').toString().replace(/\D/g,'').slice(0,5);
+  if(zip && !$('#w-zip').value) $('#w-zip').value=zip;
+  // Auto-run once for the profile ZIP so the page isn't empty on first open.
+  const cur=($('#w-zip').value||'').replace(/\D/g,'').slice(0,5);
+  if(cur.length===5 && WX_LOADED!==cur){ WX_LOADED=cur; runWeather(); }
+}
+$('#w-go').onclick=()=>{ WX_LOADED=($('#w-zip').value||'').replace(/\D/g,'').slice(0,5); runWeather(); };
+$('#w-zip').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#w-go').click(); } });
 
 // ═══ integrations (honest, backend-driven) ═══
 let CONN = { hub:{ready:false}, connectedApps:[] };
@@ -1008,7 +1082,7 @@ function buildProfileForm(container,vals){
 }
 function readProfileForm(container){ const out={}; container.querySelectorAll('[data-k]').forEach(i=>{ let v=(i.value||'').trim(); if(i.type==='number') v=v?Number(v):''; out[i.dataset.k]=v; }); return out; }
 async function saveProfile(vals){ try{ const r=await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(vals)}); return r.ok?(await r.json()).profile:null; }catch(e){ return null; } }
-async function loadProfile(){ if(!REMOTE)return; try{ const r=await fetch('/api/profile'); const d=await r.json(); buildProfileForm($('#profile-form'), d.profile||{}); }catch(e){} }
+async function loadProfile(){ if(!REMOTE)return; try{ const r=await fetch('/api/profile'); const d=await r.json(); PROFILE=d.profile||{}; buildProfileForm($('#profile-form'), d.profile||{}); }catch(e){} }
 $('#profile-save').onclick=async()=>{ const btn=$('#profile-save'); btn.disabled=true; const p=await saveProfile(readProfileForm($('#profile-form'))); $('#profile-note').textContent=p?'Saved ✓':'Could not save.'; btn.disabled=false; setTimeout(()=>{$('#profile-note').textContent='';},2500); };
 $('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=readProfileForm($('#onboard-form')); if(!vals.businessName){ alert('Please enter your business name.'); return; } btn.disabled=true; await saveProfile(vals); $('#onboard').classList.remove('on'); btn.disabled=false; };
 $('#logout').onclick=async()=>{ try{ await fetch('/auth/logout',{method:'POST'}); }catch(e){} window.location='/login'; };
@@ -1018,6 +1092,7 @@ async function authInit(){
     const r=await fetch('/auth/me'); if(!r.ok){ window.location='/login'; return; }
     const d=await r.json(); const u=d.user||{};
     sessionId = u.id || sessionId;
+    PROFILE = d.profile||{};
     $('#user-email').textContent = u.email||'';
     $('#user-av').textContent = ((u.name||u.email||'?')[0]||'?').toUpperCase();
     if(!d.profile){ buildProfileForm($('#onboard-form'),{}); $('#onboard').classList.add('on'); }

@@ -8,6 +8,7 @@ import { getConnector, type Connector } from './connectors/index.js';
 import { loadConfig, pipedreamReady } from './config.js';
 import { getPack, listPacks, validateIntake } from './packs/index.js';
 import { fetchDemographics } from './research/census.js';
+import { fetchWeather, evaluateWeatherTriggers } from './research/weather.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
 import { hashPassword, verifyPassword, newToken, newUserId, parseCookies } from './auth.js';
 import { MemoryStore, type Store, type User } from './db/index.js';
@@ -208,6 +209,20 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const d = await fetchDemographics(zip);
       if (!d) return reply.code(404).send({ error: 'No Census data for that ZIP — try a 5-digit US ZIP.' });
       return d;
+    } catch (err) {
+      return reply.code(502).send({ error: String((err as Error).message) });
+    }
+  });
+
+  // Weather-triggered marketing — live conditions for a ZIP + the campaign
+  // actions Miles recommends when weather fires (native, no third-party platform).
+  app.get<{ Querystring: { zip?: string; vertical?: string } }>('/api/weather', async (req, reply) => {
+    const zip = req.query?.zip;
+    if (!zip) return reply.code(400).send({ error: 'zip required' });
+    try {
+      const w = await fetchWeather(zip);
+      if (!w) return reply.code(404).send({ error: 'No weather data for that ZIP — try a 5-digit US ZIP.' });
+      return { weather: w, triggers: evaluateWeatherTriggers(w, req.query?.vertical) };
     } catch (err) {
       return reply.code(502).send({ error: String((err as Error).message) });
     }
