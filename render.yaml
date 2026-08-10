@@ -33,6 +33,11 @@ services:
       # (ZIP Business Patterns). Get one free at api.census.gov/data/key_signup.html
       - key: CENSUS_API_KEY
         sync: false
+      # Optional — Google Places key. Adds real competitor listings (names, ratings,
+      # review counts) to the Research tab. Without it, Research shows the Census
+      # competitor *count* only.
+      - key: GOOGLE_PLACES_KEY
+        sync: false
       # Optional — add later to switch on real language understanding:
       # - key: ANTHROPIC_API_KEY
       #   sync: false

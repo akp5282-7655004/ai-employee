@@ -999,7 +999,27 @@ async function runResearch(){
     const r=await fetch('/api/research?zip='+zip); const d=await r.json().catch(()=>({}));
     if(!r.ok){ box.innerHTML=''; box.append(el('div','verdict tight', d.error||('HTTP '+r.status))); return; }
     renderResearch(d);
+    loadCompetitors(zip);
   }catch(e){ box.innerHTML=''; box.append(el('div','verdict tight','Error: '+e.message)); }
+}
+async function loadCompetitors(zip){
+  if(!REMOTE) return; const box=$('#r-results');
+  const q=(((PROFILE&&(PROFILE.services||PROFILE.industry))||'home services contractors')+'').split(',')[0].trim();
+  try{
+    const r=await fetch('/api/competitors?zip='+zip+'&q='+encodeURIComponent(q));
+    const d=await r.json().catch(()=>({}));
+    if(!d.configured || !(d.competitors||[]).length) return; // stay silent when not set up / no results
+    box.append(el('div','sect-label','TOP COMPETITORS NEARBY'));
+    const wrap=el('div');
+    for(const c of d.competitors){
+      const row=el('div','arow'); const left=el('div','rl'); left.append(el('b','',c.name)); if(c.address) left.append(el('span','',c.address));
+      const right=el('div'); right.style.textAlign='right';
+      if(c.rating!=null) right.append(el('b','','★ '+c.rating));
+      if(c.reviews!=null){ const rv=el('div'); rv.style.cssText='font-size:11px;color:var(--faint)'; rv.textContent=Number(c.reviews).toLocaleString()+' reviews'; right.append(rv); }
+      row.append(left,right); wrap.append(row);
+    }
+    box.append(wrap);
+  }catch(e){}
 }
 $('#r-go').onclick=runResearch;
 $('#r-zip').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); runResearch(); } });

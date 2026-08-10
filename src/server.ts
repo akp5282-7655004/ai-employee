@@ -13,6 +13,7 @@ import { falReady, falGenerateImage } from './creative/fal.js';
 import { fetchDemographics } from './research/census.js';
 import { fetchWeather, evaluateWeatherTriggers } from './research/weather.js';
 import { importSite } from './research/site.js';
+import { searchCompetitors } from './research/places.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
 import { hashPassword, verifyPassword, newToken, newUserId, parseCookies } from './auth.js';
 import { MemoryStore, type Store, type User } from './db/index.js';
@@ -284,6 +285,22 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       return connector.listApps ? await connector.listApps(q, limit, req.query?.after) : { apps: [] };
     } catch (err) {
       return { apps: [], error: String((err as Error).message) };
+    }
+  });
+
+  // Real competitor listings near a ZIP (Google Places) — names, ratings, reviews.
+  app.get<{ Querystring: { zip?: string; q?: string } }>('/api/competitors', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const zip = req.query?.zip;
+    const q = (req.query?.q || 'home services contractors').trim();
+    const query = zip ? `${q} in ${zip}` : q;
+    const configured = !!process.env.GOOGLE_PLACES_KEY;
+    try {
+      const list = await searchCompetitors(query);
+      return { competitors: list ?? [], configured };
+    } catch {
+      return { competitors: [], configured };
     }
   });
 
