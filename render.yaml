@@ -17,6 +17,12 @@ services:
       # it the app falls back to in-memory storage, which resets on every restart.
       - key: DATABASE_URL
         sync: false
+      # Pipedream Connect environment. Defaults to "development" (only YOU, signed
+      # into pipedream.com, can connect apps). Set to "production" so your real
+      # customers can connect their own accounts. Also set PIPEDREAM_PROJECT_ID /
+      # _CLIENT_ID / _CLIENT_SECRET.
+      - key: PIPEDREAM_ENVIRONMENT
+        sync: false
       # Optional — add later to switch on real language understanding:
       # - key: ANTHROPIC_API_KEY
       #   sync: false
