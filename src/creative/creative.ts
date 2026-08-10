@@ -16,6 +16,8 @@ export interface CreativeRequest {
   offer?: string;
   businessName?: string;
   city?: string;
+  /** The customer's services (first-party), woven into the copy when present. */
+  services?: string;
 }
 
 export interface AdCreative {
@@ -68,7 +70,7 @@ export function generateAdCopy(req: CreativeRequest): AdCreative[] {
     {
       angle: 'Offer',
       headline: offer,
-      body: `${biz} — trusted ${cat.label.toLowerCase()} in ${place}. Book online in under a minute and lock in this offer today.`,
+      body: `${biz} — trusted ${cat.label.toLowerCase()} in ${place}.${req.services ? ` We handle ${req.services}.` : ''} Book online in under a minute and lock in this offer today.`,
       cta: 'Book now',
       imagePrompt: imageBase,
     },

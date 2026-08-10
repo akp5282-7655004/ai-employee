@@ -158,6 +158,23 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { ok: true };
   });
 
+  // Brand assets — logo, brand info, services, and uploaded photos (first-party
+  // data used to generate on-brand ads). Stored per workspace.
+  app.get('/api/assets', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return { assets: data.assets ?? { photos: [] } };
+  });
+  app.put('/api/assets', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    data.assets = (req.body as { assets?: unknown })?.assets ?? { photos: [] };
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+
   // Persisted chat history, per workspace (last 200 turns).
   app.get('/api/chat', async (req, reply) => {
     const u = await requireUser(req, reply);

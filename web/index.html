@@ -60,6 +60,8 @@
   .nav a{display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:8px;color:var(--muted);font-size:13.5px;cursor:pointer;}
   .nav a:hover{background:var(--panel-2);color:var(--ink);}
   .nav a.on{background:var(--panel-2);color:var(--ink);font-weight:600;}
+  .nav a.sub{margin-left:20px;padding-left:12px;border-left:1.5px solid var(--line);font-size:13px;border-radius:0 8px 8px 0;}
+  .nav a.sub .ico{width:15px;height:15px;}
   .glabel{font-size:10.5px;letter-spacing:.05em;color:var(--faint);padding:12px 10px 4px;font-weight:700;}
   .side .grow{flex:1;}
   .pill{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;color:var(--muted);font-size:13px;cursor:pointer;}
@@ -193,6 +195,17 @@
   .modalx{position:absolute;top:14px;right:18px;font-size:22px;color:var(--faint);cursor:pointer;line-height:1;}
   .pickbtn{text-align:left;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:11px 14px;font-size:13.5px;font-weight:600;cursor:pointer;color:var(--ink);}
   .pickbtn:hover{border-color:var(--accent);}
+  /* assets */
+  .logobox{width:130px;height:130px;border:2px dashed var(--line);border-radius:12px;display:grid;place-items:center;cursor:pointer;color:var(--faint);font-size:12px;font-weight:600;text-align:center;overflow:hidden;background:var(--panel-2);}
+  .logobox:hover{border-color:var(--accent);}
+  .logobox img{width:100%;height:100%;object-fit:contain;padding:10px;}
+  .photogrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;}
+  .photo-item{position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--line);aspect-ratio:1;background:var(--panel-2);}
+  .photo-item img{width:100%;height:100%;object-fit:cover;display:block;}
+  .photo-del{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.6);color:#fff;border:0;border-radius:6px;width:24px;height:24px;cursor:pointer;font-size:15px;line-height:1;}
+  .pickphoto{border:2px solid transparent;border-radius:10px;overflow:hidden;cursor:pointer;aspect-ratio:1;background:var(--panel-2);}
+  .pickphoto.sel{border-color:var(--accent);}
+  .pickphoto img{width:100%;height:100%;object-fit:cover;display:block;}
   .demo-map{width:100%;height:260px;border:1px solid var(--line);border-radius:12px;margin-bottom:16px;}
   .racebar{display:grid;grid-template-columns:130px 1fr 50px;align-items:center;gap:10px;margin:8px 0;}
   .racebar .rl{font-size:13px;color:var(--muted);}
@@ -278,12 +291,13 @@
       <a data-page="dashboard" class="on"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg> Dashboard</a>
       <a data-page="agents"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/></svg> Agents &amp; Specialists</a>
       <a data-page="skills"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 2.2 5.6L20 9l-4.3 3.8L17 19l-5-3-5 3 1.3-6.2L4 9l5.8-.4Z"/></svg> Skills &amp; Playbooks</a>
-      <a data-page="meters"><svg class="ico" viewBox="0 0 24 24"><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 12 15 9M4 12a8 8 0 0 1 16 0"/></svg> Meters</a>
       <a data-page="analytics"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Analytics</a>
-      <a data-page="research"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg> Research</a>
+      <a data-page="meters" class="sub"><svg class="ico" viewBox="0 0 24 24"><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 12 15 9M4 12a8 8 0 0 1 16 0"/></svg> Meters</a>
+      <a data-page="research" class="sub"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg> Research</a>
       <a data-page="weather"><svg class="ico" viewBox="0 0 24 24"><path d="M17 14a4 4 0 0 0-1-7.87A6 6 0 0 0 4 8a4 4 0 0 0 .5 8H17Z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/></svg> Weather Triggers</a>
-      <a data-page="adstudio"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
       <a data-page="hub"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg> Marketing Hub</a>
+      <a data-page="adstudio" class="sub"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
+      <a data-page="assets" class="sub"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/><path d="M3 3l18 18" opacity="0"/></svg> Assets</a>
       <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
       <a data-page="profile"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
     </nav>
@@ -399,7 +413,13 @@
           <div style="flex:1;min-width:220px"><label class="f" style="display:block">Offer (optional)</label><input class="f" id="ad-offer" placeholder="e.g. $79 AC tune-up" style="margin:0"></div>
           <button class="go" id="ad-go" style="flex:none">Generate ads ✨</button>
         </div>
-        <div id="ad-note" class="appsub" style="margin-top:8px"></div>
+        <div id="ad-imgrow" style="margin:10px 0 0;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <span style="font-weight:600">Ad photo:</span>
+          <label style="cursor:pointer"><input type="radio" name="adimg" value="ai" checked> AI-generated</label>
+          <label style="cursor:pointer"><input type="radio" name="adimg" value="mine"> Use my photo</label>
+        </div>
+        <div id="ad-photostrip" class="photogrid" style="margin-top:12px;display:none;max-width:620px"></div>
+        <div id="ad-note" class="appsub" style="margin-top:10px"></div>
         <div id="ad-results" class="adgrid" style="margin-top:20px"></div>
       </div>
     </section>
@@ -407,6 +427,37 @@
     <!-- MARKETING HUB -->
     <section class="page" id="page-hub">
       <div id="hub-body"></div>
+    </section>
+
+    <!-- ASSETS -->
+    <section class="page" id="page-assets">
+      <div class="mcard pf" style="max-width:900px">
+        <h3>Brand Assets</h3>
+        <p class="mdesc">Your logo, brand details, and photos — Miles uses these as first-party data to generate on-brand ads that actually look like your business.</p>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;margin:6px 0 4px">
+          <div>
+            <label>Logo</label>
+            <div id="logo-box" class="logobox"><span>+ Upload<br>logo</span></div>
+            <input type="file" id="logo-input" accept="image/*" style="display:none">
+            <button class="adsave" id="logo-remove" style="margin-top:8px;display:none">Remove logo</button>
+          </div>
+          <div class="pf-grid" style="flex:1;min-width:300px">
+            <div class="full"><label>Tagline</label><input id="as-tagline" placeholder="e.g. Fast, friendly, on time"></div>
+            <div class="full"><label>Key services (used in ads)</label><textarea id="as-services" placeholder="e.g. AC repair, furnace install, tune-ups"></textarea></div>
+            <div><label>Brand color</label><input id="as-color" placeholder="#111111 or ‘navy’"></div>
+            <div><label>Phone</label><input id="as-phone" placeholder="(215) 555-0134"></div>
+            <div class="full"><label>Website</label><input id="as-website" placeholder="https://…"></div>
+            <div class="full"><label>What makes you different?</label><textarea id="as-diff" placeholder="Licensed &amp; insured, 5-star rated, same-day service…"></textarea></div>
+          </div>
+        </div>
+        <button class="pf-save" id="assets-save">Save brand info</button>
+        <span id="assets-note" class="appsub" style="margin-left:12px"></span>
+        <div class="sect-label" style="margin-top:28px">PHOTO LIBRARY</div>
+        <p class="mdesc" style="margin:-6px 0 12px">Upload your own service or job photos to use directly in ads — real first-party imagery beats stock.</p>
+        <input type="file" id="photo-input" accept="image/*" multiple style="display:none">
+        <button class="go" id="photo-add">+ Upload photos</button>
+        <div id="photo-grid" class="photogrid" style="margin-top:16px"></div>
+      </div>
     </section>
 
     <!-- generic modal -->
@@ -818,7 +869,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',hub:'Marketing Hub',integrations:'Integrations',profile:'Business Profile',chat:'Ask Miles'};
+const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',hub:'Marketing Hub',assets:'Brand Assets',integrations:'Integrations',profile:'Business Profile',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
@@ -830,6 +881,7 @@ function setPage(id){
   $('#page-weather').classList.toggle('on',id==='weather');
   $('#page-adstudio').classList.toggle('on',id==='adstudio');
   $('#page-hub').classList.toggle('on',id==='hub');
+  $('#page-assets').classList.toggle('on',id==='assets');
   $('#page-int').classList.toggle('on',id==='integrations');
   $('#page-profile').classList.toggle('on',id==='profile');
   $('#page-chat').classList.toggle('on',id==='chat');
@@ -841,6 +893,7 @@ function setPage(id){
   if(id==='weather') openWeather();
   if(id==='adstudio') openAdStudio();
   if(id==='hub') openHub();
+  if(id==='assets') openAssets();
   if(id==='integrations'){ loadIntegrations(); }
 }
 function updateConnStat(){
@@ -1145,12 +1198,15 @@ async function generateAds(){
   if(!REMOTE){ box.innerHTML=''; box.append(el('div','verdict tight','Ad generation runs on the deployed app (it needs the server).')); return; }
   const btn=$('#ad-go'); btn.disabled=true; note.textContent='Miles is writing your ads…'; box.innerHTML='';
   try{
-    const payload={vertical:adVert,category:$('#ad-cat').value,offer:($('#ad-offer').value||'').trim(),businessName:(PROFILE&&PROFILE.businessName)||'',city:(PROFILE&&PROFILE.serviceAreas)||''};
+    const payload={vertical:adVert,category:$('#ad-cat').value,offer:($('#ad-offer').value||'').trim(),businessName:(PROFILE&&PROFILE.businessName)||'',city:(PROFILE&&PROFILE.serviceAreas)||'',services:(ASSETS&&ASSETS.services)||(PROFILE&&PROFILE.services)||''};
     const r=await fetch('/api/creative',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
     const d=await r.json().catch(()=>({}));
     if(!r.ok){ note.textContent=d.error||('HTTP '+r.status); btn.disabled=false; return; }
-    note.textContent = d.imagesLive ? 'Generated with live photos.' : 'Copy is real. Add a fal.ai key (FAL_KEY) to generate real photos — until then the photo area is a placeholder.';
-    renderAdCards(d.creatives||[]);
+    const creatives=d.creatives||[];
+    if(ADIMG.mode==='mine' && ADIMG.url){ creatives.forEach(c=>c.imageUrl=ADIMG.url); note.textContent='Using your uploaded photo across all variations.'; }
+    else if(ADIMG.mode==='mine'){ note.textContent='Copy generated. Select one of your photos above to place it in the ads.'; }
+    else { note.textContent = d.imagesLive ? 'Generated with live AI photos.' : 'Copy is real. Add a fal.ai key (FAL_KEY) to generate real photos — until then the photo area is a placeholder.'; }
+    renderAdCards(creatives);
   }catch(e){ note.textContent='Error: '+e.message; }
   btn.disabled=false;
 }
@@ -1217,6 +1273,40 @@ async function pickCampaign(cb){ if(!HUB_LOADED) await loadHub();
   $('#modal').querySelectorAll('[data-cid]').forEach(b=>b.onclick=()=>{ closeModal(); cb(b.dataset.cid); });
   $('#pc-go').onclick=()=>{ const n=$('#pc-new').value.trim(); if(!n) return; const c={id:newId(),name:n,createdAt:new Date().toISOString(),items:[]}; HUB.campaigns.unshift(c); closeModal(); cb(c.id); }; }
 function saveCreativeToCampaign(cr){ pickCampaign((cid)=>{ const c=HUB.campaigns.find(x=>x.id===cid); if(!c) return; c.items.unshift({id:newId(),type:'copy',angle:cr.angle,headline:cr.headline,body:cr.body,cta:cr.cta,imageUrl:cr.imageUrl,createdAt:new Date().toISOString()}); saveHub(); toast('Saved to “'+c.name+'”'); }); }
+
+// ═══ brand assets (first-party data) ═══
+function downscaleImage(file, maxDim, type){ return new Promise((resolve,reject)=>{ const fr=new FileReader(); fr.onload=()=>{ const img=new Image(); img.onload=()=>{ let w=img.width,h=img.height; const s=Math.min(1,maxDim/Math.max(w,h)); w=Math.round(w*s); h=Math.round(h*s); const cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h); resolve(type==='image/png'?cv.toDataURL('image/png'):cv.toDataURL('image/jpeg',0.82)); }; img.onerror=reject; img.src=fr.result; }; fr.onerror=reject; fr.readAsDataURL(file); }); }
+let ASSETS={photos:[]}, ASSETS_LOADED=false;
+async function loadAssets(){ if(!REMOTE){ ASSETS_LOADED=true; return; } try{ const r=await fetch('/api/assets'); const d=await r.json(); ASSETS=d.assets||{photos:[]}; if(!ASSETS.photos) ASSETS.photos=[]; }catch(e){} ASSETS_LOADED=true; }
+async function saveAssets(){ if(!REMOTE) return; try{ await fetch('/api/assets',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({assets:ASSETS})}); }catch(e){} }
+async function openAssets(){ if(!ASSETS_LOADED) await loadAssets(); renderAssets(); }
+function renderAssets(){
+  const lb=$('#logo-box');
+  if(ASSETS.logo){ lb.innerHTML='<img src="'+ASSETS.logo+'" alt="logo">'; $('#logo-remove').style.display=''; }
+  else { lb.innerHTML='<span>+ Upload<br>logo</span>'; $('#logo-remove').style.display='none'; }
+  $('#as-tagline').value=ASSETS.tagline||''; $('#as-services').value=ASSETS.services||''; $('#as-color').value=ASSETS.brandColor||'';
+  $('#as-phone').value=ASSETS.phone||''; $('#as-website').value=ASSETS.website||''; $('#as-diff').value=ASSETS.differentiators||'';
+  const g=$('#photo-grid'); g.innerHTML='';
+  const photos=ASSETS.photos||[];
+  if(!photos.length){ g.append(el('div','appsub','No photos yet — upload job or service photos to use in ads.')); }
+  for(const p of photos){ const it=el('div','photo-item'); const im=el('img'); im.src=p.url; im.alt=''; const d=el('button','photo-del','×'); d.onclick=()=>{ ASSETS.photos=ASSETS.photos.filter(x=>x.id!==p.id); saveAssets(); renderAssets(); }; it.append(im,d); g.append(it); }
+}
+$('#logo-box').onclick=()=>$('#logo-input').click();
+$('#logo-input').onchange=async(e)=>{ const f=e.target.files[0]; if(!f)return; try{ ASSETS.logo=await downscaleImage(f,320,'image/png'); await saveAssets(); renderAssets(); }catch(err){} e.target.value=''; };
+$('#logo-remove').onclick=async()=>{ delete ASSETS.logo; await saveAssets(); renderAssets(); };
+$('#photo-add').onclick=()=>$('#photo-input').click();
+$('#photo-input').onchange=async(e)=>{ const files=[...e.target.files]; for(const f of files){ try{ const url=await downscaleImage(f,1024,'image/jpeg'); (ASSETS.photos=ASSETS.photos||[]).push({id:newId(),url,caption:''}); }catch(err){} } await saveAssets(); renderAssets(); e.target.value=''; };
+$('#assets-save').onclick=async()=>{ ASSETS.tagline=$('#as-tagline').value.trim(); ASSETS.services=$('#as-services').value.trim(); ASSETS.brandColor=$('#as-color').value.trim(); ASSETS.phone=$('#as-phone').value.trim(); ASSETS.website=$('#as-website').value.trim(); ASSETS.differentiators=$('#as-diff').value.trim(); const btn=$('#assets-save'); btn.disabled=true; await saveAssets(); $('#assets-note').textContent='Saved ✓'; btn.disabled=false; setTimeout(()=>{$('#assets-note').textContent='';},2200); };
+
+// Ad Studio image source (AI vs the customer's own uploaded photos)
+let ADIMG={mode:'ai',url:null};
+async function renderAdPhotoStrip(){
+  const strip=$('#ad-photostrip'); if(!ASSETS_LOADED) await loadAssets();
+  strip.innerHTML=''; const photos=ASSETS.photos||[];
+  if(!photos.length){ strip.append(el('div','appsub','No photos in Assets yet. Add some under Marketing Hub → Assets, then pick one here.')); return; }
+  for(const p of photos){ const d=el('div','pickphoto'+(ADIMG.url===p.url?' sel':'')); const im=el('img'); im.src=p.url; im.alt=''; d.append(im); d.onclick=()=>{ ADIMG.url=(ADIMG.url===p.url?null:p.url); renderAdPhotoStrip(); }; strip.append(d); }
+}
+document.querySelectorAll('input[name="adimg"]').forEach(r=>r.onchange=()=>{ ADIMG.mode=r.value; const strip=$('#ad-photostrip'); if(r.value==='mine'){ strip.style.display='grid'; renderAdPhotoStrip(); } else { strip.style.display='none'; ADIMG.url=null; } });
 
 function renderBenchmarks(){
   const host=$('#bench'); if(!host) return;
