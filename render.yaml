@@ -28,6 +28,11 @@ services:
       # generate real ad images (Flux Schnell by default; override with FAL_IMAGE_MODEL).
       - key: FAL_KEY
         sync: false
+      # Optional — a free US Census API key. Research works without it (keyless,
+      # ~500 calls/day), but a key raises limits and enables the competition layer
+      # (ZIP Business Patterns). Get one free at api.census.gov/data/key_signup.html
+      - key: CENSUS_API_KEY
+        sync: false
       # Optional — add later to switch on real language understanding:
       # - key: ANTHROPIC_API_KEY
       #   sync: false

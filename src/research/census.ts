@@ -28,7 +28,16 @@ export interface Demographics {
   medianAge: number;
   homeownershipPct: number;
   race: RaceBreakdown;
+  /** Housing-stock layer — signals repair/replacement demand for the trades. */
+  medianYearBuilt: number;
+  housingUnits: number;
+  /** Share of homes built before 1980 (aging stock → more roofing/HVAC/plumbing work). */
+  pctOlderHomes: number;
+  /** Construction & trade businesses in the ZIP (competition), when available. */
+  competition?: number;
   insight: string;
+  /** A trade-focused read of the market (housing age + income + competition). */
+  marketFit: string;
 }
 
 // population, income, home value, age, occupancy, and race/ethnicity (B03002, not-Hispanic breakdown).
@@ -47,6 +56,14 @@ const VARS = [
   'B03002_007E', // Native Hawaiian / Pacific Islander, not Hispanic
   'B03002_009E', // Two or more races, not Hispanic
   'B03002_012E', // Hispanic or Latino
+  'B25035_001E', // median year structure built
+  'B25001_001E', // total housing units
+  'B25034_001E', // year-built universe (total)
+  'B25034_007E', // built 1970–1979
+  'B25034_008E', // built 1960–1969
+  'B25034_009E', // built 1950–1959
+  'B25034_010E', // built 1940–1949
+  'B25034_011E', // built 1939 or earlier
 ];
 
 const num = (s: string | undefined): number => {
@@ -58,9 +75,10 @@ export async function fetchDemographics(zipInput: string): Promise<Demographics 
   const zip = (zipInput || '').replace(/\D/g, '').slice(0, 5);
   if (zip.length !== 5) return null;
 
+  const key = process.env.CENSUS_API_KEY ? `&key=${process.env.CENSUS_API_KEY}` : '';
   const url =
     `https://api.census.gov/data/2022/acs/acs5?get=NAME,${VARS.join(',')}` +
-    `&for=zip%20code%20tabulation%20area:${zip}`;
+    `&for=zip%20code%20tabulation%20area:${zip}${key}`;
   const res = await fetch(url);
   if (!res.ok) return null;
   const data = (await res.json()) as string[][];
@@ -72,6 +90,13 @@ export async function fetchDemographics(zipInput: string): Promise<Demographics 
     num(r[1]), num(r[2]), num(r[3]), num(r[4]), num(r[5]), num(r[6]),
     num(r[7]), num(r[8]), num(r[9]), num(r[10]), num(r[11]), num(r[12]), num(r[13]), num(r[14]),
   ];
+  // Housing-stock layer.
+  const medianYearBuilt = num(r[15]);
+  const housingUnits = num(r[16]);
+  const ybTotal = num(r[17]);
+  const olderHomes = num(r[18]) + num(r[19]) + num(r[20]) + num(r[21]) + num(r[22]); // pre-1980
+  const pctOlderHomes = ybTotal ? Math.round((olderHomes / ybTotal) * 1000) / 10 : 0;
+  const competition = await fetchCompetition(zip);
   const pct = (v: number) => (raceTotal ? Math.round((v / raceTotal) * 1000) / 10 : 0);
   const race: RaceBreakdown = {
     white: pct(white),
@@ -99,8 +124,53 @@ export async function fetchDemographics(zipInput: string): Promise<Demographics 
     medianAge: age,
     homeownershipPct: occ ? Math.round((owner / occ) * 100) : 0,
     race,
+    medianYearBuilt,
+    housingUnits,
+    pctOlderHomes,
+    competition,
     insight: insightFor(income, homeValue, occ ? Math.round((owner / occ) * 100) : 0),
+    marketFit: marketFitFor(income, occ ? Math.round((owner / occ) * 100) : 0, pctOlderHomes, medianYearBuilt, competition),
   };
+}
+
+/** Construction & specialty-trade businesses in the ZIP (competition). Best-effort:
+ * ZIP Business Patterns is 2018-vintage and needs a Census key for reliable access. */
+async function fetchCompetition(zip: string): Promise<number | undefined> {
+  try {
+    const key = process.env.CENSUS_API_KEY ? `&key=${process.env.CENSUS_API_KEY}` : '';
+    // NAICS 238 = Specialty Trade Contractors (plumbing, HVAC, electrical, roofing, painting…).
+    const url = `https://api.census.gov/data/2018/zbp?get=ESTAB&for=zipcode:${zip}&NAICS2017=238${key}`;
+    const res = await fetch(url);
+    if (!res.ok) return undefined;
+    const data = (await res.json()) as string[][];
+    if (!Array.isArray(data) || data.length < 2) return undefined;
+    return num(data[1]![0]);
+  } catch {
+    return undefined;
+  }
+}
+
+function marketFitFor(income: number, ownership: number, pctOlder: number, medianYearBuilt: number, competition?: number): string {
+  const parts: string[] = [];
+  const age = medianYearBuilt ? new Date().getFullYear() - medianYearBuilt : 0;
+  if (pctOlder >= 55 || (age && age >= 45)) {
+    parts.push(`Aging housing stock (${pctOlder}% built before 1980${medianYearBuilt ? `, median built ${medianYearBuilt}` : ''}) — strong, steady demand for roofing, HVAC replacement, and plumbing repair.`);
+  } else if (pctOlder <= 25) {
+    parts.push(`Newer housing here (${pctOlder}% pre-1980) — lean toward installs, upgrades, and maintenance plans over emergency repair.`);
+  } else {
+    parts.push(`Mixed-age housing (${pctOlder}% pre-1980) — a healthy blend of repair and upgrade demand.`);
+  }
+  if (ownership >= 60) parts.push('High homeownership means decision-makers who pay for their own repairs.');
+  if (competition !== undefined) {
+    parts.push(
+      competition >= 40
+        ? `Competitive market — ~${competition} specialty-trade contractors here. Win on speed, reviews, and a sharp offer.`
+        : competition > 0
+          ? `Relatively open market — only ~${competition} specialty-trade contractors in this ZIP.`
+          : 'Few registered trade contractors in this ZIP — potential underserved demand.',
+    );
+  }
+  return parts.join(' ');
 }
 
 /** Free ZIP → lat/lng + place name for the map (no key). Best-effort. */

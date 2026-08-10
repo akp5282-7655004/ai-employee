@@ -966,6 +966,16 @@ function renderResearch(d){
     statCard('Homeownership', d.homeownershipPct? d.homeownershipPct+'%' : '—')
   );
   box.append(grid);
+  box.append(el('div','sect-label','HOUSING & MARKET'));
+  const hg=el('div','stats'); hg.style.marginBottom='16px';
+  hg.append(
+    statCard('Median year built', d.medianYearBuilt? d.medianYearBuilt : '—'),
+    statCard('Homes built pre-1980', d.pctOlderHomes!=null? d.pctOlderHomes+'%' : '—'),
+    statCard('Housing units', d.housingUnits? d.housingUnits.toLocaleString() : '—'),
+    statCard('Trade competitors', d.competition!=null? d.competition : '—')
+  );
+  box.append(hg);
+  if(d.marketFit){ const mf=el('div','verdict ok'); mf.style.marginBottom='6px'; mf.textContent='🏗️ '+d.marketFit; box.append(mf); }
   const R=d.race||{};
   box.append(el('div','sect-label','RACE & ETHNICITY'));
   const rw=el('div');
