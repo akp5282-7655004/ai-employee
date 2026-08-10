@@ -23,6 +23,11 @@ services:
       # _CLIENT_ID / _CLIENT_SECRET.
       - key: PIPEDREAM_ENVIRONMENT
         sync: false
+      # Ad Studio image generation (fal.ai). Without it, Ad Studio still writes real
+      # ad copy but shows a placeholder for the photo. Add your fal.ai key to
+      # generate real ad images (Flux Schnell by default; override with FAL_IMAGE_MODEL).
+      - key: FAL_KEY
+        sync: false
       # Optional — add later to switch on real language understanding:
       # - key: ANTHROPIC_API_KEY
       #   sync: false
