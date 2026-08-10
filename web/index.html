@@ -238,7 +238,7 @@
 <div class="app">
   <aside class="side">
     <div class="brandrow"><svg class="milesmark" viewBox="0 0 100 100" width="26" height="26" role="img" aria-label="Miles"><rect x="1.5" y="1.5" width="97" height="97" rx="26" fill="#111112"/><g fill="none" stroke="#fff" stroke-width="8"><path d="M31.6 31.6A26 26 0 0 0 68.4 68.4" stroke-opacity=".22"/><path d="M31.6 31.6A26 26 0 0 1 68.4 68.4"/></g><circle cx="42" cy="50" r="4" fill="#fff"/><circle cx="58" cy="50" r="4" fill="#fff"/></svg><span class="wm">miles.ai</span></div>
-    <div class="ws"><span class="sq">AW</span><b>Akhil's Workspace</b><span class="cx"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg></span></div>
+    <div class="ws"><span class="sq" id="ws-av">·</span><b id="ws-name">Your Workspace</b><span class="cx"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg></span></div>
     <div class="newtask" data-ask><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New task</div>
     <nav class="nav" id="nav">
       <a data-page="dashboard" class="on"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg> Dashboard</a>
@@ -278,7 +278,7 @@
       </div>
       <div class="hero">
         <div class="orb"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 1.9 4.8L19 9l-4 3.5L16 18l-4-2.4L8 18l1-5.5L5 9l5.1-1.2Z"/></svg></div>
-        <h1>Hi Akhil, let's make Miles useful for your business</h1>
+        <h1 id="greeting">Let's make Miles useful for your business</h1>
         <p class="sub">Press Enter or select a ready-to-run specialist task below to get started.</p>
         <div class="prompt">
           <textarea id="hprompt" rows="1" placeholder="Help me get started with Miles…"></textarea>
@@ -703,6 +703,17 @@ const REMOTE = !!window.MILES_SERVER;
 const newId = () => (self.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'sess-'+Math.random().toString(36).slice(2);
 let sessionId = newId();
 let PROFILE = {};
+let ME = {};
+// Fill the per-user identity (workspace name, avatar, greeting) so nothing is
+// hardcoded to one account — every logged-in user sees their own name.
+function applyIdentity(){
+  const emailPrefix = ME.email ? ME.email.split('@')[0] : '';
+  const wsName = (PROFILE && PROFILE.businessName) || ME.name || emailPrefix || 'Your Workspace';
+  const first = (ME.name && ME.name.split(' ')[0]) || emailPrefix || 'there';
+  const wsn=$('#ws-name'); if(wsn) wsn.textContent=wsName;
+  const wsa=$('#ws-av'); if(wsa) wsa.textContent=(wsName[0]||'?').toUpperCase();
+  const g=$('#greeting'); if(g) g.textContent="Hi "+first+", let's make Miles useful for your business";
+}
 const USER='workspace';
 const connector = makeConnector({ [USER]:['google_ads','google_my_business','gohighlevel','facebook_ads'] });
 let agent = makeAgent(connector, USER);
@@ -1267,8 +1278,8 @@ function buildProfileForm(container,vals){
 function readProfileForm(container){ const out={}; container.querySelectorAll('[data-k]').forEach(i=>{ let v=(i.value||'').trim(); if(i.type==='number') v=v?Number(v):''; out[i.dataset.k]=v; }); return out; }
 async function saveProfile(vals){ try{ const r=await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(vals)}); return r.ok?(await r.json()).profile:null; }catch(e){ return null; } }
 async function loadProfile(){ if(!REMOTE)return; try{ const r=await fetch('/api/profile'); const d=await r.json(); PROFILE=d.profile||{}; buildProfileForm($('#profile-form'), d.profile||{}); }catch(e){} }
-$('#profile-save').onclick=async()=>{ const btn=$('#profile-save'); btn.disabled=true; const p=await saveProfile(readProfileForm($('#profile-form'))); $('#profile-note').textContent=p?'Saved ✓':'Could not save.'; btn.disabled=false; setTimeout(()=>{$('#profile-note').textContent='';},2500); };
-$('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=readProfileForm($('#onboard-form')); if(!vals.businessName){ alert('Please enter your business name.'); return; } btn.disabled=true; await saveProfile(vals); $('#onboard').classList.remove('on'); btn.disabled=false; };
+$('#profile-save').onclick=async()=>{ const btn=$('#profile-save'); btn.disabled=true; const p=await saveProfile(readProfileForm($('#profile-form'))); if(p){ PROFILE=p; applyIdentity(); } $('#profile-note').textContent=p?'Saved ✓':'Could not save.'; btn.disabled=false; setTimeout(()=>{$('#profile-note').textContent='';},2500); };
+$('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=readProfileForm($('#onboard-form')); if(!vals.businessName){ alert('Please enter your business name.'); return; } btn.disabled=true; const p=await saveProfile(vals); if(p){ PROFILE=p; applyIdentity(); } $('#onboard').classList.remove('on'); btn.disabled=false; };
 $('#logout').onclick=async()=>{ try{ await fetch('/auth/logout',{method:'POST'}); }catch(e){} window.location='/login'; };
 async function authInit(){
   if(!REMOTE) return;
@@ -1276,9 +1287,10 @@ async function authInit(){
     const r=await fetch('/auth/me'); if(!r.ok){ window.location='/login'; return; }
     const d=await r.json(); const u=d.user||{};
     sessionId = u.id || sessionId;
-    PROFILE = d.profile||{};
+    ME = u; PROFILE = d.profile||{};
     $('#user-email').textContent = u.email||'';
     $('#user-av').textContent = ((u.name||u.email||'?')[0]||'?').toUpperCase();
+    applyIdentity();
     if(!d.profile){ buildProfileForm($('#onboard-form'),{}); $('#onboard').classList.add('on'); }
   }catch(e){}
 }
