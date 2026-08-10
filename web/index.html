@@ -172,6 +172,27 @@
   .adfoot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:10px;border-top:1px solid var(--line-soft);}
   .adfoot .biz{font-size:12px;color:var(--faint);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .adcta{background:var(--ink);color:var(--panel);border:0;border-radius:8px;padding:7px 14px;font-weight:600;font-size:12.5px;cursor:pointer;flex:none;}
+  .adsave{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-weight:600;font-size:12.5px;cursor:pointer;flex:none;}
+  /* marketing hub */
+  .hubhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
+  .folgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;}
+  .folder{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:var(--shadow);cursor:pointer;transition:border-color .15s;}
+  .folder:hover{border-color:var(--accent);}
+  .folder .fic{font-size:26px;margin-bottom:10px;}
+  .folder h4{margin:0 0 4px;font-size:15px;}
+  .folder .meta{font-size:12px;color:var(--faint);}
+  .itemgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;}
+  .item{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;}
+  .item img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:var(--panel-2);}
+  .item .ibody{padding:13px 15px;display:flex;flex-direction:column;gap:6px;flex:1;}
+  .item .ihead{font-weight:700;font-size:14px;}
+  .item .itext{font-size:12.5px;color:var(--muted);line-height:1.5;flex:1;}
+  .item .ifoot{display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid var(--line-soft);font-size:11px;color:var(--faint);}
+  .idel{background:none;border:0;color:var(--faint);cursor:pointer;font-size:12px;}.idel:hover{color:#c2564d;}
+  .modalbox{background:var(--panel);border-radius:16px;padding:24px;max-width:460px;width:100%;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+  .modalx{position:absolute;top:14px;right:18px;font-size:22px;color:var(--faint);cursor:pointer;line-height:1;}
+  .pickbtn{text-align:left;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:11px 14px;font-size:13.5px;font-weight:600;cursor:pointer;color:var(--ink);}
+  .pickbtn:hover{border-color:var(--accent);}
   .demo-map{width:100%;height:260px;border:1px solid var(--line);border-radius:12px;margin-bottom:16px;}
   .racebar{display:grid;grid-template-columns:130px 1fr 50px;align-items:center;gap:10px;margin:8px 0;}
   .racebar .rl{font-size:13px;color:var(--muted);}
@@ -262,6 +283,7 @@
       <a data-page="research"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg> Research</a>
       <a data-page="weather"><svg class="ico" viewBox="0 0 24 24"><path d="M17 14a4 4 0 0 0-1-7.87A6 6 0 0 0 4 8a4 4 0 0 0 .5 8H17Z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/></svg> Weather Triggers</a>
       <a data-page="adstudio"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
+      <a data-page="hub"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg> Marketing Hub</a>
       <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
       <a data-page="profile"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
     </nav>
@@ -381,6 +403,14 @@
         <div id="ad-results" class="adgrid" style="margin-top:20px"></div>
       </div>
     </section>
+
+    <!-- MARKETING HUB -->
+    <section class="page" id="page-hub">
+      <div id="hub-body"></div>
+    </section>
+
+    <!-- generic modal -->
+    <div class="overlay" id="modal"><div class="modalbox"><span class="modalx" id="modal-x">×</span><div id="modal-body"></div></div></div>
 
     <!-- INTEGRATIONS -->
     <section class="page" id="page-int">
@@ -788,7 +818,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',integrations:'Integrations',profile:'Business Profile',chat:'Ask Miles'};
+const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',hub:'Marketing Hub',integrations:'Integrations',profile:'Business Profile',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
@@ -799,6 +829,7 @@ function setPage(id){
   $('#page-research').classList.toggle('on',id==='research');
   $('#page-weather').classList.toggle('on',id==='weather');
   $('#page-adstudio').classList.toggle('on',id==='adstudio');
+  $('#page-hub').classList.toggle('on',id==='hub');
   $('#page-int').classList.toggle('on',id==='integrations');
   $('#page-profile').classList.toggle('on',id==='profile');
   $('#page-chat').classList.toggle('on',id==='chat');
@@ -809,6 +840,7 @@ function setPage(id){
   if(id==='analytics') renderAnalytics();
   if(id==='weather') openWeather();
   if(id==='adstudio') openAdStudio();
+  if(id==='hub') openHub();
   if(id==='integrations'){ loadIntegrations(); }
 }
 function updateConnStat(){
@@ -1101,7 +1133,10 @@ function renderAdCards(cr){
     else img.append(el('div','ph','📷 Ad photo generates here'));
     const body=el('div','adbody');
     body.append(el('div','adangle',c.angle), el('div','adhead',c.headline), el('div','adtext',c.body));
-    const foot=el('div','adfoot'); foot.append(el('span','biz',biz)); foot.append(el('button','adcta',c.cta));
+    const foot=el('div','adfoot'); foot.append(el('span','biz',biz));
+    const grp=el('div'); grp.style.cssText='display:flex;gap:8px;flex:none';
+    const save=el('button','adsave','＋ Save'); save.onclick=()=>saveCreativeToCampaign(c);
+    grp.append(save, el('button','adcta',c.cta)); foot.append(grp);
     body.append(foot); card.append(img,body); box.append(card);
   }
 }
@@ -1120,6 +1155,68 @@ async function generateAds(){
   btn.disabled=false;
 }
 $('#ad-go').onclick=generateAds;
+
+// ═══ marketing hub (campaigns/folders of copy + images) ═══
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function fmtDate(iso){ try{ return new Date(iso).toLocaleDateString(); }catch(e){ return ''; } }
+function showModal(html){ $('#modal-body').innerHTML=html; $('#modal').classList.add('on'); }
+function closeModal(){ $('#modal').classList.remove('on'); }
+$('#modal-x').onclick=closeModal; $('#modal').onclick=(e)=>{ if(e.target.id==='modal') closeModal(); };
+function toast(msg){ let t=$('#toast'); if(!t){ t=el('div'); t.id='toast'; t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:100;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;transition:opacity .2s'; document.body.append(t);} t.textContent=msg; t.style.opacity='1'; clearTimeout(t._t); t._t=setTimeout(()=>{t.style.opacity='0';},1900); }
+
+let HUB={campaigns:[]}, HUB_LOADED=false, hubView=null;
+async function loadHub(){ if(!REMOTE){ HUB_LOADED=true; return; } try{ const r=await fetch('/api/hub'); const d=await r.json(); HUB=d.hub||{campaigns:[]}; }catch(e){} HUB_LOADED=true; }
+async function saveHub(){ if(!REMOTE) return; try{ await fetch('/api/hub',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({hub:HUB})}); }catch(e){} }
+async function openHub(){ if(!HUB_LOADED) await loadHub(); hubView=null; renderHub(); }
+function renderHub(){
+  const box=$('#hub-body'); box.innerHTML='';
+  if(hubView){ return renderCampaign(box, hubView); }
+  const head=el('div','hubhead'); const h=el('div');
+  h.innerHTML='<h3 style="margin:0">Marketing Hub</h3><p class="mdesc" style="margin:4px 0 0">Organize your work into campaigns — save ad copy and images into offer-specific projects.</p>';
+  const nb=el('button','go','+ New campaign'); nb.onclick=newCampaign; head.append(h,nb); box.append(head);
+  if(!HUB.campaigns.length){ box.append(el('div','verdict tight','No campaigns yet. Create one — or generate ads in Ad Studio and click “Save” to file them here.')); return; }
+  const g=el('div','folgrid');
+  for(const c of HUB.campaigns){ const f=el('div','folder'); f.innerHTML='<div class="fic">📁</div><h4>'+esc(c.name)+'</h4><div class="meta">'+c.items.length+' item'+(c.items.length===1?'':'s')+' · '+fmtDate(c.createdAt)+'</div>'; f.onclick=()=>{ hubView=c.id; renderHub(); }; g.append(f); }
+  box.append(g);
+}
+function renderCampaign(box, cid){
+  const c=HUB.campaigns.find(x=>x.id===cid); if(!c){ hubView=null; return renderHub(); }
+  const head=el('div','hubhead'); const left=el('div');
+  const back=el('button','adsave','← Back'); back.onclick=()=>{ hubView=null; renderHub(); };
+  const title=el('h3','',c.name); title.style.cssText='margin:10px 0 2px';
+  left.append(back,title, (()=>{const d=el('div','mdesc',c.items.length+' items'); d.style.margin='0'; return d;})());
+  const actions=el('div'); actions.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start';
+  const ai=el('button','adsave','+ Add image'); ai.onclick=()=>addImageItem(cid);
+  const an=el('button','adsave','+ Add note'); an.onclick=()=>addNoteItem(cid);
+  const del=el('button','adsave','Delete campaign'); del.onclick=()=>{ if(confirm('Delete “'+c.name+'” and everything in it?')){ HUB.campaigns=HUB.campaigns.filter(x=>x.id!==cid); saveHub(); hubView=null; renderHub(); } };
+  actions.append(ai,an,del); head.append(left,actions); box.append(head);
+  if(!c.items.length){ box.append(el('div','verdict tight','Empty campaign — add an image or note, or save creatives here from Ad Studio.')); return; }
+  const g=el('div','itemgrid'); for(const it of c.items) g.append(renderItem(c,it)); box.append(g);
+}
+function renderItem(c,it){
+  const card=el('div','item');
+  if(it.imageUrl){ const im=el('img'); im.src=it.imageUrl; im.alt=''; im.onerror=()=>im.remove(); card.append(im); }
+  const body=el('div','ibody');
+  if(it.type==='copy'){ body.append(el('div','ihead',it.headline||''), el('div','itext',it.body||'')); if(it.cta){ const cb=el('div','',('CTA: '+it.cta)); cb.style.cssText='font-size:11px;color:var(--faint)'; body.append(cb); } }
+  else if(it.type==='note'){ body.append(el('div','itext',it.text||'')); }
+  else if(it.type==='image' && it.caption){ body.append(el('div','itext',it.caption)); }
+  const foot=el('div','ifoot'); foot.append(el('span','',(it.angle||it.type||'').toString()));
+  const d=el('button','idel','Delete'); d.onclick=()=>{ c.items=c.items.filter(x=>x.id!==it.id); saveHub(); renderHub(); };
+  foot.append(d); body.append(foot); card.append(body); return card;
+}
+function newCampaign(){ showModal('<h3 style="margin:0 0 14px">New campaign</h3><input class="f" id="nc-name" placeholder="e.g. Summer AC Push" style="margin:0"><button class="go" id="nc-go" style="margin-top:14px;width:100%">Create campaign</button>');
+  const go=()=>{ const n=$('#nc-name').value.trim(); if(!n) return; HUB.campaigns.unshift({id:newId(),name:n,createdAt:new Date().toISOString(),items:[]}); saveHub(); closeModal(); renderHub(); };
+  $('#nc-go').onclick=go; $('#nc-name').addEventListener('keydown',e=>{ if(e.key==='Enter') go(); }); setTimeout(()=>$('#nc-name').focus(),40); }
+function addImageItem(cid){ showModal('<h3 style="margin:0 0 14px">Add image</h3><input class="f" id="im-url" placeholder="Image URL (https://…)" style="margin:0"><input class="f" id="im-cap" placeholder="Caption (optional)" style="margin:8px 0 0"><button class="go" id="im-go" style="margin-top:14px;width:100%">Add image</button>');
+  $('#im-go').onclick=()=>{ const url=$('#im-url').value.trim(); if(!url) return; const c=HUB.campaigns.find(x=>x.id===cid); c.items.unshift({id:newId(),type:'image',imageUrl:url,caption:$('#im-cap').value.trim(),createdAt:new Date().toISOString()}); saveHub(); closeModal(); renderHub(); }; setTimeout(()=>$('#im-url').focus(),40); }
+function addNoteItem(cid){ showModal('<h3 style="margin:0 0 14px">Add note</h3><textarea class="f" id="nt-text" placeholder="Write a note, idea, or copy…" style="margin:0;min-height:96px"></textarea><button class="go" id="nt-go" style="margin-top:14px;width:100%">Add note</button>');
+  $('#nt-go').onclick=()=>{ const t=$('#nt-text').value.trim(); if(!t) return; const c=HUB.campaigns.find(x=>x.id===cid); c.items.unshift({id:newId(),type:'note',text:t,createdAt:new Date().toISOString()}); saveHub(); closeModal(); renderHub(); }; setTimeout(()=>$('#nt-text').focus(),40); }
+async function pickCampaign(cb){ if(!HUB_LOADED) await loadHub();
+  const list=HUB.campaigns.map(c=>'<button class="pickbtn" data-cid="'+c.id+'">'+esc(c.name)+' <span style="color:var(--faint);font-weight:500">('+c.items.length+')</span></button>').join('');
+  showModal('<h3 style="margin:0 0 14px">Save to campaign</h3><div style="display:flex;flex-direction:column;gap:8px;max-height:230px;overflow:auto">'+(list||'<div class="appsub">No campaigns yet — create one below.</div>')+'</div><div style="display:flex;gap:8px;margin-top:14px"><input class="f" id="pc-new" placeholder="New campaign…" style="margin:0;flex:1"><button class="go" id="pc-go" style="flex:none">Create</button></div>');
+  $('#modal').querySelectorAll('[data-cid]').forEach(b=>b.onclick=()=>{ closeModal(); cb(b.dataset.cid); });
+  $('#pc-go').onclick=()=>{ const n=$('#pc-new').value.trim(); if(!n) return; const c={id:newId(),name:n,createdAt:new Date().toISOString(),items:[]}; HUB.campaigns.unshift(c); closeModal(); cb(c.id); }; }
+function saveCreativeToCampaign(cr){ pickCampaign((cid)=>{ const c=HUB.campaigns.find(x=>x.id===cid); if(!c) return; c.items.unshift({id:newId(),type:'copy',angle:cr.angle,headline:cr.headline,body:cr.body,cta:cr.cta,imageUrl:cr.imageUrl,createdAt:new Date().toISOString()}); saveHub(); toast('Saved to “'+c.name+'”'); }); }
 
 function renderBenchmarks(){
   const host=$('#bench'); if(!host) return;
@@ -1269,7 +1366,7 @@ document.querySelector('.main').addEventListener('scroll', async (e)=>{
 const chat=$('#chat'), cinput=$('#cinput');
 const APP_LABEL={google_ads:'Google Ads',google_my_business:'Business Profile',google_lsa:'Local Services Ads',facebook_ads:'Meta Ads',gohighlevel:'GoHighLevel'};
 function addRow(role){const r=el('div','row '+(role==='user'?'user':'emp'));const a=el('div','av '+(role==='user'?'you':'emp'),role==='user'?'A':'M');const b=el('div','bubble');r.append(a,b);chat.append(r);chat.scrollTop=chat.scrollHeight;return b;}
-function say(role,text){const b=addRow(role);b.textContent=text;chat.scrollTop=chat.scrollHeight;return b;}
+function say(role,text){const b=addRow(role);b.textContent=text;chat.scrollTop=chat.scrollHeight;logChat(role,text);return b;}
 function renderPlan(reply){
   const b=addRow('emp'); b.append(el('div',null,reply.text)); const plan=reply.plan,card=el('div','pcard');
   const h=el('h4');h.append(el('span',null,'Proposed plan'),el('span',null,plan.band+' · '+money(plan.monthlyBudget)+'/mo'));card.append(h);
@@ -1304,15 +1401,20 @@ function renderResult(reply){
   }
   chat.scrollTop=chat.scrollHeight;
 }
-function dispatch(r){ if(r.plan)renderPlan(r); else if(r.launched!==undefined)renderResult(r); else say('emp',r.text); }
+function dispatch(r){ if(r.plan){renderPlan(r); logChat('emp', r.summary || 'Here’s your plan.');} else if(r.launched!==undefined)renderResult(r); else say('emp',r.text); }
 async function send(text,silent){const msg=(text!=null?text:cinput.value).trim();if(!msg)return;if(!silent)say('user',msg);cinput.value='';try{dispatch(await apiMessage(msg));}catch(e){say('emp','Sorry — I couldn’t reach the server just now.');}}
 async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId})}); }catch(e){} } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER); } }
-async function openChat(seed){ await resetSession(); chat.innerHTML=''; setPage('chat'); if(seed){say('user',seed);try{dispatch(await apiMessage(seed));}catch(e){say('emp','Sorry — I couldn’t reach the server.');}} else { say('emp',"Hi — I'm Miles. Tell me about the business and I'll build a plan you can approve."); } }
+let CHAT_LOG=[], CHAT_LOADED=false, chatSaveT;
+function logChat(role,text){ if(!text) return; CHAT_LOG.push({role,text}); if(REMOTE){ clearTimeout(chatSaveT); chatSaveT=setTimeout(saveChat,600); } }
+function saveChat(){ if(!REMOTE) return; try{ fetch('/api/chat',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-200)})}); }catch(e){} }
+async function loadChat(){ CHAT_LOADED=true; if(!REMOTE) return; try{ const r=await fetch('/api/chat'); const d=await r.json(); CHAT_LOG=(d.messages||[]).filter(m=>m&&m.text); chat.innerHTML=''; for(const m of CHAT_LOG){ const b=addRow(m.role==='user'?'user':'emp'); b.textContent=m.text; } chat.scrollTop=chat.scrollHeight; }catch(e){} }
+async function enterChat(){ setPage('chat'); if(!CHAT_LOADED) await loadChat(); if(!chat.children.length){ say('emp',"Hi — I'm Miles. Tell me about your business and I'll build a plan you can approve. Everything we discuss is saved here."); } }
+async function openChat(seed){ await enterChat(); if(seed){ await resetSession(); send(seed); } }
 
 $('#back').onclick=()=>setPage('dashboard');
 $('#hgo').onclick=()=>{const v=$('#hprompt').value.trim();if(v)openChat(v);};
 $('#hprompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#hgo').click();}});
-document.querySelectorAll('[data-ask]').forEach(n=>n.onclick=()=>openChat());
+document.querySelectorAll('[data-ask]').forEach(n=>n.onclick=()=>enterChat());
 $('#csend').onclick=()=>send();
 cinput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
 cinput.addEventListener('input',()=>{cinput.style.height='auto';cinput.style.height=Math.min(cinput.scrollHeight,120)+'px';});

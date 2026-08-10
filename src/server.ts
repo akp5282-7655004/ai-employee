@@ -142,6 +142,39 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { ok: true, profile: data.profile };
   });
 
+  // Marketing Hub — campaigns/folders holding saved copy + images, per workspace.
+  app.get('/api/hub', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return { hub: data.hub ?? { campaigns: [] } };
+  });
+  app.put('/api/hub', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    data.hub = (req.body as { hub?: unknown })?.hub ?? { campaigns: [] };
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+
+  // Persisted chat history, per workspace (last 200 turns).
+  app.get('/api/chat', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return { messages: (data.chat as unknown[]) ?? [] };
+  });
+  app.put('/api/chat', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const msgs = (req.body as { messages?: unknown[] })?.messages ?? [];
+    data.chat = Array.isArray(msgs) ? msgs.slice(-200) : [];
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+
   // Honest integration status — the Integrations page reads this instead of
   // hard-coded "Connected" badges. Real apps connect through Pipedream, so their
   // status follows whether Pipedream itself is configured.
