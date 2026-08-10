@@ -22,6 +22,13 @@ export class MemoryStore implements Store {
   async getUserById(id: string): Promise<User | null> {
     return this.users.get(id) ?? null;
   }
+  async updateUser(id: string, patch: { name?: string; passwordHash?: string }): Promise<void> {
+    const u = this.users.get(id);
+    if (!u) return;
+    if (patch.name !== undefined) u.name = patch.name;
+    if (patch.passwordHash !== undefined) u.passwordHash = patch.passwordHash;
+    this.users.set(id, u);
+  }
 
   async createSession(s: AuthSession): Promise<void> {
     this.sessions.set(s.token, s);

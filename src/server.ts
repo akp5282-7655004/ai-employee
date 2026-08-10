@@ -144,6 +144,72 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { ok: true, profile: data.profile };
   });
 
+  // ── settings: account, API keys, team, usage ──
+  app.get('/api/settings', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const keys = ((data.apiKeys as any[]) ?? []).map((k) => ({
+      id: k.id, name: k.name, createdAt: k.createdAt,
+      masked: 'miles_sk_…' + String(k.key || '').slice(-4),
+    }));
+    const team = (data.team as any[]) ?? [{ email: u.email, role: 'Owner', status: 'active' }];
+    return { account: { name: u.name ?? '', email: u.email }, keys, team };
+  });
+  app.put<{ Body: { name?: string } }>('/api/account', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    await authStore.updateUser(u.id, { name: (req.body?.name ?? '').slice(0, 120) });
+    return { ok: true };
+  });
+  app.post<{ Body: { current?: string; next?: string } }>('/auth/change-password', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const b = req.body ?? {};
+    if (!b.next || b.next.length < 6) return reply.code(400).send({ error: 'New password must be at least 6 characters.' });
+    if (!verifyPassword(b.current ?? '', u.passwordHash)) return reply.code(401).send({ error: 'Your current password is wrong.' });
+    await authStore.updateUser(u.id, { passwordHash: hashPassword(b.next) });
+    return { ok: true };
+  });
+  app.post<{ Body: { name?: string } }>('/api/keys', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const key = 'miles_sk_' + newToken();
+    const entry = { id: newToken().slice(0, 12), name: (req.body?.name || 'API key').slice(0, 60), key, createdAt: new Date().toISOString() };
+    data.apiKeys = [...((data.apiKeys as any[]) ?? []), entry];
+    await authStore.setUserData(u.id, data);
+    return { ok: true, key, id: entry.id, name: entry.name };
+  });
+  app.post<{ Body: { id?: string } }>('/api/keys/delete', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    data.apiKeys = ((data.apiKeys as any[]) ?? []).filter((k) => k.id !== req.body?.id);
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+  app.put<{ Body: { team?: unknown[] } }>('/api/team', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    data.team = Array.isArray(req.body?.team) ? req.body!.team!.slice(0, 50) : [];
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+  app.get('/api/usage', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const d = await authStore.getUserData(u.id);
+    const hub = (d.hub as any) ?? { campaigns: [] };
+    const campaigns = (hub.campaigns ?? []).length;
+    const savedAds = (hub.campaigns ?? []).reduce((n: number, c: any) => n + (c.items?.length ?? 0), 0);
+    const triggers = ((d.weatherRules as any[]) ?? []).length;
+    const deploys = ((d.deploy as any)?.queue ?? []).filter((c: any) => c.status === 'live').length;
+    const chats = ((d.chat as any[]) ?? []).length;
+    return { campaigns, savedAds, triggers, deploys, chats };
+  });
+
   // Marketing Hub — campaigns/folders holding saved copy + images, per workspace.
   app.get('/api/hub', async (req, reply) => {
     const u = await requireUser(req, reply);

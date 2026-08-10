@@ -25,6 +25,8 @@ export interface Store {
   createUser(u: User): Promise<void>;
   getUserByEmail(email: string): Promise<User | null>;
   getUserById(id: string): Promise<User | null>;
+  /** Update a user's name and/or password hash. */
+  updateUser(id: string, patch: { name?: string; passwordHash?: string }): Promise<void>;
 
   createSession(s: AuthSession): Promise<void>;
   getSession(token: string): Promise<AuthSession | null>;

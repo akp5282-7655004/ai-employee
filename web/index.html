@@ -312,6 +312,7 @@
       <a data-page="deploy"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 21h14"/></svg> Deploy <span id="deploy-badge" class="navbadge" style="display:none"></span></a>
       <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
       <a data-page="profile"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
+      <a data-page="settings"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg> Settings</a>
     </nav>
     <div class="glabel">PROJECTS</div>
     <div class="pill newproj"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New project</div>
@@ -479,6 +480,12 @@
     <!-- DEPLOY -->
     <section class="page" id="page-deploy">
       <div id="deploy-body"></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="page" id="page-settings">
+      <div class="subtabs" id="set-subtabs"></div>
+      <div id="settings-body"></div>
     </section>
 
     <!-- generic modal -->
@@ -890,7 +897,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',hub:'Marketing Hub',assets:'Brand Assets',deploy:'Deploy',integrations:'Integrations',profile:'Business Profile',chat:'Ask Miles'};
+const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',hub:'Marketing Hub',assets:'Brand Assets',deploy:'Deploy',integrations:'Integrations',profile:'Business Profile',settings:'Settings',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
@@ -904,6 +911,7 @@ function setPage(id){
   $('#page-hub').classList.toggle('on',id==='hub');
   $('#page-assets').classList.toggle('on',id==='assets');
   $('#page-deploy').classList.toggle('on',id==='deploy');
+  $('#page-settings').classList.toggle('on',id==='settings');
   $('#page-int').classList.toggle('on',id==='integrations');
   $('#page-profile').classList.toggle('on',id==='profile');
   $('#page-chat').classList.toggle('on',id==='chat');
@@ -917,6 +925,7 @@ function setPage(id){
   if(id==='hub') openHub();
   if(id==='assets') openAssets();
   if(id==='deploy') openDeploy();
+  if(id==='settings') openSettings();
   if(id==='integrations'){ loadIntegrations(); }
 }
 function updateConnStat(){
@@ -1476,6 +1485,66 @@ function renderDeploy(){
   if(!q.length){ box.append(el('div','verdict ok','No changes yet. As you build campaigns, generate ads, and set triggers, they’ll appear here ready to deploy.')); return; }
   box.append(el('div','sect-label', n? ('PENDING · '+n) : 'ALL DEPLOYED'));
   for(const c of q) box.append(deployRow(c));
+}
+
+// ═══ settings hub (account, team, api keys, usage, billing) ═══
+let SETTINGS={account:{name:'',email:''},keys:[],team:[]}, SET_LOADED=false, setTab='account';
+async function loadSettings(){ if(!REMOTE){ SET_LOADED=true; return; } try{ const r=await fetch('/api/settings'); const d=await r.json(); SETTINGS=d; if(!SETTINGS.team) SETTINGS.team=[]; if(!SETTINGS.keys) SETTINGS.keys=[]; }catch(e){} SET_LOADED=true; }
+async function openSettings(){ if(!SET_LOADED) await loadSettings(); renderSettings(); }
+const SET_TABS=[['account','Account'],['team','Team'],['keys','API Keys'],['usage','Usage'],['billing','Billing']];
+function renderSettings(){
+  const bar=$('#set-subtabs'); bar.innerHTML=SET_TABS.map(t=>`<button class="tab${t[0]===setTab?' on':''}" data-stab="${t[0]}">${t[1]}</button>`).join('');
+  bar.querySelectorAll('[data-stab]').forEach(b=>b.onclick=()=>{ setTab=b.dataset.stab; renderSettings(); });
+  const body=$('#settings-body'); body.innerHTML='';
+  ({account:setAccount,team:setTeam,keys:setKeys,usage:setUsage,billing:setBilling}[setTab]||setAccount)(body);
+}
+async function saveTeam(){ if(!REMOTE) return; try{ await fetch('/api/team',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({team:SETTINGS.team})}); }catch(e){} }
+function setAccount(box){
+  const card=el('div','mcard pf'); card.style.maxWidth='620px';
+  card.innerHTML='<h3>My Account</h3><p class="mdesc">Your name and sign-in.</p>';
+  const grid=el('div','pf-grid'); grid.innerHTML='<div class="full"><label>Name</label><input id="set-name" placeholder="Your name"></div><div class="full"><label>Email</label><input id="set-email" disabled></div>'; card.append(grid);
+  const save=el('button','pf-save','Save'); const note=el('span','appsub'); note.style.marginLeft='12px'; const row=el('div'); row.style.marginTop='16px'; row.append(save,note); card.append(row);
+  card.append(el('div','sect-label','CHANGE PASSWORD'));
+  const pg=el('div','pf-grid'); pg.innerHTML='<div class="full"><label>Current password</label><input id="set-pw-cur" type="password"></div><div class="full"><label>New password</label><input id="set-pw-new" type="password" placeholder="at least 6 characters"></div>'; card.append(pg);
+  const pwbtn=el('button','pf-save','Update password'); const pwnote=el('span','appsub'); pwnote.style.marginLeft='12px'; const prow=el('div'); prow.style.marginTop='14px'; prow.append(pwbtn,pwnote); card.append(prow);
+  box.append(card);
+  $('#set-name').value=SETTINGS.account.name||''; $('#set-email').value=SETTINGS.account.email||'';
+  save.onclick=async()=>{ if(!REMOTE) return; save.disabled=true; const name=$('#set-name').value.trim(); await fetch('/api/account',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({name})}); SETTINGS.account.name=name; ME.name=name; applyIdentity(); note.textContent='Saved ✓'; save.disabled=false; setTimeout(()=>note.textContent='',2000); };
+  pwbtn.onclick=async()=>{ if(!REMOTE) return; pwbtn.disabled=true; const r=await fetch('/auth/change-password',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({current:$('#set-pw-cur').value,next:$('#set-pw-new').value})}); const d=await r.json().catch(()=>({})); pwnote.textContent=r.ok?'Password updated ✓':(d.error||'Failed'); if(r.ok){ $('#set-pw-cur').value=''; $('#set-pw-new').value=''; } pwbtn.disabled=false; setTimeout(()=>pwnote.textContent='',3500); };
+}
+function setTeam(box){
+  const card=el('div','mcard'); card.style.maxWidth='700px';
+  card.innerHTML='<h3>Team</h3><p class="mdesc">Invite teammates to your workspace. Invites are saved here; teammate logins + email delivery arrive with the Team plan.</p>';
+  const list=el('div'); for(const m of (SETTINGS.team||[])){ const row=el('div','arow'); const l=el('div','rl'); l.append(el('b','',m.email)); l.append(el('span','',m.role||'Member')); const right=el('div'); right.style.cssText='display:flex;gap:8px;align-items:center'; right.append(el('span','apill '+(m.status==='active'?'active':'paused'), m.status==='active'?'ACTIVE':'INVITED')); if(m.role!=='Owner'){ const rm=el('button','idel','Remove'); rm.onclick=()=>{ SETTINGS.team=SETTINGS.team.filter(x=>x.email!==m.email); saveTeam(); renderSettings(); }; right.append(rm); } row.append(l,right); list.append(row); } card.append(list);
+  const inv=el('div'); inv.style.cssText='display:flex;gap:8px;margin-top:16px;max-width:460px'; inv.innerHTML='<input class="f" id="set-invite" placeholder="teammate@email.com" style="margin:0;flex:1"><button class="go" id="set-invite-go" style="flex:none">Invite</button>'; card.append(inv);
+  box.append(card);
+  $('#set-invite-go').onclick=()=>{ const email=$('#set-invite').value.trim(); if(!email||!email.includes('@')) return; SETTINGS.team=SETTINGS.team||[]; if(SETTINGS.team.some(m=>m.email===email)) return; SETTINGS.team.push({email,role:'Member',status:'invited'}); saveTeam(); renderSettings(); toast('Invite added'); };
+}
+function setKeys(box){
+  const card=el('div','mcard'); card.style.maxWidth='700px';
+  card.innerHTML='<h3>API Keys</h3><p class="mdesc">Call the Miles API from your own tools. Keep keys secret — revoke any that leak.</p>';
+  const list=el('div'); const keys=SETTINGS.keys||[]; if(!keys.length) list.append(el('div','appsub','No keys yet.'));
+  for(const k of keys){ const row=el('div','arow'); const l=el('div','rl'); l.append(el('b','',k.name)); l.append(el('span','',k.masked+' · '+fmtDate(k.createdAt))); const rm=el('button','idel','Revoke'); rm.onclick=async()=>{ await fetch('/api/keys/delete',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:k.id})}); await loadSettings(); renderSettings(); }; row.append(l,rm); list.append(row); } card.append(list);
+  const inv=el('div'); inv.style.cssText='display:flex;gap:8px;margin-top:16px;max-width:460px'; inv.innerHTML='<input class="f" id="set-key-name" placeholder="Key name (e.g. Zapier)" style="margin:0;flex:1"><button class="go" id="set-key-go" style="flex:none">Generate</button>'; card.append(inv);
+  box.append(card);
+  $('#set-key-go').onclick=async()=>{ if(!REMOTE) return; const name=$('#set-key-name').value.trim()||'API key'; const r=await fetch('/api/keys',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name})}); const d=await r.json().catch(()=>({})); if(d.key){ showModal('<h3 style="margin:0 0 10px">Your new API key</h3><p class="mdesc" style="margin:0 0 12px">Copy it now — you won’t see it in full again.</p><div style="background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:12px;font-family:monospace;font-size:12px;word-break:break-all">'+esc(d.key)+'</div><button class="go" id="key-done" style="width:100%;margin-top:14px">Done</button>'); $('#key-done').onclick=async()=>{ closeModal(); await loadSettings(); renderSettings(); }; } };
+}
+async function setUsage(box){
+  box.append(el('div','appsub','Loading usage…'));
+  let u={}; if(REMOTE){ try{ u=await (await fetch('/api/usage')).json(); }catch(e){} }
+  box.innerHTML='';
+  const card=el('div','mcard'); card.style.maxWidth='860px';
+  card.innerHTML='<h3>Usage</h3><p class="mdesc">What Miles has done for your workspace.</p>';
+  const g=el('div','stats'); g.style.margin='4px 0 0';
+  g.append(statCard('Campaigns',u.campaigns||0), statCard('Ads created',u.savedAds||0), statCard('Weather triggers',u.triggers||0), statCard('Deploys',u.deploys||0));
+  card.append(g); box.append(card);
+}
+function setBilling(box){
+  const card=el('div','mcard'); card.style.maxWidth='680px';
+  card.innerHTML='<h3>Billing</h3><p class="mdesc">Your plan and payment.</p>';
+  const plan=el('div','acard'); plan.style.marginTop='8px'; plan.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div><b>Free plan</b><div class="mdesc" style="margin:2px 0 0">Full access while Miles is in early access.</div></div><span class="apill active">CURRENT</span></div>';
+  card.append(plan); card.append(el('div','verdict tight','💳 Paid plans & Stripe billing are coming soon — you’ll manage your subscription here.'));
+  box.append(card);
 }
 
 function renderBenchmarks(){
