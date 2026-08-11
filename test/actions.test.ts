@@ -56,4 +56,22 @@ describe('agent runs the task through the connector', () => {
     expect(reply.text.toLowerCase()).toContain('connect');
     expect(reply.connectUrl).toBeTruthy();
   });
+
+  it('builds an email campaign instead of dead-ending when the app has no such action', async () => {
+    const connector = new MockConnector({ shop: ['gohighlevel'] });
+    // Stub textGen so the test is deterministic (no network).
+    const textGen = async () => 'Email 1 — Subject: We miss you\nBody: Come back for 15% off.';
+    const agent = new Agent({ connector, textGen });
+    const { reply } = await agent.handle(newSession('shop') as Session, 'build an email marketing campaign and put it into my go high level account');
+    expect(reply.task!.ok).toBe(true);
+    expect(reply.text).toContain('Email 1 — Subject');
+    expect(reply.text).toContain('GoHighLevel'); // honest delivery note
+  });
+
+  it('still dead-ends gracefully (no textGen) rather than crashing', async () => {
+    const connector = new MockConnector({ shop: ['gohighlevel'] });
+    const agent = new Agent({ connector }); // no textGen
+    const { reply } = await agent.handle(newSession('shop') as Session, 'build an email marketing campaign in gohighlevel');
+    expect(reply.task).toBeDefined();
+  });
 });

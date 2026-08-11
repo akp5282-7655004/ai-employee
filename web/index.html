@@ -288,6 +288,14 @@
   .composer{border-top:1px solid var(--line);padding-top:12px;display:flex;gap:10px;align-items:flex-end;}
   .composer textarea{flex:1;resize:none;font-family:var(--sans);font-size:15px;color:var(--ink);background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;max-height:120px;outline:none;}
   .csend{width:44px;height:44px;border-radius:11px;border:none;background:var(--primary);color:var(--primary-ink);font-size:17px;cursor:pointer;}
+  .cplus-wrap{position:relative;flex:none;}
+  .cplus{width:44px;height:44px;border-radius:11px;border:1px solid var(--line);background:var(--panel-2);color:var(--muted);font-size:22px;line-height:1;cursor:pointer;display:grid;place-items:center;}
+  .cplus:hover{border-color:var(--accent);color:var(--ink);}
+  .cmenu{position:absolute;bottom:52px;left:0;min-width:210px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 34px rgba(0,0,0,.18);padding:6px;z-index:60;}
+  .cmitem{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:8px;font-size:14px;color:var(--ink);cursor:pointer;}
+  .cmitem:hover{background:var(--panel-2);}
+  .cmitem span{width:20px;text-align:center;}
+  .cmitem .cmsub{margin-left:auto;font-size:11px;color:var(--faint);}
 
   @media (max-width:1000px){ .stats{grid-template-columns:repeat(2,1fr);} .cards{grid-template-columns:repeat(2,1fr);} .meters,.intgrid{grid-template-columns:1fr;} }
   @media (max-width:760px){ .app{grid-template-columns:1fr;} .side{display:none;} .cards{grid-template-columns:1fr;} }
@@ -565,7 +573,8 @@
       <div class="chatview on">
         <span class="back" id="back"><svg class="ico" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Back</span>
         <div class="chat" id="chat" aria-live="polite"></div>
-        <div class="composer"><textarea id="cinput" rows="1" placeholder="Reply to Miles…"></textarea><button class="csend" id="csend">↑</button></div>
+        <div class="composer"><div class="cplus-wrap"><button class="cplus" id="cplus" title="Add" aria-label="Add">+</button><div class="cmenu" id="cmenu" style="display:none"></div></div><textarea id="cinput" rows="1" placeholder="Reply to Miles…"></textarea><button class="csend" id="csend">↑</button></div>
+        <input type="file" id="chat-file" accept="image/*" style="display:none">
       </div>
     </section>
   </main>
@@ -2180,6 +2189,20 @@ $('#hgo').onclick=()=>{const v=$('#hprompt').value.trim();if(v)openChat(v);};
 $('#hprompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#hgo').click();}});
 document.querySelectorAll('[data-ask]').forEach(n=>n.onclick=()=>enterChat());
 $('#csend').onclick=()=>send();
+// "+" menu — attach a photo, or jump to a capability. Only honest, working actions.
+const CMENU=[
+  {ic:'📎',label:'Add photo',sub:'→ Assets',act:()=>$('#chat-file').click()},
+  {ic:'🔌',label:'Connect an app',act:()=>{ setPage('integrations'); }},
+  {ic:'🎨',label:'Creative Studio',act:()=>{ setPage('studio'); }},
+  {ic:'⏰',label:'Schedule an agent',act:()=>{ setPage('schedules'); }},
+  {ic:'🔍',label:'Research',act:()=>{ setPage('research'); }},
+  {ic:'🧩',label:'Browse skills',act:()=>{ setPage('market'); }},
+];
+function openCMenu(){ const m=$('#cmenu'); if(!m) return; m.innerHTML=''; for(const it of CMENU){ const b=el('div','cmitem'); b.innerHTML='<span>'+it.ic+'</span>'+esc(it.label)+(it.sub?'<span class="cmsub">'+esc(it.sub)+'</span>':''); b.onclick=()=>{ closeCMenu(); it.act(); }; m.append(b); } m.style.display=''; }
+function closeCMenu(){ const m=$('#cmenu'); if(m) m.style.display='none'; }
+$('#cplus').onclick=(e)=>{ e.stopPropagation(); const m=$('#cmenu'); (m.style.display==='none')?openCMenu():closeCMenu(); };
+document.addEventListener('click',(e)=>{ if(!e.target.closest('.cplus-wrap')) closeCMenu(); });
+$('#chat-file').onchange=async(e)=>{ const f=e.target.files[0]; if(!f) return; if(!ASSETS_LOADED) await loadAssets(); try{ const url=await downscaleImage(f,1024,'image/jpeg'); ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url,caption:'Added from chat'}); await saveAssets(); say('emp','📎 Saved that photo to your Assets — you can drop it into ads from Creative Studio or Ad Studio.'); }catch(err){ say('emp','Sorry, I couldn’t read that image.'); } e.target.value=''; };
 cinput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
 cinput.addEventListener('input',()=>{cinput.style.height='auto';cinput.style.height=Math.min(cinput.scrollHeight,120)+'px';});
 $('#theme').onclick=()=>{const c=document.documentElement.getAttribute('data-theme');document.documentElement.setAttribute('data-theme',c==='dark'?'light':'dark');};

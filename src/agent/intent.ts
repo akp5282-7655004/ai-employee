@@ -122,6 +122,10 @@ export class MockInterpreter implements Interpreter {
     } else if (/\b(add|apply|put)\b[^.]*\b(tag|label)\b/.test(low) || /\btag\s+(them|it|this|the|as|contact|lead|\w+\s+(?:as|with))/.test(low)) {
       op = 'add_tag';
       query = 'add tag';
+    } else if (/\b(email\s*(marketing\s*)?campaign|newsletter|email\s*sequence|drip\s*campaign|nurture\s*sequence)\b/.test(low)) {
+      // A "build content" request — no app runs it as one action; the loop builds the content.
+      op = 'other';
+      query = /newsletter/.test(low) ? 'newsletter' : 'email marketing campaign';
     }
     if (!op) return undefined;
     // Require either a named app or an unambiguous CRM verb so we don't hijack planning turns.

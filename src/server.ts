@@ -59,7 +59,11 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   const connector = deps.connector ?? getConnector();
   const interpreter =
     process.env.OPENROUTER_API_KEY || process.env.ANTHROPIC_API_KEY ? new LlmInterpreter() : new MockInterpreter();
-  const agent = new Agent({ connector, interpreter });
+  const agent = new Agent({
+    connector,
+    interpreter,
+    textGen: (system, user) => generateText({ system, user, maxTokens: 900 }),
+  });
 
   const authStore = deps.authStore ?? new MemoryStore();
 
@@ -720,6 +724,17 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const { sessionId, text } = req.body ?? {};
     if (!sessionId || typeof text !== 'string') return reply.code(400).send({ error: 'sessionId and text required' });
     const session = store.getOrCreate(sessionId);
+    // Seed the conversation with the owner's business profile so anything Miles builds
+    // (email campaigns, content) is on-brand even if they didn't restate it in chat.
+    const u = await getUser(req);
+    if (u) {
+      const data = await authStore.getUserData(u.id);
+      const p = (data.profile ?? {}) as Record<string, string>;
+      if (!session.intake.businessName && p.businessName) session.intake.businessName = p.businessName;
+      if (!session.intake.category && p.industry) session.intake.category = p.industry;
+      if (!session.intake.services && p.services)
+        session.intake.services = String(p.services).split(',').map((x) => x.trim()).filter(Boolean);
+    }
     const res = await agent.handle(session, text);
     store.save(sessionId, res.session);
     return res.reply;

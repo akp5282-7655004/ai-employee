@@ -43,7 +43,13 @@ const CHANNEL_APP: Record<string, { app: string; actionId: string }> = {
 export interface AgentDeps {
   connector: Connector;
   interpreter?: Interpreter;
+  /** Optional content generator (LLM). Lets Miles build things apps don't expose
+   * as one-click actions — an email campaign, a newsletter — instead of dead-ending. */
+  textGen?: (system: string, user: string) => Promise<string | null>;
 }
+
+/** Requests to *build content* that no app exposes as a single runnable action. */
+const CONTENT_RE = /email\s*(marketing\s*)?campaign|newsletter|email\s*sequence|drip\s*campaign|nurture\s*sequence|blog\s*post|content\s*calendar/i;
 
 export class Agent {
   private interpreter: Interpreter;
@@ -136,6 +142,20 @@ export class Agent {
 
   /** "Do this in my app" — run a real task in a connected tool (contacts, texts, notes, tags). */
   private async runTask(s: Session, action: AppAction): Promise<{ session: Session; reply: AgentReply }> {
+    // Content-build requests (email campaign, newsletter, …) aren't a one-click app
+    // action anywhere — so build the content and be honest about the delivery step,
+    // instead of dead-ending with "app doesn't expose that action".
+    if (action.op === 'other' && this.deps.textGen && CONTENT_RE.test(action.query + ' ' + Object.values(action.params).join(' '))) {
+      const content = await this.buildContent(s, action);
+      if (content) {
+        const app = prettyApp(action.app);
+        const text =
+          `Here's your ${action.query}, ready to use:\n\n${content}\n\n` +
+          `📥 ${app} doesn't expose a one-click "${action.query}" over its API, so this drops straight into ${app}'s campaign/email builder. ` +
+          `Want me to save it to your Marketing Hub, or add your contacts as the audience?`;
+        return { session: s, reply: { text, task: { ok: true, app: action.app, summary: `Built ${action.query}` } } };
+      }
+    }
     if (!this.deps.connector.runAppTask) {
       return { session: s, reply: { text: "I can't run tasks inside your apps on this connection yet — that needs the live Pipedream connection." } };
     }
@@ -158,6 +178,29 @@ export class Agent {
     }
     return { session: s, reply: { text, connectUrl, task: { ok: res.ok, app: res.app ?? action.app, summary: res.summary } } };
   }
+
+  /** Generate ready-to-use content (email campaign, newsletter, …) via the LLM. */
+  private async buildContent(s: Session, action: AppAction): Promise<string | null> {
+    if (!this.deps.textGen) return null;
+    const biz = s.intake.businessName || 'the business';
+    const trade = (s.intake.category || s.intake.vertical || 'local-service').replace(/_/g, ' ');
+    const svc = s.intake.services?.length ? ` Services: ${s.intake.services.join(', ')}.` : '';
+    const isEmail = /email|newsletter|sequence|drip|nurture/i.test(action.query);
+    const system = isEmail
+      ? 'You are an email-marketing expert for local-service businesses. Write a complete, ready-to-send campaign as a 3-email sequence. For each email give: "Email N — Subject:", a one-line preview, and a short benefit-led body with ONE clear call to action. Plain text, clearly separated. No preamble.'
+      : 'You write ready-to-use marketing content for local-service businesses — concise, concrete, on-brand, with a clear call to action. Plain text.';
+    const user = `Business: ${biz} (${trade}).${svc}\nRequest: ${action.query}.`;
+    return this.deps.textGen(system, user);
+  }
+}
+
+/** A human-readable app name for a slug. */
+function prettyApp(slug: string): string {
+  const map: Record<string, string> = {
+    gohighlevel: 'GoHighLevel', hubspot: 'HubSpot', salesforce_rest_api: 'Salesforce',
+    servicetitan: 'ServiceTitan', jobber: 'Jobber', mailchimp: 'Mailchimp', twilio: 'Twilio',
+  };
+  return map[slug] || slug.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
