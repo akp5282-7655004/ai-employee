@@ -38,6 +38,13 @@ services:
       # competitor *count* only.
       - key: GOOGLE_PLACES_KEY
         sync: false
-      # Optional — add later to switch on real language understanding:
+      # Language understanding — set ONE of these to switch it on (OpenRouter wins if both set).
+      # OpenRouter: one key, every vendor (Claude/GPT/Gemini/open-source), one bill.
+      - key: OPENROUTER_API_KEY
+        sync: false
+      # Optional: pin the model OpenRouter uses (defaults to openai/gpt-4o-mini).
+      # - key: OPENROUTER_MODEL
+      #   sync: false
+      # Or run direct on Anthropic instead:
       # - key: ANTHROPIC_API_KEY
       #   sync: false

@@ -24,9 +24,10 @@ import { MemoryStore, type Store, type User } from './db/index.js';
  * exposes the agent loop over HTTP so the dashboard runs the *actual* TypeScript
  * engine (packs + planner + connector), not a browser copy (docs/VISION.md §3).
  *
- * The interpreter upgrades automatically: Claude when ANTHROPIC_API_KEY is set,
- * the deterministic mock otherwise. The connector is mock until Pipedream
- * credentials are set. Nothing about the routes changes when either goes live.
+ * The interpreter upgrades automatically: OpenRouter when OPENROUTER_API_KEY is
+ * set (one key, every vendor), else Claude when ANTHROPIC_API_KEY is set, else
+ * the deterministic mock. The connector is mock until Pipedream credentials are
+ * set. Nothing about the routes changes when either goes live.
  */
 export interface ServerDeps {
   store?: SessionStore;
@@ -45,7 +46,8 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   const app = Fastify({ logger: false });
   const store = deps.store ?? new MemorySessionStore();
   const connector = deps.connector ?? getConnector();
-  const interpreter = process.env.ANTHROPIC_API_KEY ? new LlmInterpreter() : new MockInterpreter();
+  const interpreter =
+    process.env.OPENROUTER_API_KEY || process.env.ANTHROPIC_API_KEY ? new LlmInterpreter() : new MockInterpreter();
   const agent = new Agent({ connector, interpreter });
 
   const authStore = deps.authStore ?? new MemoryStore();

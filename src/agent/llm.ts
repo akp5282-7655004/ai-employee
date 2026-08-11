@@ -2,23 +2,31 @@ import { MockInterpreter, type Interpretation, type Interpreter } from './intent
 import type { Session } from './types.js';
 
 /**
- * The Claude-backed interpreter — real natural-language understanding for the
+ * The LLM-backed interpreter — real natural-language understanding for the
  * same `Interpreter` seam the mock implements (docs/VISION.md §3). It extracts
  * the intake fields and intent from messier phrasing than the regex parser can
  * handle, and the whole agent loop, planner, and connector underneath stay
  * unchanged.
  *
- * Two safety choices mirror the connector's:
- *  - The Anthropic SDK is loaded dynamically, so the project ships without the
- *    dependency until this path is switched on ( npm install @anthropic-ai/sdk ).
- *  - Every call falls back to the deterministic MockInterpreter if the key is
- *    missing, the SDK isn't installed, or the model errors — so the product never
- *    hard-depends on the LLM being reachable.
+ * It speaks to either backend, preferring OpenRouter so the whole product can
+ * run vendor-agnostic on one key and one bill (the Model Router's whole point):
+ *  - OPENROUTER_API_KEY → OpenRouter's OpenAI-compatible API over plain `fetch`
+ *    (no SDK dependency at all). Model is OPENROUTER_MODEL or a cheap default.
+ *  - ANTHROPIC_API_KEY → the Anthropic SDK, loaded dynamically so the project
+ *    ships without the dependency until this path is switched on.
+ * Every call falls back to the deterministic MockInterpreter if no key is set,
+ * the backend is unreachable, or the model errors — so the product never
+ * hard-depends on the LLM being up.
  */
 export interface LlmOptions {
   apiKey?: string;
   model?: string;
+  openrouterKey?: string;
+  openrouterModel?: string;
 }
+
+/** Default OpenRouter model for the interpreter — cheap, stable, good at instructions. */
+const DEFAULT_OR_MODEL = 'openai/gpt-4o-mini';
 
 const SYSTEM = `You turn a small-business owner's message to their AI marketing employee into structured fields.
 Return ONLY a JSON object with these optional keys:
@@ -33,15 +41,21 @@ Return ONLY a JSON object with these optional keys:
 Use "approve" if they are confirming/approving; "connect" if they ask to connect an app; "plan" if they describe the business; else "unknown". Omit keys you can't determine. No prose, JSON only.`;
 
 export class LlmInterpreter implements Interpreter {
-  readonly name = 'claude';
+  readonly name: string;
   private fallback = new MockInterpreter();
   private client: any | null = null;
   private model: string;
   private apiKey?: string;
+  private openrouterKey?: string;
+  private openrouterModel: string;
 
   constructor(opts: LlmOptions = {}) {
     this.apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
     this.model = opts.model ?? process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5-20251001';
+    this.openrouterKey = opts.openrouterKey ?? process.env.OPENROUTER_API_KEY;
+    this.openrouterModel = opts.openrouterModel ?? process.env.OPENROUTER_MODEL ?? DEFAULT_OR_MODEL;
+    // OpenRouter wins when present — one key, every vendor.
+    this.name = this.openrouterKey ? 'openrouter' : 'claude';
   }
 
   /** Interpreter is sync; callers that want the LLM use interpretAsync. */
@@ -50,16 +64,9 @@ export class LlmInterpreter implements Interpreter {
   }
 
   async interpretAsync(message: string, session: Session): Promise<Interpretation> {
-    if (!this.apiKey) return this.fallback.interpret(message, session);
+    if (!this.openrouterKey && !this.apiKey) return this.fallback.interpret(message, session);
     try {
-      const client = await this.backend();
-      const res = await client.messages.create({
-        model: this.model,
-        max_tokens: 400,
-        system: SYSTEM,
-        messages: [{ role: 'user', content: message }],
-      });
-      const text = (res.content ?? []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('');
+      const text = this.openrouterKey ? await this.viaOpenRouter(message) : await this.viaAnthropic(message);
       const json = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
       const intent = ['plan', 'approve', 'connect', 'unknown'].includes(json.intent) ? json.intent : undefined;
       const fields: Interpretation['fields'] = {};
@@ -72,6 +79,42 @@ export class LlmInterpreter implements Interpreter {
     } catch {
       return this.fallback.interpret(message, session);
     }
+  }
+
+  /** OpenRouter's OpenAI-compatible chat-completions API — plain fetch, no SDK. */
+  private async viaOpenRouter(message: string): Promise<string> {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${this.openrouterKey}`,
+        'content-type': 'application/json',
+        'HTTP-Referer': 'https://miles.ai',
+        'X-Title': 'Miles',
+      },
+      body: JSON.stringify({
+        model: this.openrouterModel,
+        max_tokens: 400,
+        messages: [
+          { role: 'system', content: SYSTEM },
+          { role: 'user', content: message },
+        ],
+      }),
+    });
+    if (!res.ok) throw new Error(`openrouter ${res.status}`);
+    const data: any = await res.json();
+    return data?.choices?.[0]?.message?.content ?? '';
+  }
+
+  /** The Anthropic SDK path, loaded dynamically so it isn't a hard dependency. */
+  private async viaAnthropic(message: string): Promise<string> {
+    const client = await this.backend();
+    const res = await client.messages.create({
+      model: this.model,
+      max_tokens: 400,
+      system: SYSTEM,
+      messages: [{ role: 'user', content: message }],
+    });
+    return (res.content ?? []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('');
   }
 
   private async backend(): Promise<any> {
