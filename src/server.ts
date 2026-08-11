@@ -674,7 +674,11 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
         const url = await falGenerateVideo(prompt, { aspect, duration: body.duration });
         return { type: spec.type, kind: 'video', url, prompt, live: falReady() };
       }
-      const url = await falGenerateImage(prompt, { aspect, quality: body.quality });
+      // Text-bearing designs (logo/flyer/social/card) go to a text-capable model —
+      // the fast default garbles words. Plain photos stay on the fast model.
+      const textHeavy = ['logo', 'flyer', 'social', 'card'].includes(spec.type);
+      const model = textHeavy ? process.env.FAL_TEXT_MODEL || 'fal-ai/recraft-v3' : undefined;
+      const url = await falGenerateImage(prompt, { aspect, quality: body.quality, model });
       return { type: spec.type, kind: 'image', url, prompt, live: falReady() };
     },
   );

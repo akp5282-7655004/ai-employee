@@ -67,16 +67,32 @@ function bizLine(brand: BrandContext): string {
   return `${biz}, a ${trade(brand)} business${loc}`;
 }
 
+// Strip meta-instructions ("use my logo", "add my brand") so the image model
+// doesn't paint those words onto the artwork as literal text.
+const META_RE = /\b(?:use|add|put|include|with|and)\s+(?:my\s+|our\s+|the\s+)?(?:logo|branding|brand)\b/gi;
+function cleanIdea(s: string): string {
+  return (s || '')
+    .replace(META_RE, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.!?])/g, '$1')
+    .replace(/^[,.\s]+|[,\s]+$/g, '')
+    .trim();
+}
+// Guardrails for text-bearing designs — AI image models can't spell reliably, so
+// keep text minimal, real, and correctly spelled, and never invent contact info.
+const TEXT_RULES =
+  ' Text on the design must be limited to the business name and the offer, spelled correctly. Do NOT invent phone numbers, websites, addresses, or any placeholder/gibberish text. Leave a clean empty area for the logo. Clean, professional, legible typography.';
+
 /** Build a generation-ready image/video prompt for a visual asset type. */
 export function buildVisualPrompt(type: AssetType, prompt: string, brand: BrandContext = {}, style?: string): string {
-  const idea = (prompt || '').trim();
+  const idea = cleanIdea(prompt);
   const styleTag = style && style !== 'Auto' ? ` Style: ${style.toLowerCase()}.` : '';
   const base: Record<string, string> = {
-    logo: `Minimalist, professional vector logo for "${brand.business || 'the business'}", a ${trade(brand)} company. ${idea}. Flat, clean, memorable, centered on a plain background, no lorem text.`,
-    social: `Eye-catching social media graphic for ${bizLine(brand)}. ${idea}. Bold and thumb-stopping, high contrast, clear space for a short headline, on-brand and trustworthy.`,
-    flyer: `Professional marketing flyer / advertisement for ${bizLine(brand)}. ${idea}. Clean layout with a clear headline area, trustworthy local-service look, print-ready.`,
-    card: `Elegant card or invitation design for ${brand.business || 'the business'}. ${idea}. Tasteful, balanced composition, print-ready.`,
-    image: `High-quality, realistic marketing photo for ${bizLine(brand)}. ${idea}. Professional lighting, sharp, authentic — not stocky.`,
+    logo: `Minimalist, professional vector logo for "${brand.business || 'the business'}", a ${trade(brand)} company. ${idea}. Flat, clean, memorable, centered on a plain background. The only text is the business name, correctly spelled — no other words, no gibberish.`,
+    social: `Eye-catching social media graphic for ${bizLine(brand)}. ${idea}.${TEXT_RULES} Bold, thumb-stopping, high contrast.`,
+    flyer: `Professional marketing flyer for ${bizLine(brand)}. ${idea}.${TEXT_RULES} Clean layout, trustworthy local-service look.`,
+    card: `Elegant card or invitation for ${brand.business || 'the business'}. ${idea}.${TEXT_RULES}`,
+    image: `High-quality, realistic marketing photo for ${bizLine(brand)}. ${idea}. Professional lighting, sharp, authentic — not stocky. No text overlay.`,
     video: `Short, dynamic marketing video clip for ${bizLine(brand)}. ${idea}. Professional, engaging first second, smooth motion.`,
   };
   return `${base[type] ?? `${idea} — for ${bizLine(brand)}.`}${styleTag}`.trim();

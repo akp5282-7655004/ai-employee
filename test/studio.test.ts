@@ -30,6 +30,15 @@ describe('buildVisualPrompt', () => {
     expect(buildVisualPrompt('image', 'a van', brand, 'Photorealistic')).toContain('photorealistic');
     expect(buildVisualPrompt('image', 'a van', brand, 'Auto')).not.toContain('Style:');
   });
+  it('strips "use my logo / my brand" instructions so they are not painted as text', () => {
+    const p = buildVisualPrompt('flyer', 'paint 3 rooms get 4th room free, use my logo and my brand', brand);
+    expect(p.toLowerCase()).not.toContain('use my logo');
+    expect(p.toLowerCase()).not.toContain('my brand');
+    expect(p).toContain('4th room free'); // the real offer survives
+  });
+  it('forbids invented contact info on text-bearing designs', () => {
+    expect(buildVisualPrompt('flyer', 'spring special', brand)).toContain('Do NOT invent phone numbers');
+  });
 });
 
 describe('text prompts + fallback', () => {
