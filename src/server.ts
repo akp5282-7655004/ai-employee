@@ -720,11 +720,14 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
         const url = await falGenerateVideo(prompt, { aspect, duration: body.duration });
         return { type: spec.type, kind: 'video', url, prompt, live: falReady() };
       }
-      // Text-bearing designs (logo/flyer/social/card) go to a text-capable model —
-      // the fast default garbles words. Plain photos stay on the fast model.
+      // A text-capable model for designs (logo/flyer/social/card) is opt-in via
+      // FAL_TEXT_MODEL (must be verified against the live account first). By default
+      // everything uses the known-working flux model. If a custom text model returns
+      // nothing, fall back to the default so we never dead-end when the key is valid.
       const textHeavy = ['logo', 'flyer', 'social', 'card'].includes(spec.type);
-      const model = textHeavy ? process.env.FAL_TEXT_MODEL || 'fal-ai/recraft-v3' : undefined;
-      const url = await falGenerateImage(prompt, { aspect, quality: body.quality, model });
+      const model = textHeavy && process.env.FAL_TEXT_MODEL ? process.env.FAL_TEXT_MODEL : undefined;
+      let url = await falGenerateImage(prompt, { aspect, quality: body.quality, model });
+      if (!url && model) url = await falGenerateImage(prompt, { aspect, quality: body.quality });
       return { type: spec.type, kind: 'image', url, prompt, live: falReady() };
     },
   );
