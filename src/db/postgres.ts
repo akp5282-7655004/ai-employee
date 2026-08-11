@@ -88,4 +88,18 @@ export class PostgresStore implements Store {
     const r = await this.pool.query('SELECT user_id FROM user_data');
     return r.rows.map((row: { user_id: string }) => row.user_id);
   }
+  async listUsers(): Promise<Array<{ id: string; email: string; name?: string; createdAt: string }>> {
+    const r = await this.pool.query('SELECT id, email, name, created_at FROM users ORDER BY created_at ASC');
+    return r.rows.map((x: { id: string; email: string; name?: string; created_at: string }) => ({
+      id: x.id,
+      email: x.email,
+      name: x.name ?? undefined,
+      createdAt: typeof x.created_at === 'string' ? x.created_at : new Date(x.created_at).toISOString(),
+    }));
+  }
+  async deleteUser(id: string): Promise<void> {
+    await this.pool.query('DELETE FROM sessions WHERE user_id=$1', [id]);
+    await this.pool.query('DELETE FROM user_data WHERE user_id=$1', [id]);
+    await this.pool.query('DELETE FROM users WHERE id=$1', [id]);
+  }
 }

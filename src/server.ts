@@ -99,6 +99,28 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return u;
   };
 
+  // ── owner/admin: who runs this workspace ──
+  // Admin = the user whose email matches ADMIN_EMAIL, or (if unset) the very first
+  // account created. That owner can view/remove users and gate signups.
+  const adminEmail = () => (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const adminUserId = async (): Promise<string | null> => {
+    const e = adminEmail();
+    if (e) return (await authStore.getUserByEmail(e))?.id ?? null;
+    return (await authStore.listUsers())[0]?.id ?? null;
+  };
+  const isAdmin = async (u: User): Promise<boolean> => {
+    const e = adminEmail();
+    if (e) return u.email.toLowerCase() === e;
+    return u.id === (await adminUserId());
+  };
+  const getAdminSettings = async (): Promise<{ inviteOnly: boolean; allowed: string[] }> => {
+    const id = await adminUserId();
+    if (!id) return { inviteOnly: false, allowed: [] };
+    const data = await authStore.getUserData(id);
+    const s = (data.adminSettings ?? {}) as { inviteOnly?: boolean; allowed?: string[] };
+    return { inviteOnly: !!s.inviteOnly, allowed: Array.isArray(s.allowed) ? s.allowed : [] };
+  };
+
   // ── pages (gated: no account → login) ──
   app.get('/', async (req, reply) => {
     const u = await getUser(req);
@@ -115,6 +137,17 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       return reply.code(400).send({ error: 'Enter an email and a password of at least 6 characters.' });
     if (await authStore.getUserByEmail(b.email))
       return reply.code(409).send({ error: 'An account with that email already exists — try logging in.' });
+    // Invite-only gate (the very first account is always allowed — it becomes the owner).
+    const existing = await authStore.listUsers();
+    if (existing.length > 0) {
+      const settings = await getAdminSettings();
+      if (settings.inviteOnly) {
+        const email = b.email.toLowerCase();
+        const ok = email === adminEmail() || settings.allowed.map((e) => e.toLowerCase()).includes(email);
+        if (!ok)
+          return reply.code(403).send({ error: 'Sign-ups are invite-only right now. Ask the owner to add your email to the invite list.' });
+      }
+    }
     const user: User = {
       id: newUserId(),
       email: b.email.toLowerCase(),
@@ -144,7 +177,41 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const u = await getUser(req);
     if (!u) return reply.code(401).send({ error: 'not signed in' });
     const data = await authStore.getUserData(u.id);
-    return { user: { id: u.id, email: u.email, name: u.name }, profile: data.profile ?? null };
+    return { user: { id: u.id, email: u.email, name: u.name }, profile: data.profile ?? null, admin: await isAdmin(u) };
+  });
+
+  // ── owner admin: list/remove users, gate signups (owner-only) ──
+  app.get('/api/admin', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (!(await isAdmin(u))) return { isAdmin: false };
+    return { isAdmin: true, adminId: await adminUserId(), users: await authStore.listUsers(), settings: await getAdminSettings() };
+  });
+  app.post<{ Body: { id?: string } }>('/api/admin/remove', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (!(await isAdmin(u))) return reply.code(403).send({ error: 'owner only' });
+    const id = req.body?.id;
+    if (!id) return reply.code(400).send({ error: 'id required' });
+    if (id === (await adminUserId())) return reply.code(400).send({ error: "You can't remove the owner account." });
+    await authStore.deleteUser(id);
+    return { ok: true };
+  });
+  app.put<{ Body: { inviteOnly?: boolean; allowed?: string[] } }>('/api/admin/settings', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (!(await isAdmin(u))) return reply.code(403).send({ error: 'owner only' });
+    const id = await adminUserId();
+    if (!id) return reply.code(400).send({ error: 'no owner resolved' });
+    const data = await authStore.getUserData(id);
+    data.adminSettings = {
+      inviteOnly: !!req.body?.inviteOnly,
+      allowed: Array.isArray(req.body?.allowed)
+        ? req.body!.allowed!.map((e) => String(e).trim().toLowerCase()).filter((e) => e.includes('@')).slice(0, 500)
+        : [],
+    };
+    await authStore.setUserData(id, data);
+    return { ok: true };
   });
 
   // ── customer profile (the onboarding intake, saved + editable) ──

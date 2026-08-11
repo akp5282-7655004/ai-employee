@@ -37,4 +37,8 @@ export interface Store {
   setUserData(userId: string, data: Record<string, unknown>): Promise<void>;
   /** All user ids that have stored data — used by the scheduler to find due agents. */
   listUserIds(): Promise<string[]>;
+  /** All accounts (for the owner's admin screen), oldest first. */
+  listUsers(): Promise<Array<{ id: string; email: string; name?: string; createdAt: string }>>;
+  /** Fully remove a user — their sessions, data, and account. */
+  deleteUser(id: string): Promise<void>;
 }

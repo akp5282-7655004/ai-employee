@@ -55,4 +55,16 @@ export class MemoryStore implements Store {
   async listUserIds(): Promise<string[]> {
     return Array.from(this.data.keys());
   }
+  async listUsers(): Promise<Array<{ id: string; email: string; name?: string; createdAt: string }>> {
+    return Array.from(this.users.values())
+      .map((u) => ({ id: u.id, email: u.email, name: u.name, createdAt: u.createdAt }))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+  async deleteUser(id: string): Promise<void> {
+    const u = this.users.get(id);
+    if (u) this.byEmail.delete(u.email.toLowerCase());
+    this.users.delete(id);
+    this.data.delete(id);
+    for (const [token, s] of this.sessions) if (s.userId === id) this.sessions.delete(token);
+  }
 }

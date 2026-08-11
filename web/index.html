@@ -1801,15 +1801,17 @@ function schedForm(){
 let SETTINGS={account:{name:'',email:''},keys:[],team:[]}, SET_LOADED=false, setTab='account';
 async function loadSettings(){ if(!REMOTE){ SET_LOADED=true; return; } try{ const r=await fetch('/api/settings'); const d=await r.json(); SETTINGS=d; if(!SETTINGS.team) SETTINGS.team=[]; if(!SETTINGS.keys) SETTINGS.keys=[]; }catch(e){} SET_LOADED=true; }
 async function openSettings(){ if(!SET_LOADED) await loadSettings(); if(!MODEL_LOADED) await loadModel(); renderSettings(); }
+let IS_ADMIN=false;
 const SET_TABS=[['account','Account'],['model','Model'],['team','Team'],['keys','API Keys'],['usage','Usage'],['billing','Billing']];
+function setTabsList(){ return IS_ADMIN ? SET_TABS.concat([['admin','Users']]) : SET_TABS; }
 let MODEL={mode:'auto',quality:'balanced'}, MODEL_LOADED=false;
 async function loadModel(){ if(!REMOTE){ MODEL_LOADED=true; return; } try{ const r=await fetch('/api/model'); MODEL=(await r.json()).model||MODEL; }catch(e){} MODEL_LOADED=true; }
 async function saveModel(){ if(!REMOTE) return; try{ await fetch('/api/model',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({model:MODEL})}); }catch(e){} }
 function renderSettings(){
-  const bar=$('#set-subtabs'); bar.innerHTML=SET_TABS.map(t=>`<button class="tab${t[0]===setTab?' on':''}" data-stab="${t[0]}">${t[1]}</button>`).join('');
+  const bar=$('#set-subtabs'); bar.innerHTML=setTabsList().map(t=>`<button class="tab${t[0]===setTab?' on':''}" data-stab="${t[0]}">${t[1]}</button>`).join('');
   bar.querySelectorAll('[data-stab]').forEach(b=>b.onclick=()=>{ setTab=b.dataset.stab; renderSettings(); });
   const body=$('#settings-body'); body.innerHTML='';
-  ({account:setAccount,model:setModel,team:setTeam,keys:setKeys,usage:setUsage,billing:setBilling}[setTab]||setAccount)(body);
+  ({account:setAccount,model:setModel,team:setTeam,keys:setKeys,usage:setUsage,billing:setBilling,admin:setAdmin}[setTab]||setAccount)(body);
 }
 function setModel(box){
   const card=el('div','mcard'); card.style.maxWidth='860px';
@@ -1882,6 +1884,34 @@ function setBilling(box){
   card.append(plan); card.append(el('div','verdict tight','💳 Paid plans & Stripe billing are coming soon — you’ll manage your subscription here.'));
   box.append(card);
 }
+// Owner-only: see everyone who signed up, remove accounts, gate signups.
+async function setAdmin(box){
+  box.append(el('div','appsub','Loading…'));
+  let d={}; if(REMOTE){ try{ d=await (await fetch('/api/admin')).json(); }catch(e){} }
+  box.innerHTML='';
+  if(!d.isAdmin){ box.append(el('div','verdict tight','Owner-only. On Render, set an ADMIN_EMAIL environment variable to your email to manage users here.')); return; }
+  let allowed=((d.settings&&d.settings.allowed)||[]).slice();
+  let inviteOnly=!!(d.settings&&d.settings.inviteOnly);
+  const save=async()=>{ if(!REMOTE) return; try{ await fetch('/api/admin/settings',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({inviteOnly,allowed})}); }catch(e){} };
+  // invite-only card
+  const card=el('div','mcard'); card.style.maxWidth='760px';
+  card.innerHTML='<h3>Who can sign up</h3><p class="mdesc">Control who can create an account in your workspace.</p>';
+  const io=el('div','acard'); io.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 14px';
+  const iol=el('div'); iol.innerHTML='<b>Invite-only sign-ups</b><div class="mdesc" id="io-desc" style="margin:2px 0 0">'+(inviteOnly?'On — only emails on your list can create an account.':'Off — anyone with the link can sign up.')+'</div>';
+  const sw=el('label','switch'); const ci=el('input'); ci.type='checkbox'; ci.checked=inviteOnly; const sl=el('span','sl'); sw.append(ci,sl);
+  ci.onchange=async()=>{ inviteOnly=ci.checked; $('#io-desc').textContent=inviteOnly?'On — only emails on your list can create an account.':'Off — anyone with the link can sign up.'; await save(); };
+  io.append(iol,sw); card.append(io);
+  card.append(el('div','sect-label','ALLOWED EMAILS'));
+  const list=el('div'); const renderAllowed=()=>{ list.innerHTML=''; if(!allowed.length){ list.append(el('div','appsub','No invites yet. Add the emails you want to let in.')); return; } for(const e of allowed){ const row=el('div','arow'); const l=el('div','rl'); l.append(el('b','',e)); const rm=el('button','idel','Remove'); rm.onclick=async()=>{ allowed=allowed.filter(x=>x!==e); await save(); renderAllowed(); }; row.append(l,rm); list.append(row);} }; renderAllowed(); card.append(list);
+  const add=el('div'); add.style.cssText='display:flex;gap:8px;margin-top:12px;max-width:460px'; add.innerHTML='<input class="f" id="inv-email" placeholder="teammate@email.com" style="margin:0;flex:1"><button class="go" id="inv-add" style="flex:none">Add</button>'; card.append(add);
+  box.append(card);
+  $('#inv-add').onclick=async()=>{ const e=($('#inv-email').value||'').trim().toLowerCase(); if(!e.includes('@')) return; if(!allowed.includes(e)) allowed.push(e); await save(); $('#inv-email').value=''; renderAllowed(); };
+  // accounts list
+  const uc=el('div','mcard'); uc.style.cssText='max-width:760px;margin-top:16px'; uc.innerHTML='<h3>Accounts ('+(d.users||[]).length+')</h3><p class="mdesc">Everyone with an account. Removing someone deletes their data and signs them out.</p>';
+  for(const usr of (d.users||[])){ const row=el('div','arow'); const owner=usr.id===d.adminId; const l=el('div','rl'); l.append(el('b','',(usr.name?esc(usr.name)+' · ':'')+esc(usr.email))); l.append(el('span','','Joined '+fmtDate(usr.createdAt))); const right=el('div'); right.style.cssText='display:flex;gap:8px;align-items:center'; if(owner){ right.append(el('span','apill active','OWNER')); } else { const rm=el('button','idel','Remove'); rm.onclick=()=>confirmRemoveUser(usr); right.append(rm); } row.append(l,right); uc.append(row); }
+  box.append(uc);
+}
+function confirmRemoveUser(usr){ showModal('<h3 style="margin:0 0 10px">Remove this account?</h3><p class="mdesc" style="margin:0 0 14px">This permanently deletes <b>'+esc(usr.email)+'</b> and all of their data. This can’t be undone.</p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="adsave" id="ru-cancel">Cancel</button><button class="go" id="ru-go" style="flex:none">Remove account</button></div>'); $('#ru-cancel').onclick=closeModal; $('#ru-go').onclick=async()=>{ closeModal(); try{ const r=await fetch('/api/admin/remove',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:usr.id})}); if(r.ok){ toast('Account removed'); } else { const e=await r.json().catch(()=>({})); toast(e.error||'Could not remove'); } }catch(e){ toast('Could not remove'); } renderSettings(); }; }
 
 // ═══ autopilot (graduated control + living SOP + cluster) ═══
 let AUTOPILOT={autonomy:50,guardrails:{maxBudgetChangePct:10,protectProven:true,approveHighImpact:true}}, AP_LOADED=false;
@@ -2284,7 +2314,7 @@ async function authInit(){
     const r=await fetch('/auth/me'); if(!r.ok){ window.location='/login'; return; }
     const d=await r.json(); const u=d.user||{};
     sessionId = u.id || sessionId;
-    ME = u; PROFILE = d.profile||{};
+    ME = u; PROFILE = d.profile||{}; IS_ADMIN = !!d.admin;
     loadDeploy(); loadAutopilot();
     $('#user-email').textContent = u.email||'';
     $('#user-av').textContent = ((u.name||u.email||'?')[0]||'?').toUpperCase();
