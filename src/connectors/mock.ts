@@ -84,6 +84,35 @@ export class MockConnector implements Connector {
     return { apps: rows.slice(0, limit) };
   }
 
+  async getAdSpend(externalUserId: string) {
+    const apps = new Set((this.accounts.get(externalUserId) ?? []).map((a) => a.app));
+    const rows: import('../revenue/attribution.js').CampaignSpend[] = [];
+    if (apps.has('google_ads')) {
+      rows.push(
+        { platform: 'google_ads', campaign: 'Emergency Plumbing', utm: 'gads_plumbing', spend: 1240, clicks: 410, conversions: 38 },
+        { platform: 'google_ads', campaign: 'AC Repair Search', utm: 'gads_ac', spend: 980, clicks: 300, conversions: 26 },
+      );
+    }
+    if (apps.has('facebook')) {
+      rows.push({ platform: 'facebook', campaign: 'AC Tune-up Promo', utm: 'meta_ac', spend: 620, clicks: 520, conversions: 19 });
+    }
+    return rows;
+  }
+
+  async getDeals(externalUserId: string) {
+    const CRMS = ['gohighlevel', 'servicetitan', 'jobber', 'hubspot', 'salesforce_rest_api', 'housecall_pro', 'service_fusion'];
+    const apps = new Set((this.accounts.get(externalUserId) ?? []).map((a) => a.app));
+    if (!CRMS.some((c) => apps.has(c))) return [];
+    return [
+      { id: 'd1', value: 4200, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing' },
+      { id: 'd2', value: 1850, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing' },
+      { id: 'd3', value: 2100, won: true, utmSource: 'google_ads', utmCampaign: 'gads_ac' },
+      { id: 'd4', value: 890, won: false, utmSource: 'facebook', utmCampaign: 'meta_ac' },
+      { id: 'd5', value: 2480, won: true, utmSource: 'facebook', utmCampaign: 'meta_ac' },
+      { id: 'd6', value: 1714, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing' },
+    ];
+  }
+
   async runAction(req: RunActionRequest): Promise<RunActionResult> {
     const app = req.actionId.split('-')[0];
     const connected = (this.accounts.get(req.externalUserId) ?? []).some((a) => a.app === app);

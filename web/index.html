@@ -1287,16 +1287,35 @@ function dashEmail(){
     +card('Email Performance Trends',trend)+'<div class="agrid2">'+card('Campaign Performance',camp)+recent+'</div>';
 }
 function emptyState(msg){ return `<div class="aempty"><div style="font-size:22px">⃝</div><div>${msg}</div><button class="abtn" data-goint>Go to Integrations</button></div>`; }
-function dashRoi(){
-  return '<div class="mdesc" style="margin:-4px 0 18px">Attributed revenue from your CRM matched to ad spend by UTM campaign. This reads your real connected data — no sample numbers.</div>'
-    +kpis([['Total Spend','$0'],['Attributed Revenue','$0'],['Blended ROAS','—'],['Won Deals','0']])
+let REV=null;
+const revMoney=n=>'$'+Number(n||0).toLocaleString();
+function roiHtml(rev){
+  const rep=rev&&rev.report; const has=rep&&(rep.totalSpend>0||rep.attributedRevenue>0);
+  const head='<div class="mdesc" style="margin:-4px 0 18px">Attributed revenue from your CRM matched to ad spend by UTM campaign — real data from your connected accounts.</div>';
+  if(!has) return head+kpis([['Total Spend','$0'],['Attributed Revenue','$0'],['Blended ROAS','—'],['Won Deals','0']])
     +card('By Platform',emptyState('No campaigns or deals yet. Connect an ad platform and a CRM to see attributed ROAS.'))
     +card('By Campaign',emptyState('No campaigns or deals yet. Connect an ad platform and a CRM to see attributed ROAS.'));
+  const rows=arr=>(arr||[]).map(r=>`<div class="arow"><div class="rl"><b>${esc(r.key)}</b><span>${revMoney(r.spend)} spend · ${r.wonDeals} customers</span></div><div style="text-align:right"><b style="color:var(--good)">${r.roas}x</b><div style="font-size:11px;color:var(--faint)">${revMoney(r.revenue)} revenue</div></div></div>`).join('');
+  return head+kpis([['Total Spend',revMoney(rep.totalSpend)],['Attributed Revenue',revMoney(rep.attributedRevenue)],['Blended ROAS',rep.blendedRoas+'x'],['Won Deals',String(rep.wonDeals)]])
+    +card('ROAS by Platform',rows(rep.byPlatform))+card('ROAS by Campaign',rows(rep.byCampaign))
+    +(rep.unattributedRevenue>0?('<div class="verdict tight" style="margin-bottom:16px">⚠️ '+revMoney(rep.unattributedRevenue)+' in won revenue couldn’t be matched to a campaign — add UTM tags to close the tracking gap.</div>'):'');
 }
-function dashCrm(){
-  return '<div class="mdesc" style="margin:-4px 0 18px">Deals synced from your connected CRMs. The UTM source on each deal powers attributed ROAS. Reads real data — no sample numbers.</div>'
-    +kpis([['Total Deals','0'],['Won','0'],['Won Revenue','$0.00']])
-    +card('Recent Deals',emptyState('No deals yet. Connect a CRM (GoHighLevel, ServiceTitan, HubSpot, Salesforce) to start syncing.'));
+function crmHtml(rev){
+  const deals=(rev&&rev.deals)||[];
+  const head='<div class="mdesc" style="margin:-4px 0 18px">Deals synced from your connected CRMs. The UTM source on each deal powers attributed ROAS.</div>';
+  if(!deals.length) return head+kpis([['Total Deals','0'],['Won','0'],['Won Revenue','$0.00']])+card('Recent Deals',emptyState('No deals yet. Connect a CRM (GoHighLevel, ServiceTitan, HubSpot, Salesforce) to start syncing.'));
+  const won=deals.filter(d=>d.won), wonRev=won.reduce((s,d)=>s+(d.value||0),0);
+  const rows=deals.map(d=>`<div class="arow"><div class="rl"><b>${revMoney(d.value)}${d.won?'':' · lost'}</b><span>${esc(d.utmSource||'—')} · ${esc(d.utmCampaign||'no UTM')}</span></div><span class="apill ${d.won?'active':'paused'}">${d.won?'WON':'OPEN'}</span></div>`).join('');
+  return head+kpis([['Total Deals',String(deals.length)],['Won',String(won.length)],['Won Revenue',revMoney(wonRev)]])+card('Recent Deals',rows);
+}
+function dashRoi(){ return roiHtml(REV); }
+function dashCrm(){ return crmHtml(REV); }
+async function loadRevenue(tab){
+  if(!REMOTE) return;
+  try{ const r=await fetch('/api/revenue?sessionId='+encodeURIComponent(sessionId)); REV=await r.json(); }catch(e){ return; }
+  if(aTab!==tab) return; // user switched away
+  const body=$('#analytics-body'); body.innerHTML = tab==='roi'?roiHtml(REV):crmHtml(REV);
+  body.querySelectorAll('[data-goint]').forEach(b=>b.onclick=()=>setPage('integrations'));
 }
 const A_TABS=[['overview','Overview'],['ads','Ad Campaigns'],['web','Web'],['social','Social'],['email','Email'],['roi','ROI / ROAS'],['crm','CRM Deals']];
 const A_RENDER={overview:dashOverview,ads:dashAds,web:dashWeb,social:dashSocial,email:dashEmail,roi:dashRoi,crm:dashCrm};
@@ -1306,6 +1325,7 @@ function renderAnalytics(){
   bar.querySelectorAll('[data-atab]').forEach(b=>b.onclick=()=>{ aTab=b.dataset.atab; renderAnalytics(); });
   const body=$('#analytics-body'); body.innerHTML=(A_RENDER[aTab]||dashOverview)();
   body.querySelectorAll('[data-goint]').forEach(b=>b.onclick=()=>setPage('integrations'));
+  if(aTab==='roi'||aTab==='crm') loadRevenue(aTab);
 }
 
 // ═══ real LSA benchmarks (SearchLight, Feb 2026) ═══

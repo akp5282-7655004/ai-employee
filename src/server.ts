@@ -14,6 +14,7 @@ import { fetchDemographics } from './research/census.js';
 import { fetchWeather, evaluateWeatherTriggers } from './research/weather.js';
 import { importSite } from './research/site.js';
 import { searchCompetitors } from './research/places.js';
+import { attributeRevenue } from './revenue/attribution.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
 import { hashPassword, verifyPassword, newToken, newUserId, parseCookies } from './auth.js';
 import { MemoryStore, type Store, type User } from './db/index.js';
@@ -363,6 +364,19 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       }
     }
     return { connector: connector.name, hub: { ready: pdReady }, connectedApps };
+  });
+
+  // Closed-loop revenue attribution — ad spend correlated to CRM deals by UTM.
+  app.get<{ Querystring: { sessionId?: string } }>('/api/revenue', async (req) => {
+    const sessionId = req.query?.sessionId;
+    if (!sessionId) return { report: null, deals: [], connected: false };
+    try {
+      const spend = connector.getAdSpend ? await connector.getAdSpend(sessionId) : [];
+      const deals = connector.getDeals ? await connector.getDeals(sessionId) : [];
+      return { report: attributeRevenue(spend, deals), deals, connected: spend.length > 0 || deals.length > 0 };
+    } catch (err) {
+      return { report: null, deals: [], connected: false, error: String((err as Error).message) };
+    }
   });
 
   // Mint a Pipedream connect link the customer opens to connect an app account.

@@ -10,6 +10,8 @@
  * hold their credentials or their spend.
  */
 
+import type { CampaignSpend, Deal } from '../revenue/attribution.js';
+
 export interface ConnectTokenResult {
   /** Short-lived token the frontend uses to open the connect flow. */
   token: string;
@@ -66,6 +68,10 @@ export interface Connector {
   runAction(req: RunActionRequest): Promise<RunActionResult>;
   /** Browse/search the connector's app catalog (Pipedream's registry), paginated. */
   listApps?(query?: string, limit?: number, after?: string): Promise<{ apps: AppInfo[]; after?: string }>;
+  /** Ad spend by campaign from connected ad platforms — for revenue attribution. */
+  getAdSpend?(externalUserId: string): Promise<CampaignSpend[]>;
+  /** Deals from connected CRMs — for revenue attribution. */
+  getDeals?(externalUserId: string): Promise<Deal[]>;
   /**
    * Mark an app connected for a user. Present on the mock (a demo shortcut); on
    * live Pipedream the real connection happens through the connect-token flow, so
