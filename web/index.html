@@ -1433,27 +1433,32 @@ async function studioGenerate(){
     let r;
     if(REMOTE){ const resp=await fetch('/api/studio',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); r=await resp.json(); }
     else { r={type:studioType,kind:spec.kind,url:null,text:'(demo) '+prompt,live:false,prompt}; }
+    studioLastPrompt=prompt;
     renderStudioResult(r,spec);
-    if(REMOTE) queueChange('creative','Created '+spec.label.toLowerCase()+(prompt?' — '+prompt.slice(0,42):''),true);
+    // Generating is free experimentation — it does NOT touch Deploy or your ad account.
+    // Only "Send to Deploy" on a result you like stages it for approval.
   }catch(e){ box.innerHTML=''; box.append(el('div','verdict bad','Generation failed — try again in a moment.')); }
   btn.disabled=false; btn.textContent=old;
 }
+let studioLastPrompt='';
 function studioDownload(url,name){ const a=el('a','adsave','⤓ Download'); a.href=url; a.target='_blank'; a.download=name||'asset'; a.style.textDecoration='none'; return a; }
+// The one button that stages an asset for your ad account — as PENDING, so you still approve it in Deploy.
+function studioPushBtn(spec){ const b=el('button','go','↗ Send to Deploy'); b.style.flex='none'; b.onclick=()=>{ queueChange('creative',spec.label+(studioLastPrompt?': '+studioLastPrompt.slice(0,42):''),'pending'); toast('Sent to Deploy — approve it there to push it live'); }; return b; }
 function renderStudioResult(r,spec){
   const box=$('#studio-results'); box.innerHTML='';
   if(r.kind==='text'){
     const card=el('div','acard'); const pre=el('div'); pre.style.cssText='white-space:pre-wrap;font-size:14px;line-height:1.6'; pre.textContent=r.text||''; card.append(pre);
-    const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px'; const cp=el('button','go','Copy'); cp.style.flex='none'; cp.onclick=()=>{ try{navigator.clipboard.writeText(r.text||'');}catch(e){} toast('Copied'); }; bar.append(cp); card.append(bar); box.append(card);
+    const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px'; const cp=el('button','go','Copy'); cp.style.flex='none'; cp.onclick=()=>{ try{navigator.clipboard.writeText(r.text||'');}catch(e){} toast('Copied'); }; bar.append(cp); if(r.live) bar.append(studioPushBtn(spec)); card.append(bar); box.append(card);
     if(!r.live) box.append(el('div','appsub','Demo copy — add an OpenRouter key so Miles writes this custom for every request.'));
     return;
   }
   if(r.kind==='video'){
-    if(r.url){ const v=el('video'); v.src=r.url; v.controls=true; v.style.cssText='max-width:100%;border-radius:12px'; box.append(v); const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px'; bar.append(studioDownload(r.url,'miles-video.mp4')); box.append(bar); }
+    if(r.url){ const v=el('video'); v.src=r.url; v.controls=true; v.style.cssText='max-width:100%;border-radius:12px'; box.append(v); const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px'; bar.append(studioDownload(r.url,'miles-video.mp4')); bar.append(studioPushBtn(spec)); box.append(bar); }
     else box.append(el('div','verdict tight','🎬 To generate real video, add FAL_KEY (and optionally FAL_VIDEO_MODEL) on Render. Video is the priciest, slowest asset — everything else works today.'));
     return;
   }
   if(r.kind==='audio'){
-    if(r.url){ const a=el('audio'); a.src=r.url; a.controls=true; a.style.cssText='width:100%;margin-top:4px'; box.append(a); const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px'; bar.append(studioDownload(r.url,'voiceover.mp3')); box.append(bar); }
+    if(r.url){ const a=el('audio'); a.src=r.url; a.controls=true; a.style.cssText='width:100%;margin-top:4px'; box.append(a); const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px'; bar.append(studioDownload(r.url,'voiceover.mp3')); bar.append(studioPushBtn(spec)); box.append(bar); }
     else box.append(el('div','verdict tight','🎙️ Voiceover needs FAL_KEY + a TTS model (set FAL_TTS_MODEL) on Render. Add it and this reads your script aloud in a real voice.'));
     return;
   }
@@ -1461,7 +1466,7 @@ function renderStudioResult(r,spec){
     const im=el('img'); im.src=r.url; im.style.cssText='max-width:100%;border-radius:12px;border:1px solid var(--line)'; box.append(im);
     const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px;flex-wrap:wrap';
     const save=el('button','go','Save to Assets'); save.style.flex='none'; save.onclick=()=>{ ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:r.url,caption:'Creative Studio: '+spec.label}); saveAssets(); toast('Saved to Assets'); };
-    bar.append(save); bar.append(studioDownload(r.url,spec.type+'.png')); box.append(bar);
+    bar.append(save); bar.append(studioDownload(r.url,spec.type+'.png')); bar.append(studioPushBtn(spec)); box.append(bar);
   } else {
     box.append(el('div','verdict tight','🖼️ Add FAL_KEY on Render to generate the real image. Here’s the on-brand prompt Miles built for you:'));
     const pc=el('div','acard'); pc.style.marginTop='8px'; pc.style.fontSize='13px'; pc.textContent=r.prompt||''; box.append(pc);
@@ -1627,11 +1632,13 @@ function currentState(){
   return { hub:strip(HUB), weatherRules:strip(WRULES), assets:strip(ASSETS), profile:strip(PROFILE), skills:strip(SKILLS_INSTALLED), autopilot:strip(AUTOPILOT), model:strip(MODEL) };
 }
 async function snapshotVersion(id,label){ if(!REMOTE) return; try{ await fetch('/api/versions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,label,state:currentState()})}); }catch(e){} }
-// Every change routes by autonomy: at 100% (or auto-deploy on) it goes live and into the log;
-// anything under 100% waits in the queue for a per-item Approve. Each change also drops a restore point.
-function queueChange(type,label,forceLive){ if(!REMOTE) return; DEPLOY.queue=DEPLOY.queue||[];
+// mode: 'live' = already done (log it), 'pending' = wait for a per-item Approve regardless of
+// autonomy (used when you explicitly stage an experiment), undefined = route by autonomy
+// (at 100% or auto-deploy on it goes live; otherwise it waits for Approve). Each drops a restore point.
+function queueChange(type,label,mode){ if(!REMOTE) return; DEPLOY.queue=DEPLOY.queue||[];
   const auton=(AUTOPILOT&&typeof AUTOPILOT.autonomy==='number')?AUTOPILOT.autonomy:50;
-  const live=!!forceLive||(auton>=100)||!!DEPLOY.auto; const now=new Date().toISOString();
+  const live = mode==='live' ? true : mode==='pending' ? false : ((auton>=100)||!!DEPLOY.auto);
+  const now=new Date().toISOString();
   const item={id:newId(),type,label,ts:now,status:live?'live':'pending',autonomy:auton,auto:!!DEPLOY.auto};
   if(live){ item.deployedAt=now; DEPLOY.lastDeployedAt=now; }
   DEPLOY.queue.unshift(item); if(DEPLOY.queue.length>300) DEPLOY.queue=DEPLOY.queue.slice(0,300);
@@ -1656,7 +1663,7 @@ function deployRow(c){
 function renderDeploy(){
   const box=$('#deploy-body'); if(!box) return; box.innerHTML='';
   const ap=(AUTOPILOT&&typeof AUTOPILOT.autonomy==='number')?AUTOPILOT.autonomy:50;
-  const head=el('div'); head.innerHTML='<h3 style="margin:0">Deploy</h3><p class="mdesc" style="margin:4px 0 0;max-width:680px">Changes are routed by your <b>autonomy</b> setting'+(ap>=100?' — currently <b>100%</b>, so Miles deploys everything automatically and it lands in the <b>Change Log</b>.':' — currently <b>'+ap+'%</b>, so changes wait here as <b>Pending</b> until you <b>Approve</b> them (one at a time, or all at once). At 100% autonomy they would deploy automatically.')+' Every change keeps a restore point — see the <b>Logs</b> tab to undo or roll back.</p>';
+  const head=el('div'); head.innerHTML='<h3 style="margin:0">Deploy</h3><p class="mdesc" style="margin:4px 0 0;max-width:680px">Changes are routed by your <b>autonomy</b> setting'+(ap>=100?' — currently <b>100%</b>, so Miles deploys everything automatically and it lands in the <b>Change Log</b>.':' — currently <b>'+ap+'%</b>, so changes wait here as <b>Pending</b> until you <b>Approve</b> them (one at a time, or all at once). At 100% autonomy they would deploy automatically.')+' <b>Nothing reaches your ad account until you approve it here.</b> Assets you generate in Creative Studio are just drafts — they only appear in this queue when you hit <b>Send to Deploy</b> on the ones you like. Every change keeps a restore point — see the <b>Logs</b> tab to undo or roll back.</p>';
   box.append(head);
   const auto=el('div','acard'); auto.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0';
   const al=el('div'); al.innerHTML='<b>Auto-deploy</b><div class="mdesc" style="margin:2px 0 0">'+(DEPLOY.auto?'On — changes go live instantly.':'Off — changes wait in the queue until you deploy.')+'</div>';
@@ -2158,7 +2165,7 @@ function renderResult(reply){
   }
   chat.scrollTop=chat.scrollHeight;
 }
-function dispatch(r){ if(r.plan){renderPlan(r); logChat('emp', r.summary || 'Here’s your plan.');} else if(r.task){ say('emp',r.text); if(r.task.ok) queueChange('action', r.task.summary, true); } else if(r.launched!==undefined)renderResult(r); else say('emp',r.text); }
+function dispatch(r){ if(r.plan){renderPlan(r); logChat('emp', r.summary || 'Here’s your plan.');} else if(r.task){ say('emp',r.text); if(r.task.ok) queueChange('action', r.task.summary, 'live'); } else if(r.launched!==undefined)renderResult(r); else say('emp',r.text); }
 async function send(text,silent){const msg=(text!=null?text:cinput.value).trim();if(!msg)return;if(!silent)say('user',msg);cinput.value='';try{dispatch(await apiMessage(msg));}catch(e){say('emp','Sorry — I couldn’t reach the server just now.');}}
 async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId})}); }catch(e){} } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER); } }
 let CHAT_LOG=[], CHAT_LOADED=false, chatSaveT;
