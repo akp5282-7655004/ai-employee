@@ -311,6 +311,7 @@
       <a data-page="adstudio" class="sub"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
       <a data-page="assets" class="sub"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/><path d="M3 3l18 18" opacity="0"/></svg> Assets</a>
       <a data-page="deploy"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 21h14"/></svg> Deploy <span id="deploy-badge" class="navbadge" style="display:none"></span></a>
+      <a data-page="logs" class="sub"><svg class="ico" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l3-3 3 2 4-5"/><circle cx="7" cy="15" r="0.5"/></svg> Logs</a>
       <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
       <a data-page="profile"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
       <a data-page="settings"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg> Settings</a>
@@ -482,6 +483,11 @@
     <!-- DEPLOY -->
     <section class="page" id="page-deploy">
       <div id="deploy-body"></div>
+    </section>
+
+    <!-- LOGS -->
+    <section class="page" id="page-logs">
+      <div id="logs-body"></div>
     </section>
 
     <!-- SETTINGS -->
@@ -914,7 +920,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',hub:'Marketing Hub',assets:'Brand Assets',deploy:'Deploy',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
+const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',hub:'Marketing Hub',assets:'Brand Assets',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
@@ -931,6 +937,7 @@ function setPage(id){
   $('#page-hub').classList.toggle('on',id==='hub');
   $('#page-assets').classList.toggle('on',id==='assets');
   $('#page-deploy').classList.toggle('on',id==='deploy');
+  $('#page-logs').classList.toggle('on',id==='logs');
   $('#page-settings').classList.toggle('on',id==='settings');
   $('#page-int').classList.toggle('on',id==='integrations');
   $('#page-profile').classList.toggle('on',id==='profile');
@@ -947,6 +954,7 @@ function setPage(id){
   if(id==='hub') openHub();
   if(id==='assets') openAssets();
   if(id==='deploy') openDeploy();
+  if(id==='logs') openLogs();
   if(id==='settings') openSettings();
   if(id==='integrations'){ loadIntegrations(); }
 }
@@ -1498,20 +1506,43 @@ async function loadDeploy(){ if(!REMOTE){ DEPLOY_LOADED=true; return; } try{ con
 async function saveDeploy(){ if(!REMOTE) return; try{ await fetch('/api/deploy',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({deploy:DEPLOY})}); }catch(e){} }
 function pendingCount(){ return (DEPLOY.queue||[]).filter(c=>c.status==='pending').length; }
 function updateDeployBadge(){ const b=$('#deploy-badge'); if(!b) return; const n=pendingCount(); if(n){ b.textContent=n; b.style.display=''; } else b.style.display='none'; }
-function queueChange(type,label){ if(!REMOTE) return; DEPLOY.queue=DEPLOY.queue||[]; DEPLOY.queue.unshift({id:newId(),type,label,ts:new Date().toISOString(),status:DEPLOY.auto?'live':'pending'}); if(DEPLOY.queue.length>300) DEPLOY.queue=DEPLOY.queue.slice(0,300); saveDeploy(); updateDeployBadge(); if($('#page-deploy')&&$('#page-deploy').classList.contains('on')) renderDeploy(); }
+// A light snapshot of the workspace's editable domains, used as an undo/rollback point.
+// data: URLs (logos, generated ads) are stripped so restore points stay small.
+function currentState(){
+  const strip=(o)=>{ try{ return JSON.parse(JSON.stringify(o==null?null:o), (k,v)=> (typeof v==='string'&&v.slice(0,5)==='data:') ? '[image]' : v); }catch(e){ return null; } };
+  return { hub:strip(HUB), weatherRules:strip(WRULES), assets:strip(ASSETS), profile:strip(PROFILE), skills:strip(SKILLS_INSTALLED), autopilot:strip(AUTOPILOT), model:strip(MODEL) };
+}
+async function snapshotVersion(id,label){ if(!REMOTE) return; try{ await fetch('/api/versions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,label,state:currentState()})}); }catch(e){} }
+// Every change routes by autonomy: at 100% (or auto-deploy on) it goes live and into the log;
+// anything under 100% waits in the queue for a per-item Approve. Each change also drops a restore point.
+function queueChange(type,label){ if(!REMOTE) return; DEPLOY.queue=DEPLOY.queue||[];
+  const auton=(AUTOPILOT&&typeof AUTOPILOT.autonomy==='number')?AUTOPILOT.autonomy:50;
+  const live=(auton>=100)||!!DEPLOY.auto; const now=new Date().toISOString();
+  const item={id:newId(),type,label,ts:now,status:live?'live':'pending',autonomy:auton,auto:!!DEPLOY.auto};
+  if(live){ item.deployedAt=now; DEPLOY.lastDeployedAt=now; }
+  DEPLOY.queue.unshift(item); if(DEPLOY.queue.length>300) DEPLOY.queue=DEPLOY.queue.slice(0,300);
+  saveDeploy(); snapshotVersion(item.id,label); updateDeployBadge();
+  if($('#page-deploy')&&$('#page-deploy').classList.contains('on')) renderDeploy();
+  if($('#page-logs')&&$('#page-logs').classList.contains('on')) renderLogs();
+}
 const DEP_ICON={campaign:'📁',creative:'🖼️',trigger:'⛅',profile:'🏢',assets:'🎨',asset:'📎',change:'•'};
 function fmtWhen(iso){ try{ return new Date(iso).toLocaleString(); }catch(e){ return ''; } }
 function openDeploy(){ if(!DEPLOY_LOADED){ loadDeploy().then(renderDeploy); } else renderDeploy(); }
-function deployAll(){ const n=pendingCount(); if(!n) return; const now=new Date().toISOString(); DEPLOY.queue.forEach(c=>{ if(c.status==='pending'){ c.status='live'; c.deployedAt=now; } }); DEPLOY.lastDeployedAt=now; saveDeploy(); updateDeployBadge(); renderDeploy(); toast(n+' change'+(n===1?'':'s')+' deployed live'); }
+function deployAll(){ const n=pendingCount(); if(!n) return; const now=new Date().toISOString(); DEPLOY.queue.forEach(c=>{ if(c.status==='pending'){ c.status='live'; c.deployedAt=now; } }); DEPLOY.lastDeployedAt=now; saveDeploy(); updateDeployBadge(); renderDeploy(); if($('#page-logs')&&$('#page-logs').classList.contains('on')) renderLogs(); toast(n+' change'+(n===1?'':'s')+' deployed live'); }
+function approveChange(id){ const c=(DEPLOY.queue||[]).find(x=>x.id===id); if(!c||c.status==='live') return; const now=new Date().toISOString(); c.status='live'; c.deployedAt=now; c.approvedAt=now; DEPLOY.lastDeployedAt=now; saveDeploy(); updateDeployBadge(); renderDeploy(); if($('#page-logs')&&$('#page-logs').classList.contains('on')) renderLogs(); toast('Approved & deployed live'); }
 function deployRow(c){
   const row=el('div','arow'); const left=el('div','rl');
-  left.append(el('b','',(DEP_ICON[c.type]||'•')+'  '+(c.label||c.type))); left.append(el('span','',fmtWhen(c.ts)));
-  const st=el('span','apill '+(c.status==='live'?'active':'paused')); st.textContent=c.status==='live'?'LIVE':'PENDING';
-  row.append(left,st); return row;
+  left.append(el('b','',(DEP_ICON[c.type]||'•')+'  '+(c.label||c.type)));
+  left.append(el('span','',fmtWhen(c.ts)+(c.status==='live'&&c.autonomy>=100?' · auto-deployed (100% autonomy)':'')));
+  const right=el('div'); right.style.cssText='display:flex;gap:8px;align-items:center';
+  const st=el('span','apill '+(c.status==='live'?'active':'paused')); st.textContent=c.status==='live'?'LIVE':'PENDING'; right.append(st);
+  if(c.status==='pending'){ const ap=el('button','go','Approve'); ap.style.cssText='flex:none;padding:6px 14px'; ap.onclick=()=>approveChange(c.id); right.append(ap); }
+  row.append(left,right); return row;
 }
 function renderDeploy(){
   const box=$('#deploy-body'); if(!box) return; box.innerHTML='';
-  const head=el('div'); head.innerHTML='<h3 style="margin:0">Deploy</h3><p class="mdesc" style="margin:4px 0 0;max-width:660px">Every change you make — campaigns, ads, triggers, brand data — is staged here. Push them all live at once, or turn on auto-deploy to have changes go live the moment you make them.</p>';
+  const ap=(AUTOPILOT&&typeof AUTOPILOT.autonomy==='number')?AUTOPILOT.autonomy:50;
+  const head=el('div'); head.innerHTML='<h3 style="margin:0">Deploy</h3><p class="mdesc" style="margin:4px 0 0;max-width:680px">Changes are routed by your <b>autonomy</b> setting'+(ap>=100?' — currently <b>100%</b>, so Miles deploys everything automatically and it lands in the <b>Change Log</b>.':' — currently <b>'+ap+'%</b>, so changes wait here as <b>Pending</b> until you <b>Approve</b> them (one at a time, or all at once). At 100% autonomy they would deploy automatically.')+' Every change keeps a restore point — see the <b>Logs</b> tab to undo or roll back.</p>';
   box.append(head);
   const auto=el('div','acard'); auto.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0';
   const al=el('div'); al.innerHTML='<b>Auto-deploy</b><div class="mdesc" style="margin:2px 0 0">'+(DEPLOY.auto?'On — changes go live instantly.':'Off — changes wait in the queue until you deploy.')+'</div>';
@@ -1527,6 +1558,47 @@ function renderDeploy(){
   if(!q.length){ box.append(el('div','verdict ok','No changes yet. As you build campaigns, generate ads, and set triggers, they’ll appear here ready to deploy.')); return; }
   box.append(el('div','sect-label', n? ('PENDING · '+n) : 'ALL DEPLOYED'));
   for(const c of q) box.append(deployRow(c));
+}
+
+// ═══ change log (full history + per-task undo + day rollback) ═══
+let VERSIONS=[];
+async function loadVersions(){ if(!REMOTE){ VERSIONS=[]; return; } try{ const r=await fetch('/api/versions'); VERSIONS=(await r.json()).versions||[]; }catch(e){ VERSIONS=[]; } }
+async function openLogs(){ if(!DEPLOY_LOADED) await loadDeploy(); await loadVersions(); renderLogs(); }
+function dayLabel(iso){ const d=new Date(iso); const sd=new Date(d.getFullYear(),d.getMonth(),d.getDate()); const now=new Date(); const sn=new Date(now.getFullYear(),now.getMonth(),now.getDate()); const diff=Math.round((sn-sd)/86400000); if(diff===0) return 'Today'; if(diff===1) return 'Yesterday'; try{ return d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}); }catch(e){ return sd.toISOString().slice(0,10); } }
+async function restoreVersion(id){ if(!REMOTE) return; try{ const r=await fetch('/api/versions/restore',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})}); if(r.ok){ toast('Restored — reloading…'); setTimeout(()=>window.location.reload(),650); } else { const d=await r.json().catch(()=>({})); toast(d.error||'Restore failed'); } }catch(e){ toast('Restore failed'); } }
+function confirmRestore(id,phrase){ showModal('<h3 style="margin:0 0 10px">Restore workspace?</h3><p class="mdesc" style="margin:0 0 14px">This will '+esc(phrase)+'. Your campaigns, weather triggers, autopilot and model settings go back to that point; any changes after it are rolled back. Your logo and photos are not touched.</p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="adsave" id="rs-cancel">Cancel</button><button class="go" id="rs-go" style="flex:none">Restore</button></div>'); $('#rs-cancel').onclick=closeModal; $('#rs-go').onclick=()=>{ closeModal(); restoreVersion(id); }; }
+function logRow(c,hasRestore){
+  const row=el('div','arow'); const left=el('div','rl');
+  left.append(el('b','',(DEP_ICON[c.type]||'•')+'  '+(c.label||c.type)));
+  const how = c.autonomy>=100 ? 'auto-deployed · 100% autonomy' : (c.approvedAt?'approved by you':(c.status==='live'?'deployed':'awaiting approval'));
+  left.append(el('span','',fmtWhen(c.ts)+' · '+how));
+  const right=el('div'); right.style.cssText='display:flex;gap:8px;align-items:center';
+  const st=el('span','apill '+(c.status==='live'?'active':'paused')); st.textContent=c.status==='live'?'LIVE':'PENDING'; right.append(st);
+  if(hasRestore){ const rb=el('button','idel','Restore to this point'); rb.onclick=()=>confirmRestore(c.id,'restore your workspace to “'+(c.label||'this point')+'”'); right.append(rb); }
+  row.append(left,right); return row;
+}
+function renderLogs(){
+  const box=$('#logs-body'); if(!box) return; box.innerHTML='';
+  const head=el('div'); head.innerHTML='<h3 style="margin:0">Change Log</h3><p class="mdesc" style="margin:4px 0 0;max-width:700px">Every change Miles or you have ever made — newest first. Undo one thing, or roll the whole workspace back to how it was at any earlier point. Your logo and photos are never affected by a rollback.</p>';
+  box.append(head);
+  const ids=new Set(VERSIONS.map(v=>v.id));
+  const vb=(DEPLOY.queue||[]).filter(c=>ids.has(c.id));
+  const bar=el('div'); bar.style.cssText='display:flex;gap:12px;align-items:center;margin:16px 0 6px';
+  const undo=el('button','pf-save', vb.length? '↩  Undo last change' : 'Nothing to undo'); undo.style.marginTop='0'; undo.disabled=vb.length<2;
+  undo.onclick=()=>{ const v=(DEPLOY.queue||[]).filter(c=>ids.has(c.id)); if(v.length<2) return; confirmRestore(v[1].id,'undo “'+(v[0].label||'the last change')+'”'); };
+  bar.append(undo); if(vb.length===1) bar.append(el('span','appsub','Only one restore point so far — nothing earlier to undo to yet.')); box.append(bar);
+  const q=DEPLOY.queue||[];
+  if(!q.length){ box.append(el('div','verdict ok','No changes yet. Everything Miles does — campaigns, ads, triggers, settings — is logged here with one-click undo.')); return; }
+  let cur=null; const groups=[];
+  for(const c of q){ const k=dayLabel(c.ts); if(!cur||cur.k!==k){ cur={k,items:[]}; groups.push(cur); } cur.items.push(c); }
+  for(const g of groups){
+    const gh=el('div'); gh.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 8px';
+    gh.append(el('div','sect-label',g.k));
+    const dayVb=g.items.find(c=>ids.has(c.id));
+    if(dayVb){ const rb=el('button','idel','⟲  Roll back to end of '+g.k); rb.onclick=()=>confirmRestore(dayVb.id,'roll your workspace back to the end of '+g.k+' (‘'+(dayVb.label||'that point')+'’)'); gh.append(rb); }
+    box.append(gh);
+    for(const c of g.items) box.append(logRow(c, ids.has(c.id)));
+  }
 }
 
 // ═══ settings hub (account, team, api keys, usage, billing) ═══
@@ -1978,7 +2050,7 @@ async function authInit(){
     const d=await r.json(); const u=d.user||{};
     sessionId = u.id || sessionId;
     ME = u; PROFILE = d.profile||{};
-    loadDeploy();
+    loadDeploy(); loadAutopilot();
     $('#user-email').textContent = u.email||'';
     $('#user-av').textContent = ((u.name||u.email||'?')[0]||'?').toUpperCase();
     applyIdentity();

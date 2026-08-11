@@ -358,6 +358,39 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { ok: true };
   });
 
+  // Version snapshots — point-in-time restore points for undo / rollback.
+  // `assets` is deliberately excluded: logos/photos are large base64 data URLs that the
+  // client strips from snapshots to keep them small, so restoring assets would wipe images.
+  // Campaigns (hub) and weather triggers (weatherRules) are the real undo targets and are lossless.
+  const RESTORE_DOMAINS = ['hub', 'weatherRules', 'profile', 'skills', 'autopilot', 'model'];
+  app.get('/api/versions', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return { versions: ((data.versions as any[]) ?? []).map((v) => ({ id: v.id, ts: v.ts, label: v.label })) };
+  });
+  app.post<{ Body: { id?: string; label?: string; state?: any } }>('/api/versions', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    // Accept a client-supplied id so a change-log entry and its restore point share one id.
+    const id = (req.body?.id || newToken().slice(0, 10)).toString().slice(0, 40);
+    const v = { id, ts: new Date().toISOString(), label: (req.body?.label || 'Change').slice(0, 120), state: req.body?.state ?? {} };
+    data.versions = [...((data.versions as any[]) ?? []), v].slice(-30);
+    await authStore.setUserData(u.id, data);
+    return { ok: true, id: v.id };
+  });
+  app.post<{ Body: { id?: string } }>('/api/versions/restore', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const v = ((data.versions as any[]) ?? []).find((x) => x.id === req.body?.id);
+    if (!v) return reply.code(404).send({ error: 'restore point not found' });
+    for (const k of RESTORE_DOMAINS) if (k in (v.state ?? {})) (data as any)[k] = v.state[k];
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+
   // Persisted chat history, per workspace (last 200 turns).
   app.get('/api/chat', async (req, reply) => {
     const u = await requireUser(req, reply);
