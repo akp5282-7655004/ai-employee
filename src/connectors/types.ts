@@ -48,6 +48,25 @@ export interface RunActionResult {
   note?: string;
 }
 
+/** A "do this in my app" task, resolved from plain English (the "hands"). */
+export interface AppTaskRequest {
+  externalUserId: string;
+  /** App slug, e.g. "gohighlevel". */
+  app: string;
+  /** Short phrase naming the action to discover, e.g. "create contact". */
+  query: string;
+  /** Semantic inputs — email / firstName / phone / message / note / tag / … —
+   * mapped onto the real component's props by the connector. */
+  params: Record<string, string>;
+}
+
+export interface AppTaskResult extends RunActionResult {
+  /** The discovered component key that ran (or would have). */
+  componentKey?: string;
+  /** A friendly, human-readable summary of what happened. */
+  summary: string;
+}
+
 /** One app in the connector's catalog (Pipedream's ~3,000-app registry). */
 export interface AppInfo {
   slug: string;
@@ -66,6 +85,9 @@ export interface Connector {
   listAccounts(externalUserId: string, app?: string): Promise<ConnectedAccount[]>;
   /** Run an app action on the user's behalf — the "hands". */
   runAction(req: RunActionRequest): Promise<RunActionResult>;
+  /** Resolve a plain-English task to a real app action and run it (discover +
+   * attach the connected account + map params + execute). The "employee hands". */
+  runAppTask?(req: AppTaskRequest): Promise<AppTaskResult>;
   /** Browse/search the connector's app catalog (Pipedream's registry), paginated. */
   listApps?(query?: string, limit?: number, after?: string): Promise<{ apps: AppInfo[]; after?: string }>;
   /** Ad spend by campaign from connected ad platforms — for revenue attribution. */

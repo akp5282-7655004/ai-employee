@@ -1,12 +1,28 @@
 import type { Config } from '../config.js';
+import { summarizeTask } from './mock.js';
 import type {
   AppInfo,
+  AppTaskRequest,
+  AppTaskResult,
   ConnectedAccount,
   ConnectTokenResult,
   Connector,
   RunActionRequest,
   RunActionResult,
 } from './types.js';
+
+/** Which component-prop names satisfy each semantic param, most-specific first. */
+const PARAM_KEYWORDS: Record<string, string[]> = {
+  firstName: ['first name', 'firstname', 'first'],
+  lastName: ['last name', 'lastname', 'last', 'surname'],
+  email: ['email'],
+  phone: ['phone', 'mobile', 'cell', 'sms number', 'to number', 'number'],
+  company: ['company', 'organization', 'business name', 'organisation'],
+  name: ['full name', 'name', 'title'],
+  message: ['message', 'body', 'text', 'content'],
+  note: ['note', 'body', 'comment', 'description'],
+  tag: ['tag', 'label'],
+};
 
 /**
  * The **live Pipedream Connect** connector. It talks to Pipedream's managed-auth
@@ -113,4 +129,119 @@ export class PipedreamConnector implements Connector {
       return { ok: false, actionId: req.actionId, app, output: null, note: String((err as Error).message) };
     }
   }
+
+  /**
+   * Resolve a plain-English task to a real component and run it. Discovers the
+   * action for the app, attaches the user's connected account, maps the semantic
+   * params onto the component's real props, and executes. All failures return a
+   * friendly, actionable note rather than throwing.
+   */
+  async runAppTask(req: AppTaskRequest): Promise<AppTaskResult> {
+    const summary = summarizeTask(req.app, req.query, req.params);
+    const base = { app: req.app, output: null as unknown, summary };
+    let pd: any;
+    try {
+      pd = await this.backend();
+    } catch (err) {
+      return { ok: false, actionId: `${req.app}-task`, ...base, note: String((err as Error).message) };
+    }
+
+    // 1) Must have a connected account for this app.
+    let account: any;
+    try {
+      const accts = await this.listAccounts(req.externalUserId, req.app);
+      account = accts.find((a) => a.healthy) ?? accts[0];
+    } catch {
+      /* fall through to the not-connected message */
+    }
+    if (!account) {
+      return {
+        ok: false,
+        actionId: `${req.app}-task`,
+        ...base,
+        note: `No connected ${req.app} account yet — connect it in Integrations, then I can ${lower(summary)}.`,
+      };
+    }
+
+    // 2) Discover the action component for this app.
+    let comp: any;
+    try {
+      const list = await pd.actions.list({ app: req.app, q: req.query, limit: 10 });
+      const rows: any[] = list?.data ?? (Array.isArray(list) ? list : list?.items ?? []);
+      comp = pickComponent(rows, req.query);
+    } catch (err) {
+      return { ok: false, actionId: `${req.app}-task`, ...base, note: `Couldn't look up ${req.app} actions: ${String((err as Error).message)}` };
+    }
+    if (!comp) {
+      return { ok: false, actionId: `${req.app}-task`, ...base, note: `${req.app} doesn't expose a “${req.query}” action I can run.` };
+    }
+    const key: string = comp.key ?? comp.id ?? comp.componentKey;
+
+    // 3) Fetch the prop schema so we map onto real prop names.
+    let props: any[] = comp.configurableProps ?? comp.configurable_props ?? [];
+    if (!props.length) {
+      try {
+        const full = await pd.actions.retrieve(key);
+        const data = full?.data ?? full;
+        props = data?.configurableProps ?? data?.configurable_props ?? [];
+      } catch {
+        /* best effort — some components list their props inline */
+      }
+    }
+
+    // 4) Build configuredProps: attach the account to the app prop, map params to the rest.
+    const configuredProps = buildConfiguredProps(props, account.id, req.params);
+
+    // 5) Run it.
+    try {
+      const res = await pd.actions.run({ externalUserId: req.externalUserId, id: key, configuredProps });
+      const output = (res && (res.ret ?? res.exports ?? res)) ?? null;
+      return { ok: true, actionId: key, componentKey: key, app: req.app, output, summary, note: `Done — ${lower(summary)}.` };
+    } catch (err) {
+      return { ok: false, actionId: key, componentKey: key, app: req.app, output: null, summary, note: `${req.app} rejected the run: ${String((err as Error).message)}` };
+    }
+  }
+}
+
+const lower = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+
+/** Pick the component whose name best matches the query (prefer create/add verbs). */
+function pickComponent(rows: any[], query: string): any {
+  if (!rows?.length) return undefined;
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const score = (c: any) => {
+    const n = `${c.name ?? ''} ${c.key ?? c.id ?? ''}`.toLowerCase();
+    let s = 0;
+    for (const w of words) if (n.includes(w)) s += 2;
+    if (/\b(create|add|new)\b/.test(n)) s += 1;
+    return s;
+  };
+  return [...rows].sort((a, b) => score(b) - score(a))[0];
+}
+
+/** Attach the connected account to the app prop, then map semantic params to props. */
+function buildConfiguredProps(props: any[], accountId: string, params: Record<string, string>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const used = new Set<string>();
+  const appProp = (props ?? []).find((p) => p?.type === 'app');
+  if (appProp?.name) {
+    out[appProp.name] = { authProvisionId: accountId };
+    used.add(appProp.name);
+  }
+  const candidates = (props ?? []).filter((p) => p && p.type !== 'app' && p.name);
+  const nameOf = (p: any) => `${p.label ?? ''} ${p.name ?? ''}`.toLowerCase();
+  for (const [semantic, value] of Object.entries(params)) {
+    if (value == null || value === '') continue;
+    const keywords = PARAM_KEYWORDS[semantic] ?? [semantic.toLowerCase()];
+    let hit: any;
+    for (const kw of keywords) {
+      hit = candidates.find((p) => !used.has(p.name) && nameOf(p).includes(kw));
+      if (hit) break;
+    }
+    if (hit) {
+      out[hit.name] = value;
+      used.add(hit.name);
+    }
+  }
+  return out;
 }

@@ -1,4 +1,4 @@
-import { MockInterpreter, type Interpretation, type Interpreter } from './intent.js';
+import { MockInterpreter, appSlugFrom, type ActionOp, type AppAction, type Interpretation, type Interpreter } from './intent.js';
 import type { Session } from './types.js';
 
 /**
@@ -30,7 +30,7 @@ const DEFAULT_OR_MODEL = 'openai/gpt-4o-mini';
 
 const SYSTEM = `You turn a small-business owner's message to their AI marketing employee into structured fields.
 Return ONLY a JSON object with these optional keys:
-  intent: "plan" | "approve" | "connect" | "unknown"
+  intent: "plan" | "approve" | "connect" | "action" | "unknown"
   vertical: "home_services" | "dental"
   category: a category id — home_services: plumbing,hvac,electrical,roofing,garage_door,water_damage,pest_control,landscaping,remodeling; dental: general,cosmetic,orthodontics,implants,emergency_dental
   monthlyBudget: number (whole dollars)
@@ -38,7 +38,17 @@ Return ONLY a JSON object with these optional keys:
   emergency: boolean
   cities: string[]
   businessName: string
-Use "approve" if they are confirming/approving; "connect" if they ask to connect an app; "plan" if they describe the business; else "unknown". Omit keys you can't determine. No prose, JSON only.`;
+  action: an object { app, op, query, params } — ONLY when they ask to DO a specific task inside a connected app
+Intent rules:
+  "approve" if they confirm/approve; "connect" if they ask to connect/link an app;
+  "action" if they ask you to perform a concrete task in an app (e.g. "add a contact to GoHighLevel", "text this lead", "tag them VIP", "add a note");
+  "plan" if they describe the business for a marketing plan; else "unknown".
+For an "action", fill the action object:
+  app: an app slug — gohighlevel, hubspot, salesforce_rest_api, servicetitan, jobber, housecall_pro, twilio, mailchimp, google_sheets, slack (guess the closest; default gohighlevel for CRM/contacts)
+  op: "create_contact" | "send_sms" | "add_note" | "add_tag" | "other"
+  query: a 2-4 word phrase naming the app action, e.g. "create contact", "send SMS", "add note", "add tag"
+  params: only the details they gave, as flat strings — any of: email, phone, firstName, lastName, name, message, note, tag, company
+Omit keys you can't determine. No prose, JSON only.`;
 
 export class LlmInterpreter implements Interpreter {
   readonly name: string;
@@ -68,17 +78,34 @@ export class LlmInterpreter implements Interpreter {
     try {
       const text = this.openrouterKey ? await this.viaOpenRouter(message) : await this.viaAnthropic(message);
       const json = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
-      const intent = ['plan', 'approve', 'connect', 'unknown'].includes(json.intent) ? json.intent : undefined;
+      const intent = ['plan', 'approve', 'connect', 'action', 'unknown'].includes(json.intent) ? json.intent : undefined;
       const fields: Interpretation['fields'] = {};
       for (const k of ['vertical', 'category', 'monthlyBudget', 'goal', 'emergency', 'cities', 'businessName'] as const) {
         if (json[k] !== undefined) (fields as Record<string, unknown>)[k] = json[k];
       }
-      // Trust the mock for intent when the model didn't commit, so approve/connect still work.
+      const action = this.normalizeAction(json.action, message);
+      if (intent === 'action' && action) return { intent: 'action', fields: {}, action };
+      // Trust the mock for intent when the model didn't commit, so approve/connect/action still work.
       const base = this.fallback.interpret(message, session);
+      if (base.intent === 'action') return base;
       return { intent: intent ?? (Object.keys(fields).length ? 'plan' : base.intent), fields, connectApp: base.connectApp };
     } catch {
       return this.fallback.interpret(message, session);
     }
+  }
+
+  /** Validate/repair the model's action object into a well-formed AppAction. */
+  private normalizeAction(a: any, message: string): AppAction | undefined {
+    if (!a || typeof a !== 'object') return undefined;
+    const ops: ActionOp[] = ['create_contact', 'send_sms', 'add_note', 'add_tag', 'other'];
+    const op: ActionOp = ops.includes(a.op) ? a.op : 'other';
+    const app = (typeof a.app === 'string' && a.app.trim()) || appSlugFrom(message) || 'gohighlevel';
+    const params: Record<string, string> = {};
+    if (a.params && typeof a.params === 'object') {
+      for (const [k, v] of Object.entries(a.params)) if (v != null && v !== '') params[k] = String(v);
+    }
+    const query = (typeof a.query === 'string' && a.query.trim()) || op.replace('_', ' ');
+    return { app, op, query, params };
   }
 
   /** OpenRouter's OpenAI-compatible chat-completions API — plain fetch, no SDK. */

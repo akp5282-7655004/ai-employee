@@ -2,7 +2,7 @@ import { parseIntake, type Intake } from '../intake.js';
 import { planCampaign, CHANNEL_LABEL } from '../plan/planner.js';
 import type { CampaignPlan } from '../plan/types.js';
 import type { Connector } from '../connectors/index.js';
-import { MockInterpreter, type Interpreter } from './intent.js';
+import { MockInterpreter, type AppAction, type Interpreter } from './intent.js';
 import type { AgentReply, PartialIntake, ProposedAction, Session } from './types.js';
 
 /**
@@ -59,6 +59,7 @@ export class Agent {
 
     if (interp.intent === 'approve') return this.approve(s);
     if (interp.intent === 'connect') return this.connect(s, interp.connectApp);
+    if (interp.intent === 'action' && interp.action) return this.runTask(s, interp.action);
 
     // Merge anything we learned.
     Object.assign(s.intake, prune(interp.fields));
@@ -131,6 +132,31 @@ export class Agent {
     const token = await this.deps.connector.createConnectToken(s.externalUserId);
     const which = app ? `your ${app} account` : 'an app';
     return { session: s, reply: { text: `To connect ${which}, open: ${token.connectUrl}`, connectUrl: token.connectUrl } };
+  }
+
+  /** "Do this in my app" — run a real task in a connected tool (contacts, texts, notes, tags). */
+  private async runTask(s: Session, action: AppAction): Promise<{ session: Session; reply: AgentReply }> {
+    if (!this.deps.connector.runAppTask) {
+      return { session: s, reply: { text: "I can't run tasks inside your apps on this connection yet — that needs the live Pipedream connection." } };
+    }
+    const res = await this.deps.connector.runAppTask({
+      externalUserId: s.externalUserId,
+      app: action.app,
+      query: action.query,
+      params: action.params,
+    });
+    let text = res.ok ? `✅ ${res.summary}.` : `⚠️ ${res.note ?? `Couldn't ${res.summary}.`}`;
+    let connectUrl: string | undefined;
+    if (!res.ok && /connect/i.test(res.note ?? '')) {
+      try {
+        const token = await this.deps.connector.createConnectToken(s.externalUserId);
+        connectUrl = token.connectUrl;
+        text += `\nConnect here: ${connectUrl}`;
+      } catch {
+        /* no token available */
+      }
+    }
+    return { session: s, reply: { text, connectUrl, task: { ok: res.ok, app: res.app ?? action.app, summary: res.summary } } };
   }
 }
 

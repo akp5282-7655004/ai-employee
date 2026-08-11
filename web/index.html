@@ -1515,9 +1515,9 @@ function currentState(){
 async function snapshotVersion(id,label){ if(!REMOTE) return; try{ await fetch('/api/versions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,label,state:currentState()})}); }catch(e){} }
 // Every change routes by autonomy: at 100% (or auto-deploy on) it goes live and into the log;
 // anything under 100% waits in the queue for a per-item Approve. Each change also drops a restore point.
-function queueChange(type,label){ if(!REMOTE) return; DEPLOY.queue=DEPLOY.queue||[];
+function queueChange(type,label,forceLive){ if(!REMOTE) return; DEPLOY.queue=DEPLOY.queue||[];
   const auton=(AUTOPILOT&&typeof AUTOPILOT.autonomy==='number')?AUTOPILOT.autonomy:50;
-  const live=(auton>=100)||!!DEPLOY.auto; const now=new Date().toISOString();
+  const live=!!forceLive||(auton>=100)||!!DEPLOY.auto; const now=new Date().toISOString();
   const item={id:newId(),type,label,ts:now,status:live?'live':'pending',autonomy:auton,auto:!!DEPLOY.auto};
   if(live){ item.deployedAt=now; DEPLOY.lastDeployedAt=now; }
   DEPLOY.queue.unshift(item); if(DEPLOY.queue.length>300) DEPLOY.queue=DEPLOY.queue.slice(0,300);
@@ -1525,7 +1525,7 @@ function queueChange(type,label){ if(!REMOTE) return; DEPLOY.queue=DEPLOY.queue|
   if($('#page-deploy')&&$('#page-deploy').classList.contains('on')) renderDeploy();
   if($('#page-logs')&&$('#page-logs').classList.contains('on')) renderLogs();
 }
-const DEP_ICON={campaign:'📁',creative:'🖼️',trigger:'⛅',profile:'🏢',assets:'🎨',asset:'📎',change:'•'};
+const DEP_ICON={campaign:'📁',creative:'🖼️',trigger:'⛅',profile:'🏢',assets:'🎨',asset:'📎',action:'⚡',change:'•'};
 function fmtWhen(iso){ try{ return new Date(iso).toLocaleString(); }catch(e){ return ''; } }
 function openDeploy(){ if(!DEPLOY_LOADED){ loadDeploy().then(renderDeploy); } else renderDeploy(); }
 function deployAll(){ const n=pendingCount(); if(!n) return; const now=new Date().toISOString(); DEPLOY.queue.forEach(c=>{ if(c.status==='pending'){ c.status='live'; c.deployedAt=now; } }); DEPLOY.lastDeployedAt=now; saveDeploy(); updateDeployBadge(); renderDeploy(); if($('#page-logs')&&$('#page-logs').classList.contains('on')) renderLogs(); toast(n+' change'+(n===1?'':'s')+' deployed live'); }
@@ -1994,7 +1994,7 @@ function renderResult(reply){
   }
   chat.scrollTop=chat.scrollHeight;
 }
-function dispatch(r){ if(r.plan){renderPlan(r); logChat('emp', r.summary || 'Here’s your plan.');} else if(r.launched!==undefined)renderResult(r); else say('emp',r.text); }
+function dispatch(r){ if(r.plan){renderPlan(r); logChat('emp', r.summary || 'Here’s your plan.');} else if(r.task){ say('emp',r.text); if(r.task.ok) queueChange('action', r.task.summary, true); } else if(r.launched!==undefined)renderResult(r); else say('emp',r.text); }
 async function send(text,silent){const msg=(text!=null?text:cinput.value).trim();if(!msg)return;if(!silent)say('user',msg);cinput.value='';try{dispatch(await apiMessage(msg));}catch(e){say('emp','Sorry — I couldn’t reach the server just now.');}}
 async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId})}); }catch(e){} } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER); } }
 let CHAT_LOG=[], CHAT_LOADED=false, chatSaveT;

@@ -1,11 +1,31 @@
 import type {
   AppInfo,
+  AppTaskRequest,
+  AppTaskResult,
   ConnectedAccount,
   ConnectTokenResult,
   Connector,
   RunActionRequest,
   RunActionResult,
 } from './types.js';
+
+/** A friendly one-line summary of an app task, from its query + params. */
+export function summarizeTask(app: string, query: string, params: Record<string, string>): string {
+  const who =
+    params.name ||
+    [params.firstName, params.lastName].filter(Boolean).join(' ') ||
+    params.email ||
+    params.phone ||
+    'the contact';
+  const detail = params.email && who !== params.email ? ` (${params.email})` : '';
+  const q = query.toLowerCase();
+  if (q.includes('contact') || q.includes('lead')) return `Add ${who}${detail} as a new contact in ${app}`;
+  if (q.includes('sms') || q.includes('text') || q.includes('message'))
+    return `Text ${who}${params.message ? `: “${params.message}”` : ''} via ${app}`;
+  if (q.includes('note')) return `Add a note to ${who} in ${app}${params.note ? `: “${params.note}”` : ''}`;
+  if (q.includes('tag') || q.includes('label')) return `Tag ${who}${params.tag ? ` “${params.tag}”` : ''} in ${app}`;
+  return `Run “${query}” in ${app}`;
+}
 
 /** A curated slice of the app catalog for offline/demo mode. */
 const MOCK_APPS: AppInfo[] = [
@@ -111,6 +131,31 @@ export class MockConnector implements Connector {
       { id: 'd5', value: 2480, won: true, utmSource: 'facebook', utmCampaign: 'meta_ac' },
       { id: 'd6', value: 1714, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing' },
     ];
+  }
+
+  async runAppTask(req: AppTaskRequest): Promise<AppTaskResult> {
+    const summary = summarizeTask(req.app, req.query, req.params);
+    const connected = (this.accounts.get(req.externalUserId) ?? []).some((a) => a.app === req.app);
+    if (!connected) {
+      return {
+        ok: false,
+        actionId: `${req.app}-${req.query.replace(/\s+/g, '-')}`,
+        app: req.app,
+        output: null,
+        summary,
+        note: `No connected "${req.app}" account — connect it first, then I can ${summary.charAt(0).toLowerCase()}${summary.slice(1)}.`,
+      };
+    }
+    const componentKey = `${req.app}-${req.query.replace(/\s+/g, '-')}`;
+    return {
+      ok: true,
+      actionId: componentKey,
+      componentKey,
+      app: req.app,
+      output: { simulated: true, ranAt: new Date().toISOString(), params: req.params },
+      summary,
+      note: 'Mock run — no real API call was made.',
+    };
   }
 
   async runAction(req: RunActionRequest): Promise<RunActionResult> {

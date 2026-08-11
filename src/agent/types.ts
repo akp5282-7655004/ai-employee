@@ -39,6 +39,8 @@ export interface AgentReply {
   /** After an approval: which actions ran, and which need an app connected. */
   launched?: string[];
   blocked?: Array<{ label: string; app: string; actionId: string }>;
+  /** After a "do this in my app" task: what ran, so the UI can log it. */
+  task?: { ok: boolean; app: string; summary: string };
 }
 
 export function newSession(externalUserId: string): Session {

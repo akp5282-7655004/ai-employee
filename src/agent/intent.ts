@@ -7,13 +7,49 @@ import type { PartialIntake, Session } from './types.js';
  * can later implement the same interface for real natural-language understanding,
  * with the whole loop underneath unchanged.
  */
-export type Intent = 'plan' | 'approve' | 'connect' | 'unknown';
+export type Intent = 'plan' | 'approve' | 'connect' | 'action' | 'unknown';
+
+/** Canonical tasks Miles can run inside a connected app (the "hands"). */
+export type ActionOp = 'create_contact' | 'send_sms' | 'add_note' | 'add_tag' | 'other';
+
+/**
+ * A concrete "do this in my app" request, resolved from plain English. `app` is
+ * a slug (gohighlevel, twilio, …); `params` are semantic — email/firstName/phone/
+ * message/note/tag — and the connector maps them onto the real component's props.
+ */
+export interface AppAction {
+  app: string;
+  op: ActionOp;
+  /** A short natural-language phrase used to discover the right app action. */
+  query: string;
+  params: Record<string, string>;
+}
 
 export interface Interpretation {
   intent: Intent;
   fields: PartialIntake;
   /** For a connect request, the app the user named (if any). */
   connectApp?: string;
+  /** For an action request, the task to run in a connected app. */
+  action?: AppAction;
+}
+
+/** App name/phrase → slug. Extend as more CRMs/tools are wired. */
+const APP_ALIASES: Array<[RegExp, string]> = [
+  [/\b(go\s*high\s*level|gohighlevel|ghl|highlevel|lead\s*connector)\b/i, 'gohighlevel'],
+  [/\bhubspot\b/i, 'hubspot'],
+  [/\bsalesforce\b/i, 'salesforce_rest_api'],
+  [/\bservice\s*titan\b/i, 'servicetitan'],
+  [/\bjobber\b/i, 'jobber'],
+  [/\bhousecall\b/i, 'housecall_pro'],
+  [/\btwilio\b/i, 'twilio'],
+  [/\bmailchimp\b/i, 'mailchimp'],
+  [/\bgoogle\s*sheets?\b/i, 'google_sheets'],
+  [/\bslack\b/i, 'slack'],
+];
+export function appSlugFrom(text: string): string | undefined {
+  for (const [re, slug] of APP_ALIASES) if (re.test(text)) return slug;
+  return undefined;
 }
 
 export interface Interpreter {
@@ -52,6 +88,9 @@ export class MockInterpreter implements Interpreter {
     if (/^(y|yes|yep|approve|approved|launch it|do it|go ahead|ship it|confirm)\b/.test(low)) {
       return { intent: 'approve', fields: {} };
     }
+    const action = this.parseAction(t, low);
+    if (action) return { intent: 'action', fields: {}, action };
+
     if (/\bconnect\b/.test(low)) {
       return { intent: 'connect', fields: {}, connectApp: this.parseApp(low) };
     }
@@ -60,6 +99,63 @@ export class MockInterpreter implements Interpreter {
     // If we learned anything plan-relevant, treat it as a planning turn.
     const learned = Object.keys(fields).length > 0;
     return { intent: learned ? 'plan' : 'unknown', fields };
+  }
+
+  /**
+   * Detect a "do this in my app" request. Returns an AppAction only when the
+   * message clearly names a task verb + object (add contact / send text / add
+   * note / add tag), so ordinary planning talk ("get me more calls") never trips it.
+   */
+  private parseAction(t: string, low: string): AppAction | undefined {
+    const app = appSlugFrom(low);
+    let op: ActionOp | undefined;
+    let query = '';
+    if (/\b(add|create|new|make|save)\b[^.]*\b(contact|lead|customer|client|person)\b/.test(low)) {
+      op = 'create_contact';
+      query = 'create contact';
+    } else if (/\b(send|text|shoot)\b[^.]*\b(text|sms|message)\b/.test(low) || (/\btext\b/.test(low) && /\bphone|\+?\d[\d\s().-]{7,}/.test(low))) {
+      op = 'send_sms';
+      query = 'send SMS';
+    } else if (/\b(add|leave|create|write)\b[^.]*\bnote\b/.test(low)) {
+      op = 'add_note';
+      query = 'create note';
+    } else if (/\b(add|apply|put)\b[^.]*\b(tag|label)\b/.test(low) || /\btag\s+(them|it|this|the|as|contact|lead|\w+\s+(?:as|with))/.test(low)) {
+      op = 'add_tag';
+      query = 'add tag';
+    }
+    if (!op) return undefined;
+    // Require either a named app or an unambiguous CRM verb so we don't hijack planning turns.
+    if (!app && op === 'create_contact' && !/\b(crm|contact|lead)\b/.test(low)) return undefined;
+
+    const params = this.parseActionParams(t);
+    return { app: app ?? 'gohighlevel', op, query, params };
+  }
+
+  private parseActionParams(t: string): Record<string, string> {
+    const p: Record<string, string> = {};
+    const email = t.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+    if (email) p.email = email[0];
+    const phone = t.match(/\+?\d[\d\s().-]{7,}\d/);
+    if (phone) p.phone = phone[0].trim();
+    // "name - Miles Employee", "name: Miles Employee", "named Miles Employee", "name is Miles"
+    const name = t.match(/\bnamed?\s*(?:is|[-:])?\s*["“]?([A-Za-z][\w'.-]*(?:\s+[A-Za-z][\w'.-]*){0,3})["”]?/i);
+    if (name) {
+      const full = name[1]!.trim();
+      p.name = full;
+      const parts = full.split(/\s+/);
+      p.firstName = parts[0]!;
+      if (parts.length > 1) p.lastName = parts.slice(1).join(' ');
+    }
+    // message / note body: after "saying", "that says", or in quotes
+    const body = t.match(/\b(?:saying|that says|message|note)\s*[:-]?\s*["“]([^"”]+)["”]/i) || t.match(/["“]([^"”]{3,})["”]/);
+    if (body) {
+      p.message = body[1]!.trim();
+      p.note = body[1]!.trim();
+    }
+    // tag value: "tag them VIP", "add tag VIP"
+    const tag = t.match(/\b(?:tag|label)\s+(?:them\s+|it\s+|as\s+)?["“]?([A-Za-z][\w -]{1,30})["”]?/i);
+    if (tag && !/\b(tag|label)s?\b/i.test(tag[1]!)) p.tag = tag[1]!.trim();
+    return p;
   }
 
   private parseFields(t: string, low: string): PartialIntake {
