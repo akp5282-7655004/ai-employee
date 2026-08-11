@@ -242,6 +242,26 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     await authStore.setUserData(u.id, data);
     return { ok: true };
   });
+  // Model Router setting — Auto vs Manual + quality tier (spec §8), per workspace.
+  app.get('/api/model', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return { model: data.model ?? { mode: 'auto', quality: 'balanced' } };
+  });
+  app.put<{ Body: { model?: { mode?: string; quality?: string } } }>('/api/model', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const m = req.body?.model ?? {};
+    data.model = {
+      mode: m.mode === 'manual' ? 'manual' : 'auto',
+      quality: ['value', 'balanced', 'max'].includes(m.quality ?? '') ? m.quality : 'balanced',
+    };
+    await authStore.setUserData(u.id, data);
+    return { ok: true, model: data.model };
+  });
+
   app.get('/api/usage', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;

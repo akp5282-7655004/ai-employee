@@ -1532,13 +1532,39 @@ function renderDeploy(){
 // ═══ settings hub (account, team, api keys, usage, billing) ═══
 let SETTINGS={account:{name:'',email:''},keys:[],team:[]}, SET_LOADED=false, setTab='account';
 async function loadSettings(){ if(!REMOTE){ SET_LOADED=true; return; } try{ const r=await fetch('/api/settings'); const d=await r.json(); SETTINGS=d; if(!SETTINGS.team) SETTINGS.team=[]; if(!SETTINGS.keys) SETTINGS.keys=[]; }catch(e){} SET_LOADED=true; }
-async function openSettings(){ if(!SET_LOADED) await loadSettings(); renderSettings(); }
-const SET_TABS=[['account','Account'],['team','Team'],['keys','API Keys'],['usage','Usage'],['billing','Billing']];
+async function openSettings(){ if(!SET_LOADED) await loadSettings(); if(!MODEL_LOADED) await loadModel(); renderSettings(); }
+const SET_TABS=[['account','Account'],['model','Model'],['team','Team'],['keys','API Keys'],['usage','Usage'],['billing','Billing']];
+let MODEL={mode:'auto',quality:'balanced'}, MODEL_LOADED=false;
+async function loadModel(){ if(!REMOTE){ MODEL_LOADED=true; return; } try{ const r=await fetch('/api/model'); MODEL=(await r.json()).model||MODEL; }catch(e){} MODEL_LOADED=true; }
+async function saveModel(){ if(!REMOTE) return; try{ await fetch('/api/model',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({model:MODEL})}); }catch(e){} }
 function renderSettings(){
   const bar=$('#set-subtabs'); bar.innerHTML=SET_TABS.map(t=>`<button class="tab${t[0]===setTab?' on':''}" data-stab="${t[0]}">${t[1]}</button>`).join('');
   bar.querySelectorAll('[data-stab]').forEach(b=>b.onclick=()=>{ setTab=b.dataset.stab; renderSettings(); });
   const body=$('#settings-body'); body.innerHTML='';
-  ({account:setAccount,team:setTeam,keys:setKeys,usage:setUsage,billing:setBilling}[setTab]||setAccount)(body);
+  ({account:setAccount,model:setModel,team:setTeam,keys:setKeys,usage:setUsage,billing:setBilling}[setTab]||setAccount)(body);
+}
+function setModel(box){
+  const card=el('div','mcard'); card.style.maxWidth='860px';
+  card.innerHTML='<h3>Model</h3><p class="mdesc" style="max-width:660px">Miles routes every task to the best model at the lowest cost that clears the quality bar — across all vendors (Claude, GPT, Gemini, open-source). You never pick model names; just how hard to push for quality.</p>';
+  card.append(el('div','sect-label','MODE'));
+  const modeRow=el('div','subtabs'); modeRow.style.marginBottom='6px';
+  [['auto','Auto · recommended'],['manual','Manual']].forEach(md=>{ const b=el('button','tab'+(MODEL.mode===md[0]?' on':''),md[1]); b.onclick=()=>{ MODEL.mode=md[0]; saveModel(); renderSettings(); }; modeRow.append(b); });
+  card.append(modeRow);
+  const an=el('div','mdesc'); an.style.margin='0 0 6px'; an.textContent=MODEL.mode==='auto'?'Auto picks the cheapest model that clears the bar per task — the profit-optimal path. Most workspaces never leave it.':'Manual locks your workspace to a quality tier. Better output costs more credits; cheaper output makes your balance last longer.'; card.append(an);
+  card.append(el('div','sect-label',MODEL.mode==='manual'?'QUALITY TIER (LOCKED)':'DEFAULT QUALITY'));
+  const tiers=[
+    {v:'value',label:'Value',burn:'~1x',desc:'Lowest cost — favors the cheapest trusted models that still pass quality checks. Best for volume and stretching your balance.'},
+    {v:'balanced',label:'Balanced',burn:'~1.5–2x',desc:'Default. The bar is set by task complexity and your brand — the right model for the job, most of the time.'},
+    {v:'max',label:'Max Intelligence',burn:'~3–5x',desc:'Highest quality — prefers the strongest reasoners even at higher cost. For your most important, customer-facing work.'},
+  ];
+  const opts=el('div'); opts.style.cssText='display:flex;flex-direction:column;gap:10px';
+  for(const t of tiers){ const sel=MODEL.quality===t.v; const row=el('button','acard'); row.style.cssText='text-align:left;cursor:pointer;margin:0;width:100%;border:'+(sel?'2px solid var(--accent)':'1px solid var(--line)');
+    row.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>'+t.label+' <span class="appsub" style="font-weight:500">· '+t.burn+' credit burn</span></b>'+(sel?'<span class="apill active">CURRENT</span>':'<span class="appsub">Select</span>')+'</div><div class="mdesc" style="margin:5px 0 0">'+t.desc+'</div>';
+    row.onclick=()=>{ MODEL.quality=t.v; saveModel(); renderSettings(); toast('Quality set to '+t.label); };
+    opts.append(row); }
+  card.append(opts);
+  card.append(el('div','verdict tight','🔒 Safety floor: whatever the setting, any money-moving action (launching, pausing, or spending budget) always escalates to a trusted model — Value can make things cheaper, never reckless.'));
+  box.append(card);
 }
 async function saveTeam(){ if(!REMOTE) return; try{ await fetch('/api/team',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({team:SETTINGS.team})}); }catch(e){} }
 function setAccount(box){
