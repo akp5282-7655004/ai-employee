@@ -36,6 +36,8 @@ services:
       #   sync: false
       # - key: FAL_VIDEO_MODEL
       #   sync: false
+      # - key: FAL_TTS_MODEL
+      #   sync: false
       # Optional — a free US Census API key. Research works without it (keyless,
       # ~500 calls/day), but a key raises limits and enables the competition layer
       # (ZIP Business Patterns). Get one free at api.census.gov/data/key_signup.html

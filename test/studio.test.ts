@@ -5,9 +5,10 @@ const brand = { business: 'Rivera Plumbing', category: 'plumbing', city: 'Phoeni
 
 describe('asset catalog', () => {
   it('offers the marketing asset types with a kind each', () => {
-    expect(ASSET_TYPES.map((a) => a.type)).toEqual(['image', 'logo', 'social', 'flyer', 'card', 'video', 'copy', 'doc']);
+    expect(ASSET_TYPES.map((a) => a.type)).toEqual(['image', 'logo', 'social', 'flyer', 'card', 'video', 'voiceover', 'copy', 'doc']);
     expect(specFor('logo')!.kind).toBe('image');
     expect(specFor('video')!.kind).toBe('video');
+    expect(specFor('voiceover')!.kind).toBe('audio');
     expect(specFor('copy')!.kind).toBe('text');
     expect(specFor('nope')).toBeUndefined();
   });

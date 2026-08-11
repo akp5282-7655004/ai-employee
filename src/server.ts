@@ -9,9 +9,18 @@ import { loadConfig, pipedreamReady } from './config.js';
 import { getPack, listPacks, validateIntake } from './packs/index.js';
 import { LSA_TRADES, LSA_BLENDED, LSA_VS_GOOGLE, BENCHMARK_META } from './packs/benchmarks.js';
 import { generateAdCopy, type CreativeRequest } from './creative/creative.js';
-import { falReady, falGenerateImage, falGenerateVideo, type Aspect } from './creative/fal.js';
+import { falReady, falGenerateImage, falGenerateVideo, falGenerateAudio, type Aspect } from './creative/fal.js';
 import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText, type BrandContext } from './creative/studio.js';
 import { generateText, textLlmReady } from './llm/text.js';
+import {
+  TASK_SPECS,
+  isDue,
+  buildMorningBrief,
+  buildCpaReport,
+  type ScheduledAgent,
+  type AgentRun,
+  type TaskType,
+} from './agents/scheduled.js';
 import { fetchDemographics } from './research/census.js';
 import { fetchWeather, evaluateWeatherTriggers } from './research/weather.js';
 import { importSite } from './research/site.js';
@@ -560,6 +569,10 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
         const text = (await generateText({ system, user })) ?? fallbackText(spec.type, body.prompt ?? '', brand);
         return { type: spec.type, kind: 'text', text, live: textLlmReady() };
       }
+      if (spec.kind === 'audio') {
+        const url = await falGenerateAudio(body.prompt ?? '', { voice: body.style });
+        return { type: spec.type, kind: 'audio', url, live: falReady() };
+      }
       const prompt = buildVisualPrompt(spec.type, body.prompt ?? '', brand, body.style);
       const aspect = (body.aspect ?? spec.defaultAspect) as Aspect;
       if (spec.kind === 'video') {
@@ -570,6 +583,103 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       return { type: spec.type, kind: 'image', url, prompt, live: falReady() };
     },
   );
+
+  // ── Scheduled agents — recurring, unattended work (morning brief, CPA report) ──
+  // Runs a task now and returns its written result. Reused by the endpoint + scheduler.
+  async function runScheduledTask(userId: string, task: TaskType): Promise<{ title: string; body: string }> {
+    const data = await authStore.getUserData(userId);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    if (task === 'cpa_report') {
+      const spend = connector.getAdSpend ? await connector.getAdSpend(userId) : [];
+      const deals = connector.getDeals ? await connector.getDeals(userId) : [];
+      const targetCpa = Number(p.targetCpa) || 85;
+      const r = buildCpaReport(spend, deals, targetCpa);
+      return { title: r.title, body: r.body };
+    }
+    // morning_brief
+    let weatherLine: string | undefined;
+    let weatherOpportunity: string | undefined;
+    const zip = (p.zip || '').replace(/\D/g, '').slice(0, 5);
+    if (zip) {
+      try {
+        const w = await fetchWeather(zip);
+        if (w) {
+          weatherLine = `${Math.round(w.tempF)}°F${w.shortForecast ? `, ${w.shortForecast}` : ''}`;
+          const trigs = evaluateWeatherTriggers(w, p.industry);
+          if (trigs[0]) weatherOpportunity = trigs[0].action || trigs[0].label;
+        }
+      } catch {
+        /* weather is best-effort */
+      }
+    }
+    const deploy = (data.deploy ?? {}) as { queue?: Array<{ status?: string }> };
+    const pendingApprovals = (deploy.queue ?? []).filter((c) => c.status === 'pending').length;
+    const activeTriggers = ((data.weatherRules as Array<{ enabled?: boolean }>) ?? []).filter((r) => r.enabled).length;
+    const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    return buildMorningBrief({ business: p.businessName, dateLabel, weatherLine, weatherOpportunity, pendingApprovals, activeTriggers });
+  }
+
+  function appendRun(data: Record<string, unknown>, agent: ScheduledAgent, result: { title: string; body: string }): AgentRun {
+    const run: AgentRun = { id: newToken().slice(0, 10), agentId: agent.id, task: agent.task, ts: new Date().toISOString(), ...result };
+    data.agentRuns = [run, ...(((data.agentRuns as AgentRun[]) ?? []))].slice(0, 50);
+    return run;
+  }
+
+  app.get('/api/schedules', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return { agents: (data.schedules as ScheduledAgent[]) ?? [], runs: (data.agentRuns as AgentRun[]) ?? [], tasks: TASK_SPECS };
+  });
+  app.put<{ Body: { agents?: ScheduledAgent[] } }>('/api/schedules', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    data.schedules = (req.body?.agents ?? []).slice(0, 25);
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+  app.post<{ Body: { id?: string } }>('/api/schedules/run', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const agent = ((data.schedules as ScheduledAgent[]) ?? []).find((a) => a.id === req.body?.id);
+    if (!agent) return reply.code(404).send({ error: 'agent not found' });
+    const result = await runScheduledTask(u.id, agent.task);
+    const run = appendRun(data, agent, result);
+    agent.lastRunAt = run.ts;
+    await authStore.setUserData(u.id, data);
+    return { ok: true, run };
+  });
+
+  // The scheduler tick — find every due agent across all users and run it. Called
+  // on an interval by index.ts (never during tests). Best-effort: logged, never throws.
+  (app as unknown as { runDueSchedules: () => Promise<void> }).runDueSchedules = async () => {
+    const now = new Date();
+    let ids: string[];
+    try {
+      ids = await authStore.listUserIds();
+    } catch {
+      return;
+    }
+    for (const uid of ids) {
+      try {
+        const data = await authStore.getUserData(uid);
+        const agents = (data.schedules as ScheduledAgent[]) ?? [];
+        let changed = false;
+        for (const agent of agents) {
+          if (!isDue(agent, now)) continue;
+          const result = await runScheduledTask(uid, agent.task);
+          appendRun(data, agent, result);
+          agent.lastRunAt = new Date().toISOString();
+          changed = true;
+        }
+        if (changed) await authStore.setUserData(uid, data);
+      } catch {
+        /* one user's failure never stops the rest */
+      }
+    }
+  };
 
   // Real observed LSA economics (SearchLight benchmark) + the breakeven math.
   app.get('/api/benchmarks', async () => ({

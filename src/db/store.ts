@@ -35,4 +35,6 @@ export interface Store {
   /** Per-user blob (their intake, connected apps, saved research, …). */
   getUserData(userId: string): Promise<Record<string, unknown>>;
   setUserData(userId: string, data: Record<string, unknown>): Promise<void>;
+  /** All user ids that have stored data — used by the scheduler to find due agents. */
+  listUserIds(): Promise<string[]>;
 }

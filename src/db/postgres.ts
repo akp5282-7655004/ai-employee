@@ -84,4 +84,8 @@ export class PostgresStore implements Store {
       [userId, JSON.stringify(data)],
     );
   }
+  async listUserIds(): Promise<string[]> {
+    const r = await this.pool.query('SELECT user_id FROM user_data');
+    return r.rows.map((row: { user_id: string }) => row.user_id);
+  }
 }

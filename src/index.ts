@@ -11,6 +11,14 @@ async function main() {
   await app.listen({ port, host });
   // eslint-disable-next-line no-console
   console.log(`Miles listening on http://${host}:${port} (store: ${authStore.name})`);
+
+  // Scheduled agents: tick every minute to run any due morning briefs / reports.
+  const runDue = (app as unknown as { runDueSchedules?: () => Promise<void> }).runDueSchedules;
+  if (runDue && !process.env.MILES_NO_SCHEDULER) {
+    setInterval(() => {
+      void runDue().catch(() => {});
+    }, 60_000);
+  }
 }
 
 main().catch((err) => {

@@ -6,8 +6,8 @@
  */
 import type { Aspect } from './fal.js';
 
-export type AssetKind = 'image' | 'video' | 'text';
-export type AssetType = 'image' | 'logo' | 'social' | 'flyer' | 'card' | 'video' | 'copy' | 'doc';
+export type AssetKind = 'image' | 'video' | 'text' | 'audio';
+export type AssetType = 'image' | 'logo' | 'social' | 'flyer' | 'card' | 'video' | 'voiceover' | 'copy' | 'doc';
 
 export interface AssetTypeSpec {
   type: AssetType;
@@ -25,6 +25,7 @@ export const ASSET_TYPES: AssetTypeSpec[] = [
   { type: 'flyer', label: 'Flyer', kind: 'image', defaultAspect: '4:5', hint: 'A printable promo / ad' },
   { type: 'card', label: 'Card / Invite', kind: 'image', defaultAspect: '4:5', hint: 'A card or invitation' },
   { type: 'video', label: 'Video clip', kind: 'video', defaultAspect: '16:9', hint: 'A short AI video (slow + pricier)' },
+  { type: 'voiceover', label: 'Voiceover', kind: 'audio', defaultAspect: '1:1', hint: 'Text-to-speech from a script' },
   { type: 'copy', label: 'Ad copy', kind: 'text', defaultAspect: '1:1', hint: 'Headlines + ad text' },
   { type: 'doc', label: 'Doc / Email', kind: 'text', defaultAspect: '1:1', hint: 'An email, blog, or one-pager' },
 ];

@@ -1,0 +1,75 @@
+import { describe, expect, it } from 'vitest';
+import { isDue, buildCpaReport, buildMorningBrief, type ScheduledAgent } from '../src/agents/scheduled.js';
+
+const agent = (o: Partial<ScheduledAgent> = {}): ScheduledAgent => ({
+  id: 'a1', name: 'Brief', task: 'morning_brief', time: '08:30', days: [1, 2, 3, 4, 5], enabled: true, tzOffset: 0, createdAt: '', ...o,
+});
+
+describe('isDue', () => {
+  // A Monday at 08:30 UTC (tzOffset 0).
+  const mon0830 = new Date('2026-08-10T08:30:00Z');
+  it('fires at the scheduled minute on a scheduled weekday', () => {
+    expect(isDue(agent(), mon0830)).toBe(true);
+  });
+  it('does not fire before the time or long after', () => {
+    expect(isDue(agent(), new Date('2026-08-10T08:29:00Z'))).toBe(false);
+    expect(isDue(agent(), new Date('2026-08-10T08:40:00Z'))).toBe(false);
+  });
+  it('forgives a few minutes of scheduler lag', () => {
+    expect(isDue(agent(), new Date('2026-08-10T08:33:00Z'))).toBe(true);
+  });
+  it('skips days not in the schedule (Sunday)', () => {
+    expect(isDue(agent(), new Date('2026-08-09T08:30:00Z'))).toBe(false);
+  });
+  it('respects the timezone offset (PST 08:30 local = 16:30 UTC)', () => {
+    const pst = agent({ tzOffset: 480 });
+    expect(isDue(pst, new Date('2026-08-10T16:30:00Z'))).toBe(true);
+    expect(isDue(pst, new Date('2026-08-10T08:30:00Z'))).toBe(false);
+  });
+  it('runs only once per local day', () => {
+    expect(isDue(agent({ lastRunAt: '2026-08-10T08:30:00Z' }), new Date('2026-08-10T08:31:00Z'))).toBe(false);
+  });
+  it('never fires when disabled', () => {
+    expect(isDue(agent({ enabled: false }), mon0830)).toBe(false);
+  });
+});
+
+describe('buildCpaReport', () => {
+  const spend = [
+    { platform: 'google_ads', campaign: 'Plumbing', utm: 'g', spend: 1200, clicks: 400, conversions: 20 }, // $60 CPA
+    { platform: 'facebook', campaign: 'AC', utm: 'f', spend: 900, clicks: 500, conversions: 6 }, // $150 CPA
+  ];
+  it('computes CPA per platform and flags the ones over target', () => {
+    const r = buildCpaReport(spend, [], 85);
+    const g = r.rows.find((x) => x.platform === 'google_ads')!;
+    const f = r.rows.find((x) => x.platform === 'facebook')!;
+    expect(g.cpa).toBe(60);
+    expect(g.status).toBe('under');
+    expect(f.cpa).toBe(150);
+    expect(f.status).toBe('over');
+    expect(r.overCount).toBe(1);
+    expect(r.body).toContain('OVER target');
+  });
+  it('handles a platform with no conversions without dividing by zero', () => {
+    const r = buildCpaReport([{ platform: 'google_ads', campaign: 'x', utm: 'g', spend: 500, clicks: 100, conversions: 0 }], [], 85);
+    expect(r.rows[0]!.status).toBe('no_data');
+    expect(r.rows[0]!.cpa).toBeNull();
+  });
+  it('says so cleanly when there is no ad data at all', () => {
+    const r = buildCpaReport([], [], 85);
+    expect(r.body.toLowerCase()).toContain('connect');
+  });
+});
+
+describe('buildMorningBrief', () => {
+  it('lists pending approvals and weather as real to-dos', () => {
+    const b = buildMorningBrief({
+      business: 'Rivera Plumbing', dateLabel: 'Monday, August 10', weatherLine: '104°F, Sunny',
+      weatherOpportunity: 'Push AC emergency ads', pendingApprovals: 2, activeTriggers: 1,
+    });
+    expect(b.title).toContain('Morning brief');
+    expect(b.body).toContain('Rivera Plumbing');
+    expect(b.body).toContain('104°F');
+    expect(b.body).toContain('Approve 2 changes');
+  });
+});

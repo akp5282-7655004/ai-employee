@@ -301,6 +301,7 @@
     <nav class="nav" id="nav">
       <a data-page="dashboard" class="on"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg> Dashboard</a>
       <a data-page="agents"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/></svg> Agents &amp; Specialists</a>
+      <a data-page="schedules" class="sub"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M12 3h.01M5 4L3 6M19 4l2 2"/></svg> Scheduled Agents</a>
       <a data-page="autopilot"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M12 12l4-2"/></svg> Autopilot</a>
       <a data-page="skills"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 2.2 5.6L20 9l-4.3 3.8L17 19l-5-3-5 3 1.3-6.2L4 9l5.8-.4Z"/></svg> Skills &amp; Playbooks</a>
       <a data-page="analytics"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Analytics</a>
@@ -516,6 +517,11 @@
     <!-- AUTOPILOT -->
     <section class="page" id="page-autopilot">
       <div id="autopilot-body"></div>
+    </section>
+
+    <!-- SCHEDULED AGENTS -->
+    <section class="page" id="page-schedules">
+      <div id="schedules-body"></div>
     </section>
 
     <!-- SKILLS -->
@@ -937,13 +943,14 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',studio:'Creative Studio',hub:'Marketing Hub',assets:'Brand Assets',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
+const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',schedules:'Scheduled Agents',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',studio:'Creative Studio',hub:'Marketing Hub',assets:'Brand Assets',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
   const homeIds=['dashboard','agents'];
   $('#page-home').classList.toggle('on',homeIds.includes(id));
   $('#page-autopilot').classList.toggle('on',id==='autopilot');
+  $('#page-schedules').classList.toggle('on',id==='schedules');
   $('#page-skills').classList.toggle('on',id==='skills');
   $('#page-market').classList.toggle('on',id==='market');
   $('#page-meters').classList.toggle('on',id==='meters');
@@ -962,6 +969,7 @@ function setPage(id){
   $('#page-chat').classList.toggle('on',id==='chat');
   if(id==='profile') loadProfile();
   if(id==='autopilot') openAutopilot();
+  if(id==='schedules') openSchedules();
   if(id==='skills') openSkills();
   if(id==='market') openMarket();
   if(homeIds.includes(id) && activeCat==='Math Skills'){ activeCat='Popular tasks'; renderTabs(); renderCards(); }
@@ -1404,11 +1412,14 @@ function renderStudio(){
   } else if(spec.kind==='video'){
     ob.append(studioOpt('Aspect ratio',['16:9','9:16','1:1'],studioAspect||'16:9',v=>studioAspect=v));
     ob.append(studioOpt('Length (sec)',['5','10'],studioDuration,v=>studioDuration=Number(v)));
+  } else if(spec.kind==='audio'){
+    ob.append(studioOpt('Voice',['Josh','Anna','Wilder','Chloe'],studioStyle==='Auto'?'Anna':studioStyle,v=>studioStyle=v));
   }
-  const ta=$('#studio-prompt'); if(ta) ta.placeholder='Describe your '+spec.label.toLowerCase()+', and Miles will bring it to life…';
+  const ta=$('#studio-prompt'); if(ta) ta.placeholder = spec.kind==='audio' ? 'Write exactly what the voice should read out loud…' : ('Describe your '+spec.label.toLowerCase()+', and Miles will bring it to life…');
   const note=$('#studio-note');
   if(spec.kind==='text') note.textContent = STUDIO.textLive?'Miles writes this custom for your business.':'Demo copy until an AI key is added.';
   else if(spec.kind==='video') note.textContent = STUDIO.imagesLive?'Video takes ~1 minute and uses the most credits.':'Demo preview until FAL_KEY is added.';
+  else if(spec.kind==='audio') note.textContent = STUDIO.imagesLive?'Text-to-speech from your script.':'Demo state until FAL_KEY (+ a TTS model) is added.';
   else note.textContent = STUDIO.imagesLive?'Generated on-brand from your business details.':'Demo preview until FAL_KEY is added for real images.';
   $('#studio-go').onclick=studioGenerate;
 }
@@ -1439,6 +1450,11 @@ function renderStudioResult(r,spec){
   if(r.kind==='video'){
     if(r.url){ const v=el('video'); v.src=r.url; v.controls=true; v.style.cssText='max-width:100%;border-radius:12px'; box.append(v); const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px'; bar.append(studioDownload(r.url,'miles-video.mp4')); box.append(bar); }
     else box.append(el('div','verdict tight','🎬 To generate real video, add FAL_KEY (and optionally FAL_VIDEO_MODEL) on Render. Video is the priciest, slowest asset — everything else works today.'));
+    return;
+  }
+  if(r.kind==='audio'){
+    if(r.url){ const a=el('audio'); a.src=r.url; a.controls=true; a.style.cssText='width:100%;margin-top:4px'; box.append(a); const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px'; bar.append(studioDownload(r.url,'voiceover.mp3')); box.append(bar); }
+    else box.append(el('div','verdict tight','🎙️ Voiceover needs FAL_KEY + a TTS model (set FAL_TTS_MODEL) on Render. Add it and this reads your script aloud in a real voice.'));
     return;
   }
   if(r.url){
@@ -1697,6 +1713,56 @@ function renderLogs(){
     box.append(gh);
     for(const c of g.items) box.append(logRow(c, ids.has(c.id)));
   }
+}
+
+// ═══ scheduled agents (recurring, unattended work) ═══
+const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const SCHED_TASKS_FB=[{task:'morning_brief',label:'Morning brief + to-do list',description:'A daily rundown — weather, approvals, priorities.',defaultTime:'08:30'},{task:'cpa_report',label:'Marketing performance report',description:'CPA across platforms vs. your target.',defaultTime:'09:00'}];
+let SCHED={agents:[],runs:[],tasks:SCHED_TASKS_FB}, SCHED_LOADED=false;
+async function openSchedules(){ if(!SCHED_LOADED){ if(REMOTE){ try{ const r=await fetch('/api/schedules'); const d=await r.json(); SCHED=d; }catch(e){} } if(!SCHED.tasks||!SCHED.tasks.length) SCHED.tasks=SCHED_TASKS_FB; if(!SCHED.agents) SCHED.agents=[]; if(!SCHED.runs) SCHED.runs=[]; SCHED_LOADED=true; } renderSchedules(); }
+async function saveSchedules(){ if(!REMOTE) return; try{ await fetch('/api/schedules',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({agents:SCHED.agents})}); }catch(e){} }
+function schedSummary(a){ const days=a.days.length===7?'Every day':(a.days.join(',')==='1,2,3,4,5'?'Weekdays':(a.days.join(',')==='0,6'?'Weekends':a.days.map(d=>DOW[d]).join(', '))); return days+' at '+a.time; }
+function renderSchedules(){
+  const box=$('#schedules-body'); if(!box) return; box.innerHTML='';
+  const head=el('div'); head.innerHTML='<h3 style="margin:0">Scheduled Agents</h3><p class="mdesc" style="margin:4px 0 0;max-width:700px">Put Miles on a schedule. It runs recurring work on its own — a morning brief, a performance report — and drops the result below. Runs automatically while Miles is online; hit “Run now” to try it anytime.</p>';
+  box.append(head);
+  const addBtn=el('button','pf-save','+ New scheduled agent'); addBtn.style.marginTop='16px'; addBtn.onclick=schedForm; box.append(addBtn);
+  const list=el('div'); list.style.marginTop='16px';
+  if(!SCHED.agents.length) list.append(el('div','verdict ok','No scheduled agents yet. Add one — e.g. a morning brief at 8:30am on weekdays, or a marketing performance report.'));
+  for(const a of SCHED.agents){
+    const row=el('div','acard'); row.style.marginBottom='10px';
+    const top=el('div'); top.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:10px';
+    const l=el('div'); l.innerHTML='<b>'+esc(a.name)+'</b><div class="mdesc" style="margin:2px 0 0">'+esc(schedSummary(a))+(a.lastRunAt?' · last ran '+fmtWhen(a.lastRunAt):'')+'</div>';
+    const right=el('div'); right.style.cssText='display:flex;gap:8px;align-items:center';
+    const sw=el('label','switch'); const ci=el('input'); ci.type='checkbox'; ci.checked=!!a.enabled; const sl=el('span','sl'); sw.append(ci,sl); ci.onchange=()=>{ a.enabled=ci.checked; saveSchedules(); };
+    const run=el('button','go','Run now'); run.style.cssText='flex:none;padding:6px 12px'; run.onclick=()=>schedRunNow(a,run);
+    const del=el('button','idel','Delete'); del.onclick=()=>{ SCHED.agents=SCHED.agents.filter(x=>x.id!==a.id); saveSchedules(); renderSchedules(); };
+    right.append(sw,run,del); top.append(l,right); row.append(top); list.append(row);
+  }
+  box.append(list);
+  box.append(el('div','sect-label','RECENT RUNS'));
+  if(!SCHED.runs.length){ box.append(el('div','appsub','Nothing yet — run an agent to see its output here.')); return; }
+  for(const r of SCHED.runs){ const row=el('div','arow'); const l=el('div','rl'); l.append(el('b','','📋  '+r.title)); l.append(el('span','',fmtWhen(r.ts))); const v=el('button','idel','View'); v.onclick=()=>schedShowRun(r); row.append(l,v); box.append(row); }
+}
+function schedShowRun(r){ showModal('<h3 style="margin:0 0 6px">'+esc(r.title)+'</h3><div class="appsub" style="margin:0 0 12px">'+fmtWhen(r.ts)+'</div><div style="white-space:pre-wrap;font-size:14px;line-height:1.6;max-height:58vh;overflow:auto;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:14px">'+esc(r.body)+'</div><button class="go" id="run-done" style="width:100%;margin-top:14px">Close</button>'); $('#run-done').onclick=closeModal; }
+async function schedRunNow(a,btn){ if(!REMOTE){ toast('Run now works on the live app'); return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Running…'; try{ const r=await(await fetch('/api/schedules/run',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:a.id})})).json(); if(r.run){ SCHED.runs.unshift(r.run); a.lastRunAt=r.run.ts; renderSchedules(); schedShowRun(r.run); } else toast('Run failed'); }catch(e){ toast('Run failed'); } btn.disabled=false; btn.textContent=old; }
+function schedForm(){
+  const tasks=SCHED.tasks||SCHED_TASKS_FB;
+  const opts=tasks.map(t=>'<option value="'+t.task+'">'+esc(t.label)+'</option>').join('');
+  const dayChips=DOW.map((d,i)=>'<button type="button" class="tab'+([1,2,3,4,5].includes(i)?' on':'')+'" data-day="'+i+'" style="padding:5px 11px">'+d+'</button>').join('');
+  showModal('<h3 style="margin:0 0 12px">New scheduled agent</h3>'+
+    '<label class="f" style="display:block;margin-bottom:3px">Task</label><select class="f" id="sf-task" style="margin:0 0 6px;width:100%">'+opts+'</select>'+
+    '<div class="mdesc" id="sf-desc" style="margin:0 0 12px"></div>'+
+    '<label class="f" style="display:block;margin-bottom:3px">Name</label><input class="f" id="sf-name" style="margin:0 0 12px;width:100%" placeholder="e.g. Daily morning brief">'+
+    '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start"><div><label class="f" style="display:block;margin-bottom:3px">Time</label><input class="f" id="sf-time" type="time" value="08:30" style="margin:0"></div>'+
+    '<div style="flex:1;min-width:220px"><label class="f" style="display:block;margin-bottom:3px">Days</label><div class="subtabs" id="sf-days" style="gap:6px;flex-wrap:wrap">'+dayChips+'</div></div></div>'+
+    '<button class="go" id="sf-save" style="width:100%;margin-top:18px">Create agent</button>');
+  const days=new Set([1,2,3,4,5]);
+  $('#sf-days').querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>{ const d=Number(b.dataset.day); if(days.has(d)){days.delete(d); b.classList.remove('on');} else {days.add(d); b.classList.add('on');} });
+  const tsel=$('#sf-task'), nameI=$('#sf-name'), timeI=$('#sf-time'), desc=$('#sf-desc');
+  const sync=()=>{ const t=tasks.find(x=>x.task===tsel.value); if(t){ desc.textContent=t.description||''; timeI.value=t.defaultTime||'08:30'; nameI.placeholder='e.g. '+t.label; } };
+  tsel.onchange=sync; sync();
+  $('#sf-save').onclick=()=>{ const task=tsel.value; const t=tasks.find(x=>x.task===task); const name=(nameI.value||'').trim()||(t&&t.label)||'Scheduled agent'; if(!days.size){ toast('Pick at least one day'); return; } const a={id:newId(),name,task,time:timeI.value||'08:30',days:[...days].sort((x,y)=>x-y),enabled:true,tzOffset:new Date().getTimezoneOffset(),createdAt:new Date().toISOString()}; SCHED.agents.push(a); saveSchedules(); closeModal(); renderSchedules(); toast('Scheduled agent created'); };
 }
 
 // ═══ settings hub (account, team, api keys, usage, billing) ═══

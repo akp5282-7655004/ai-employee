@@ -52,4 +52,7 @@ export class MemoryStore implements Store {
   async setUserData(userId: string, data: Record<string, unknown>): Promise<void> {
     this.data.set(userId, data);
   }
+  async listUserIds(): Promise<string[]> {
+    return Array.from(this.data.keys());
+  }
 }

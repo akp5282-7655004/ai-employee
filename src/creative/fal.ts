@@ -83,3 +83,29 @@ export async function falGenerateVideo(prompt: string, opts: VideoOpts = {}): Pr
     return null;
   }
 }
+
+export interface AudioOpts {
+  voice?: string;
+  model?: string;
+}
+
+/**
+ * Text-to-speech via a fal.ai TTS model — a voiceover from any script. The exact
+ * model + voice ids vary by provider, so both are env-overridable and any error
+ * returns null (the UI then shows the demo state). Set FAL_TTS_MODEL to pin one.
+ */
+export async function falGenerateAudio(text: string, opts: AudioOpts = {}): Promise<string | null> {
+  const key = process.env.FAL_KEY;
+  if (!key || !text.trim()) return null;
+  try {
+    const fal = await falClient(key);
+    const model = opts.model || process.env.FAL_TTS_MODEL || 'fal-ai/playai/tts/v3';
+    const input: Record<string, unknown> = { input: text, text };
+    if (opts.voice) input.voice = opts.voice;
+    const res = await fal.subscribe(model, { input, logs: false });
+    const url = res?.data?.audio?.url ?? res?.audio?.url ?? res?.data?.audio_url ?? res?.audio_url ?? null;
+    return typeof url === 'string' ? url : null;
+  } catch {
+    return null;
+  }
+}
