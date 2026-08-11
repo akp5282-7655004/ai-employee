@@ -301,6 +301,10 @@
   .fb-stars{display:flex;gap:6px;margin:4px 0 14px;}
   .fb-star{font-size:24px;cursor:pointer;filter:grayscale(1) opacity(.45);transition:filter .1s;}
   .fb-star.on{filter:none;}
+  .pf-sechead{grid-column:1/-1;font-weight:800;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:16px 0 0;padding-top:14px;border-top:1px solid var(--line);}
+  .pf-sechead:first-child{margin-top:0;padding-top:0;border-top:none;}
+  .importbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:16px;}
+  .importbar input{flex:1;min-width:200px;border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:14px;background:var(--panel);color:var(--ink);outline:none;}
 
   @media (max-width:1000px){ .stats{grid-template-columns:repeat(2,1fr);} .cards{grid-template-columns:repeat(2,1fr);} .meters,.intgrid{grid-template-columns:1fr;} }
   @media (max-width:760px){ .app{grid-template-columns:1fr;} .side{display:none;} .cards{grid-template-columns:1fr;} }
@@ -568,7 +572,9 @@
     <section class="page" id="page-profile">
       <div class="mcard" style="max-width:760px">
         <h3>Business Profile</h3>
-        <p class="mdesc">Everything Miles needs to run marketing for you. Update anytime — plans use these details.</p>
+        <p class="mdesc">Everything Miles needs to run marketing for you. Update anytime — plans, ads, and content use these details.</p>
+        <div class="importbar"><span style="font-size:18px">🌐</span><input id="pf-website" placeholder="Re-import from yourbusiness.com"><button class="go" id="pf-import" style="flex:none">Import</button></div>
+        <div id="pf-import-note" class="appsub" style="margin:-8px 0 12px"></div>
         <div class="pf"><div class="pf-grid" id="profile-form"></div></div>
         <button class="pf-save" id="profile-save">Save changes</button>
         <span id="profile-note" class="appsub" style="margin-left:12px"></span>
@@ -590,7 +596,9 @@
   <div class="overlay" id="onboard">
     <div class="sheet">
       <h2>Let's set up your business</h2>
-      <p class="sd">Miles needs to understand your business before it can run marketing for you. This becomes your customer profile — you can edit it anytime.</p>
+      <p class="sd">Start with your website — Miles reads it and fills in as much as it can. Then just review and complete the rest. This becomes your marketing profile; you can edit it anytime.</p>
+      <div class="importbar"><span style="font-size:18px">🌐</span><input id="ob-website" placeholder="yourbusiness.com" autocomplete="url"><button class="go" id="ob-import" style="flex:none">Import my info</button></div>
+      <div id="ob-import-note" class="appsub" style="margin:-8px 0 14px"></div>
       <div class="pf"><div class="pf-grid" id="onboard-form"></div></div>
       <button class="pf-save" id="onboard-save">Save &amp; get started</button>
     </div>
@@ -2354,34 +2362,112 @@ cinput.addEventListener('input',()=>{cinput.style.height='auto';cinput.style.hei
 $('#theme').onclick=()=>{const c=document.documentElement.getAttribute('data-theme');document.documentElement.setAttribute('data-theme',c==='dark'?'light':'dark');};
 
 // ═══ auth + customer profile ═══
-const PROFILE_FIELDS=[
-  {k:'businessName',label:'Business name',type:'text',full:true,ph:'e.g. Rapid Response Plumbing'},
-  {k:'industry',label:'Industry',type:'select',options:['Home Services','Roofing','Dental','Solar','Other']},
-  {k:'services',label:'What services do you offer?',type:'textarea',full:true,ph:'e.g. drain cleaning, water heaters, sewer line…'},
-  {k:'employees',label:'How many employees?',type:'number'},
-  {k:'yearStarted',label:'Year founded',type:'number',ph:'e.g. 2012'},
-  {k:'serviceAreas',label:'Areas you service',type:'text',full:true,ph:'cities / neighborhoods'},
-  {k:'zip',label:'ZIP code',type:'text',ph:'e.g. 19104'},
-  {k:'monthlyBudget',label:'Monthly marketing budget ($)',type:'number'},
-  {k:'goal',label:'Your marketing goal / plan',type:'textarea',full:true,ph:'e.g. more calls for high-ticket jobs'},
-  {k:'existingMarketing',label:'Where have you marketed before?',type:'textarea',full:true,ph:'Google, Facebook, mailers, none yet…'},
+// A full marketing intake — grouped by discipline. Most fields auto-fill from the
+// website crawl; the rest the owner completes. Only businessName is required.
+const PROFILE_SECTIONS=[
+  {title:'Your business',fields:[
+    {k:'businessName',label:'Business name',type:'text',full:true,ph:'e.g. Rivera Plumbing & AC'},
+    {k:'industry',label:'Industry',type:'select',options:['Home Services','Plumbing','HVAC','Electrical','Roofing','Landscaping','Cleaning','Pest Control','Dental','Solar','Other']},
+    {k:'yearStarted',label:'Year founded',type:'number',ph:'e.g. 2012'},
+    {k:'description',label:'What you do & what makes you different',type:'textarea',full:true,ph:'Your pitch in a sentence or two — the thing customers pick you for.'},
+    {k:'phone',label:'Phone',type:'text'},
+    {k:'email',label:'Email',type:'text'},
+    {k:'employees',label:'Team size',type:'number'},
+  ]},
+  {title:'Location & service area',fields:[
+    {k:'address',label:'Street address',type:'text',full:true},
+    {k:'city',label:'City',type:'text'},
+    {k:'state',label:'State',type:'text'},
+    {k:'zip',label:'ZIP code',type:'text',ph:'e.g. 85001'},
+    {k:'serviceAreas',label:'Cities & neighborhoods you serve',type:'textarea',full:true,ph:'Phoenix, Scottsdale, Tempe…'},
+  ]},
+  {title:'Services & offers',fields:[
+    {k:'services',label:'Services you offer',type:'textarea',full:true,ph:'drain cleaning, water heaters, AC repair…'},
+    {k:'topServices',label:'Most profitable / priority services',type:'text',full:true,ph:'the jobs you want more of'},
+    {k:'avgTicket',label:'Average job value ($)',type:'number'},
+    {k:'currentOffers',label:'Current promotions / offers',type:'text',full:true,ph:'e.g. $79 AC tune-up'},
+  ]},
+  {title:'Goals & budget',fields:[
+    {k:'goal',label:'Primary goal',type:'select',options:['More calls & leads','Higher-ticket jobs','Fill the schedule','Brand awareness']},
+    {k:'monthlyBudget',label:'Monthly marketing budget ($)',type:'number'},
+    {k:'targetCpa',label:'Target cost per lead ($)',type:'number'},
+    {k:'idealCustomer',label:'Your ideal customer',type:'textarea',full:true,ph:'homeowners, 35–65, specific neighborhoods…'},
+  ]},
+  {title:'SEO & website',fields:[
+    {k:'website',label:'Website',type:'text',full:true,ph:'yourbusiness.com'},
+    {k:'websitePlatform',label:'Website platform',type:'select',options:['Not sure','WordPress','Wix','Squarespace','GoDaddy','GoHighLevel','Webflow','Custom']},
+    {k:'gbpClaimed',label:'Google Business Profile claimed?',type:'select',options:['Not sure','Yes','No']},
+    {k:'targetKeywords',label:'Services / keywords you want to rank for',type:'textarea',full:true,ph:'emergency plumber phoenix, water heater repair…'},
+  ]},
+  {title:'Paid ads (PPC)',fields:[
+    {k:'runningAds',label:'Running paid ads now?',type:'select',options:['None yet','Google Ads','Meta (FB/IG)','Both','Other']},
+    {k:'adSpend',label:'Current monthly ad spend ($)',type:'number'},
+    {k:'adResults',label:'What has worked or not in ads',type:'textarea',full:true,ph:'Anything you\'ve tried and how it went.'},
+  ]},
+  {title:'Social media',fields:[
+    {k:'facebook',label:'Facebook URL',type:'text'},
+    {k:'instagram',label:'Instagram URL',type:'text'},
+    {k:'linkedin',label:'LinkedIn URL',type:'text'},
+    {k:'tiktok',label:'TikTok URL',type:'text'},
+    {k:'youtube',label:'YouTube URL',type:'text'},
+    {k:'postingFrequency',label:'How often do you post?',type:'select',options:['Not active','Rarely','Weekly','A few times a week','Daily']},
+  ]},
+  {title:'Email & SMS',fields:[
+    {k:'collectsEmails',label:'Collect customer emails?',type:'select',options:['Not sure','Yes','No']},
+    {k:'emailListSize',label:'Email list size',type:'number'},
+    {k:'emailTool',label:'Email tool',type:'text',ph:'Mailchimp, GoHighLevel…'},
+    {k:'sendsNewsletter',label:'Send regular emails / newsletters?',type:'select',options:['No','Yes']},
+  ]},
+  {title:'Brand & competitors',fields:[
+    {k:'competitors',label:'Main competitors',type:'textarea',full:true,ph:'who you compete with locally'},
+    {k:'brandColors',label:'Brand colors',type:'text',ph:'e.g. navy & orange'},
+    {k:'brandVoice',label:'Brand voice',type:'select',options:['Local & trustworthy','Friendly & approachable','Professional','Bold & confident','Premium']},
+  ]},
 ];
+const PROFILE_FIELDS=PROFILE_SECTIONS.flatMap(s=>s.fields); // flat list for any lookups
 function buildProfileForm(container,vals){
   container.innerHTML=''; vals=vals||{};
-  for(const f of PROFILE_FIELDS){
-    const w=el('div',f.full?'full':''); w.append(el('label',null,f.label));
-    let inp;
-    if(f.type==='select'){ inp=el('select'); for(const o of f.options){ const op=el('option',null,o); op.value=o; if(vals[f.k]===o)op.selected=true; inp.append(op);} }
-    else if(f.type==='textarea'){ inp=el('textarea'); inp.value=vals[f.k]||''; if(f.ph)inp.placeholder=f.ph; }
-    else { inp=el('input'); inp.type=f.type; inp.value=(vals[f.k]!=null?vals[f.k]:''); if(f.ph)inp.placeholder=f.ph; }
-    inp.dataset.k=f.k; w.append(inp); container.append(w);
+  for(const sec of PROFILE_SECTIONS){
+    const h=el('div','full pf-sechead',sec.title); container.append(h);
+    for(const f of sec.fields){
+      const w=el('div',f.full?'full':''); w.append(el('label',null,f.label));
+      let inp;
+      if(f.type==='select'){ inp=el('select'); for(const o of f.options){ const op=el('option',null,o); op.value=o; if(vals[f.k]===o)op.selected=true; inp.append(op);} }
+      else if(f.type==='textarea'){ inp=el('textarea'); inp.value=vals[f.k]||''; if(f.ph)inp.placeholder=f.ph; }
+      else { inp=el('input'); inp.type=f.type; inp.value=(vals[f.k]!=null?vals[f.k]:''); if(f.ph)inp.placeholder=f.ph; }
+      inp.dataset.k=f.k; w.append(inp); container.append(w);
+    }
   }
+}
+// Fill empty form fields from a website-crawl result. Returns how many it filled.
+function applyImportToForm(container,d){
+  const map={website:'website',businessName:'businessName',description:'description',services:'services',phone:'phone',email:'email',address:'address',city:'city',state:'state',zip:'zip',facebook:'facebook',instagram:'instagram',linkedin:'linkedin',youtube:'youtube',tiktok:'tiktok',brandColor:'brandColors'};
+  let n=0;
+  for(const [src,dst] of Object.entries(map)){ const v=d[src]; if(v){ const inp=container.querySelector('[data-k="'+dst+'"]'); if(inp && !String(inp.value||'').trim()){ inp.value=v; n++; } } }
+  if(d.logo){ ASSETS=ASSETS||{photos:[]}; if(!ASSETS.logo){ ASSETS.logo=d.logo; try{ saveAssets(); }catch(e){} } }
+  return n;
+}
+async function runSiteImport(url,container,noteEl){
+  if(!url){ return; }
+  if(!REMOTE){ if(noteEl) noteEl.textContent='Website import runs on the live app.'; return; }
+  if(noteEl) noteEl.textContent='Reading your website…';
+  try{
+    const r=await fetch('/api/import-site',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ if(noteEl) noteEl.textContent=d.error||'Couldn’t read that site — check the URL, or just fill it in below.'; return 0; }
+    const n=applyImportToForm(container,d);
+    if(noteEl) noteEl.textContent='✓ Imported '+n+' field'+(n===1?'':'s')+' — review below and fill in the rest.';
+    return n;
+  }catch(e){ if(noteEl) noteEl.textContent='Couldn’t read that site — you can fill it in below.'; return 0; }
 }
 function readProfileForm(container){ const out={}; container.querySelectorAll('[data-k]').forEach(i=>{ let v=(i.value||'').trim(); if(i.type==='number') v=v?Number(v):''; out[i.dataset.k]=v; }); return out; }
 async function saveProfile(vals){ try{ const r=await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(vals)}); return r.ok?(await r.json()).profile:null; }catch(e){ return null; } }
 async function loadProfile(){ if(!REMOTE)return; try{ const r=await fetch('/api/profile'); const d=await r.json(); PROFILE=d.profile||{}; buildProfileForm($('#profile-form'), d.profile||{}); }catch(e){} }
+$('#pf-import').onclick=async()=>{ const btn=$('#pf-import'); const url=($('#pf-website').value||'').trim()||($('#profile-form').querySelector('[data-k="website"]')||{}).value||''; if(!url){ $('#pf-import-note').textContent='Enter your website to re-import.'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#profile-form'),$('#pf-import-note')); btn.disabled=false; btn.textContent=old; };
 $('#profile-save').onclick=async()=>{ const btn=$('#profile-save'); btn.disabled=true; const p=await saveProfile(readProfileForm($('#profile-form'))); if(p){ PROFILE=p; applyIdentity(); queueChange('profile','Business profile updated'); } $('#profile-note').textContent=p?'Saved ✓':'Could not save.'; btn.disabled=false; setTimeout(()=>{$('#profile-note').textContent='';},2500); };
-$('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=readProfileForm($('#onboard-form')); if(!vals.businessName){ alert('Please enter your business name.'); return; } btn.disabled=true; const p=await saveProfile(vals); if(p){ PROFILE=p; applyIdentity(); } $('#onboard').classList.remove('on'); btn.disabled=false; };
+$('#ob-import').onclick=async()=>{ const btn=$('#ob-import'); const url=($('#ob-website').value||'').trim(); if(!url){ $('#ob-import-note').textContent='Enter your website first (or skip and fill it in below).'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#onboard-form'),$('#ob-import-note')); btn.disabled=false; btn.textContent=old; };
+$('#ob-website').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#ob-import').click(); } });
+$('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=readProfileForm($('#onboard-form')); if(!vals.businessName){ alert('Please enter your business name (or import it from your website above).'); return; } btn.disabled=true; const p=await saveProfile(vals); if(p){ PROFILE=p; applyIdentity(); } $('#onboard').classList.remove('on'); btn.disabled=false; };
 $('#logout').onclick=async()=>{ try{ await fetch('/auth/logout',{method:'POST'}); }catch(e){} window.location='/login'; };
 async function authInit(){
   if(!REMOTE) return;
