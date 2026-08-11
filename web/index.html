@@ -1590,14 +1590,33 @@ function setBilling(box){
 }
 
 // ═══ autopilot (graduated control + living SOP + cluster) ═══
-let AUTOPILOT={autonomy:50}, AP_LOADED=false;
+let AUTOPILOT={autonomy:50,guardrails:{maxBudgetChangePct:10,protectProven:true,approveHighImpact:true}}, AP_LOADED=false;
 const AUTONOMY=[
   {v:10,label:'10% · Assist',desc:'Miles drafts everything; you approve every change before anything goes live. Maximum control.'},
   {v:20,label:'20% · Guided',desc:'Miles proposes campaigns and edits; you approve the important ones. Small tweaks are batched for review.'},
   {v:50,label:'50% · Co-pilot',desc:'Miles runs day-to-day optimization on its own and asks before budget or strategy changes. Recommended starting point.'},
   {v:100,label:'100% · Autopilot',desc:'Miles deploys and optimizes fully on its own to hit your targets. You accept responsibility for the risk.'},
 ];
-async function loadAutopilot(){ if(!REMOTE){ AP_LOADED=true; return; } try{ const r=await fetch('/api/autopilot'); const d=await r.json(); AUTOPILOT=d.autopilot||{autonomy:50}; }catch(e){} AP_LOADED=true; }
+async function loadAutopilot(){ if(!REMOTE){ AP_LOADED=true; return; } try{ const r=await fetch('/api/autopilot'); const d=await r.json(); AUTOPILOT=d.autopilot||AUTOPILOT; }catch(e){} if(!AUTOPILOT.guardrails) AUTOPILOT.guardrails={maxBudgetChangePct:10,protectProven:true,approveHighImpact:true}; AP_LOADED=true; }
+function guardToggle(title,desc,on,cb){
+  const row=el('div','acard'); row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 0 0';
+  const l=el('div'); l.innerHTML='<b>'+title+'</b><div class="mdesc" style="margin:2px 0 0">'+desc+'</div>';
+  const sw=el('label','switch'); const ci=el('input'); ci.type='checkbox'; ci.checked=!!on; const sl=el('span','sl'); sw.append(ci,sl); ci.onchange=()=>cb(ci.checked);
+  row.append(l,sw); return row;
+}
+function guardrailsCard(){
+  const g=AUTOPILOT.guardrails||(AUTOPILOT.guardrails={maxBudgetChangePct:10,protectProven:true,approveHighImpact:true});
+  const card=el('div','mcard'); card.style.maxWidth='860px';
+  const p=el('p','mdesc'); p.style.margin='0 0 16px'; p.textContent='Safety rails that hold no matter how high you set autonomy — so Miles can optimize without risking your best campaigns.'; card.append(p);
+  card.append(el('div','sect-label','MAX BUDGET CHANGE PER ADJUSTMENT'));
+  const sub=el('div','mdesc'); sub.style.margin='-6px 0 10px'; sub.textContent='Miles never moves a campaign’s budget by more than this in one step — protects high performers from big swings.'; card.append(sub);
+  const capRow=el('div','subtabs'); capRow.style.marginBottom='4px';
+  for(const c of [5,10,15,25,100]){ const b=el('button','tab'+(g.maxBudgetChangePct===c?' on':''), c===100?'No cap':(c+'%')); b.onclick=()=>{ g.maxBudgetChangePct=c; saveAutopilot(); queueChange('guardrail','Max budget change: '+(c===100?'no cap':c+'%')); renderAutopilot(); }; capRow.append(b); }
+  card.append(capRow);
+  card.append(guardToggle('Protect proven funnels','Miles only experiments on new/experimental campaigns and never modifies proven, profitable funnels.', g.protectProven, v=>{ g.protectProven=v; saveAutopilot(); queueChange('guardrail','Protect proven funnels: '+(v?'on':'off')); renderAutopilot(); }));
+  card.append(guardToggle('Require approval for high-impact changes','Even at higher autonomy, anything above your budget cap or touching a top campaign waits for your approval — suggestion-only for the big moves.', g.approveHighImpact, v=>{ g.approveHighImpact=v; saveAutopilot(); renderAutopilot(); }));
+  return card;
+}
 async function saveAutopilot(){ if(!REMOTE) return; try{ await fetch('/api/autopilot',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({autopilot:AUTOPILOT})}); }catch(e){} }
 async function openAutopilot(){ if(!AP_LOADED) await loadAutopilot(); renderAutopilot(); }
 function clusterCard(){
@@ -1626,6 +1645,8 @@ function renderAutopilot(){
     row.onclick=()=>{ AUTOPILOT.autonomy=o.v; saveAutopilot(); queueChange('autonomy','Autonomy set to '+o.v+'%'); renderAutopilot(); toast('Autonomy set to '+o.v+'%'); };
     opts.append(row); }
   ac.append(opts); box.append(ac);
+  box.append(el('div','sect-label','CAMPAIGN GUARDRAILS'));
+  box.append(guardrailsCard());
   box.append(el('div','sect-label','CHANNEL PLAYBOOKS · LIVING SOP'));
   const note=el('p','mdesc'); note.style.cssText='margin:-6px 0 12px;max-width:740px'; note.textContent='Each channel runs on a master playbook of best practice. Miles forks a private copy for your account and auto-tunes it every 1–2 weeks from your real results — there’s no one winning formula, so it learns what works for you.'; box.append(note);
   const chans=[{n:'Google Ads',s:'Search setup, display/remarketing, campaign structure, audience & geo targeting, offers.'},{n:'Meta / Facebook',s:'Audience building, creative testing, automated rules, retargeting, CAPI events.'},{n:'Local Services Ads',s:'LSA setup, lead disputes, budget pacing, review management.'}];

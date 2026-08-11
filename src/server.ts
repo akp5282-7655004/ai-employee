@@ -146,11 +146,13 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   });
 
   // Autopilot — graduated control (autonomy %) + operating settings, per workspace.
+  const DEFAULT_GUARDRAILS = { maxBudgetChangePct: 10, protectProven: true, approveHighImpact: true };
   app.get('/api/autopilot', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    return { autopilot: data.autopilot ?? { autonomy: 50 } };
+    const ap = (data.autopilot as any) ?? {};
+    return { autopilot: { autonomy: ap.autonomy ?? 50, guardrails: { ...DEFAULT_GUARDRAILS, ...(ap.guardrails ?? {}) } } };
   });
   app.put<{ Body: { autopilot?: any } }>('/api/autopilot', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -158,7 +160,15 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const data = await authStore.getUserData(u.id);
     const a = req.body?.autopilot ?? {};
     const lvl = Number(a.autonomy);
-    data.autopilot = { autonomy: [10, 20, 50, 100].includes(lvl) ? lvl : 50 };
+    const g = a.guardrails ?? {};
+    data.autopilot = {
+      autonomy: [10, 20, 50, 100].includes(lvl) ? lvl : 50,
+      guardrails: {
+        maxBudgetChangePct: [5, 10, 15, 25, 100].includes(Number(g.maxBudgetChangePct)) ? Number(g.maxBudgetChangePct) : 10,
+        protectProven: !!g.protectProven,
+        approveHighImpact: g.approveHighImpact !== false,
+      },
+    };
     await authStore.setUserData(u.id, data);
     return { ok: true, autopilot: data.autopilot };
   });
