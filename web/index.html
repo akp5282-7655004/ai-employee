@@ -296,6 +296,11 @@
   .cmitem:hover{background:var(--panel-2);}
   .cmitem span{width:20px;text-align:center;}
   .cmitem .cmsub{margin-left:auto;font-size:11px;color:var(--faint);}
+  .fb-fab{position:fixed;right:18px;bottom:18px;z-index:70;background:var(--ink);color:var(--panel);border:none;border-radius:24px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.22);display:none;}
+  .fb-fab:hover{opacity:.92;}
+  .fb-stars{display:flex;gap:6px;margin:4px 0 14px;}
+  .fb-star{font-size:24px;cursor:pointer;filter:grayscale(1) opacity(.45);transition:filter .1s;}
+  .fb-star.on{filter:none;}
 
   @media (max-width:1000px){ .stats{grid-template-columns:repeat(2,1fr);} .cards{grid-template-columns:repeat(2,1fr);} .meters,.intgrid{grid-template-columns:1fr;} }
   @media (max-width:760px){ .app{grid-template-columns:1fr;} .side{display:none;} .cards{grid-template-columns:1fr;} }
@@ -545,6 +550,7 @@
 
     <!-- generic modal -->
     <div class="overlay" id="modal"><div class="modalbox"><span class="modalx" id="modal-x">×</span><div id="modal-body"></div></div></div>
+    <button class="fb-fab" id="fb-btn" title="Send feedback">💬 Feedback</button>
 
     <!-- INTEGRATIONS -->
     <section class="page" id="page-int">
@@ -1803,7 +1809,7 @@ async function loadSettings(){ if(!REMOTE){ SET_LOADED=true; return; } try{ cons
 async function openSettings(){ if(!SET_LOADED) await loadSettings(); if(!MODEL_LOADED) await loadModel(); renderSettings(); }
 let IS_ADMIN=false;
 const SET_TABS=[['account','Account'],['model','Model'],['team','Team'],['keys','API Keys'],['usage','Usage'],['billing','Billing']];
-function setTabsList(){ return IS_ADMIN ? SET_TABS.concat([['admin','Users']]) : SET_TABS; }
+function setTabsList(){ return IS_ADMIN ? SET_TABS.concat([['admin','Users'],['feedback','Feedback']]) : SET_TABS; }
 let MODEL={mode:'auto',quality:'balanced'}, MODEL_LOADED=false;
 async function loadModel(){ if(!REMOTE){ MODEL_LOADED=true; return; } try{ const r=await fetch('/api/model'); MODEL=(await r.json()).model||MODEL; }catch(e){} MODEL_LOADED=true; }
 async function saveModel(){ if(!REMOTE) return; try{ await fetch('/api/model',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({model:MODEL})}); }catch(e){} }
@@ -1811,7 +1817,7 @@ function renderSettings(){
   const bar=$('#set-subtabs'); bar.innerHTML=setTabsList().map(t=>`<button class="tab${t[0]===setTab?' on':''}" data-stab="${t[0]}">${t[1]}</button>`).join('');
   bar.querySelectorAll('[data-stab]').forEach(b=>b.onclick=()=>{ setTab=b.dataset.stab; renderSettings(); });
   const body=$('#settings-body'); body.innerHTML='';
-  ({account:setAccount,model:setModel,team:setTeam,keys:setKeys,usage:setUsage,billing:setBilling,admin:setAdmin}[setTab]||setAccount)(body);
+  ({account:setAccount,model:setModel,team:setTeam,keys:setKeys,usage:setUsage,billing:setBilling,admin:setAdmin,feedback:setFeedback}[setTab]||setAccount)(body);
 }
 function setModel(box){
   const card=el('div','mcard'); card.style.maxWidth='860px';
@@ -1912,6 +1918,43 @@ async function setAdmin(box){
   box.append(uc);
 }
 function confirmRemoveUser(usr){ showModal('<h3 style="margin:0 0 10px">Remove this account?</h3><p class="mdesc" style="margin:0 0 14px">This permanently deletes <b>'+esc(usr.email)+'</b> and all of their data. This can’t be undone.</p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="adsave" id="ru-cancel">Cancel</button><button class="go" id="ru-go" style="flex:none">Remove account</button></div>'); $('#ru-cancel').onclick=closeModal; $('#ru-go').onclick=async()=>{ closeModal(); try{ const r=await fetch('/api/admin/remove',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:usr.id})}); if(r.ok){ toast('Account removed'); } else { const e=await r.json().catch(()=>({})); toast(e.error||'Could not remove'); } }catch(e){ toast('Could not remove'); } renderSettings(); }; }
+// ═══ customer feedback (tester → owner inbox) ═══
+let fbRating=0;
+function openFeedback(){ fbRating=0;
+  showModal('<h3 style="margin:0 0 4px">Send feedback</h3><p class="mdesc" style="margin:0 0 10px">Tell us what’s working, what’s broken, or what you wish Miles did.</p>'
+    +'<div class="fb-stars" id="fb-stars">'+[1,2,3,4,5].map(n=>'<span class="fb-star" data-n="'+n+'">★</span>').join('')+'</div>'
+    +'<textarea class="f" id="fb-msg" placeholder="Your feedback…" style="width:100%;min-height:110px;margin:0"></textarea>'
+    +'<button class="go" id="fb-send" style="width:100%;margin-top:14px">Send feedback</button>');
+  $('#fb-stars').querySelectorAll('.fb-star').forEach(s=>s.onclick=()=>{ fbRating=Number(s.dataset.n); $('#fb-stars').querySelectorAll('.fb-star').forEach(x=>x.classList.toggle('on', Number(x.dataset.n)<=fbRating)); });
+  $('#fb-send').onclick=submitFeedback;
+}
+async function submitFeedback(){ const msg=($('#fb-msg').value||'').trim(); if(!msg){ toast('Type your feedback first'); return; }
+  const btn=$('#fb-send'); btn.disabled=true; btn.textContent='Sending…';
+  try{ const r=await fetch('/api/feedback',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:msg,rating:fbRating,page:($('#ptitle')?$('#ptitle').textContent:'')})});
+    if(r.ok){ closeModal(); toast('Thanks — feedback sent! 🙏'); } else { toast('Could not send'); btn.disabled=false; btn.textContent='Send feedback'; }
+  }catch(e){ toast('Could not send'); btn.disabled=false; btn.textContent='Send feedback'; }
+}
+async function setFeedback(box){
+  box.append(el('div','appsub','Loading…'));
+  let d={}; if(REMOTE){ try{ d=await(await fetch('/api/feedback')).json(); }catch(e){} }
+  box.innerHTML='';
+  if(!d.isAdmin){ box.append(el('div','verdict tight','Owner-only.')); return; }
+  const items=d.feedback||[];
+  const head=el('div'); head.innerHTML='<h3 style="margin:0">Feedback ('+items.length+')</h3><p class="mdesc" style="margin:4px 0 0">What your testers are telling you — newest first. They send it with the 💬 button.</p>'; box.append(head);
+  if(!items.length){ box.append(el('div','verdict ok','No feedback yet.')); return; }
+  const wrap=el('div'); wrap.style.marginTop='14px';
+  for(const f of items){ const row=el('div','acard'); row.style.cssText='margin:0 0 10px'+(f.resolved?';opacity:.55':'');
+    const top=el('div'); top.style.cssText='display:flex;justify-content:space-between;gap:10px;align-items:center';
+    top.innerHTML='<b>'+(f.name?esc(f.name)+' · ':'')+esc(f.email)+(f.rating?'  <span style="color:#e0a838">'+'★'.repeat(f.rating)+'</span>':'')+'</b>';
+    top.append(el('span','appsub',fmtWhen(f.ts)+(f.page?' · '+esc(f.page):''))); row.append(top);
+    const m=el('div'); m.style.cssText='white-space:pre-wrap;margin-top:8px;font-size:14px;line-height:1.5'; m.textContent=f.message; row.append(m);
+    const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:10px';
+    const res=el('button','adsave',f.resolved?'Reopen':'✓ Mark resolved'); res.onclick=async()=>{ await fetch('/api/feedback/update',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:f.id,resolved:!f.resolved})}); renderSettings(); };
+    const del=el('button','idel','Delete'); del.onclick=async()=>{ await fetch('/api/feedback/update',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:f.id,remove:true})}); renderSettings(); };
+    bar.append(res,del); row.append(bar); wrap.append(row);
+  }
+  box.append(wrap);
+}
 
 // ═══ autopilot (graduated control + living SOP + cluster) ═══
 let AUTOPILOT={autonomy:50,guardrails:{maxBudgetChangePct:10,protectProven:true,approveHighImpact:true}}, AP_LOADED=false;
@@ -2319,6 +2362,7 @@ async function authInit(){
     $('#user-email').textContent = u.email||'';
     $('#user-av').textContent = ((u.name||u.email||'?')[0]||'?').toUpperCase();
     applyIdentity();
+    const fb=$('#fb-btn'); if(fb){ fb.style.display=''; fb.onclick=openFeedback; }
     if(!d.profile){ buildProfileForm($('#onboard-form'),{}); $('#onboard').classList.add('on'); }
   }catch(e){}
 }

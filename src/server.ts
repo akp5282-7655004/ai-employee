@@ -214,6 +214,52 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { ok: true };
   });
 
+  // ── customer feedback: any tester submits; the owner reads it in one inbox ──
+  app.post<{ Body: { message?: string; rating?: number; page?: string } }>('/api/feedback', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const message = (req.body?.message ?? '').trim().slice(0, 2000);
+    if (!message) return reply.code(400).send({ error: 'Say a little about what you think.' });
+    const ownerId = await adminUserId();
+    if (!ownerId) return { ok: true }; // no owner yet — nothing to store against
+    const data = await authStore.getUserData(ownerId);
+    const entry = {
+      id: newToken().slice(0, 10),
+      ts: new Date().toISOString(),
+      email: u.email,
+      name: u.name ?? '',
+      rating: Math.max(0, Math.min(5, Number(req.body?.rating) || 0)),
+      page: (req.body?.page ?? '').slice(0, 40),
+      message,
+      resolved: false,
+    };
+    data.feedback = [entry, ...((data.feedback as unknown[]) ?? [])].slice(0, 500);
+    await authStore.setUserData(ownerId, data);
+    return { ok: true };
+  });
+  app.get('/api/feedback', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (!(await isAdmin(u))) return { isAdmin: false };
+    const id = await adminUserId();
+    const data = id ? await authStore.getUserData(id) : {};
+    return { isAdmin: true, feedback: (data.feedback as unknown[]) ?? [] };
+  });
+  app.post<{ Body: { id?: string; resolved?: boolean; remove?: boolean } }>('/api/feedback/update', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (!(await isAdmin(u))) return reply.code(403).send({ error: 'owner only' });
+    const ownerId = await adminUserId();
+    if (!ownerId) return reply.code(400).send({ error: 'no owner' });
+    const data = await authStore.getUserData(ownerId);
+    let list = (data.feedback as Array<{ id: string; resolved?: boolean }>) ?? [];
+    if (req.body?.remove) list = list.filter((f) => f.id !== req.body?.id);
+    else list = list.map((f) => (f.id === req.body?.id ? { ...f, resolved: !!req.body?.resolved } : f));
+    data.feedback = list;
+    await authStore.setUserData(ownerId, data);
+    return { ok: true };
+  });
+
   // ── customer profile (the onboarding intake, saved + editable) ──
   app.get('/api/profile', async (req, reply) => {
     const u = await requireUser(req, reply);
