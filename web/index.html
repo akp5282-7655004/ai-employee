@@ -301,6 +301,7 @@
     <nav class="nav" id="nav">
       <a data-page="dashboard" class="on"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg> Dashboard</a>
       <a data-page="agents"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/></svg> Agents &amp; Specialists</a>
+      <a data-page="autopilot"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M12 12l4-2"/></svg> Autopilot</a>
       <a data-page="skills"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 2.2 5.6L20 9l-4.3 3.8L17 19l-5-3-5 3 1.3-6.2L4 9l5.8-.4Z"/></svg> Skills &amp; Playbooks</a>
       <a data-page="analytics"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Analytics</a>
       <a data-page="meters" class="sub"><svg class="ico" viewBox="0 0 24 24"><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 12 15 9M4 12a8 8 0 0 1 16 0"/></svg> Meters</a>
@@ -487,6 +488,11 @@
     <section class="page" id="page-settings">
       <div class="subtabs" id="set-subtabs"></div>
       <div id="settings-body"></div>
+    </section>
+
+    <!-- AUTOPILOT -->
+    <section class="page" id="page-autopilot">
+      <div id="autopilot-body"></div>
     </section>
 
     <!-- SKILLS -->
@@ -908,12 +914,13 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',hub:'Marketing Hub',assets:'Brand Assets',deploy:'Deploy',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
+const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',hub:'Marketing Hub',assets:'Brand Assets',deploy:'Deploy',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
   const homeIds=['dashboard','agents'];
   $('#page-home').classList.toggle('on',homeIds.includes(id));
+  $('#page-autopilot').classList.toggle('on',id==='autopilot');
   $('#page-skills').classList.toggle('on',id==='skills');
   $('#page-market').classList.toggle('on',id==='market');
   $('#page-meters').classList.toggle('on',id==='meters');
@@ -929,6 +936,7 @@ function setPage(id){
   $('#page-profile').classList.toggle('on',id==='profile');
   $('#page-chat').classList.toggle('on',id==='chat');
   if(id==='profile') loadProfile();
+  if(id==='autopilot') openAutopilot();
   if(id==='skills') openSkills();
   if(id==='market') openMarket();
   if(homeIds.includes(id) && activeCat==='Math Skills'){ activeCat='Popular tasks'; renderTabs(); renderCards(); }
@@ -1559,6 +1567,54 @@ function setBilling(box){
   const plan=el('div','acard'); plan.style.marginTop='8px'; plan.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div><b>Free plan</b><div class="mdesc" style="margin:2px 0 0">Full access while Miles is in early access.</div></div><span class="apill active">CURRENT</span></div>';
   card.append(plan); card.append(el('div','verdict tight','💳 Paid plans & Stripe billing are coming soon — you’ll manage your subscription here.'));
   box.append(card);
+}
+
+// ═══ autopilot (graduated control + living SOP + cluster) ═══
+let AUTOPILOT={autonomy:50}, AP_LOADED=false;
+const AUTONOMY=[
+  {v:10,label:'10% · Assist',desc:'Miles drafts everything; you approve every change before anything goes live. Maximum control.'},
+  {v:20,label:'20% · Guided',desc:'Miles proposes campaigns and edits; you approve the important ones. Small tweaks are batched for review.'},
+  {v:50,label:'50% · Co-pilot',desc:'Miles runs day-to-day optimization on its own and asks before budget or strategy changes. Recommended starting point.'},
+  {v:100,label:'100% · Autopilot',desc:'Miles deploys and optimizes fully on its own to hit your targets. You accept responsibility for the risk.'},
+];
+async function loadAutopilot(){ if(!REMOTE){ AP_LOADED=true; return; } try{ const r=await fetch('/api/autopilot'); const d=await r.json(); AUTOPILOT=d.autopilot||{autonomy:50}; }catch(e){} AP_LOADED=true; }
+async function saveAutopilot(){ if(!REMOTE) return; try{ await fetch('/api/autopilot',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({autopilot:AUTOPILOT})}); }catch(e){} }
+async function openAutopilot(){ if(!AP_LOADED) await loadAutopilot(); renderAutopilot(); }
+function clusterCard(){
+  const emp=Number((PROFILE&&PROFILE.employees)||0), yr=Number((PROFILE&&PROFILE.yearStarted)||0);
+  const years=yr?(new Date().getFullYear()-yr):0;
+  let size='Solo / startup'; if(emp>=25) size='Large operator'; else if(emp>=6) size='Established mid-size'; else if(emp>=1) size='Small team';
+  const tenure=years>=10?'10+ yrs':years>=3?(years+' yrs'):(years>0?(years+' yr'):'newer');
+  const area=((PROFILE&&PROFILE.serviceAreas)||'your market').split(',')[0]||'—';
+  const card=el('div','mcard'); card.style.maxWidth='860px';
+  card.innerHTML='<p class="mdesc" style="margin:0 0 12px">Learnings only propagate between comparable businesses — Miles groups you by size, tenure, ticket, and market, so big operators teach big operators and startups learn from startups.</p>';
+  const g=el('div','stats'); g.style.margin='0';
+  g.append(statCard('Size band',size),statCard('Tenure',tenure),statCard('Market',area),statCard('Employees',emp||'—'));
+  card.append(g);
+  const v=el('div','verdict ok'); v.style.marginTop='14px'; v.textContent='🧠 As comparable '+size.toLowerCase()+' home-services businesses join your cluster, winning tactics from the top performers propagate into your playbook automatically.'; card.append(v);
+  return card;
+}
+function renderAutopilot(){
+  const box=$('#autopilot-body'); box.innerHTML='';
+  const h=el('div'); h.innerHTML='<h3 style="margin:0">Autopilot</h3><p class="mdesc" style="margin:4px 0 0;max-width:740px">Set how much Miles does on its own, see the living playbook that adapts to your account, and the market intelligence behind your campaigns.</p>'; box.append(h);
+  box.append(el('div','sect-label','AGENT AUTONOMY'));
+  const ac=el('div','mcard'); ac.style.maxWidth='860px';
+  const p=el('p','mdesc'); p.style.margin='0 0 14px'; p.textContent='How much can Miles do without asking? Start conservative and raise it as trust builds.'; ac.append(p);
+  const opts=el('div'); opts.style.cssText='display:flex;flex-direction:column;gap:10px';
+  for(const o of AUTONOMY){ const sel=AUTOPILOT.autonomy===o.v; const row=el('button','acard'); row.style.cssText='text-align:left;cursor:pointer;margin:0;width:100%;border:'+(sel?'2px solid var(--accent)':'1px solid var(--line)');
+    row.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>'+o.label+'</b>'+(sel?'<span class="apill active">CURRENT</span>':'<span class="appsub">Select</span>')+'</div><div class="mdesc" style="margin:5px 0 0">'+o.desc+'</div>';
+    row.onclick=()=>{ AUTOPILOT.autonomy=o.v; saveAutopilot(); queueChange('autonomy','Autonomy set to '+o.v+'%'); renderAutopilot(); toast('Autonomy set to '+o.v+'%'); };
+    opts.append(row); }
+  ac.append(opts); box.append(ac);
+  box.append(el('div','sect-label','CHANNEL PLAYBOOKS · LIVING SOP'));
+  const note=el('p','mdesc'); note.style.cssText='margin:-6px 0 12px;max-width:740px'; note.textContent='Each channel runs on a master playbook of best practice. Miles forks a private copy for your account and auto-tunes it every 1–2 weeks from your real results — there’s no one winning formula, so it learns what works for you.'; box.append(note);
+  const chans=[{n:'Google Ads',s:'Search setup, display/remarketing, campaign structure, audience & geo targeting, offers.'},{n:'Meta / Facebook',s:'Audience building, creative testing, automated rules, retargeting, CAPI events.'},{n:'Local Services Ads',s:'LSA setup, lead disputes, budget pacing, review management.'}];
+  const cg=el('div','folgrid'); for(const c of chans){ const card=el('div','acard'); card.style.margin='0'; card.innerHTML='<b>'+c.n+'</b><div class="mdesc" style="margin:6px 0 10px">'+c.s+'</div><div class="appsub">Master playbook → your account fork</div><div style="margin-top:8px"><span class="apill active">AUTO-TUNES EVERY 1–2 WKS</span></div>'; cg.append(card); } box.append(cg);
+  box.append(el('div','sect-label','YOUR CLUSTER')); box.append(clusterCard());
+  box.append(el('div','sect-label','IDEAL CUSTOMER PROFILE'));
+  const icp=el('div','mcard'); icp.style.maxWidth='860px';
+  icp.innerHTML='<p class="mdesc" style="margin:0 0 8px">Miles reverse-engineers who your best customers are — ZIP, age, income — and feeds that profile back into ad targeting to lower your cost per lead. It starts from your market’s Census demographics and sharpens as your CRM close data flows in.</p>';
+  const go=el('button','go','Open Research →'); go.onclick=()=>setPage('research'); icp.append(go); box.append(icp);
 }
 
 // ═══ skills + marketplace ═══

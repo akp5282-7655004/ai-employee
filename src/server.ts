@@ -144,6 +144,24 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { ok: true, profile: data.profile };
   });
 
+  // Autopilot — graduated control (autonomy %) + operating settings, per workspace.
+  app.get('/api/autopilot', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return { autopilot: data.autopilot ?? { autonomy: 50 } };
+  });
+  app.put<{ Body: { autopilot?: any } }>('/api/autopilot', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const a = req.body?.autopilot ?? {};
+    const lvl = Number(a.autonomy);
+    data.autopilot = { autonomy: [10, 20, 50, 100].includes(lvl) ? lvl : 50 };
+    await authStore.setUserData(u.id, data);
+    return { ok: true, autopilot: data.autopilot };
+  });
+
   // Installed skills (Marketplace bundles) for the workspace.
   app.get('/api/skills', async (req, reply) => {
     const u = await requireUser(req, reply);
