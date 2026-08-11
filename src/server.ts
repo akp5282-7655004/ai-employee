@@ -12,6 +12,7 @@ import { generateAdCopy, type CreativeRequest } from './creative/creative.js';
 import { falReady, falGenerateImage, falGenerateVideo, falGenerateAudio, type Aspect } from './creative/fal.js';
 import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText, type BrandContext } from './creative/studio.js';
 import { generateText, textLlmReady } from './llm/text.js';
+import { catalogForClient, findPlay } from './skills/catalog.js';
 import {
   TASK_SPECS,
   isDue,
@@ -195,7 +196,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    return { installed: (data.skills as string[]) ?? [] };
+    return { installed: (data.skills as string[]) ?? [], catalog: catalogForClient(), textLive: textLlmReady() };
   });
   app.put<{ Body: { installed?: string[] } }>('/api/skills', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -204,6 +205,29 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     data.skills = Array.isArray(req.body?.installed) ? req.body!.installed!.slice(0, 200) : [];
     await authStore.setUserData(u.id, data);
     return { ok: true };
+  });
+  // Run one of a skill's plays — real expert output from the LLM, on-brand from the
+  // business profile. Demo-safe: falls back to a templated deliverable with no key.
+  app.post<{ Body: { skillId?: string; playId?: string } }>('/api/skills/play', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const match = findPlay(req.body?.skillId ?? '', req.body?.playId ?? '');
+    if (!match) return reply.code(404).send({ error: 'play not found' });
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const biz = p.businessName || 'the business';
+    const trade = (p.industry || 'local-service').toString();
+    const svc = p.services ? ` Services: ${p.services}.` : '';
+    const loc = p.serviceAreas ? ` Area: ${p.serviceAreas}.` : '';
+    const user = `Business: ${biz} (${trade}).${svc}${loc}`;
+    const text = await generateText({ system: match.play.system, user, maxTokens: 900 });
+    if (text) return { text, live: true, skill: match.skill.name, play: match.play.label };
+    return {
+      text: `“${match.play.label}” is ready to generate. Add an OpenRouter key on Render and Miles will write this custom for ${biz} — expert ${match.skill.category.toLowerCase()} output, on-brand, in seconds.`,
+      live: false,
+      skill: match.skill.name,
+      play: match.play.label,
+    };
   });
 
   // ── settings: account, API keys, team, usage ──

@@ -1947,20 +1947,45 @@ const MARKET=[
   {id:'email-sms',name:'Email & SMS Nurture',skills:10,cat:'CRM',author:'Miles',desc:'Win-back, appointment reminders, and seasonal offers across email and text.'},
   {id:'call-recovery',name:'Call Tracking & Lead Recovery',skills:9,cat:'CRM',author:'Miles',desc:'Missed-call text-back, call scoring, and lead-recovery automations.'},
 ];
-let SKILLS_INSTALLED=[], SKILLS_LOADED=false, MARKET_Q='';
-async function loadSkills(){ if(!REMOTE){ SKILLS_LOADED=true; return; } try{ const r=await fetch('/api/skills'); const d=await r.json(); SKILLS_INSTALLED=d.installed||[]; }catch(e){} SKILLS_LOADED=true; }
+let SKILLS_INSTALLED=[], SKILLS_LOADED=false, MARKET_Q='', SKILL_CAT=[], SKILLS_TEXTLIVE=false;
+function skillList(){ return SKILL_CAT.length?SKILL_CAT:MARKET; }
+async function loadSkills(){ if(!REMOTE){ SKILLS_LOADED=true; return; } try{ const r=await fetch('/api/skills'); const d=await r.json(); SKILLS_INSTALLED=d.installed||[]; if(d.catalog&&d.catalog.length) SKILL_CAT=d.catalog; SKILLS_TEXTLIVE=!!d.textLive; }catch(e){} SKILLS_LOADED=true; }
 async function saveSkills(){ if(!REMOTE) return; try{ await fetch('/api/skills',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({installed:SKILLS_INSTALLED})}); }catch(e){} }
 function isInstalled(id){ return SKILLS_INSTALLED.includes(id); }
-function installSkill(id){ const m=MARKET.find(x=>x.id===id); if(!m||isInstalled(id)) return; SKILLS_INSTALLED.push(id); saveSkills(); queueChange('skill','Installed skill: '+m.name); toast('Installed '+m.name); }
+function installSkill(id){ const m=skillList().find(x=>x.id===id); if(!m||isInstalled(id)) return; SKILLS_INSTALLED.push(id); saveSkills(); toast('Installed '+m.name+' — open it to run its plays'); }
 function uninstallSkill(id){ SKILLS_INSTALLED=SKILLS_INSTALLED.filter(x=>x!==id); saveSkills(); }
+function playCount(m){ return m.plays?m.plays.length:(m.skills||0); }
 function skillCard(m,installed){
   const card=el('div','acard'); card.style.margin='0';
-  card.innerHTML='<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><b>'+esc(m.name)+'</b><span class="apill" style="background:var(--panel-2);color:var(--muted)">'+m.skills+' skills</span></div><div class="mdesc" style="margin:6px 0 12px">'+esc(m.desc)+'</div>';
+  const n=playCount(m);
+  card.innerHTML='<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><b>'+esc(m.name)+'</b><span class="apill" style="background:var(--panel-2);color:var(--muted)">'+n+' play'+(n===1?'':'s')+'</span></div><div class="mdesc" style="margin:6px 0 12px">'+esc(m.desc)+'</div>';
   const foot=el('div'); foot.style.cssText='display:flex;gap:8px;align-items:center';
-  foot.append(el('span','appsub',m.cat+' · by '+m.author));
-  const btn=el('button',installed?'adsave':'go', installed?'✓ Installed':'Install'); btn.style.marginLeft='auto';
+  foot.append(el('span','appsub',m.cat+' · by '+(m.author||'Miles')));
+  const wrap=el('div'); wrap.style.cssText='margin-left:auto;display:flex;gap:8px';
+  if(installed && m.plays){ const open=el('button','go','Open'); open.onclick=()=>openSkillDetail(m); wrap.append(open); }
+  const btn=el('button',installed?'adsave':'go', installed?'✓ Installed':'Install');
   btn.onclick=()=>{ if(installed) uninstallSkill(m.id); else installSkill(m.id); if($('#page-skills').classList.contains('on')) renderSkills(); if($('#page-market').classList.contains('on')) renderMarket(); };
-  foot.append(btn); card.append(foot); return card;
+  wrap.append(btn); foot.append(wrap); card.append(foot); return card;
+}
+// A skill's real deliverables — run one, get expert on-brand output.
+function openSkillDetail(m){
+  const plays=(m.plays||[]).map(p=>'<div class="arow" data-play="'+p.id+'" style="cursor:pointer"><div class="rl"><b>▶︎ '+esc(p.label)+'</b><span>Generate this for your business</span></div><button class="go play-run" data-play="'+p.id+'" style="flex:none;padding:6px 12px">Run</button></div>').join('');
+  showModal('<h3 style="margin:0 0 4px">'+esc(m.name)+'</h3><div class="mdesc" style="margin:0 0 6px">'+esc(m.expertise||m.desc)+'</div>'+(SKILLS_TEXTLIVE?'':'<div class="appsub" style="margin:0 0 10px">Demo output until an OpenRouter key is added — then every play writes custom for your business.</div>')+'<div class="sect-label">PLAYS</div>'+plays+'<div id="play-out" style="margin-top:12px"></div>');
+  $('#modal-body').querySelectorAll('.play-run').forEach(b=>b.onclick=()=>runPlay(m.id,b.dataset.play,b));
+}
+async function runPlay(skillId,playId,btn){
+  if(!REMOTE){ toast('Runs on the live app'); return; }
+  const out=$('#play-out'); out.innerHTML=''; out.append(el('div','appsub','Working…')); btn.disabled=true; const old=btn.textContent; btn.textContent='Running…';
+  try{
+    const r=await(await fetch('/api/skills/play',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({skillId,playId})})).json();
+    out.innerHTML='';
+    const card=el('div','acard'); const pre=el('div'); pre.style.cssText='white-space:pre-wrap;font-size:13.5px;line-height:1.6;max-height:44vh;overflow:auto'; pre.textContent=r.text||''; card.append(pre);
+    const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px;flex-wrap:wrap';
+    const cp=el('button','go','Copy'); cp.style.flex='none'; cp.onclick=()=>{ try{navigator.clipboard.writeText(r.text||'');}catch(e){} toast('Copied'); }; bar.append(cp);
+    if(r.live){ const push=el('button','adsave','↗ Send to Deploy'); push.onclick=()=>{ queueChange('skill',(r.skill||'Skill')+': '+(r.play||''),'pending'); toast('Sent to Deploy — approve it there'); }; bar.append(push); }
+    card.append(bar); out.append(card);
+  }catch(e){ out.innerHTML=''; out.append(el('div','verdict bad','Couldn’t run that play — try again.')); }
+  btn.disabled=false; btn.textContent=old;
 }
 async function openSkills(){ if(!SKILLS_LOADED) await loadSkills(); renderSkills(); }
 function renderSkills(){
@@ -1970,21 +1995,21 @@ function renderSkills(){
   banner.innerHTML='<div><b>🛍️ Discover more in the Marketplace</b><div class="mdesc" style="margin:2px 0 0">Browse bundles, featured picks, and the full catalog of skills to install.</div></div>';
   const br=el('button','go','Browse →'); br.onclick=()=>setPage('market'); banner.append(br); box.append(banner);
   box.append(el('div','sect-label','INSTALLED SKILLS'));
-  const installed=MARKET.filter(m=>isInstalled(m.id));
+  const installed=skillList().filter(m=>isInstalled(m.id));
   if(!installed.length){ box.append(el('div','verdict tight','No skills installed yet. Open the Marketplace to add capabilities like Google Ads, Meta Ads, or Local SEO.')); return; }
   const g=el('div','folgrid'); for(const m of installed) g.append(skillCard(m,true)); box.append(g);
 }
 async function openMarket(){ if(!SKILLS_LOADED) await loadSkills(); renderMarket(); }
 function renderMarket(){
   const box=$('#market-body'); box.innerHTML='';
-  const h=el('div'); h.innerHTML='<h3 style="margin:0">Marketplace</h3><p class="mdesc" style="margin:4px 0 0;max-width:700px">New abilities for Miles, one click away. Install ready-made skill bundles to give Miles specialized knowledge and put recurring work on autopilot.</p>'; box.append(h);
+  const h=el('div'); h.innerHTML='<h3 style="margin:0">Marketplace</h3><p class="mdesc" style="margin:4px 0 0;max-width:700px">Real abilities for Miles, one click away. Install a skill, then <b>Open</b> it to run its <b>plays</b> — expert deliverables (campaign blueprints, ad copy, review templates, nurture sequences) written on-brand for your business in seconds.</p>'; box.append(h);
   const sb=el('input','searchbar'); sb.id='market-search'; sb.placeholder='Search the Marketplace…'; sb.value=MARKET_Q; sb.style.margin='16px 0'; sb.oninput=()=>{ MARKET_Q=sb.value; renderMarketList(); }; box.append(sb);
   const wrap=el('div'); wrap.id='market-list'; box.append(wrap); renderMarketList();
 }
 function renderMarketList(){
   const wrap=$('#market-list'); if(!wrap) return; wrap.innerHTML='';
   const q=MARKET_Q.trim().toLowerCase();
-  const items=MARKET.filter(m=>!q||m.name.toLowerCase().includes(q)||m.desc.toLowerCase().includes(q)||m.cat.toLowerCase().includes(q));
+  const items=skillList().filter(m=>!q||m.name.toLowerCase().includes(q)||m.desc.toLowerCase().includes(q)||m.cat.toLowerCase().includes(q));
   if(!q){ const feat=items.filter(m=>m.featured); if(feat.length){ wrap.append(el('div','sect-label','FEATURED')); const fg=el('div','folgrid'); for(const m of feat) fg.append(skillCard(m,isInstalled(m.id))); wrap.append(fg); } }
   wrap.append(el('div','sect-label', q?'RESULTS':'ALL SKILLS'));
   const g=el('div','folgrid'); for(const m of items) g.append(skillCard(m,isInstalled(m.id))); wrap.append(g);
