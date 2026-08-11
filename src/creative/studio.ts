@@ -34,6 +34,22 @@ export function specFor(type: string): AssetTypeSpec | undefined {
   return ASSET_TYPES.find((a) => a.type === type);
 }
 
+/**
+ * The system prompt for the "Optimize prompt" button — turns a customer's rough,
+ * vague idea into an expert, detailed prompt for the asset type, so people who
+ * don't know prompt engineering still get great results. Returns ONLY the rewritten
+ * prompt so it can drop straight back into the input for the customer to review.
+ */
+export function optimizerSystem(kind: AssetKind): string {
+  if (kind === 'image')
+    return "You are a world-class prompt engineer for AI image generation. Rewrite the user's rough idea into ONE vivid, detailed image prompt — name the subject, composition, setting, style, lighting, mood, colors, and quality cues (e.g. sharp, professional, photorealistic). Keep it realistic and on-brand for their business, and honor any specifics they gave (logo, offer text, colors). Return ONLY the improved prompt as plain text — no preamble, no quotes, no explanation, no lists.";
+  if (kind === 'video')
+    return "You are a world-class prompt engineer for AI text-to-video. Rewrite the user's rough idea into ONE vivid prompt describing the scene, subject, action/motion, camera movement, lighting, and mood for a short clip. On-brand for their business; honor any specifics they gave. Return ONLY the improved prompt as plain text — no preamble, no quotes, no explanation.";
+  if (kind === 'audio')
+    return "You are an expert voiceover scriptwriter. Rewrite the user's rough idea into a natural, engaging spoken script — clear, warm, well-paced, ready to read aloud in about the requested length. On-brand for their business. Return ONLY the script text — no preamble, no stage directions, no quotes.";
+  return "You are an expert marketing brief writer. Rewrite the user's rough idea into a clear, specific, effective brief that will produce great marketing content — spell out the audience, angle, key points, tone, and call to action. On-brand for their business. Return ONLY the improved brief as plain text — no preamble, no quotes.";
+}
+
 export interface BrandContext {
   business?: string;
   vertical?: string;

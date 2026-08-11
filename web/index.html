@@ -458,8 +458,9 @@
         <div class="subtabs" id="studio-types" style="margin-bottom:14px"></div>
         <textarea class="f" id="studio-prompt" placeholder="Describe your idea, and Miles will bring it to life…" style="width:100%;min-height:72px;margin:0"></textarea>
         <div id="studio-opts" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin:14px 0 4px"></div>
-        <div style="display:flex;align-items:center;gap:14px;margin-top:10px">
-          <button class="go" id="studio-go" style="flex:none">Generate ✨</button>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
+          <button class="adsave" id="studio-optimize" style="flex:none">✨ Optimize prompt</button>
+          <button class="go" id="studio-go" style="flex:none">Generate</button>
           <span id="studio-note" class="appsub"></span>
         </div>
         <div id="studio-results" style="margin-top:22px"></div>
@@ -1431,6 +1432,21 @@ function renderStudio(){
   else if(spec.kind==='audio') note.textContent = STUDIO.imagesLive?'Text-to-speech from your script.':'Demo state until FAL_KEY (+ a TTS model) is added.';
   else note.textContent = STUDIO.imagesLive?'Generated on-brand from your business details.':'Demo preview until FAL_KEY is added for real images.';
   $('#studio-go').onclick=studioGenerate;
+  const opt=$('#studio-optimize'); if(opt) opt.onclick=studioOptimize;
+}
+async function studioOptimize(){
+  const spec=studioSpec(); const rough=($('#studio-prompt').value||'').trim();
+  if(!rough){ toast('Type a rough idea first, then I’ll make it great'); return; }
+  if(!REMOTE){ toast('Optimize works on the live app'); return; }
+  const btn=$('#studio-optimize'), old=btn.textContent; btn.disabled=true; btn.textContent='✨ Improving…';
+  const note=$('#studio-note'); const prev=note.textContent; note.textContent='Rewriting your prompt into an expert one…';
+  try{
+    const r=await(await fetch('/api/studio/optimize',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:studioType,prompt:rough})})).json();
+    if(r.prompt){ $('#studio-prompt').value=r.prompt; $('#studio-prompt').dispatchEvent(new Event('input')); }
+    note.textContent = r.improved ? '✨ Prompt upgraded — review it and hit Generate.' : (r.prompt===rough ? 'Add an OpenRouter key to auto-improve prompts.' : prev);
+    if(r.improved) toast('Prompt improved — review & Generate');
+  }catch(e){ toast('Couldn’t optimize — try again'); note.textContent=prev; }
+  btn.disabled=false; btn.textContent=old;
 }
 async function studioGenerate(){
   const spec=studioSpec(); const prompt=($('#studio-prompt').value||'').trim();

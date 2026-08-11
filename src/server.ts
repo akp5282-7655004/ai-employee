@@ -10,7 +10,7 @@ import { getPack, listPacks, validateIntake } from './packs/index.js';
 import { LSA_TRADES, LSA_BLENDED, LSA_VS_GOOGLE, BENCHMARK_META } from './packs/benchmarks.js';
 import { generateAdCopy, type CreativeRequest } from './creative/creative.js';
 import { falReady, falGenerateImage, falGenerateVideo, falGenerateAudio, type Aspect } from './creative/fal.js';
-import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText, type BrandContext } from './creative/studio.js';
+import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText, optimizerSystem, type BrandContext } from './creative/studio.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { catalogForClient, findPlay } from './skills/catalog.js';
 import {
@@ -611,6 +611,26 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       return { type: spec.type, kind: 'image', url, prompt, live: falReady() };
     },
   );
+
+  // "Optimize prompt" — rewrite a customer's rough idea into an expert prompt for
+  // the asset type, so non-prompt-engineers get great results. Returns just the
+  // improved prompt to drop back into the input for review before Generate.
+  app.post<{ Body: { type?: string; prompt?: string } }>('/api/studio/optimize', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const spec = specFor(req.body?.type ?? 'image') ?? specFor('image')!;
+    const rough = (req.body?.prompt ?? '').trim();
+    if (!rough) return reply.code(400).send({ error: 'Type a rough idea first.' });
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const who = `${p.businessName || 'a local business'} — ${p.industry || 'local-service'}${p.serviceAreas ? `, ${p.serviceAreas}` : ''}${p.services ? `. Services: ${p.services}` : ''}`;
+    const improved = await generateText({
+      system: optimizerSystem(spec.kind),
+      user: `Business: ${who}.\nMaking: a ${spec.label.toLowerCase()}.\nTheir rough idea: "${rough}"\n\nRewrite it now.`,
+      maxTokens: 500,
+    });
+    return { prompt: (improved || rough).trim(), improved: !!improved, live: textLlmReady() };
+  });
 
   // ── Scheduled agents — recurring, unattended work (morning brief, CPA report) ──
   // Runs a task now and returns its written result. Reused by the endpoint + scheduler.
