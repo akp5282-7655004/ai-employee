@@ -28,6 +28,14 @@ services:
       # generate real ad images (Flux Schnell by default; override with FAL_IMAGE_MODEL).
       - key: FAL_KEY
         sync: false
+      # Optional — pin the Creative Studio image/video models (defaults are
+      # flux/schnell, flux/dev for premium, and kling-video for video).
+      # - key: FAL_IMAGE_MODEL
+      #   sync: false
+      # - key: FAL_IMAGE_MODEL_PREMIUM
+      #   sync: false
+      # - key: FAL_VIDEO_MODEL
+      #   sync: false
       # Optional — a free US Census API key. Research works without it (keyless,
       # ~500 calls/day), but a key raises limits and enables the competition layer
       # (ZIP Business Patterns). Get one free at api.census.gov/data/key_signup.html

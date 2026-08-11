@@ -9,7 +9,9 @@ import { loadConfig, pipedreamReady } from './config.js';
 import { getPack, listPacks, validateIntake } from './packs/index.js';
 import { LSA_TRADES, LSA_BLENDED, LSA_VS_GOOGLE, BENCHMARK_META } from './packs/benchmarks.js';
 import { generateAdCopy, type CreativeRequest } from './creative/creative.js';
-import { falReady, falGenerateImage } from './creative/fal.js';
+import { falReady, falGenerateImage, falGenerateVideo, type Aspect } from './creative/fal.js';
+import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText, type BrandContext } from './creative/studio.js';
+import { generateText, textLlmReady } from './llm/text.js';
 import { fetchDemographics } from './research/census.js';
 import { fetchWeather, evaluateWeatherTriggers } from './research/weather.js';
 import { importSite } from './research/site.js';
@@ -528,6 +530,46 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     }
     return { creatives, imagesLive: falReady() };
   });
+
+  // Creative Studio — every marketing asset from one place. Visual types render
+  // an image/video (fal.ai); copy/doc render text (the LLM). All degrade to a
+  // demo-safe fallback so nothing breaks before FAL_KEY / an LLM key is set.
+  app.get('/api/studio', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    return { types: ASSET_TYPES, imagesLive: falReady(), textLive: textLlmReady() };
+  });
+  app.post<{ Body: { type?: string; prompt?: string; aspect?: Aspect; style?: string; quality?: 'standard' | 'premium'; duration?: number } }>(
+    '/api/studio',
+    async (req, reply) => {
+      const u = await requireUser(req, reply);
+      if (!u) return;
+      const body = req.body ?? {};
+      const spec = specFor(body.type ?? 'image') ?? specFor('image')!;
+      const data = await authStore.getUserData(u.id);
+      const p = (data.profile ?? {}) as Record<string, string>;
+      const brand: BrandContext = {
+        business: p.businessName,
+        vertical: p.industry,
+        category: p.industry,
+        city: (p.serviceAreas || '').split(',')[0]?.trim(),
+        services: (p.services || '').split(',').map((s) => s.trim()).filter(Boolean),
+      };
+      if (spec.kind === 'text') {
+        const { system, user } = buildTextPrompt(spec.type, body.prompt ?? '', brand);
+        const text = (await generateText({ system, user })) ?? fallbackText(spec.type, body.prompt ?? '', brand);
+        return { type: spec.type, kind: 'text', text, live: textLlmReady() };
+      }
+      const prompt = buildVisualPrompt(spec.type, body.prompt ?? '', brand, body.style);
+      const aspect = (body.aspect ?? spec.defaultAspect) as Aspect;
+      if (spec.kind === 'video') {
+        const url = await falGenerateVideo(prompt, { aspect, duration: body.duration });
+        return { type: spec.type, kind: 'video', url, prompt, live: falReady() };
+      }
+      const url = await falGenerateImage(prompt, { aspect, quality: body.quality });
+      return { type: spec.type, kind: 'image', url, prompt, live: falReady() };
+    },
+  );
 
   // Real observed LSA economics (SearchLight benchmark) + the breakeven math.
   app.get('/api/benchmarks', async () => ({

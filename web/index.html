@@ -308,6 +308,7 @@
       <a data-page="research" class="sub"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg> Research</a>
       <a data-page="weather"><svg class="ico" viewBox="0 0 24 24"><path d="M17 14a4 4 0 0 0-1-7.87A6 6 0 0 0 4 8a4 4 0 0 0 .5 8H17Z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/></svg> Weather Triggers</a>
       <a data-page="hub"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg> Marketing Hub</a>
+      <a data-page="studio" class="sub"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4 3.6L17 19l-5-3-5 3 1-6.4L4 9l5.8-.7Z"/></svg> Creative Studio</a>
       <a data-page="adstudio" class="sub"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
       <a data-page="assets" class="sub"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/><path d="M3 3l18 18" opacity="0"/></svg> Assets</a>
       <a data-page="deploy"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 21h14"/></svg> Deploy <span id="deploy-badge" class="navbadge" style="display:none"></span></a>
@@ -437,6 +438,22 @@
         <div id="ad-photostrip" class="photogrid" style="margin-top:12px;display:none;max-width:620px"></div>
         <div id="ad-note" class="appsub" style="margin-top:10px"></div>
         <div id="ad-results" class="adgrid" style="margin-top:20px"></div>
+      </div>
+    </section>
+
+    <!-- CREATIVE STUDIO -->
+    <section class="page" id="page-studio">
+      <div class="mcard" style="max-width:1000px">
+        <h3>Creative Studio</h3>
+        <p class="mdesc">Every marketing asset for your business, from one place. Pick what you're making, describe it, and Miles brings it to life — on-brand, using your business details.</p>
+        <div class="subtabs" id="studio-types" style="margin-bottom:14px"></div>
+        <textarea class="f" id="studio-prompt" placeholder="Describe your idea, and Miles will bring it to life…" style="width:100%;min-height:72px;margin:0"></textarea>
+        <div id="studio-opts" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin:14px 0 4px"></div>
+        <div style="display:flex;align-items:center;gap:14px;margin-top:10px">
+          <button class="go" id="studio-go" style="flex:none">Generate ✨</button>
+          <span id="studio-note" class="appsub"></span>
+        </div>
+        <div id="studio-results" style="margin-top:22px"></div>
       </div>
     </section>
 
@@ -920,7 +937,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',hub:'Marketing Hub',assets:'Brand Assets',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
+const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',studio:'Creative Studio',hub:'Marketing Hub',assets:'Brand Assets',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
@@ -934,6 +951,7 @@ function setPage(id){
   $('#page-research').classList.toggle('on',id==='research');
   $('#page-weather').classList.toggle('on',id==='weather');
   $('#page-adstudio').classList.toggle('on',id==='adstudio');
+  $('#page-studio').classList.toggle('on',id==='studio');
   $('#page-hub').classList.toggle('on',id==='hub');
   $('#page-assets').classList.toggle('on',id==='assets');
   $('#page-deploy').classList.toggle('on',id==='deploy');
@@ -951,6 +969,7 @@ function setPage(id){
   if(id==='analytics') renderAnalytics();
   if(id==='weather') openWeather();
   if(id==='adstudio') openAdStudio();
+  if(id==='studio') openStudio();
   if(id==='hub') openHub();
   if(id==='assets') openAssets();
   if(id==='deploy') openDeploy();
@@ -1353,6 +1372,85 @@ function adCats(){ const p=PACKMETA.find(x=>x.id===adVert)||PACKMETA[0]; return 
 function fillAdCats(){ const sel=$('#ad-cat'); if(!sel)return; sel.innerHTML=adCats().filter(c=>c&&c.label).map(c=>`<option value="${c.id}">${c.label}</option>`).join(''); }
 function renderAdVpick(){ const vp=$('#ad-vpick'); if(!vp)return; vp.innerHTML=''; for(const p of PACKMETA){ const b=el('button',p.id===adVert?'on':'',p.label); b.onclick=()=>{ adVert=p.id; renderAdVpick(); fillAdCats(); }; vp.append(b); } }
 function openAdStudio(){ if(!PACKMETA.length){ loadPacks().then(()=>{ renderAdVpick(); fillAdCats(); }); return; } renderAdVpick(); fillAdCats(); }
+
+// ═══ creative studio (every marketing asset from one place) ═══
+const STUDIO_FALLBACK=[
+  {type:'image',label:'Image',kind:'image',defaultAspect:'16:9'},{type:'logo',label:'Logo',kind:'image',defaultAspect:'1:1'},
+  {type:'social',label:'Social post',kind:'image',defaultAspect:'4:5'},{type:'flyer',label:'Flyer',kind:'image',defaultAspect:'4:5'},
+  {type:'card',label:'Card / Invite',kind:'image',defaultAspect:'4:5'},{type:'video',label:'Video clip',kind:'video',defaultAspect:'16:9'},
+  {type:'copy',label:'Ad copy',kind:'text',defaultAspect:'1:1'},{type:'doc',label:'Doc / Email',kind:'text',defaultAspect:'1:1'},
+];
+const STUDIO_STYLES=['Auto','Photorealistic','Illustration','3D render','Minimal','Bold & vibrant','Vintage','Flat design'];
+let STUDIO={types:STUDIO_FALLBACK,imagesLive:false,textLive:false}, STUDIO_LOADED=false;
+let studioType='image', studioAspect='', studioStyle='Auto', studioQuality='standard', studioDuration=5;
+async function openStudio(){
+  if(!STUDIO_LOADED){
+    if(REMOTE){ try{ const r=await fetch('/api/studio'); const d=await r.json(); if(d.types&&d.types.length) STUDIO=d; }catch(e){} }
+    if(!ASSETS_LOADED) await loadAssets();
+    STUDIO_LOADED=true;
+  }
+  renderStudio();
+}
+function studioSpec(){ return (STUDIO.types||STUDIO_FALLBACK).find(t=>t.type===studioType)||STUDIO.types[0]; }
+function studioOpt(label,opts,val,onch){ const w=el('div'); w.innerHTML='<label class="f" style="display:block;margin-bottom:3px">'+label+'</label>'; const s=el('select','f'); s.style.margin='0'; for(const o of opts){ const op=el('option',null,o); op.value=o; if(String(o)===String(val))op.selected=true; s.append(op);} s.onchange=()=>onch(s.value); w.append(s); return w; }
+function renderStudio(){
+  const tb=$('#studio-types'); if(!tb) return; tb.innerHTML='';
+  for(const t of (STUDIO.types||STUDIO_FALLBACK)){ const c=el('button','tab'+(studioType===t.type?' on':''),t.label); c.onclick=()=>{ studioType=t.type; studioAspect=''; renderStudio(); }; tb.append(c); }
+  const spec=studioSpec(); const ob=$('#studio-opts'); ob.innerHTML='';
+  if(spec.kind==='image'){
+    ob.append(studioOpt('Aspect ratio',['1:1','16:9','9:16','4:5','3:4'],studioAspect||spec.defaultAspect,v=>studioAspect=v));
+    ob.append(studioOpt('Style',STUDIO_STYLES,studioStyle,v=>studioStyle=v));
+    ob.append(studioOpt('Quality',['standard','premium'],studioQuality,v=>studioQuality=v));
+  } else if(spec.kind==='video'){
+    ob.append(studioOpt('Aspect ratio',['16:9','9:16','1:1'],studioAspect||'16:9',v=>studioAspect=v));
+    ob.append(studioOpt('Length (sec)',['5','10'],studioDuration,v=>studioDuration=Number(v)));
+  }
+  const ta=$('#studio-prompt'); if(ta) ta.placeholder='Describe your '+spec.label.toLowerCase()+', and Miles will bring it to life…';
+  const note=$('#studio-note');
+  if(spec.kind==='text') note.textContent = STUDIO.textLive?'Miles writes this custom for your business.':'Demo copy until an AI key is added.';
+  else if(spec.kind==='video') note.textContent = STUDIO.imagesLive?'Video takes ~1 minute and uses the most credits.':'Demo preview until FAL_KEY is added.';
+  else note.textContent = STUDIO.imagesLive?'Generated on-brand from your business details.':'Demo preview until FAL_KEY is added for real images.';
+  $('#studio-go').onclick=studioGenerate;
+}
+async function studioGenerate(){
+  const spec=studioSpec(); const prompt=($('#studio-prompt').value||'').trim();
+  if(!prompt && spec.kind!=='text'){ toast('Describe what you want to make'); return; }
+  const btn=$('#studio-go'), old=btn.textContent; btn.disabled=true; btn.textContent = spec.kind==='video'?'Rendering…':'Generating…';
+  const box=$('#studio-results'); box.innerHTML=''; box.append(el('div','appsub', spec.kind==='video'?'Rendering your video — this can take a minute.':'Working…'));
+  try{
+    const body={type:studioType,prompt,aspect:studioAspect||spec.defaultAspect,style:studioStyle,quality:studioQuality,duration:studioDuration};
+    let r;
+    if(REMOTE){ const resp=await fetch('/api/studio',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); r=await resp.json(); }
+    else { r={type:studioType,kind:spec.kind,url:null,text:'(demo) '+prompt,live:false,prompt}; }
+    renderStudioResult(r,spec);
+    if(REMOTE) queueChange('creative','Created '+spec.label.toLowerCase()+(prompt?' — '+prompt.slice(0,42):''),true);
+  }catch(e){ box.innerHTML=''; box.append(el('div','verdict bad','Generation failed — try again in a moment.')); }
+  btn.disabled=false; btn.textContent=old;
+}
+function studioDownload(url,name){ const a=el('a','adsave','⤓ Download'); a.href=url; a.target='_blank'; a.download=name||'asset'; a.style.textDecoration='none'; return a; }
+function renderStudioResult(r,spec){
+  const box=$('#studio-results'); box.innerHTML='';
+  if(r.kind==='text'){
+    const card=el('div','acard'); const pre=el('div'); pre.style.cssText='white-space:pre-wrap;font-size:14px;line-height:1.6'; pre.textContent=r.text||''; card.append(pre);
+    const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px'; const cp=el('button','go','Copy'); cp.style.flex='none'; cp.onclick=()=>{ try{navigator.clipboard.writeText(r.text||'');}catch(e){} toast('Copied'); }; bar.append(cp); card.append(bar); box.append(card);
+    if(!r.live) box.append(el('div','appsub','Demo copy — add an OpenRouter key so Miles writes this custom for every request.'));
+    return;
+  }
+  if(r.kind==='video'){
+    if(r.url){ const v=el('video'); v.src=r.url; v.controls=true; v.style.cssText='max-width:100%;border-radius:12px'; box.append(v); const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px'; bar.append(studioDownload(r.url,'miles-video.mp4')); box.append(bar); }
+    else box.append(el('div','verdict tight','🎬 To generate real video, add FAL_KEY (and optionally FAL_VIDEO_MODEL) on Render. Video is the priciest, slowest asset — everything else works today.'));
+    return;
+  }
+  if(r.url){
+    const im=el('img'); im.src=r.url; im.style.cssText='max-width:100%;border-radius:12px;border:1px solid var(--line)'; box.append(im);
+    const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px;flex-wrap:wrap';
+    const save=el('button','go','Save to Assets'); save.style.flex='none'; save.onclick=()=>{ ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:r.url,caption:'Creative Studio: '+spec.label}); saveAssets(); toast('Saved to Assets'); };
+    bar.append(save); bar.append(studioDownload(r.url,spec.type+'.png')); box.append(bar);
+  } else {
+    box.append(el('div','verdict tight','🖼️ Add FAL_KEY on Render to generate the real image. Here’s the on-brand prompt Miles built for you:'));
+    const pc=el('div','acard'); pc.style.marginTop='8px'; pc.style.fontSize='13px'; pc.textContent=r.prompt||''; box.append(pc);
+  }
+}
 function renderAdCards(cr){
   const box=$('#ad-results'); box.innerHTML=''; const biz=(PROFILE&&PROFILE.businessName)||'Your Company';
   if(!cr.length){ box.append(el('div','verdict tight','No creative returned — try again.')); return; }
