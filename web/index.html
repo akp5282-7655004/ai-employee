@@ -1473,6 +1473,28 @@ async function studioGenerate(){
 }
 let studioLastPrompt='';
 function studioDownload(url,name){ const a=el('a','adsave','⤓ Download'); a.href=url; a.target='_blank'; a.download=name||'asset'; a.style.textDecoration='none'; return a; }
+function roundRectPath(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+// Bake the customer's real logo (a data URL) onto a generated image (a fal URL) →
+// one downloadable branded file. Returns a data URL, or null if the source image
+// can't be read cross-origin (then we just show it without the logo).
+function compositeLogo(imgUrl, logoUrl){ return new Promise((resolve)=>{
+  const img=new Image(); img.crossOrigin='anonymous';
+  img.onload=()=>{ try{
+    const W=img.naturalWidth||1024, H=img.naturalHeight||1024;
+    const cv=document.createElement('canvas'); cv.width=W; cv.height=H; const ctx=cv.getContext('2d'); ctx.drawImage(img,0,0,W,H);
+    const logo=new Image();
+    logo.onload=()=>{ try{
+      const pad=Math.round(W*0.025); const bh=Math.round(H*0.10); const ar=(logo.naturalWidth||1)/(logo.naturalHeight||1);
+      const lw=Math.round(bh*ar), lh=bh; const inset=Math.round(pad*0.55);
+      const bx=W-lw-pad-inset*2, by=H-lh-pad-inset*2;
+      ctx.fillStyle='rgba(255,255,255,.94)'; roundRectPath(ctx,bx,by,lw+inset*2,lh+inset*2,Math.round(inset*1.1)); ctx.fill();
+      ctx.drawImage(logo, bx+inset, by+inset, lw, lh);
+      resolve(cv.toDataURL('image/png'));
+    }catch(e){ resolve(null); } };
+    logo.onerror=()=>resolve(null); logo.src=logoUrl;
+  }catch(e){ resolve(null); } };
+  img.onerror=()=>resolve(null); img.src=imgUrl;
+}); }
 // The one button that stages an asset for your ad account — as PENDING, so you still approve it in Deploy.
 function studioPushBtn(spec){ const b=el('button','go','↗ Send to Deploy'); b.style.flex='none'; b.onclick=()=>{ queueChange('creative',spec.label+(studioLastPrompt?': '+studioLastPrompt.slice(0,42):''),'pending'); toast('Sent to Deploy — approve it there to push it live'); }; return b; }
 function renderStudioResult(r,spec){
@@ -1495,9 +1517,19 @@ function renderStudioResult(r,spec){
   }
   if(r.url){
     const im=el('img'); im.src=r.url; im.style.cssText='max-width:100%;border-radius:12px;border:1px solid var(--line)'; box.append(im);
+    let current=r.url; // the image Save/Download/Deploy act on (composited when logo is on)
     const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px;flex-wrap:wrap';
-    const save=el('button','go','Save to Assets'); save.style.flex='none'; save.onclick=()=>{ ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:r.url,caption:'Creative Studio: '+spec.label}); saveAssets(); toast('Saved to Assets'); };
-    bar.append(save); bar.append(studioDownload(r.url,spec.type+'.png')); bar.append(studioPushBtn(spec)); box.append(bar);
+    const save=el('button','go','Save to Assets'); save.style.flex='none'; save.onclick=()=>{ ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:current,caption:'Creative Studio: '+spec.label}); saveAssets(); toast('Saved to Assets'); };
+    const dl=studioDownload(r.url,spec.type+'.png');
+    bar.append(save,dl,studioPushBtn(spec)); box.append(bar);
+    const hasLogo=!!(ASSETS&&ASSETS.logo)&&spec.type!=='logo';
+    if(hasLogo){
+      let on=true; const tog=el('button','adsave','🏷️ Logo: On');
+      const apply=async()=>{ if(on){ tog.disabled=true; const t=tog.textContent; tog.textContent='Adding logo…'; const c=await compositeLogo(r.url, ASSETS.logo); tog.disabled=false; if(c){ current=c; im.src=c; dl.href=c; tog.textContent='🏷️ Logo: On'; } else { on=false; current=r.url; im.src=r.url; dl.href=r.url; tog.textContent='🏷️ Logo: Off'; box.append(el('div','appsub','Couldn’t bake the logo into this one — showing the design without it.')); } } else { current=r.url; im.src=r.url; dl.href=r.url; tog.textContent='🏷️ Logo: Off'; } };
+      tog.onclick=()=>{ on=!on; apply(); }; bar.append(tog); apply();
+    } else if(!(ASSETS&&ASSETS.logo)){
+      box.append(el('div','appsub','💡 Upload your logo in Assets and Miles will brand these automatically.'));
+    }
   } else {
     box.append(el('div','verdict tight','🖼️ Add FAL_KEY on Render to generate the real image. Here’s the on-brand prompt Miles built for you:'));
     const pc=el('div','acard'); pc.style.marginTop='8px'; pc.style.fontSize='13px'; pc.textContent=r.prompt||''; box.append(pc);
