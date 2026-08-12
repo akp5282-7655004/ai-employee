@@ -1606,7 +1606,8 @@ function renderStudioResult(r,spec){
     const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px;flex-wrap:wrap';
     const save=el('button','go','Save to Assets'); save.style.flex='none'; save.onclick=()=>{ ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:current,caption:'Creative Studio: '+spec.label}); saveAssets(); toast('Saved to Assets'); };
     const dl=studioDownload(r.url,spec.type+'.png');
-    bar.append(save,dl,studioPushBtn(spec)); box.append(bar);
+    const edit=el('button','adsave','✏️ Edit'); edit.onclick=()=>openEditor(current);
+    bar.append(save,dl,edit,studioPushBtn(spec)); box.append(bar);
     const hasLogo=!!(ASSETS&&ASSETS.logo)&&spec.type!=='logo';
     if(hasLogo){
       let on=true; const tog=el('button','adsave','🏷️ Logo: On');
@@ -1619,6 +1620,66 @@ function renderStudioResult(r,spec){
     box.append(el('div','verdict tight','🖼️ Add FAL_KEY on Render to generate the real image. Here’s the on-brand prompt Miles built for you:'));
     const pc=el('div','acard'); pc.style.marginTop='8px'; pc.style.fontSize='13px'; pc.textContent=r.prompt||''; box.append(pc);
   }
+}
+// ═══ Design Editor (v1) — drag your logo & text onto a generated image, then export ═══
+// A lightweight Canva-style canvas editor: background image + movable/resizable
+// logo and text layers, exported to a branded PNG. Video editing is a later phase.
+function openEditor(bgUrl){
+  const ov=el('div'); ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px';
+  const panel=el('div'); panel.style.cssText='background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:96vw;max-height:96vh;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px';
+  const head=el('div'); head.style.cssText='display:flex;justify-content:space-between;align-items:center';
+  head.append(el('b',null,'✏️ Design Editor'));
+  const close=el('button','idel','✕ Close'); head.append(close);
+  const tb=el('div'); tb.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+  const canvas=el('canvas'); canvas.style.cssText='max-width:100%;border-radius:10px;border:1px solid var(--line);touch-action:none;cursor:default;background:var(--panel-2)';
+  const ctx=canvas.getContext('2d');
+  const foot=el('div'); foot.style.cssText='display:flex;gap:8px;flex-wrap:wrap';
+  panel.append(head,tb,canvas,foot); ov.append(panel); document.body.append(ov);
+
+  let layers=[], sel=null, mode=null, off={x:0,y:0}, cw=0, ch=0;
+  const bg=new Image(); bg.crossOrigin='anonymous';
+  bg.onload=()=>{ const maxW=Math.min(820, window.innerWidth-80), maxH=window.innerHeight-260; let s=Math.min(1, maxW/bg.naturalWidth); if(bg.naturalHeight*s>maxH) s=maxH/bg.naturalHeight; cw=Math.round(bg.naturalWidth*s); ch=Math.round(bg.naturalHeight*s); canvas.width=cw; canvas.height=ch; render(); };
+  bg.onerror=()=>{ toast('Couldn’t load that image into the editor'); ov.remove(); };
+  bg.src=bgUrl;
+
+  function textMetrics(l){ ctx.font=(l.weight||'700')+' '+l.size+'px '+(l.font||'Inter, system-ui, sans-serif'); const w=ctx.measureText(l.text||' ').width; return {w, h:l.size*1.25}; }
+  function bounds(l){ if(l.type==='text'){ const m=textMetrics(l); return {x:l.x,y:l.y,w:m.w,h:m.h}; } return {x:l.x,y:l.y,w:l.w,h:l.h}; }
+  function render(){
+    ctx.clearRect(0,0,cw,ch); if(bg.complete) ctx.drawImage(bg,0,0,cw,ch);
+    for(const l of layers){
+      if(l.type==='image'){ ctx.drawImage(l.img,l.x,l.y,l.w,l.h); }
+      else { ctx.font=(l.weight||'700')+' '+l.size+'px '+(l.font||'Inter, system-ui, sans-serif'); ctx.textBaseline='top'; ctx.fillStyle=l.color||'#ffffff'; if(l.shadow!==false){ ctx.shadowColor='rgba(0,0,0,.55)'; ctx.shadowBlur=Math.max(2,l.size*0.12); ctx.shadowOffsetY=1; } ctx.fillText(l.text,l.x,l.y); ctx.shadowColor='transparent'; ctx.shadowBlur=0; ctx.shadowOffsetY=0; }
+    }
+    if(sel){ const b=bounds(sel); ctx.save(); ctx.strokeStyle='#2b6cff'; ctx.setLineDash([5,4]); ctx.lineWidth=1.5; ctx.strokeRect(b.x-2,b.y-2,b.w+4,b.h+4); ctx.setLineDash([]); ctx.fillStyle='#2b6cff'; ctx.fillRect(b.x+b.w-4,b.y+b.h-4,12,12); ctx.restore(); }
+  }
+  function pos(e){ const r=canvas.getBoundingClientRect(); const cx=(e.touches?e.touches[0].clientX:e.clientX), cy=(e.touches?e.touches[0].clientY:e.clientY); return {x:(cx-r.left)*(canvas.width/r.width), y:(cy-r.top)*(canvas.height/r.height)}; }
+  function inHandle(p){ if(!sel) return false; const b=bounds(sel); return p.x>=b.x+b.w-6 && p.x<=b.x+b.w+12 && p.y>=b.y+b.h-6 && p.y<=b.y+b.h+12; }
+  function hit(p){ for(let i=layers.length-1;i>=0;i--){ const b=bounds(layers[i]); if(p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h) return layers[i]; } return null; }
+  function down(e){ e.preventDefault(); const p=pos(e); if(inHandle(p)){ mode='resize'; return; } const h=hit(p); sel=h; if(h){ mode='move'; off={x:p.x-h.x, y:p.y-h.y}; } render(); }
+  function move(e){ if(!mode||!sel) return; e.preventDefault(); const p=pos(e); if(mode==='move'){ sel.x=p.x-off.x; sel.y=p.y-off.y; } else if(mode==='resize'){ const b=bounds(sel); if(sel.type==='image'){ const ar=sel.w/sel.h; sel.w=Math.max(24,p.x-sel.x); sel.h=sel.w/ar; } else { sel.size=Math.max(10, Math.round((p.y-sel.y)/1.25)); } } render(); }
+  function up(){ mode=null; }
+  canvas.addEventListener('mousedown',down); canvas.addEventListener('mousemove',move); window.addEventListener('mouseup',up);
+  canvas.addEventListener('touchstart',down,{passive:false}); canvas.addEventListener('touchmove',move,{passive:false}); window.addEventListener('touchend',up);
+  canvas.addEventListener('dblclick',()=>{ if(sel&&sel.type==='text'){ const t=prompt('Edit text:',sel.text); if(t!=null){ sel.text=t; render(); } } });
+
+  // toolbar
+  const bAddLogo=el('button','go','🏷️ Add logo'); bAddLogo.style.cssText='flex:none;padding:6px 12px';
+  bAddLogo.onclick=()=>{ if(!(ASSETS&&ASSETS.logo)){ toast('Upload your logo in Assets first'); return; } const im=new Image(); im.crossOrigin='anonymous'; im.onload=()=>{ const w=Math.round(cw*0.28), h=Math.round(w*(im.naturalHeight/im.naturalWidth||0.5)); const l={id:newId(),type:'image',img:im,src:ASSETS.logo,x:Math.round(cw*0.04),y:Math.round(ch*0.04),w,h}; layers.push(l); sel=l; render(); }; im.onerror=()=>toast('Couldn’t load your logo'); im.src=ASSETS.logo; };
+  const bAddText=el('button','adsave','＋ Text'); bAddText.onclick=()=>{ const t=prompt('Text to add:', (PROFILE&&PROFILE.currentOffers)||'Book today'); if(t==null) return; const l={id:newId(),type:'text',text:t||'Text',x:Math.round(cw*0.1),y:Math.round(ch*0.75),size:Math.max(20,Math.round(ch*0.09)),color:'#ffffff',weight:'700'}; layers.push(l); sel=l; render(); };
+  const color=el('input'); color.type='color'; color.value='#ffffff'; color.title='Text color'; color.style.cssText='width:38px;height:32px;border:1px solid var(--line);border-radius:6px;background:none;cursor:pointer';
+  color.oninput=()=>{ if(sel&&sel.type==='text'){ sel.color=color.value; render(); } };
+  const bDel=el('button','idel','🗑 Delete'); bDel.onclick=()=>{ if(sel){ layers=layers.filter(x=>x!==sel); sel=null; render(); } };
+  tb.append(bAddLogo,bAddText,el('span','appsub','Text color:'),color,bDel,el('span','appsub','Drag to move · pull the blue corner to resize · double-click text to edit'));
+
+  function exportPng(){ try{ const f=bg.naturalWidth/cw; const oc=document.createElement('canvas'); oc.width=bg.naturalWidth; oc.height=bg.naturalHeight; const o=oc.getContext('2d'); o.drawImage(bg,0,0,oc.width,oc.height); for(const l of layers){ if(l.type==='image'){ o.drawImage(l.img,l.x*f,l.y*f,l.w*f,l.h*f); } else { o.font=(l.weight||'700')+' '+(l.size*f)+'px '+(l.font||'Inter, system-ui, sans-serif'); o.textBaseline='top'; o.fillStyle=l.color||'#fff'; o.shadowColor='rgba(0,0,0,.55)'; o.shadowBlur=Math.max(2,l.size*f*0.12); o.shadowOffsetY=f; o.fillText(l.text,l.x*f,l.y*f); } } return oc.toDataURL('image/png'); }catch(err){ return null; } }
+  const bSave=el('button','go','Save to Assets'); bSave.style.cssText='flex:none;padding:6px 14px';
+  bSave.onclick=()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export (image is cross-origin). Save it to Assets first, then edit that copy.'); return; } ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:u,caption:'Edited design'}); saveAssets(); toast('Saved to Assets ✓'); };
+  const bDl=el('button','adsave','⤓ Download'); bDl.onclick=()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export (cross-origin image).'); return; } const a=el('a'); a.href=u; a.download='miles-design.png'; a.click(); };
+  const bDeploy=el('button','go','↗ Send to Deploy'); bDeploy.style.cssText='flex:none;padding:6px 14px';
+  bDeploy.onclick=()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export (cross-origin image).'); return; } if(typeof queueChange==='function'){ queueChange('creative','Edited design','pending'); } ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:u,caption:'Edited design (sent to Deploy)'}); saveAssets(); toast('Sent to Deploy (pending approval)'); };
+  foot.append(bSave,bDl,bDeploy);
+  close.onclick=()=>{ window.removeEventListener('mouseup',up); window.removeEventListener('touchend',up); ov.remove(); };
+  ov.addEventListener('mousedown',(e)=>{ if(e.target===ov) close.onclick(); });
 }
 function renderAdCards(cr){
   const box=$('#ad-results'); box.innerHTML=''; const biz=(PROFILE&&PROFILE.businessName)||'Your Company';
