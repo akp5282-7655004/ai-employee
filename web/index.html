@@ -1900,6 +1900,20 @@ function renderAgentSpec(spec){
   const no=el('button','adsave','Discard'); no.onclick=()=>{ out.innerHTML=''; };
   bar.append(yes,no); card.append(bar); out.append(card);
 }
+function agentDetailsHtml(reads,produces,instruction){
+  if(!reads&&!produces&&!instruction) return '';
+  return '<details style="margin-top:10px"><summary class="appsub" style="cursor:pointer;user-select:none">How it works — what it reads &amp; the exact instruction</summary>'+
+    '<div style="margin-top:8px;font-size:12.5px;line-height:1.55">'+
+    (reads?'<div style="margin-bottom:6px"><b>📥 Reads:</b> '+esc(reads)+'</div>':'')+
+    (produces?'<div style="margin-bottom:6px"><b>📤 Produces:</b> '+esc(produces)+'</div>':'')+
+    (instruction?'<div style="margin-bottom:4px"><b>🧠 Instruction it follows:</b></div><div style="white-space:pre-wrap;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:10px">'+esc(instruction)+'</div>':'')+
+    '</div></details>';
+}
+function deployedDetail(a){
+  if(a.task==='custom'&&a.spec) return {reads:(DS_LABEL[a.spec.dataSource]||a.spec.dataSource),produces:'A written result you can act on each run.',instruction:a.spec.systemPrompt};
+  const t=(SCHED.tasks||[]).find(x=>x.task===a.task);
+  return t?{reads:t.reads,produces:t.produces,instruction:t.instruction}:{reads:'',produces:'',instruction:''};
+}
 function deployCustomAgent(spec){
   const a={id:newId(),name:spec.name,task:'custom',spec,time:spec.time||'08:00',days:(spec.days&&spec.days.length?spec.days:[1,2,3,4,5]),enabled:true,tzOffset:new Date().getTimezoneOffset(),createdAt:new Date().toISOString()};
   SCHED.agents.push(a); saveSchedules(); $('#studio-agent-problem').value=''; renderSchedules(); toast(spec.name+' deployed — runs '+schedSummaryFrom(a.days,a.time)+' 🎉');
@@ -1923,7 +1937,7 @@ function renderSchedules(){
   for(const t of (SCHED.tasks||SCHED_TASKS_FB)){
     const deployed=(SCHED.agents||[]).some(a=>a.task===t.task);
     const card=el('div','acard'); card.style.margin='0';
-    card.innerHTML='<div style="font-size:22px">'+(TASK_ICON[t.task]||'🤖')+'</div><b style="display:block;margin-top:6px">'+esc(t.label)+'</b><div class="mdesc" style="margin:6px 0 10px">'+esc(t.description||'')+'</div><div class="appsub">Runs daily · '+(t.defaultTime||'08:00')+'</div>';
+    card.innerHTML='<div style="font-size:22px">'+(TASK_ICON[t.task]||'🤖')+'</div><b style="display:block;margin-top:6px">'+esc(t.label)+'</b><div class="mdesc" style="margin:6px 0 10px">'+esc(t.description||'')+'</div><div class="appsub">Runs daily · '+(t.defaultTime||'08:00')+'</div>'+agentDetailsHtml(t.reads,t.produces,t.instruction);
     const btn=el('button',deployed?'adsave':'go',deployed?'✓ Deployed':'Deploy'); btn.style.marginTop='12px'; btn.disabled=deployed;
     if(!deployed) btn.onclick=()=>deployAgent(t);
     card.append(btn); gal.append(card);
@@ -1941,7 +1955,9 @@ function renderSchedules(){
     const sw=el('label','switch'); const ci=el('input'); ci.type='checkbox'; ci.checked=!!a.enabled; const sl=el('span','sl'); sw.append(ci,sl); ci.onchange=()=>{ a.enabled=ci.checked; saveSchedules(); };
     const run=el('button','go','Run now'); run.style.cssText='flex:none;padding:6px 12px'; run.onclick=()=>schedRunNow(a,run);
     const del=el('button','idel','Delete'); del.onclick=()=>{ SCHED.agents=SCHED.agents.filter(x=>x.id!==a.id); saveSchedules(); renderSchedules(); };
-    right.append(sw,run,del); top.append(l,right); row.append(top); list.append(row);
+    right.append(sw,run,del); top.append(l,right); row.append(top);
+    const dt=deployedDetail(a); row.insertAdjacentHTML('beforeend',agentDetailsHtml(dt.reads,dt.produces,dt.instruction));
+    list.append(row);
   }
   box.append(list);
   box.append(el('div','sect-label','RECENT RUNS'));

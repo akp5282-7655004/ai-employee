@@ -27,6 +27,12 @@ export interface TaskSpec {
   description: string;
   /** A sensible default time (local HH:MM) to pre-fill the form. */
   defaultTime: string;
+  /** Transparency — what data the agent reads (and what to connect for it). */
+  reads: string;
+  /** Transparency — what the agent produces each run. */
+  produces: string;
+  /** Transparency — the actual instruction the agent follows, in plain terms. */
+  instruction: string;
 }
 
 export const TASK_SPECS: TaskSpec[] = [
@@ -35,66 +41,99 @@ export const TASK_SPECS: TaskSpec[] = [
     label: 'Morning brief + to-do list',
     description: 'A daily rundown — weather, what needs your approval, and the day’s priorities.',
     defaultTime: '08:30',
+    reads: 'Your local weather, pending approvals in Deploy, and active weather triggers.',
+    produces: 'A morning brief: weather + the opportunity it creates, a numbered to-do list, and the day’s focus.',
+    instruction: 'Assemble a daily rundown. Lead with today’s weather and the marketing opportunity it creates. List concrete to-dos: clear any changes waiting for approval, reply to overnight leads, check yesterday’s ad spend vs. booked jobs. End with one focus — turn yesterday’s leads into booked jobs before chasing new ones.',
   },
   {
     task: 'cpa_report',
     label: 'Marketing performance report',
     description: 'Cost-per-acquisition across every ad platform vs. your target, with what to fix.',
     defaultTime: '09:00',
+    reads: 'Your ad spend & conversions per platform (connect Google Ads / Meta) and your target CPA.',
+    produces: 'A per-platform cost-per-job report vs. your target, flagging what’s over and where to move budget.',
+    instruction: 'For each ad platform, compute cost-per-acquisition (spend ÷ conversions) and compare it to your target CPA. Flag any platform over target, never divide by zero when a platform has no conversions, and recommend trimming the worst performer and shifting budget to the best.',
   },
   {
     task: 'email_tasklist',
     label: 'Morning email → task list',
     description: 'Reads your inbox each morning and turns it into a prioritized to-do list — leads first.',
     defaultTime: '08:00',
+    reads: 'Your recent email inbox (connect Gmail).',
+    produces: 'A prioritized to-do list grouped Do-first / Today / When-you-can.',
+    instruction: 'Act as the owner’s executive assistant. From the inbox, build a prioritized to-do list in three groups: “Do first” (money & time-sensitive — new leads, quotes, overdue invoices, anything that books a job), “Today”, and “When you can”. Each item is one short action. Ignore newsletters and noise.',
   },
   {
     task: 'daily_wrapup',
     label: '6pm daily wrap-up',
     description: 'Reviews the day’s activity at 6pm and reports what got done vs. what’s still pending.',
     defaultTime: '18:00',
+    reads: 'Today’s deployed changes, agent runs, and anything still pending your approval.',
+    produces: 'An end-of-day wrap-up: accomplished, still pending, and tomorrow’s 1–2 priorities.',
+    instruction: 'Act as the owner’s chief of staff. Write a short, warm end-of-day wrap-up from the day’s activity only: “Accomplished today”, “Still pending” (needs approval), and “Tomorrow” (1–2 priorities). If it was a quiet day, say so kindly.',
   },
   {
     task: 'social_content',
     label: 'Daily social post + report',
     description: 'Writes an organic social post every day and reports impressions, clicks & likes.',
     defaultTime: '10:00',
+    reads: 'Your business profile, services & offer (plus social metrics if Facebook/Instagram/LinkedIn are connected).',
+    produces: 'One ready-to-post caption + hashtags + a visual note, and yesterday’s impressions/clicks/likes.',
+    instruction: 'Act as a social media manager for a local-service business. Write ONE ready-to-post organic post: a scroll-stopping caption (2–4 short lines), 5–8 relevant hashtags, and a one-line note on the visual to pair with it. Friendly, local, no fluff. Then report yesterday’s metrics if connected.',
   },
   {
     task: 'review_responder',
     label: 'Review responder',
     description: 'Drafts on-brand replies to new reviews so your reputation stays strong.',
     defaultTime: '11:00',
+    reads: 'Your new customer reviews (connect Google Business Profile).',
+    produces: 'A warm, specific reply per review — or 3 reusable templates when there are none.',
+    instruction: 'Reply to reviews as the business owner. Thank happy customers specifically; calmly de-escalate unhappy ones and offer to make it right — never defensive. If there are no new reviews, write 3 reusable reply templates (5-star, 3-star, 1-star) instead.',
   },
   {
     task: 'lead_followup',
     label: 'Lead follow-up',
     description: 'Follows up with new leads so none slip away — a ready-to-send message per lead.',
     defaultTime: '12:00',
+    reads: 'Your new leads (connect your CRM).',
+    produces: 'A ready-to-send text + email per lead — or a reusable 3-touch sequence when there are none.',
+    instruction: 'Act as a speed-to-lead specialist. For each new lead, write a short, friendly first follow-up (a text option and an email option) that books the job, referencing what they asked about with a clear next step. If there are no leads, write a reusable 3-touch follow-up sequence instead.',
   },
   {
     task: 'competitor_watch',
     label: 'Competitor watch',
     description: 'Scans your local competitors and tells you how to stay ahead.',
     defaultTime: '07:00',
+    reads: 'Your business profile, services, and local market.',
+    produces: 'A short competitive read + 3 concrete moves to get ahead this week.',
+    instruction: 'Act as a local marketing strategist. Give a short competitive read: where local competitors likely win, where this business can stand out, and 3 concrete moves to get ahead this week. Concise and actionable.',
   },
   {
     task: 'seo_agent',
     label: 'Local SEO agent',
     description: 'A weekly local-SEO play — Google Business Profile, local keywords, and citations.',
     defaultTime: '07:30',
+    reads: 'Your business profile, services, and city.',
+    produces: 'This week’s local-SEO play: a GBP post, a blog topic + outline, and 2 citation/review actions.',
+    instruction: 'Act as a local SEO specialist for home services. Produce this week’s play: (1) one Google Business Profile post, (2) one blog topic + 4-point outline targeting a “service + city” keyword, (3) two citation/backlink or review actions.',
   },
   {
     task: 'content_writer',
     label: 'SEO content writer',
     description: 'Drafts a local-SEO blog post that helps you rank for “service near me”.',
     defaultTime: '09:30',
+    reads: 'Your business profile, services, and city.',
+    produces: 'A ~400-word blog draft: title, meta description, subheads, and a call to action.',
+    instruction: 'Act as an SEO content writer. Write a ~400-word blog post optimized to rank for a “service near me / in city” search: a compelling title, a meta description under 155 characters, and a body with 2–3 H2 subheads and a clear call to action. Natural and helpful, not keyword-stuffed.',
   },
   {
     task: 'geo_agent',
     label: 'AI-search (GEO) agent',
     description: 'Gets your business recommended by ChatGPT & Gemini when locals ask for the best.',
     defaultTime: '08:15',
+    reads: 'Your business profile, services, and city.',
+    produces: 'A GEO kit: a cite-ready description, 5 AI-style FAQs, and 3 things to publish.',
+    instruction: 'Act as a Generative Engine Optimization specialist — help the business get recommended by ChatGPT, Gemini and Perplexity when people ask “who’s the best [service] near me”. Produce a crisp, factual, cite-ready description, 5 FAQ question+answer pairs matching how people ask AI, and 3 things to publish so AI models pick this business.',
   },
 ];
 
