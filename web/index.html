@@ -1512,21 +1512,48 @@ async function studioOptimize(){
   }catch(e){ toast('Couldn’t optimize — try again'); note.textContent=prev; }
   btn.disabled=false; btn.textContent=old;
 }
+// An estimated progress bar for slow generations. fal doesn't report a true
+// percentage, so this eases toward ~95% over the model's typical render time and
+// snaps to 100% the moment the real result arrives. Elapsed time is real; the bar
+// is an honest estimate (labelled as such).
+function studioProgressBar(box, etaSec, kind){
+  box.innerHTML='';
+  const wrap=el('div','mcard'); wrap.style.cssText='max-width:520px;padding:16px';
+  const label=el('div'); label.style.cssText='font-weight:600;margin-bottom:8px';
+  label.textContent = kind==='video'?'🎬 Rendering your video…':kind==='audio'?'🎙 Generating your voiceover…':kind==='image'?'🎨 Generating your image…':'✍️ Writing…';
+  const track=el('div'); track.style.cssText='height:10px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);overflow:hidden';
+  const fill=el('div'); fill.style.cssText='height:100%;width:0%;background:var(--accent,#111);transition:width .3s ease';
+  track.append(fill);
+  const sub=el('div','appsub'); sub.style.marginTop='6px';
+  wrap.append(label,track,sub); box.append(wrap);
+  const fmt=(s)=> s<60 ? Math.round(s)+'s' : Math.floor(s/60)+'m '+String(Math.round(s%60)).padStart(2,'0')+'s';
+  const t0=(window.performance&&performance.now)?performance.now():+new Date(); let stopped=false;
+  const tick=()=>{ if(stopped) return; const sec=(((window.performance&&performance.now)?performance.now():+new Date())-t0)/1000; const pct=Math.min(95,Math.round(100*(1-Math.exp(-sec/(Math.max(4,etaSec)*0.6))))); fill.style.width=pct+'%'; sub.textContent=pct+'% · '+fmt(sec)+' elapsed · est. ~'+fmt(etaSec); };
+  const iv=setInterval(tick,250); tick();
+  return {
+    stop(){ stopped=true; clearInterval(iv); },
+    async finish(){ stopped=true; clearInterval(iv); fill.style.width='100%'; sub.textContent='100% · done ✓'; await new Promise(r=>setTimeout(r,350)); },
+  };
+}
 async function studioGenerate(){
   const spec=studioSpec(); const prompt=($('#studio-prompt').value||'').trim();
   if(!prompt && spec.kind!=='text'){ toast('Describe what you want to make'); return; }
   const btn=$('#studio-go'), old=btn.textContent; btn.disabled=true; btn.textContent = spec.kind==='video'?'Rendering…':'Generating…';
-  const box=$('#studio-results'); box.innerHTML=''; box.append(el('div','appsub', spec.kind==='video'?'Rendering your video — this can take a minute.':'Working…'));
+  const box=$('#studio-results');
+  const sel=(STUDIO_MODELS[studioType]&&STUDIO_MODELS[studioType].models||[]).find(m=>m.id===studioModel);
+  const eta=(sel&&sel.eta) || (spec.kind==='video'?70:spec.kind==='audio'?15:spec.kind==='image'?18:8);
+  const prog=studioProgressBar(box, eta, spec.kind);
   try{
     const body={type:studioType,prompt,aspect:studioAspect||spec.defaultAspect,style:studioStyle,quality:studioQuality,duration:studioDuration,model:studioModel};
     let r;
     if(REMOTE){ const resp=await fetch('/api/studio',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); r=await resp.json(); }
     else { r={type:studioType,kind:spec.kind,url:null,text:'(demo) '+prompt,live:false,prompt}; }
+    await prog.finish();
     studioLastPrompt=prompt;
     renderStudioResult(r,spec);
     // Generating is free experimentation — it does NOT touch Deploy or your ad account.
     // Only "Send to Deploy" on a result you like stages it for approval.
-  }catch(e){ box.innerHTML=''; box.append(el('div','verdict bad','Generation failed — try again in a moment.')); }
+  }catch(e){ prog.stop(); box.innerHTML=''; box.append(el('div','verdict bad','Generation failed — try again in a moment.')); }
   btn.disabled=false; btn.textContent=old;
 }
 let studioLastPrompt='';

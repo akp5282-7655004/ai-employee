@@ -29,19 +29,21 @@ export interface MediaModel {
   recommendFor?: RegExp;
   /** Higher = better quality; used to pick the "for best results" recommendation. */
   quality: number;
+  /** Typical time to generate, in seconds — drives the estimated progress bar. */
+  etaSec: number;
 }
 
 export const MEDIA_MODELS: MediaModel[] = [
   // ── images ──
-  { id: 'flux-schnell', kind: 'image', label: 'Flux Schnell — Fast', blurb: 'Fast everyday images. Great for social posts and high volume.', credits: 5, provider: 'fal', falModel: 'fal-ai/flux/schnell', default: true, quality: 1 },
-  { id: 'flux-dev', kind: 'image', label: 'Flux Dev — Balanced', blurb: 'Sharper detail and cleaner text-in-image. Best for flyers, cards, and logos.', credits: 8, provider: 'fal', falModel: 'fal-ai/flux/dev', recommendFor: /logo|flyer|card|invite|poster|text|headline|menu/i, quality: 2 },
-  { id: 'flux-pro', kind: 'image', label: 'Flux Pro 1.1 — Photoreal', blurb: 'Highest quality, most photorealistic. Best for hero shots and polished ads.', credits: 12, provider: 'fal', falModel: 'fal-ai/flux-pro/v1.1', recommendFor: /photo|realistic|hero|portrait|product|professional|lifestyle/i, quality: 3 },
-  { id: 'gpt-image', kind: 'image', label: 'ChatGPT Image (GPT-Image-1)', blurb: 'OpenAI’s image model — excellent at following detailed instructions and rendering text.', credits: 15, provider: 'openai', requiresEnv: 'OPENAI_API_KEY', quality: 3 },
+  { id: 'flux-schnell', kind: 'image', label: 'Flux Schnell — Fast', blurb: 'Fast everyday images. Great for social posts and high volume.', credits: 5, provider: 'fal', falModel: 'fal-ai/flux/schnell', default: true, quality: 1, etaSec: 8 },
+  { id: 'flux-dev', kind: 'image', label: 'Flux Dev — Balanced', blurb: 'Sharper detail and cleaner text-in-image. Best for flyers, cards, and logos.', credits: 8, provider: 'fal', falModel: 'fal-ai/flux/dev', recommendFor: /logo|flyer|card|invite|poster|text|headline|menu/i, quality: 2, etaSec: 20 },
+  { id: 'flux-pro', kind: 'image', label: 'Flux Pro 1.1 — Photoreal', blurb: 'Highest quality, most photorealistic. Best for hero shots and polished ads.', credits: 12, provider: 'fal', falModel: 'fal-ai/flux-pro/v1.1', recommendFor: /photo|realistic|hero|portrait|product|professional|lifestyle/i, quality: 3, etaSec: 25 },
+  { id: 'gpt-image', kind: 'image', label: 'ChatGPT Image (GPT-Image-1)', blurb: 'OpenAI’s image model — excellent at following detailed instructions and rendering text.', credits: 15, provider: 'openai', requiresEnv: 'OPENAI_API_KEY', quality: 3, etaSec: 25 },
   // ── video ──
-  { id: 'kling-std', kind: 'video', label: 'Kling — Standard', blurb: 'Reliable everyday video. The safe default that gets the job done.', credits: 20, provider: 'fal', falModel: 'fal-ai/kling-video/v1/standard/text-to-video', default: true, quality: 1 },
-  { id: 'kling-pro', kind: 'video', label: 'Kling Pro — Cinematic', blurb: 'Smoother motion and more detail. Best for polished ads and hero videos.', credits: 35, provider: 'fal', falModel: 'fal-ai/kling-video/v1.5/pro/text-to-video', recommendFor: /.*/, quality: 2 },
+  { id: 'kling-std', kind: 'video', label: 'Kling — Standard', blurb: 'Reliable everyday video. The safe default that gets the job done.', credits: 20, provider: 'fal', falModel: 'fal-ai/kling-video/v1/standard/text-to-video', default: true, quality: 1, etaSec: 60 },
+  { id: 'kling-pro', kind: 'video', label: 'Kling Pro — Cinematic', blurb: 'Smoother motion and more detail. Best for polished ads and hero videos.', credits: 35, provider: 'fal', falModel: 'fal-ai/kling-video/v1.5/pro/text-to-video', recommendFor: /.*/, quality: 2, etaSec: 90 },
   // ── audio ──
-  { id: 'playai-tts', kind: 'audio', label: 'PlayAI Voice', blurb: 'Natural voiceover from any script.', credits: 3, provider: 'fal', falModel: 'fal-ai/playai/tts/v3', default: true, quality: 1 },
+  { id: 'playai-tts', kind: 'audio', label: 'PlayAI Voice', blurb: 'Natural voiceover from any script.', credits: 3, provider: 'fal', falModel: 'fal-ai/playai/tts/v3', default: true, quality: 1, etaSec: 15 },
 ];
 
 export function modelsForKind(kind: MediaKind): MediaModel[] {

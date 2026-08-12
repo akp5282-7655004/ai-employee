@@ -793,7 +793,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const models = modelsForKind(kind).map((m) => ({
       id: m.id, label: m.label, blurb: m.blurb, credits: m.credits,
       provider: m.provider, requiresEnv: m.requiresEnv, active: modelActive(m),
-      default: !!m.default,
+      default: !!m.default, eta: m.etaSec,
     }));
     const rec = recommendModel(kind, req.query?.prompt ?? '');
     return { kind, models, recommended: rec, defaultId: defaultModel(kind).id };
