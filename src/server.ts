@@ -39,6 +39,7 @@ import {
 import { fetchDemographics } from './research/census.js';
 import { fetchWeather, evaluateWeatherTriggers } from './research/weather.js';
 import { importSite } from './research/site.js';
+import { auditSite, buildAuditPrompt, fallbackAuditSummary } from './research/audit.js';
 import { searchCompetitors } from './research/places.js';
 import { attributeRevenue } from './revenue/attribution.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
@@ -503,6 +504,25 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const d = await importSite(url);
       if (!d) return reply.code(404).send({ error: 'Couldn’t read that site — check the URL and try again.' });
       return d;
+    } catch (err) {
+      return reply.code(502).send({ error: String((err as Error).message) });
+    }
+  });
+
+  // Website audit — crawl a site and score it, with a plain-English fix plan.
+  app.post<{ Body: { url?: string } }>('/api/audit', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const url = (req.body?.url || p.website || '').trim();
+    if (!url) return reply.code(400).send({ error: 'Enter a website URL (or add one to your Business Profile).' });
+    try {
+      const result = await auditSite(url);
+      if (!result) return reply.code(404).send({ error: 'Couldn’t reach that site — check the URL and try again.' });
+      const { system, user } = buildAuditPrompt(result, p.businessName);
+      const summary = (await generateText({ system, user, maxTokens: 700 })) ?? fallbackAuditSummary(result);
+      return { ...result, summary };
     } catch (err) {
       return reply.code(502).send({ error: String((err as Error).message) });
     }

@@ -329,6 +329,7 @@
       <a data-page="studio" class="sub"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4 3.6L17 19l-5-3-5 3 1-6.4L4 9l5.8-.7Z"/></svg> Creative Studio</a>
       <a data-page="adstudio" class="sub"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
       <a data-page="assets" class="sub"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/><path d="M3 3l18 18" opacity="0"/></svg> Assets</a>
+      <a data-page="audit" class="sub"><svg class="ico" viewBox="0 0 24 24"><path d="M4 4h16v12H4z"/><path d="M4 8h16M8 12h6"/><circle cx="17" cy="18" r="3"/><path d="M19.5 20.5L22 23"/></svg> Website Audit</a>
       <a data-page="deploy"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 21h14"/></svg> Deploy <span id="deploy-badge" class="navbadge" style="display:none"></span></a>
       <a data-page="logs" class="sub"><svg class="ico" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l3-3 3 2 4-5"/><circle cx="7" cy="15" r="0.5"/></svg> Logs</a>
       <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
@@ -513,6 +514,19 @@
         <input type="file" id="photo-input" accept="image/*" multiple style="display:none">
         <button class="go" id="photo-add">+ Upload photos</button>
         <div id="photo-grid" class="photogrid" style="margin-top:16px"></div>
+      </div>
+    </section>
+
+    <!-- WEBSITE AUDIT -->
+    <section class="page" id="page-audit">
+      <div class="mcard pf" style="max-width:900px">
+        <h3>Website Audit</h3>
+        <p class="mdesc">Miles reads your website the way Google and a first-time customer do, then scores it and tells you exactly what to fix — no guesswork, every check is real.</p>
+        <div style="display:flex;gap:8px;margin:14px 0 6px;max-width:560px">
+          <input id="audit-url" placeholder="yourbusiness.com" style="flex:1">
+          <button class="go" id="audit-go" style="flex:none">Run audit →</button>
+        </div>
+        <div id="audit-body" style="margin-top:18px"></div>
       </div>
     </section>
 
@@ -967,7 +981,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',schedules:'Scheduled Agents',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',studio:'Creative Studio',hub:'Marketing Hub',assets:'Brand Assets',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
+const TITLES={dashboard:'Dashboard',agents:'Agents & Specialists',schedules:'Scheduled Agents',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',studio:'Creative Studio',hub:'Marketing Hub',assets:'Brand Assets',audit:'Website Audit',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
@@ -985,6 +999,7 @@ function setPage(id){
   $('#page-studio').classList.toggle('on',id==='studio');
   $('#page-hub').classList.toggle('on',id==='hub');
   $('#page-assets').classList.toggle('on',id==='assets');
+  $('#page-audit').classList.toggle('on',id==='audit');
   $('#page-deploy').classList.toggle('on',id==='deploy');
   $('#page-logs').classList.toggle('on',id==='logs');
   $('#page-settings').classList.toggle('on',id==='settings');
@@ -1004,6 +1019,7 @@ function setPage(id){
   if(id==='studio') openStudio();
   if(id==='hub') openHub();
   if(id==='assets') openAssets();
+  if(id==='audit') openAudit();
   if(id==='deploy') openDeploy();
   if(id==='logs') openLogs();
   if(id==='settings') openSettings();
@@ -1680,6 +1696,54 @@ $('#as-import').onclick=async()=>{ const url=$('#as-import-url').value.trim(); i
   }catch(e){ $('#assets-note').textContent='Error: '+e.message; }
   btn.disabled=false; };
 
+// ── Website Audit ──
+function openAudit(){ const inp=$('#audit-url'); if(inp && !inp.value){ inp.value=(typeof ASSETS!=='undefined'&&ASSETS.website)||''; } }
+const AUDIT_COLOR={good:'#16a34a',warn:'#d97706',bad:'#dc2626'};
+const AUDIT_DOT={good:'✓',warn:'!',bad:'✕'};
+function gradeColor(g){ return g==='A'?'#16a34a':g==='B'?'#65a30d':g==='C'?'#d97706':g==='D'?'#ea580c':'#dc2626'; }
+function renderAudit(d){
+  const body=$('#audit-body'); body.innerHTML='';
+  const head=el('div','','');
+  head.style.cssText='display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:14px';
+  const ring=el('div','',d.score+'');
+  ring.style.cssText='width:84px;height:84px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:700;color:#fff;flex:none;background:'+gradeColor(d.grade);
+  const meta=el('div','','');
+  meta.innerHTML='<div style="font-weight:700;font-size:17px">Grade '+esc(d.grade)+' · '+d.score+'/100</div><div class="appsub" style="margin-top:2px">'+esc(d.finalUrl)+'</div><div class="appsub">'+d.stats.words+' words · '+d.stats.images+' images ('+d.stats.imagesWithAlt+' with alt text)</div>';
+  head.append(ring,meta); body.append(head);
+  if(d.summary){ const sum=el('div','mcard',''); sum.style.cssText='background:var(--panel2,#f6f7f9);padding:14px 16px;margin:6px 0 18px;white-space:pre-wrap;line-height:1.5'; sum.textContent=d.summary; body.append(sum); }
+  const lbl=el('div','sect-label','WHAT WE CHECKED ('+d.findings.length+')'); body.append(lbl);
+  const list=el('div','','');
+  for(const f of d.findings){
+    const row=el('div','','');
+    row.style.cssText='display:flex;gap:10px;padding:11px 0;border-bottom:1px solid var(--line,#eee);align-items:flex-start';
+    const dot=el('div','',AUDIT_DOT[f.status]);
+    dot.style.cssText='width:20px;height:20px;border-radius:50%;flex:none;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px;background:'+AUDIT_COLOR[f.status];
+    const txt=el('div','','');
+    txt.style.cssText='flex:1';
+    let inner='<div><b>'+esc(f.label)+'</b> <span class="appsub" style="border:1px solid var(--line,#ddd);border-radius:10px;padding:1px 7px;margin-left:4px;font-size:11px">'+esc(f.area)+'</span></div>';
+    inner+='<div class="appsub" style="margin-top:2px">'+esc(f.found)+'</div>';
+    if(f.status!=='good') inner+='<div style="margin-top:3px;font-size:13px">→ '+esc(f.fix)+'</div>';
+    txt.innerHTML=inner; row.append(dot,txt); list.append(row);
+  }
+  body.append(list);
+  const share=el('button','go','Send fixes to Deploy'); share.style.marginTop='16px';
+  share.onclick=()=>{ if(typeof queueChange==='function'){ const n=d.findings.filter(x=>x.status!=='good').length; queueChange('audit','Website fixes for '+d.finalUrl+' — '+n+' items (score '+d.score+'/100)','pending'); toast('Fix list sent to Deploy'); } };
+  body.append(share);
+}
+$('#audit-go').onclick=async()=>{
+  const url=$('#audit-url').value.trim();
+  const body=$('#audit-body');
+  if(!REMOTE){ body.innerHTML='<p class="appsub">The audit reads live websites — it runs on the deployed app.</p>'; return; }
+  const btn=$('#audit-go'); btn.disabled=true; body.innerHTML='<p class="appsub">Reading '+esc(url||'your site')+' the way Google sees it…</p>';
+  try{
+    const r=await fetch('/api/audit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ body.innerHTML='<p class="appsub">'+esc(d.error||'Could not audit that site.')+'</p>'; btn.disabled=false; return; }
+    renderAudit(d);
+  }catch(e){ body.innerHTML='<p class="appsub">Error: '+esc(e.message)+'</p>'; }
+  btn.disabled=false;
+};
+
 // Ad Studio image source (AI vs the customer's own uploaded photos)
 let ADIMG={mode:'ai',url:null};
 async function renderAdPhotoStrip(){
@@ -1717,7 +1781,7 @@ function queueChange(type,label,mode){ if(!REMOTE) return; DEPLOY.queue=DEPLOY.q
   if($('#page-deploy')&&$('#page-deploy').classList.contains('on')) renderDeploy();
   if($('#page-logs')&&$('#page-logs').classList.contains('on')) renderLogs();
 }
-const DEP_ICON={campaign:'📁',creative:'🖼️',trigger:'⛅',profile:'🏢',assets:'🎨',asset:'📎',action:'⚡',change:'•'};
+const DEP_ICON={campaign:'📁',creative:'🖼️',trigger:'⛅',profile:'🏢',assets:'🎨',asset:'📎',action:'⚡',audit:'🔍',change:'•'};
 function fmtWhen(iso){ try{ return new Date(iso).toLocaleString(); }catch(e){ return ''; } }
 function openDeploy(){ if(!DEPLOY_LOADED){ loadDeploy().then(renderDeploy); } else renderDeploy(); }
 function deployAll(){ const n=pendingCount(); if(!n) return; const now=new Date().toISOString(); DEPLOY.queue.forEach(c=>{ if(c.status==='pending'){ c.status='live'; c.deployedAt=now; } }); DEPLOY.lastDeployedAt=now; saveDeploy(); updateDeployBadge(); renderDeploy(); if($('#page-logs')&&$('#page-logs').classList.contains('on')) renderLogs(); toast(n+' change'+(n===1?'':'s')+' deployed live'); }
