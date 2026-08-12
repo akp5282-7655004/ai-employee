@@ -219,6 +219,37 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     reply.header('set-cookie', cookie('', 0));
     return { ok: true };
   });
+  // Forgot password — email a one-hour reset link (when email delivery is configured).
+  // Always returns ok so it never reveals whether an email is registered.
+  app.post('/auth/forgot', async (req, reply) => {
+    const email = ((req.body as { email?: string })?.email || '').trim().toLowerCase();
+    const u = email ? await authStore.getUserByEmail(email) : null;
+    if (u) {
+      const token = newToken();
+      const data = await authStore.getUserData(u.id);
+      data.resetToken = { token, exp: Date.now() + 3600_000 };
+      await authStore.setUserData(u.id, data);
+      const base = (process.env.APP_URL || `https://${req.headers.host}`).replace(/\/$/, '');
+      const link = `${base}/login?reset=${token}&uid=${encodeURIComponent(u.id)}`;
+      if (deliveryStatus().email) await sendEmail(u.email, 'Reset your Miles password', `Reset your Miles password with this link (expires in 1 hour):\n\n${link}\n\nIf you didn't request this, you can ignore this email.`);
+    }
+    return { ok: true, emailConfigured: deliveryStatus().email };
+  });
+  // Complete a reset from the emailed (or admin-generated) link.
+  app.post('/auth/reset', async (req, reply) => {
+    const b = (req.body ?? {}) as { uid?: string; token?: string; password?: string };
+    if (!b.uid || !b.token || !b.password || b.password.length < 6) return reply.code(400).send({ error: 'Enter a new password (at least 6 characters).' });
+    const u = await authStore.getUserById(b.uid);
+    if (!u) return reply.code(400).send({ error: 'Invalid reset link.' });
+    const data = await authStore.getUserData(u.id);
+    const rt = data.resetToken as { token?: string; exp?: number } | undefined;
+    if (!rt || rt.token !== b.token || !rt.exp || rt.exp < Date.now()) return reply.code(400).send({ error: 'This reset link is invalid or has expired — request a new one.' });
+    await authStore.updateUser(u.id, { passwordHash: hashPassword(b.password) });
+    delete data.resetToken;
+    await authStore.setUserData(u.id, data);
+    await startSession(reply, u.id);
+    return { ok: true, user: { id: u.id, email: u.email } };
+  });
   app.get('/auth/me', async (req, reply) => {
     const u = await getUser(req);
     if (!u) return reply.code(401).send({ error: 'not signed in' });
@@ -242,6 +273,21 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (id === (await adminUserId())) return reply.code(400).send({ error: "You can't remove the owner account." });
     await authStore.deleteUser(id);
     return { ok: true };
+  });
+  // Owner-only: generate a reset link for a locked-out customer (works with no email provider).
+  app.post<{ Body: { id?: string } }>('/api/admin/reset-link', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (!(await isAdmin(u))) return reply.code(403).send({ error: 'owner only' });
+    const id = req.body?.id;
+    const target = id ? await authStore.getUserById(id) : null;
+    if (!target) return reply.code(404).send({ error: 'user not found' });
+    const token = newToken();
+    const data = await authStore.getUserData(target.id);
+    data.resetToken = { token, exp: Date.now() + 3600_000 };
+    await authStore.setUserData(target.id, data);
+    const base = (process.env.APP_URL || `https://${req.headers.host}`).replace(/\/$/, '');
+    return { ok: true, link: `${base}/login?reset=${token}&uid=${encodeURIComponent(target.id)}`, email: target.email };
   });
   app.put<{ Body: { inviteOnly?: boolean; allowed?: string[] } }>('/api/admin/settings', async (req, reply) => {
     const u = await requireUser(req, reply);

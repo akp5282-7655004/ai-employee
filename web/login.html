@@ -52,13 +52,17 @@
     <label>Password</label>
     <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" required minlength="6">
     <button class="submit" id="submit" type="submit">Log in</button>
+    <button type="button" id="forgot" style="width:100%;margin-top:10px;background:none;border:none;color:var(--accent);font-size:12.5px;cursor:pointer;font-family:var(--sans)">Forgot password?</button>
     <div class="err" id="err"></div>
+    <div class="sub" id="msg" style="margin-top:10px;min-height:16px;color:var(--brand)"></div>
   </form>
   <div class="foot">Your data is stored on Miles. No credit card required.</div>
 </div>
 <script>
   let mode='login';
   const $=s=>document.getElementById(s);
+  const params=new URLSearchParams(location.search);
+  const resetToken=params.get('reset'), resetUid=params.get('uid');
   function setMode(m){
     mode=m;
     $('tab-login').classList.toggle('on',m==='login');
@@ -68,15 +72,40 @@
     $('subtitle').textContent = m==='signup'?'Set up your marketing employee in a minute.':'Sign in to your marketing employee.';
     $('submit').textContent = m==='signup'?'Create account':'Log in';
     $('password').autocomplete = m==='signup'?'new-password':'current-password';
-    $('err').textContent='';
+    $('forgot').style.display = m==='login'?'block':'none';
+    $('err').textContent=''; $('msg').textContent='';
   }
   $('tab-login').onclick=()=>setMode('login');
   $('tab-signup').onclick=()=>setMode('signup');
+  // Reset-password mode (from an emailed / admin link).
+  if(resetToken && resetUid){
+    mode='reset';
+    $('title').textContent='Set a new password';
+    $('subtitle').textContent='Choose a new password for your account.';
+    document.querySelector('.tabs').style.display='none';
+    $('email').closest('label')?.remove?.(); $('email').style.display='none'; $('email').required=false;
+    $('email').previousElementSibling && ($('email').previousElementSibling.style.display='none');
+    $('password').autocomplete='new-password'; $('password').placeholder='New password (6+ characters)';
+    $('submit').textContent='Set new password'; $('forgot').style.display='none';
+  }
+  $('forgot').onclick=async()=>{
+    const email=$('email').value.trim(); if(!email){ $('err').textContent='Enter your email above, then click Forgot password.'; return; }
+    $('err').textContent=''; $('forgot').disabled=true;
+    try{ const r=await fetch('/auth/forgot',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email})}); const d=await r.json().catch(()=>({}));
+      $('msg').textContent = d.emailConfigured ? 'If that email is registered, a reset link is on its way.' : 'Ask your admin for a reset link (email delivery isn’t set up yet).';
+    }catch(e){ $('err').textContent='Network error — try again.'; }
+    $('forgot').disabled=false;
+  };
   $('form').addEventListener('submit', async e=>{
     e.preventDefault();
     const btn=$('submit'); btn.disabled=true; $('err').textContent='';
-    const body={ email:$('email').value.trim(), password:$('password').value, name:$('name').value.trim() };
     try{
+      if(mode==='reset'){
+        const r=await fetch('/auth/reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({uid:resetUid,token:resetToken,password:$('password').value})});
+        const d=await r.json().catch(()=>({})); if(!r.ok){ $('err').textContent=d.error||'Could not reset.'; btn.disabled=false; return; }
+        window.location='/'; return;
+      }
+      const body={ email:$('email').value.trim(), password:$('password').value, name:$('name').value.trim() };
       const r=await fetch('/auth/'+(mode==='signup'?'signup':'login'),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
       const d=await r.json().catch(()=>({}));
       if(!r.ok){ $('err').textContent=d.error||'Something went wrong.'; btn.disabled=false; return; }
