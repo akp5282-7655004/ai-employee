@@ -316,8 +316,8 @@
     <div class="ws"><span class="sq" id="ws-av">·</span><b id="ws-name">Your Workspace</b><span class="cx"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg></span></div>
     <div class="newtask" data-ask><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New task</div>
     <nav class="nav" id="nav">
-      <a data-page="overview"><svg class="ico" viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0"/><path d="M12 13l4-3"/><path d="M4 13h1M19 13h1M12 3v1"/></svg> Overview</a>
-      <a data-page="dashboard" class="on"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg> Dashboard</a>
+      <a data-page="overview" class="on"><svg class="ico" viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0"/><path d="M12 13l4-3"/><path d="M4 13h1M19 13h1M12 3v1"/></svg> Overview</a>
+      <a data-page="dashboard"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg> Home</a>
       <a data-page="agents"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/></svg> Agents &amp; Specialists</a>
       <a data-page="schedules" class="sub"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M12 3h.01M5 4L3 6M19 4l2 2"/></svg> Scheduled Agents</a>
       <a data-page="autopilot"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M12 12l4-2"/></svg> Autopilot</a>
@@ -359,11 +359,11 @@
 
     <!-- HOME (dashboard / agents / skills share this) -->
     <!-- OVERVIEW DASHBOARD -->
-    <section class="page" id="page-overview">
+    <section class="page on" id="page-overview">
       <div id="overview-body"></div>
     </section>
 
-    <section class="page on" id="page-home">
+    <section class="page" id="page-home">
       <div class="stats" style="grid-template-columns:repeat(3,1fr)">
         <div class="stat"><div class="lab">Active specialists <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/></svg></div><div class="val">4 Deployments Active</div></div>
         <div class="stat"><div class="lab">Connected integrations <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div><div class="val" id="stat-conn">—</div></div>
@@ -993,7 +993,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Overview',dashboard:'Dashboard',agents:'Agents & Specialists',schedules:'Scheduled Agents',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',studio:'Creative Studio',hub:'Marketing Hub',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
+const TITLES={overview:'Overview',dashboard:'Home',agents:'Agents & Specialists',schedules:'Scheduled Agents',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',studio:'Creative Studio',hub:'Marketing Hub',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
@@ -3093,7 +3093,7 @@ async function authInit(){
 }
 
 // init
-(async()=>{ await authInit(); await loadPacks(); await fetchConnections(); const solar=PACKMETA.find(p=>p.id==='solar'); if(solar)$('#stat-cpa').textContent=money(solar.cpa.median)+' Market Median'; updateConnStat(); renderTabs(); renderCards(); })();
+(async()=>{ await authInit(); await loadPacks(); await fetchConnections(); const solar=PACKMETA.find(p=>p.id==='solar'); if(solar)$('#stat-cpa').textContent=money(solar.cpa.median)+' Market Median'; updateConnStat(); renderTabs(); renderCards(); setPage('overview'); })();
 </script>
 </body>
 </html>
