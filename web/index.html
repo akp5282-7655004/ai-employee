@@ -2043,27 +2043,69 @@ function postRow(p){
   right.append(runb,del); row.append(l,right); return row;
 }
 async function publishNow(p,btn){ if(!REMOTE){ toast('Publishing runs on the live app'); return; } btn.disabled=true; const o=btn.textContent; btn.textContent='Publishing…'; try{ const r=await(await fetch('/api/posts/run',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:p.id})})).json(); if(r.post){ const i=CAL.posts.findIndex(x=>x.id===p.id); if(i>=0) CAL.posts[i]=r.post; renderCalendar(); const held=(r.post.results||[]).filter(x=>x.note==='not connected').map(x=>x.platform); if(held.length) toast('Held — connect '+held.join(', ')+' in Integrations to publish'); else if(r.post.status==='published') toast('Published ✓'); else toast('Status: '+r.post.status); } else toast('Publish failed'); }catch(e){ toast('Publish failed'); } btn.disabled=false; btn.textContent=o; }
+// A two-pane composer (like a pro social planner): pick accounts, write, see a
+// live per-platform preview, then Schedule or Post now.
 function scheduleModal(existing){
-  const plats=CAL.platforms||[]; const pre=window.__scheduleAsset||{}; const asset=existing?{assetUrl:existing.assetUrl,kind:existing.kind}:pre; const sel=new Set(existing?existing.platforms:[]);
+  const plats=CAL.platforms||[]; const pre=window.__scheduleAsset||{};
+  const asset=existing?{assetUrl:existing.assetUrl,kind:existing.kind}:(pre.assetUrl?{...pre}:{});
+  const sel=new Set(existing?existing.platforms:[]); let caption=existing?existing.caption:''; let activeTab='all';
   const when=existing?new Date(existing.scheduledAt):new Date(Date.now()+3600000); const pad=n=>String(n).padStart(2,'0');
-  const dval=when.getFullYear()+'-'+pad(when.getMonth()+1)+'-'+pad(when.getDate()); const tval=pad(when.getHours())+':'+pad(when.getMinutes());
-  const platHtml=plats.map(p=>'<button type="button" class="tab'+(sel.has(p.id)?' on':'')+'" data-plat="'+p.id+'" style="padding:6px 11px">'+p.icon+' '+esc(p.label)+(p.connected?'':' <span style="opacity:.55">(connect)</span>')+'</button>').join('');
-  showModal('<h3 style="margin:0 0 12px">'+(existing?'Edit scheduled post':'Schedule a post')+'</h3>'+
-    (asset.assetUrl?('<div style="margin:0 0 12px;text-align:center">'+(asset.kind==='video'?'<video src="'+esc(asset.assetUrl)+'" style="max-height:150px;border-radius:8px" muted controls></video>':'<img src="'+esc(asset.assetUrl)+'" style="max-height:150px;border-radius:8px">')+'</div>'):'<div class="mdesc" style="margin:0 0 10px">Tip: use “📅 Schedule” from Creative Studio to bring an asset here automatically.</div>')+
-    '<label class="f" style="display:block;margin-bottom:3px">Asset URL</label><input class="f" id="sp-url" style="width:100%;margin:0 0 12px" value="'+esc(asset.assetUrl||'')+'" placeholder="https://…">'+
-    '<label class="f" style="display:block;margin-bottom:5px">Platforms</label><div class="subtabs" id="sp-plats" style="gap:6px;flex-wrap:wrap;margin-bottom:12px">'+platHtml+'</div>'+
-    '<label class="f" style="display:block;margin-bottom:3px">Caption</label><textarea class="f" id="sp-cap" style="width:100%;min-height:60px;margin:0 0 12px" placeholder="Write your caption…">'+esc(existing?existing.caption:'')+'</textarea>'+
-    '<div style="display:flex;gap:14px;flex-wrap:wrap"><div><label class="f" style="display:block;margin-bottom:3px">Date</label><input class="f" type="date" id="sp-date" value="'+dval+'" style="margin:0"></div><div><label class="f" style="display:block;margin-bottom:3px">Time</label><input class="f" type="time" id="sp-time" value="'+tval+'" style="margin:0"></div></div>'+
-    '<button class="go" id="sp-save" style="width:100%;margin-top:18px">'+(existing?'Save changes':'Schedule it')+'</button>');
-  $('#sp-plats').querySelectorAll('[data-plat]').forEach(b=>b.onclick=()=>{ const id=b.dataset.plat; if(sel.has(id)){sel.delete(id);b.classList.remove('on');}else{sel.add(id);b.classList.add('on');} });
-  $('#sp-save').onclick=async()=>{
-    const body={assetUrl:$('#sp-url').value.trim(),kind:(asset.kind||'image'),caption:$('#sp-cap').value,platforms:[...sel],scheduledAt:new Date($('#sp-date').value+'T'+$('#sp-time').value).toISOString()};
-    if(!body.assetUrl){ toast('Add an asset URL'); return; } if(!body.platforms.length){ toast('Pick at least one platform'); return; }
-    if(!REMOTE){ toast('Scheduling runs on the live app'); return; }
+  const ov=el('div'); ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px';
+  const panel=el('div'); panel.style.cssText='background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:1000px;width:100%;max-height:94vh;overflow:auto;display:flex;flex-direction:column';
+  const hd=el('div'); hd.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line)'; hd.append(el('b',null,existing?'Edit post':'New Post')); const x=el('button','idel','✕'); hd.append(x);
+  const bodyR=el('div'); bodyR.style.cssText='display:flex;flex-wrap:wrap';
+  const left=el('div'); left.style.cssText='flex:1;min-width:320px;padding:18px;border-right:1px solid var(--line)';
+  const right=el('div'); right.style.cssText='flex:1;min-width:300px;padding:18px;background:var(--panel-2)';
+  bodyR.append(left,right);
+  const ft=el('div'); ft.style.cssText='display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line)';
+  panel.append(hd,bodyR,ft); ov.append(panel); document.body.append(ov);
+  const close=()=>ov.remove(); x.onclick=close; ov.addEventListener('mousedown',e=>{ if(e.target===ov) close(); });
+  const bizName=()=>((typeof PROFILE!=='undefined'&&PROFILE&&PROFILE.businessName)||(ASSETS&&ASSETS.tagline)||'Your Business');
+
+  // LEFT — Post to
+  left.append(el('label','f','Post to'));
+  const chips=el('div'); chips.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px';
+  plats.forEach(p=>{ const b=el('button','tab'+(sel.has(p.id)?' on':'')); b.style.cssText='padding:6px 10px'; b.innerHTML=p.icon+' '+esc(p.label)+(p.connected?'':' <span style="opacity:.55">(connect)</span>'); b.onclick=()=>{ sel.has(p.id)?sel.delete(p.id):sel.add(p.id); b.classList.toggle('on'); syncTabs(); preview(); }; chips.append(b); });
+  left.append(chips);
+  // caption
+  left.append(el('label','f','Caption'));
+  const ta=el('textarea','f'); ta.style.cssText='width:100%;min-height:104px;margin:6px 0 8px'; ta.placeholder='Write your post…'; ta.value=caption; ta.oninput=()=>{ caption=ta.value; preview(); }; left.append(ta);
+  const ai=el('button','adsave','✨ Write with AI'); ai.style.marginBottom='14px'; ai.onclick=async()=>{ if(!REMOTE){ toast('Runs on the live app'); return; } ai.disabled=true; const o=ai.textContent; ai.textContent='Writing…'; try{ const r=await(await fetch('/api/studio/optimize',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'copy',prompt:caption||'a friendly social post for my business',mode:'business'})})).json(); if(r.prompt){ caption=r.prompt; ta.value=caption; preview(); } }catch(e){} ai.disabled=false; ai.textContent=o; }; left.append(ai);
+  // media
+  left.append(el('label','f','Media'));
+  const md=el('div'); md.style.cssText='margin:6px 0 14px'; left.append(md);
+  function renderMedia(){ md.innerHTML=''; if(asset.assetUrl){ md.innerHTML=(asset.kind==='video'?'<video src="'+esc(asset.assetUrl)+'" style="max-height:120px;border-radius:8px" muted controls></video>':'<img src="'+esc(asset.assetUrl)+'" style="max-height:120px;border-radius:8px">'); } const inp=el('input','f'); inp.placeholder='Or paste an image/video URL…'; inp.value=asset.assetUrl||''; inp.style.cssText='width:100%;margin-top:'+(asset.assetUrl?'8px':'0'); inp.oninput=()=>{ asset.assetUrl=inp.value.trim(); asset.kind=/\.(mp4|webm|mov)(\?|$)/i.test(asset.assetUrl)?'video':'image'; preview(); }; md.append(inp); }
+  renderMedia();
+  // when
+  const wRow=el('div'); wRow.innerHTML='<label class="f" style="display:block;margin-bottom:6px">When</label>'; const row=el('div'); row.style.cssText='display:flex;gap:12px;flex-wrap:wrap';
+  const dIn=el('input','f'); dIn.type='date'; dIn.value=when.getFullYear()+'-'+pad(when.getMonth()+1)+'-'+pad(when.getDate()); dIn.style.margin='0';
+  const tIn=el('input','f'); tIn.type='time'; tIn.value=pad(when.getHours())+':'+pad(when.getMinutes()); tIn.style.margin='0';
+  row.append(dIn,tIn); wRow.append(row); left.append(wRow);
+
+  // RIGHT — live preview
+  right.append(el('b',null,'Post Preview'));
+  const tabs=el('div'); tabs.style.cssText='display:flex;gap:12px;margin:10px 0;border-bottom:1px solid var(--line);padding-bottom:6px;flex-wrap:wrap'; right.append(tabs);
+  const pv=el('div'); right.append(pv);
+  function syncTabs(){ tabs.innerHTML=''; const mk=(id,label)=>{ const t=el('button'); t.style.cssText='background:none;border:none;cursor:pointer;padding:4px 2px;border-bottom:2px solid '+(activeTab===id?'#2b6cff':'transparent')+';color:inherit;font-weight:600;font-size:13px'; t.textContent=label; t.onclick=()=>{ activeTab=id; syncTabs(); preview(); }; return t; }; tabs.append(mk('all','All')); [...sel].forEach(id=>{ const p=plats.find(x=>x.id===id); if(p) tabs.append(mk(id,p.icon+' '+p.label)); }); }
+  function card(pid){ const p=plats.find(x=>x.id===pid)||{icon:'📣',label:'Social'}; const c=el('div'); c.style.cssText='background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:14px;max-width:340px'; const top=el('div'); top.style.cssText='display:flex;gap:8px;align-items:center;padding:10px 12px'; const av=el('div'); av.style.cssText='width:34px;height:34px;border-radius:50%;background:#2b6cff;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700'; av.textContent=(bizName()[0]||'B').toUpperCase(); const nm=el('div'); nm.innerHTML='<div style="font-weight:600;font-size:13px">'+esc(bizName())+' '+p.icon+'</div><div class="appsub" style="font-size:11px">Just now · '+esc(p.label)+'</div>'; top.append(av,nm); c.append(top); if(caption){ const cp=el('div'); cp.style.cssText='padding:0 12px 10px;font-size:13px;white-space:pre-wrap'; cp.textContent=caption; c.append(cp); } if(asset.assetUrl){ const m=el('div'); m.style.background='#000'; m.innerHTML=(asset.kind==='video'?'<video src="'+esc(asset.assetUrl)+'" style="width:100%;display:block" muted></video>':'<img src="'+esc(asset.assetUrl)+'" style="width:100%;display:block">'); c.append(m); } else { const ph=el('div'); ph.style.cssText='height:150px;background:var(--panel-2);display:flex;align-items:center;justify-content:center;font-size:12px'; ph.className='appsub'; ph.textContent='🖼️ Your media appears here'; c.append(ph); } const bar=el('div'); bar.style.cssText='display:flex;justify-content:space-around;padding:8px;border-top:1px solid var(--line);font-size:12px'; bar.className='appsub'; bar.innerHTML='<span>👍 Like</span><span>💬 Comment</span><span>↗ Share</span>'; c.append(bar); return c; }
+  function preview(){ pv.innerHTML=''; if(!sel.size){ pv.append(el('div','appsub','Select a social account to preview your post.')); return; } (activeTab==='all'?[...sel]:[activeTab]).forEach(id=>pv.append(card(id))); }
+  syncTabs(); preview();
+
+  // FOOTER — schedule / post now
+  const doSave=async(mode)=>{
+    if(!asset.assetUrl){ toast('Add media (or paste a URL)'); return; } if(!sel.size){ toast('Pick at least one account'); return; }
+    const when2=mode==='now'?new Date(Date.now()+5000):new Date(dIn.value+'T'+tIn.value);
+    const body={assetUrl:asset.assetUrl,kind:asset.kind||'image',caption,platforms:[...sel],scheduledAt:when2.toISOString()};
+    if(!REMOTE){ toast('Runs on the live app'); return; }
     if(existing){ try{ await fetch('/api/posts/delete',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:existing.id})}); }catch(e){} }
     const r=await(await fetch('/api/posts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})).json();
-    if(r.post){ closeModal(); window.__scheduleAsset=null; await openCalendar(); toast('Scheduled ✓'); } else toast(r.error||'Could not schedule');
+    if(!r.post){ toast(r.error||'Could not save'); return; }
+    if(mode==='now'){ try{ const rr=await(await fetch('/api/posts/run',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.post.id})})).json(); const held=((rr.post&&rr.post.results)||[]).filter(z=>z.note==='not connected').map(z=>z.platform); if(held.length) toast('Held — connect '+held.join(', ')+' in Integrations'); else toast('Posted ✓'); }catch(e){} } else toast('Scheduled ✓');
+    window.__scheduleAsset=null; close(); await openCalendar();
   };
+  const schedBtn=el('button','adsave','Schedule'); schedBtn.onclick=()=>doSave('schedule');
+  const nowBtn=el('button','go','Post now'); nowBtn.style.flex='none'; nowBtn.onclick=()=>doSave('now');
+  ft.append(schedBtn,nowBtn);
 }
 async function scheduleAsset(url,kind){ window.__scheduleAsset={assetUrl:url,kind:kind||'image'}; setPage('calendar'); await openCalendar(); scheduleModal(); }
 
