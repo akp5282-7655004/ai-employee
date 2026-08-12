@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isDue, buildCpaReport, buildMorningBrief, buildTaskListPrompt, fallbackTaskList, buildWrapupPrompt, fallbackWrapup, type ScheduledAgent } from '../src/agents/scheduled.js';
+import { isDue, buildCpaReport, buildMorningBrief, buildTaskListPrompt, fallbackTaskList, buildWrapupPrompt, fallbackWrapup, TASK_SPECS, socialAgent, reviewAgent, leadAgent, metricsLine, agentFallback, type ScheduledAgent } from '../src/agents/scheduled.js';
 
 const agent = (o: Partial<ScheduledAgent> = {}): ScheduledAgent => ({
   id: 'a1', name: 'Brief', task: 'morning_brief', time: '08:30', days: [1, 2, 3, 4, 5], enabled: true, tzOffset: 0, createdAt: '', ...o,
@@ -97,6 +97,33 @@ describe('6pm daily wrap-up', () => {
     expect(user).toContain('Acme');
     expect(user).toContain('x');
     expect(user).toContain('y');
+  });
+});
+
+describe('the full agent roster', () => {
+  const ctx = { business: 'Painters In Philly', trade: 'Home Services', city: 'Philadelphia', services: 'interior painting', offers: '10% off' };
+  it('ships all 8 agents', () => {
+    expect(TASK_SPECS.map((t) => t.task).sort()).toEqual(
+      ['competitor_watch', 'cpa_report', 'daily_wrapup', 'email_tasklist', 'lead_followup', 'morning_brief', 'review_responder', 'social_content'].sort(),
+    );
+  });
+  it('social prompt weaves in the business + offer', () => {
+    const { system, user } = socialAgent(ctx);
+    expect(system.toLowerCase()).toContain('social media');
+    expect(user).toContain('Painters In Philly');
+    expect(user).toContain('10% off');
+  });
+  it('review agent asks for templates when there are no reviews', () => {
+    expect(reviewAgent({ ...ctx, reviews: [] }).user).toContain('none today');
+    expect(reviewAgent({ ...ctx, reviews: [{ rating: 2, author: 'Dave', text: 'late' }] }).user).toContain('Dave');
+  });
+  it('metricsLine reports numbers or nudges to connect', () => {
+    expect(metricsLine({ impressions: 3420, clicks: 128, likes: 74 })).toContain('3,420 impressions');
+    expect(metricsLine(null).toLowerCase()).toContain('connect');
+  });
+  it('fallbacks are usable with no LLM key', () => {
+    expect(agentFallback('social_content', ctx)).toContain('Painters In Philly');
+    expect(agentFallback('lead_followup', { ...ctx, leads: [{ name: 'Sarah', service: 'repaint' }] })).toContain('Sarah');
   });
 });
 

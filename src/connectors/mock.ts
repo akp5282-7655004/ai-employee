@@ -146,6 +146,29 @@ export class MockConnector implements Connector {
     return demo.slice(0, limit);
   }
 
+  async getSocialMetrics(externalUserId: string) {
+    const apps = new Set((this.accounts.get(externalUserId) ?? []).map((a) => a.app));
+    if (!['facebook', 'instagram', 'linkedin'].some((a) => apps.has(a))) return null;
+    return { impressions: 3420, clicks: 128, likes: 74, followers: 1290 };
+  }
+  async getReviews(externalUserId: string) {
+    const apps = new Set((this.accounts.get(externalUserId) ?? []).map((a) => a.app));
+    if (!apps.has('google_my_business') && !apps.has('gmb')) return [];
+    return [
+      { author: 'Jenna M.', rating: 5, text: 'Showed up on time and did a beautiful job on our living room. Highly recommend!', platform: 'Google' },
+      { author: 'Dave R.', rating: 2, text: 'Work was fine but they were an hour late and didn’t call.', platform: 'Google' },
+    ];
+  }
+  async getLeads(externalUserId: string) {
+    const CRMS = ['gohighlevel', 'servicetitan', 'jobber', 'hubspot', 'salesforce_rest_api', 'housecall_pro'];
+    const apps = new Set((this.accounts.get(externalUserId) ?? []).map((a) => a.app));
+    if (!CRMS.some((c) => apps.has(c))) return [];
+    return [
+      { name: 'Sarah Kim', service: 'Kitchen repaint', source: 'Google Ads', contacted: false },
+      { name: 'Tom B.', service: 'Exterior painting quote', source: 'Website form', contacted: false },
+    ];
+  }
+
   async runAppTask(req: AppTaskRequest): Promise<AppTaskResult> {
     const summary = summarizeTask(req.app, req.query, req.params);
     const connected = (this.accounts.get(req.externalUserId) ?? []).some((a) => a.app === req.app);

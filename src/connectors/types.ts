@@ -48,6 +48,25 @@ export interface RunActionResult {
   note?: string;
 }
 
+export interface SocialMetrics {
+  impressions: number;
+  clicks: number;
+  likes: number;
+  followers?: number;
+}
+export interface Review {
+  author?: string;
+  rating: number;
+  text?: string;
+  platform?: string;
+}
+export interface Lead {
+  name?: string;
+  service?: string;
+  source?: string;
+  contacted?: boolean;
+}
+
 /** One inbox message an agent can read (the raw material for the task-list agent). */
 export interface EmailMessage {
   from?: string;
@@ -105,6 +124,12 @@ export interface Connector {
   getDeals?(externalUserId: string): Promise<Deal[]>;
   /** Recent inbox messages — the raw material for the morning task-list agent. */
   getRecentEmails?(externalUserId: string, limit?: number): Promise<EmailMessage[]>;
+  /** Yesterday's social metrics — for the social content agent's report. */
+  getSocialMetrics?(externalUserId: string): Promise<SocialMetrics | null>;
+  /** New reviews — for the review-responder agent. */
+  getReviews?(externalUserId: string): Promise<Review[]>;
+  /** New / uncontacted leads — for the lead-follow-up agent. */
+  getLeads?(externalUserId: string): Promise<Lead[]>;
   /**
    * Mark an app connected for a user. Present on the mock (a demo shortcut); on
    * live Pipedream the real connection happens through the connect-token flow, so

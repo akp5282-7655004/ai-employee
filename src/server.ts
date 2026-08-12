@@ -22,6 +22,13 @@ import {
   fallbackTaskList,
   buildWrapupPrompt,
   fallbackWrapup,
+  socialAgent,
+  reviewAgent,
+  leadAgent,
+  competitorAgent,
+  metricsLine,
+  agentFallback,
+  type AgentCtx,
   type ScheduledAgent,
   type AgentRun,
   type TaskType,
@@ -794,6 +801,40 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const { system, user } = buildWrapupPrompt(activity, p.businessName);
       const body = (await generateText({ system, user, maxTokens: 700 })) ?? fallbackWrapup(activity, dateLabel);
       return { title: `Daily wrap-up — ${dateLabel}`, body };
+    }
+    // ── content agents (social / reviews / leads / competitors) ──
+    const dLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    const ctx: AgentCtx = {
+      business: p.businessName,
+      trade: p.industry || 'local-service',
+      city: (p.serviceAreas || '').split(',')[0]?.trim() || p.city,
+      services: p.services,
+      offers: p.currentOffers,
+    };
+    if (task === 'social_content') {
+      const metrics = connector.getSocialMetrics ? await connector.getSocialMetrics(userId) : null;
+      const { system, user } = socialAgent(ctx);
+      const post = (await generateText({ system, user, maxTokens: 500 })) ?? agentFallback('social_content', ctx);
+      return { title: `Today's social post — ${dLabel}`, body: `${post}\n\n${metricsLine(metrics)}` };
+    }
+    if (task === 'review_responder') {
+      const reviews = connector.getReviews ? await connector.getReviews(userId) : [];
+      const cctx: AgentCtx = { ...ctx, reviews };
+      const { system, user } = reviewAgent(cctx);
+      const body = (await generateText({ system, user, maxTokens: 700 })) ?? agentFallback('review_responder', cctx);
+      return { title: reviews.length ? `Review replies (${reviews.length}) — ${dLabel}` : `Review reply templates — ${dLabel}`, body };
+    }
+    if (task === 'lead_followup') {
+      const leads = connector.getLeads ? await connector.getLeads(userId) : [];
+      const cctx: AgentCtx = { ...ctx, leads };
+      const { system, user } = leadAgent(cctx);
+      const body = (await generateText({ system, user, maxTokens: 700 })) ?? agentFallback('lead_followup', cctx);
+      return { title: leads.length ? `Lead follow-ups (${leads.length}) — ${dLabel}` : `Lead follow-up sequence — ${dLabel}`, body };
+    }
+    if (task === 'competitor_watch') {
+      const { system, user } = competitorAgent(ctx);
+      const body = (await generateText({ system, user, maxTokens: 700 })) ?? agentFallback('competitor_watch', ctx);
+      return { title: `Competitor watch — ${dLabel}`, body };
     }
     // morning_brief
     let weatherLine: string | undefined;

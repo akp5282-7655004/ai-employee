@@ -1800,7 +1800,7 @@ let SCHED={agents:[],runs:[],tasks:SCHED_TASKS_FB}, SCHED_LOADED=false;
 async function openSchedules(){ if(!SCHED_LOADED){ if(REMOTE){ try{ const r=await fetch('/api/schedules'); const d=await r.json(); SCHED=d; }catch(e){} } if(!SCHED.tasks||!SCHED.tasks.length) SCHED.tasks=SCHED_TASKS_FB; if(!SCHED.agents) SCHED.agents=[]; if(!SCHED.runs) SCHED.runs=[]; SCHED_LOADED=true; } renderSchedules(); }
 async function saveSchedules(){ if(!REMOTE) return; try{ await fetch('/api/schedules',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({agents:SCHED.agents})}); }catch(e){} }
 function schedSummary(a){ const days=a.days.length===7?'Every day':(a.days.join(',')==='1,2,3,4,5'?'Weekdays':(a.days.join(',')==='0,6'?'Weekends':a.days.map(d=>DOW[d]).join(', '))); return days+' at '+a.time; }
-const TASK_ICON={morning_brief:'☀️',cpa_report:'📈',email_tasklist:'✉️',daily_wrapup:'🌙'};
+const TASK_ICON={morning_brief:'☀️',cpa_report:'📈',email_tasklist:'✉️',daily_wrapup:'🌙',social_content:'📱',review_responder:'⭐',lead_followup:'📞',competitor_watch:'🔭'};
 function deployAgent(t){
   if((SCHED.agents||[]).some(a=>a.task===t.task)){ toast('Already deployed'); return; }
   const a={id:newId(),name:t.label,task:t.task,time:t.defaultTime||'08:00',days:[0,1,2,3,4,5,6],enabled:true,tzOffset:new Date().getTimezoneOffset(),createdAt:new Date().toISOString()};

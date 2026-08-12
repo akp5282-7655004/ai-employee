@@ -7,7 +7,15 @@
 import type { CampaignSpend, Deal } from '../revenue/attribution.js';
 import type { EmailMessage } from '../connectors/types.js';
 
-export type TaskType = 'morning_brief' | 'cpa_report' | 'email_tasklist' | 'daily_wrapup';
+export type TaskType =
+  | 'morning_brief'
+  | 'cpa_report'
+  | 'email_tasklist'
+  | 'daily_wrapup'
+  | 'social_content'
+  | 'review_responder'
+  | 'lead_followup'
+  | 'competitor_watch';
 
 export interface TaskSpec {
   task: TaskType;
@@ -42,7 +50,100 @@ export const TASK_SPECS: TaskSpec[] = [
     description: 'Reviews the day’s activity at 6pm and reports what got done vs. what’s still pending.',
     defaultTime: '18:00',
   },
+  {
+    task: 'social_content',
+    label: 'Daily social post + report',
+    description: 'Writes an organic social post every day and reports impressions, clicks & likes.',
+    defaultTime: '10:00',
+  },
+  {
+    task: 'review_responder',
+    label: 'Review responder',
+    description: 'Drafts on-brand replies to new reviews so your reputation stays strong.',
+    defaultTime: '11:00',
+  },
+  {
+    task: 'lead_followup',
+    label: 'Lead follow-up',
+    description: 'Follows up with new leads so none slip away — a ready-to-send message per lead.',
+    defaultTime: '12:00',
+  },
+  {
+    task: 'competitor_watch',
+    label: 'Competitor watch',
+    description: 'Scans your local competitors and tells you how to stay ahead.',
+    defaultTime: '07:00',
+  },
 ];
+
+// ── content agents (social / reviews / leads / competitors) ──
+// Each returns an LLM {system,user} plus a demo-safe fallback. `ctx` carries the
+// business profile and whatever live data the connector could gather.
+export interface AgentCtx {
+  business?: string;
+  trade?: string;
+  city?: string;
+  services?: string;
+  offers?: string;
+  metrics?: import('../connectors/types.js').SocialMetrics | null;
+  reviews?: import('../connectors/types.js').Review[];
+  leads?: import('../connectors/types.js').Lead[];
+  competitors?: string[];
+}
+
+const who = (c: AgentCtx) => `${c.business || 'a local business'}${c.trade ? ` (${c.trade})` : ''}${c.city ? `, ${c.city}` : ''}`;
+
+export function socialAgent(c: AgentCtx): { system: string; user: string } {
+  return {
+    system:
+      'You are a social media manager for a local-service business. Write ONE ready-to-post organic post for today: a scroll-stopping caption (2-4 short lines), 5-8 relevant hashtags, and a one-line note on the visual to pair with it. Friendly, local, no fluff. Plain text.',
+    user: `Business: ${who(c)}.${c.services ? ` Services: ${c.services}.` : ''}${c.offers ? ` Offer: ${c.offers}.` : ''}`,
+  };
+}
+export function reviewAgent(c: AgentCtx): { system: string; user: string } {
+  const list = (c.reviews || []).map((r, i) => `${i + 1}. ${r.rating}★ from ${r.author || 'a customer'}: ${r.text || ''}`).join('\n');
+  return {
+    system:
+      'You reply to customer reviews as the business owner. For each review, write a warm, specific, professional reply — thank happy customers, and calmly de-escalate and offer to make it right for unhappy ones. Never defensive. If NO reviews are given, instead write 3 reusable reply templates (one 5-star, one 3-star, one 1-star). Plain text, labeled.',
+    user: `Business: ${who(c)}.\nReviews:\n${list || '(none today — write reusable templates)'}`,
+  };
+}
+export function leadAgent(c: AgentCtx): { system: string; user: string } {
+  const list = (c.leads || []).map((l, i) => `${i + 1}. ${l.name || 'Lead'} — ${l.service || 'inquiry'} (via ${l.source || 'unknown'})`).join('\n');
+  return {
+    system:
+      'You are a speed-to-lead specialist. For each new lead, write a short, friendly first follow-up (a text and an email option) that books the job — reference what they asked about, offer a clear next step. If NO leads are given, instead write a reusable 3-touch follow-up sequence (text + email over a few days) for a new lead. Plain text, labeled.',
+    user: `Business: ${who(c)}.\nNew leads:\n${list || '(none today — write a reusable follow-up sequence)'}`,
+  };
+}
+export function competitorAgent(c: AgentCtx): { system: string; user: string } {
+  return {
+    system:
+      'You are a local marketing strategist. Give a short competitive read for this business: where local competitors likely win, where this business can stand out, and 3 concrete moves to get ahead this week. Concise, actionable, plain text.',
+    user: `Business: ${who(c)}.${c.services ? ` Services: ${c.services}.` : ''}${c.competitors?.length ? ` Nearby competitors: ${c.competitors.join(', ')}.` : ''}`,
+  };
+}
+
+export function metricsLine(m?: import('../connectors/types.js').SocialMetrics | null): string {
+  if (!m) return 'Connect your social accounts (Integrations) and I’ll report impressions, clicks & likes here — and compile a 30-day dataset.';
+  return `📊 Yesterday: ${m.impressions.toLocaleString()} impressions · ${m.clicks} clicks · ${m.likes} likes${m.followers ? ` · ${m.followers.toLocaleString()} followers` : ''}.`;
+}
+
+/** Demo-safe fallback text for the content agents when no LLM key is set. */
+export function agentFallback(task: TaskType, c: AgentCtx): string {
+  const biz = c.business || 'your business';
+  if (task === 'social_content')
+    return `Today's post idea for ${biz}:\n\n"Your home deserves a fresh look. ${c.offers || 'Book this week and save.'} 🏡✨"\n#local #${(c.trade || 'homeservices').replace(/\s+/g, '')} #smallbusiness\n\n(Add an OpenRouter key and Miles writes a fresh custom post every day.)`;
+  if (task === 'review_responder')
+    return (c.reviews || []).length
+      ? (c.reviews || []).map((r) => `To ${r.author || 'customer'} (${r.rating}★): "Thank you so much for the kind words — it means a lot to our team!"`).join('\n\n')
+      : 'No new reviews to respond to. Connect Google Business Profile and I’ll draft replies the moment they come in.';
+  if (task === 'lead_followup')
+    return (c.leads || []).length
+      ? (c.leads || []).map((l) => `${l.name || 'Lead'}: "Hi ${l.name || 'there'} — thanks for reaching out about ${l.service || 'your project'}! When's a good time for a quick call to get you a quote?"`).join('\n\n')
+      : 'No new leads right now. Connect your CRM and I’ll draft a follow-up for every new lead automatically.';
+  return `Competitive tip for ${biz}: lead with speed-to-lead and reviews — respond to every inquiry in minutes and ask every happy customer for a review. (Add an OpenRouter key for a full competitor read.)`;
+}
 
 export interface ScheduledAgent {
   id: string;
