@@ -22,6 +22,9 @@ const PARAM_KEYWORDS: Record<string, string[]> = {
   message: ['message', 'body', 'text', 'content'],
   note: ['note', 'body', 'comment', 'description'],
   tag: ['tag', 'label'],
+  // Social publishing: the post text and the media attachment.
+  caption: ['caption', 'message', 'text', 'content', 'status', 'post'],
+  media: ['media', 'image url', 'image', 'photo', 'video url', 'video', 'file url', 'attachment', 'url'],
 };
 
 /**

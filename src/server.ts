@@ -1083,7 +1083,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       }
       try {
         const r = connector.runAppTask
-          ? await connector.runAppTask({ externalUserId: userId, app: plat.app, query: `Publish a ${post.kind} post`, params: { caption: post.caption, mediaUrl: post.assetUrl } })
+          ? await connector.runAppTask({ externalUserId: userId, app: plat.app, query: `Create ${post.kind} post`, params: { caption: post.caption, media: post.assetUrl } })
           : null;
         results.push({ platform: pid, ok: !!r?.ok, note: r?.note || r?.summary || (r?.ok ? 'posted' : 'no publisher available') });
       } catch (err) {
