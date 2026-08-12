@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isDue, buildCpaReport, buildMorningBrief, buildTaskListPrompt, fallbackTaskList, type ScheduledAgent } from '../src/agents/scheduled.js';
+import { isDue, buildCpaReport, buildMorningBrief, buildTaskListPrompt, fallbackTaskList, buildWrapupPrompt, fallbackWrapup, type ScheduledAgent } from '../src/agents/scheduled.js';
 
 const agent = (o: Partial<ScheduledAgent> = {}): ScheduledAgent => ({
   id: 'a1', name: 'Brief', task: 'morning_brief', time: '08:30', days: [1, 2, 3, 4, 5], enabled: true, tzOffset: 0, createdAt: '', ...o,
@@ -78,6 +78,25 @@ describe('email → task list', () => {
     const doFirst = out.split('🟡')[0]!;
     expect(doFirst).toContain('Kitchen repaint quote?');
     expect(doFirst).toContain('Invoice #1042 is overdue');
+  });
+});
+
+describe('6pm daily wrap-up', () => {
+  it('fallback separates accomplished from pending', () => {
+    const out = fallbackWrapup({ accomplished: ['Paused Drain ad set'], pending: ['New AC campaign'], agentRuns: ['Morning task list'] }, 'Monday');
+    expect(out).toContain('✅ Accomplished today');
+    expect(out).toContain('Paused Drain ad set');
+    expect(out).toContain('Morning task list');
+    expect(out).toContain('New AC campaign');
+  });
+  it('handles a quiet day gracefully', () => {
+    expect(fallbackWrapup({ accomplished: [], pending: [], agentRuns: [] }, 'Monday')).toContain('Quiet day');
+  });
+  it('prompt includes the activity', () => {
+    const { user } = buildWrapupPrompt({ accomplished: ['x'], pending: ['y'], agentRuns: [] }, 'Acme');
+    expect(user).toContain('Acme');
+    expect(user).toContain('x');
+    expect(user).toContain('y');
   });
 });
 

@@ -7,7 +7,7 @@
 import type { CampaignSpend, Deal } from '../revenue/attribution.js';
 import type { EmailMessage } from '../connectors/types.js';
 
-export type TaskType = 'morning_brief' | 'cpa_report' | 'email_tasklist';
+export type TaskType = 'morning_brief' | 'cpa_report' | 'email_tasklist' | 'daily_wrapup';
 
 export interface TaskSpec {
   task: TaskType;
@@ -35,6 +35,12 @@ export const TASK_SPECS: TaskSpec[] = [
     label: 'Morning email → task list',
     description: 'Reads your inbox each morning and turns it into a prioritized to-do list — leads first.',
     defaultTime: '08:00',
+  },
+  {
+    task: 'daily_wrapup',
+    label: '6pm daily wrap-up',
+    description: 'Reviews the day’s activity at 6pm and reports what got done vs. what’s still pending.',
+    defaultTime: '18:00',
   },
 ];
 
@@ -139,6 +145,39 @@ export function fallbackTaskList(emails: EmailMessage[]): string {
   if (later.length) { parts.push('', '🟢 When you can:'); later.forEach((e) => parts.push(fmt(e))); }
   parts.push('', '(Add an OpenRouter key and Miles will summarize and prioritize these intelligently.)');
   return parts.join('\n');
+}
+
+// ── 6pm daily wrap-up agent ──
+
+export interface WrapActivity {
+  accomplished: string[];
+  pending: string[];
+  agentRuns: string[];
+}
+
+export function buildWrapupPrompt(a: WrapActivity, business?: string): { system: string; user: string } {
+  const system =
+    'You are the chief of staff to a local-service business owner. Write a short, warm end-of-day wrap-up: "✅ Accomplished today", "⏳ Still pending", and "🎯 Tomorrow" (1-2 priorities). Base it only on the activity given. Concise, plain text, no preamble.';
+  const user =
+    `${business ? `Business: ${business}.\n` : ''}` +
+    `Shipped/live today: ${a.accomplished.join('; ') || 'none'}\n` +
+    `Agent runs today: ${a.agentRuns.join('; ') || 'none'}\n` +
+    `Waiting for approval: ${a.pending.join('; ') || 'none'}`;
+  return { system, user };
+}
+
+export function fallbackWrapup(a: WrapActivity, dateLabel: string): string {
+  const done = [...a.accomplished, ...a.agentRuns];
+  if (!done.length && !a.pending.length) return `Quiet day — nothing shipped or pending in Miles on ${dateLabel}. A good time to plan tomorrow’s outreach.`;
+  const lines: string[] = [];
+  lines.push('✅ Accomplished today:');
+  if (done.length) done.forEach((d) => lines.push(`   • ${d}`));
+  else lines.push('   • (nothing shipped today)');
+  lines.push('', '⏳ Still pending:');
+  if (a.pending.length) a.pending.forEach((d) => lines.push(`   • ${d} — needs your approval`));
+  else lines.push('   • Nothing waiting on you 🎉');
+  lines.push('', `🎯 Tomorrow: clear any pending approvals and follow up on new leads.`);
+  return lines.join('\n');
 }
 
 export function buildMorningBrief(ctx: BriefContext): { title: string; body: string } {

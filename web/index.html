@@ -1800,13 +1800,32 @@ let SCHED={agents:[],runs:[],tasks:SCHED_TASKS_FB}, SCHED_LOADED=false;
 async function openSchedules(){ if(!SCHED_LOADED){ if(REMOTE){ try{ const r=await fetch('/api/schedules'); const d=await r.json(); SCHED=d; }catch(e){} } if(!SCHED.tasks||!SCHED.tasks.length) SCHED.tasks=SCHED_TASKS_FB; if(!SCHED.agents) SCHED.agents=[]; if(!SCHED.runs) SCHED.runs=[]; SCHED_LOADED=true; } renderSchedules(); }
 async function saveSchedules(){ if(!REMOTE) return; try{ await fetch('/api/schedules',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({agents:SCHED.agents})}); }catch(e){} }
 function schedSummary(a){ const days=a.days.length===7?'Every day':(a.days.join(',')==='1,2,3,4,5'?'Weekdays':(a.days.join(',')==='0,6'?'Weekends':a.days.map(d=>DOW[d]).join(', '))); return days+' at '+a.time; }
+const TASK_ICON={morning_brief:'☀️',cpa_report:'📈',email_tasklist:'✉️',daily_wrapup:'🌙'};
+function deployAgent(t){
+  if((SCHED.agents||[]).some(a=>a.task===t.task)){ toast('Already deployed'); return; }
+  const a={id:newId(),name:t.label,task:t.task,time:t.defaultTime||'08:00',days:[0,1,2,3,4,5,6],enabled:true,tzOffset:new Date().getTimezoneOffset(),createdAt:new Date().toISOString()};
+  SCHED.agents.push(a); saveSchedules(); renderSchedules(); toast(t.label+' deployed — runs every day 🎉');
+}
 function renderSchedules(){
   const box=$('#schedules-body'); if(!box) return; box.innerHTML='';
-  const head=el('div'); head.innerHTML='<h3 style="margin:0">Scheduled Agents</h3><p class="mdesc" style="margin:4px 0 0;max-width:700px">Put Miles on a schedule. It runs recurring work on its own — a morning brief, a performance report — and drops the result below. Runs automatically while Miles is online; hit “Run now” to try it anytime.</p>';
+  const head=el('div'); head.innerHTML='<h3 style="margin:0">Agents</h3><p class="mdesc" style="margin:4px 0 0;max-width:720px">Your always-on workforce. Deploy a ready-made agent below and it runs on its own, every day — reading your email, wrapping up your day, tracking performance — and drops its report in your inbox.</p>';
   box.append(head);
-  const addBtn=el('button','pf-save','+ New scheduled agent'); addBtn.style.marginTop='16px'; addBtn.onclick=schedForm; box.append(addBtn);
-  const list=el('div'); list.style.marginTop='16px';
-  if(!SCHED.agents.length) list.append(el('div','verdict ok','No scheduled agents yet. Add one — e.g. a morning brief at 8:30am on weekdays, or a marketing performance report.'));
+  // ── ready-made agents you can one-click deploy ──
+  box.append(el('div','sect-label','DEPLOY AN AGENT'));
+  const gal=el('div','folgrid');
+  for(const t of (SCHED.tasks||SCHED_TASKS_FB)){
+    const deployed=(SCHED.agents||[]).some(a=>a.task===t.task);
+    const card=el('div','acard'); card.style.margin='0';
+    card.innerHTML='<div style="font-size:22px">'+(TASK_ICON[t.task]||'🤖')+'</div><b style="display:block;margin-top:6px">'+esc(t.label)+'</b><div class="mdesc" style="margin:6px 0 10px">'+esc(t.description||'')+'</div><div class="appsub">Runs daily · '+(t.defaultTime||'08:00')+'</div>';
+    const btn=el('button',deployed?'adsave':'go',deployed?'✓ Deployed':'Deploy'); btn.style.marginTop='12px'; btn.disabled=deployed;
+    if(!deployed) btn.onclick=()=>deployAgent(t);
+    card.append(btn); gal.append(card);
+  }
+  box.append(gal);
+  box.append(el('div','sect-label','YOUR AGENTS'));
+  const addBtn=el('button','adsave','+ Custom agent (pick task, time & days)'); addBtn.onclick=schedForm; box.append(addBtn);
+  const list=el('div'); list.style.marginTop='14px';
+  if(!SCHED.agents.length) list.append(el('div','verdict ok','No agents deployed yet. Click “Deploy” on one above to put it to work every day.'));
   for(const a of SCHED.agents){
     const row=el('div','acard'); row.style.marginBottom='10px';
     const top=el('div'); top.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:10px';

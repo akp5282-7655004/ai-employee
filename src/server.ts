@@ -20,6 +20,8 @@ import {
   buildCpaReport,
   buildTaskListPrompt,
   fallbackTaskList,
+  buildWrapupPrompt,
+  fallbackWrapup,
   type ScheduledAgent,
   type AgentRun,
   type TaskType,
@@ -777,6 +779,21 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const { system, user } = buildTaskListPrompt(emails, p.businessName);
       const body = (await generateText({ system, user, maxTokens: 800 })) ?? fallbackTaskList(emails);
       return { title: `Morning task list — ${dateLabel}`, body };
+    }
+    if (task === 'daily_wrapup') {
+      const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      const today = new Date().toDateString();
+      const isToday = (ts?: string) => { try { return ts ? new Date(ts).toDateString() === today : false; } catch { return false; } };
+      const q = ((data.deploy as { queue?: Array<{ label?: string; status?: string; ts?: string }> })?.queue) ?? [];
+      const runs = ((data.agentRuns as AgentRun[]) ?? []).filter((r) => isToday(r.ts) && r.task !== 'daily_wrapup');
+      const activity = {
+        accomplished: q.filter((c) => isToday(c.ts) && c.status === 'live').map((c) => c.label || 'change'),
+        pending: q.filter((c) => c.status === 'pending').map((c) => c.label || 'change'),
+        agentRuns: runs.map((r) => r.title),
+      };
+      const { system, user } = buildWrapupPrompt(activity, p.businessName);
+      const body = (await generateText({ system, user, maxTokens: 700 })) ?? fallbackWrapup(activity, dateLabel);
+      return { title: `Daily wrap-up — ${dateLabel}`, body };
     }
     // morning_brief
     let weatherLine: string | undefined;
