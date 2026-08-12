@@ -51,6 +51,7 @@ import { applyMeter, summarizeUsage, type MeterKind, type Usage } from './usage/
 import { modelsForKind, modelById, defaultModel, modelActive, recommendModel, type MediaKind } from './creative/models.js';
 import { openaiGenerateImage } from './creative/openai_image.js';
 import { higgsfieldGenerateImage } from './creative/higgsfield.js';
+import { PLATFORMS, platformById, postDue, rollupStatus, buildPost, type ScheduledPost, type PostResult } from './posts/schedule.js';
 import { aggregateNetwork, type WorkspaceSignal } from './usage/network.js';
 import { deliveryStatus, sendEmail, sendSms, smsExcerpt } from './delivery/send.js';
 import { searchCompetitors } from './research/places.js';
@@ -1061,6 +1062,85 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     }
   }
 
+  // ── Content scheduler — publish a created asset to social platforms on a schedule ──
+  // Publishing goes through the connector (Pipedream when live). A platform the
+  // customer hasn't connected holds the post rather than pretending it published.
+  async function publishPost(userId: string, post: ScheduledPost): Promise<ScheduledPost> {
+    let connectedApps = new Set<string>();
+    try {
+      const accts = await connector.listAccounts(userId);
+      connectedApps = new Set(accts.map((a) => a.app));
+    } catch {
+      /* treat as nothing connected */
+    }
+    const results: PostResult[] = [];
+    for (const pid of post.platforms) {
+      const plat = platformById(pid);
+      if (!plat) continue;
+      if (!connectedApps.has(plat.app)) {
+        results.push({ platform: pid, ok: false, note: 'not connected' });
+        continue;
+      }
+      try {
+        const r = connector.runAppTask
+          ? await connector.runAppTask({ externalUserId: userId, app: plat.app, query: `Publish a ${post.kind} post`, params: { caption: post.caption, mediaUrl: post.assetUrl } })
+          : null;
+        results.push({ platform: pid, ok: !!r?.ok, note: r?.note || r?.summary || (r?.ok ? 'posted' : 'no publisher available') });
+      } catch (err) {
+        results.push({ platform: pid, ok: false, note: String((err as Error).message) });
+      }
+    }
+    post.results = results;
+    post.status = rollupStatus(results);
+    post.publishedAt = new Date().toISOString();
+    return post;
+  }
+
+  app.get('/api/posts', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    let connected: string[] = [];
+    try {
+      connected = [...new Set((await connector.listAccounts(u.id)).map((a) => a.app))];
+    } catch {
+      /* none */
+    }
+    const platforms = PLATFORMS.map((p) => ({ id: p.id, label: p.label, icon: p.icon, accepts: p.accepts, connected: connected.includes(p.app) }));
+    return { posts: (data.scheduledPosts as ScheduledPost[]) ?? [], platforms };
+  });
+  app.post<{ Body: Partial<ScheduledPost> }>('/api/posts', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const { post, error } = buildPost(req.body ?? {}, new Date());
+    if (error || !post) return reply.code(400).send({ error: error || 'Invalid post.' });
+    post.id = newToken().slice(0, 10);
+    const data = await authStore.getUserData(u.id);
+    const list = ((data.scheduledPosts as ScheduledPost[]) ?? []).concat(post).slice(-200);
+    data.scheduledPosts = list;
+    await authStore.setUserData(u.id, data);
+    return { ok: true, post };
+  });
+  app.post<{ Body: { id?: string } }>('/api/posts/delete', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    data.scheduledPosts = ((data.scheduledPosts as ScheduledPost[]) ?? []).filter((p) => p.id !== req.body?.id);
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+  app.post<{ Body: { id?: string } }>('/api/posts/run', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const list = (data.scheduledPosts as ScheduledPost[]) ?? [];
+    const post = list.find((p) => p.id === req.body?.id);
+    if (!post) return reply.code(404).send({ error: 'post not found' });
+    await publishPost(u.id, post);
+    await authStore.setUserData(u.id, data);
+    return { ok: true, post };
+  });
+
   app.get('/api/schedules', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
@@ -1113,6 +1193,13 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
           agent.lastRunAt = new Date().toISOString();
           bumpMeter(data, 'agent_run');
           if (agent.deliver?.email || agent.deliver?.sms) delivered.push({ agent, run });
+          changed = true;
+        }
+        // Publish any content posts whose scheduled time has arrived.
+        const posts = (data.scheduledPosts as ScheduledPost[]) ?? [];
+        for (const post of posts) {
+          if (!postDue(post, now)) continue;
+          await publishPost(uid, post);
           changed = true;
         }
         if (changed) await authStore.setUserData(uid, data);
