@@ -1603,7 +1603,7 @@ function renderStudioResult(r,spec){
     return;
   }
   if(r.kind==='video'){
-    if(r.url){ const v=el('video'); v.src=r.url; v.controls=true; v.style.cssText='max-width:100%;border-radius:12px'; box.append(v); const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px'; bar.append(studioDownload(r.url,'miles-video.mp4')); bar.append(studioPushBtn(spec)); box.append(bar); }
+    if(r.url){ const v=el('video'); v.src=r.url; v.controls=true; v.style.cssText='max-width:100%;border-radius:12px'; box.append(v); const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px;flex-wrap:wrap'; bar.append(studioDownload(r.url,'miles-video.mp4')); const ed=el('button','adsave','✏️ Add branding'); ed.onclick=()=>openVideoEditor(r.url); bar.append(ed,studioPushBtn(spec)); box.append(bar); }
     else box.append(el('div','verdict tight','🎬 To generate real video, add FAL_KEY (and optionally FAL_VIDEO_MODEL) on Render. Video is the priciest, slowest asset — everything else works today.'));
     return;
   }
@@ -1714,6 +1714,96 @@ function openEditor(bgUrl){
   bDeploy.onclick=()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export (cross-origin image).'); return; } if(typeof queueChange==='function'){ queueChange('creative','Edited design','pending'); } ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:u,caption:'Edited design (sent to Deploy)'}); saveAssets(); toast('Sent to Deploy (pending approval)'); };
   foot.append(bSave,bDl,bDeploy);
   close.onclick=()=>{ window.removeEventListener('mouseup',up); window.removeEventListener('touchend',up); ov.remove(); };
+  ov.addEventListener('mousedown',(e)=>{ if(e.target===ov) close.onclick(); });
+}
+
+// ═══ Video Branding Editor (v1) — overlay logo/text/templates on a clip, export a branded video ═══
+// Preview and export share ONE render path: a canvas draws each video frame plus
+// the overlay layers. Export pipes that same canvas (plus the clip's audio) through
+// MediaRecorder to a .webm. Renders in the browser (no server); honest fallbacks if
+// the browser can't capture or the video blocks cross-origin frames.
+function openVideoEditor(videoUrl){
+  const ov=el('div'); ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px';
+  const panel=el('div'); panel.style.cssText='background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:96vw;max-height:96vh;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px';
+  const head=el('div'); head.style.cssText='display:flex;justify-content:space-between;align-items:center'; head.append(el('b',null,'🎬 Video Branding')); const close=el('button','idel','✕ Close'); head.append(close);
+  const tb=el('div'); tb.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+  const tt=el('div'); tt.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+  const canvas=el('canvas'); canvas.style.cssText='max-width:100%;border-radius:10px;border:1px solid var(--line);background:#000;touch-action:none';
+  const ctx=canvas.getContext('2d');
+  const ctrl=el('div'); ctrl.style.cssText='display:flex;gap:10px;align-items:center;flex-wrap:wrap';
+  const foot=el('div'); foot.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+  panel.append(head,tb,tt,canvas,ctrl,foot); ov.append(panel); document.body.append(ov);
+
+  const v=document.createElement('video'); v.crossOrigin='anonymous'; v.loop=true; v.playsInline=true; v.muted=false; v.src=videoUrl;
+  let layers=[], sel=null, mode=null, off={x:0,y:0}, cw=0, ch=0, raf=0;
+  v.onloadedmetadata=()=>{ const maxW=Math.min(800, window.innerWidth-90), maxH=window.innerHeight-330; let s=Math.min(1, maxW/(v.videoWidth||1280)); if((v.videoHeight||720)*s>maxH) s=maxH/(v.videoHeight||720); cw=Math.round((v.videoWidth||1280)*s); ch=Math.round((v.videoHeight||720)*s); canvas.width=cw; canvas.height=ch; if(!raf) loop(); };
+  v.onerror=()=>{ toast('Couldn’t load that video into the editor'); close.onclick&&close.onclick(); };
+
+  function drawOverlays(c,f){
+    for(const l of layers){
+      if(l.type==='image'){ if(l.img&&l.img.complete) c.drawImage(l.img,l.x*f,l.y*f,l.w*f,l.h*f); }
+      else if(l.type==='shape'){ c.save(); c.globalAlpha=(l.opacity==null?1:l.opacity); c.fillStyle=l.fill||'#111'; if(l.radius){ roundRectPath(c,l.x*f,l.y*f,l.w*f,l.h*f,Math.min(l.radius*f,l.w*f/2,l.h*f/2)); c.fill(); } else c.fillRect(l.x*f,l.y*f,l.w*f,l.h*f); c.restore(); }
+      else { c.font=(l.weight||'700')+' '+(l.size*f)+'px Inter, system-ui, sans-serif'; c.textBaseline='top'; c.fillStyle=l.color||'#fff'; c.shadowColor='rgba(0,0,0,.55)'; c.shadowBlur=Math.max(2,l.size*f*0.12); c.shadowOffsetY=f; c.fillText(l.text,l.x*f,l.y*f); c.shadowColor='transparent'; c.shadowBlur=0; c.shadowOffsetY=0; }
+    }
+  }
+  function textW(l){ ctx.font=(l.weight||'700')+' '+l.size+'px Inter, system-ui, sans-serif'; return ctx.measureText(l.text||' ').width; }
+  function bounds(l){ return l.type==='text' ? {x:l.x,y:l.y,w:textW(l),h:l.size*1.25} : {x:l.x,y:l.y,w:l.w,h:l.h}; }
+  function loop(){ if(!canvas.isConnected){ raf=0; return; } try{ if(v.readyState>=2) ctx.drawImage(v,0,0,cw,ch); else { ctx.fillStyle='#111'; ctx.fillRect(0,0,cw,ch); } }catch(e){ ctx.fillStyle='#111'; ctx.fillRect(0,0,cw,ch); } drawOverlays(ctx,1); if(sel){ const b=bounds(sel); ctx.save(); ctx.strokeStyle='#2b6cff'; ctx.setLineDash([5,4]); ctx.lineWidth=1.5; ctx.strokeRect(b.x-2,b.y-2,b.w+4,b.h+4); ctx.setLineDash([]); ctx.fillStyle='#2b6cff'; ctx.fillRect(b.x+b.w-4,b.y+b.h-4,12,12); ctx.restore(); } raf=requestAnimationFrame(loop); }
+
+  function pos(e){ const r=canvas.getBoundingClientRect(); const cx=(e.touches?e.touches[0].clientX:e.clientX), cy=(e.touches?e.touches[0].clientY:e.clientY); return {x:(cx-r.left)*(canvas.width/r.width), y:(cy-r.top)*(canvas.height/r.height)}; }
+  function inHandle(p){ if(!sel) return false; const b=bounds(sel); return p.x>=b.x+b.w-6&&p.x<=b.x+b.w+12&&p.y>=b.y+b.h-6&&p.y<=b.y+b.h+12; }
+  function hit(p){ for(let i=layers.length-1;i>=0;i--){ const b=bounds(layers[i]); if(p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h) return layers[i]; } return null; }
+  function down(e){ e.preventDefault(); const p=pos(e); if(inHandle(p)){ mode='resize'; return; } const h=hit(p); sel=h; if(h){ mode='move'; off={x:p.x-h.x,y:p.y-h.y}; } }
+  function move(e){ if(!mode||!sel) return; e.preventDefault(); const p=pos(e); if(mode==='move'){ sel.x=p.x-off.x; sel.y=p.y-off.y; } else if(mode==='resize'){ if(sel.type==='image'){ const ar=sel.w/sel.h; sel.w=Math.max(24,p.x-sel.x); sel.h=sel.w/ar; } else if(sel.type==='shape'){ sel.w=Math.max(12,p.x-sel.x); sel.h=Math.max(12,p.y-sel.y); } else { sel.size=Math.max(10,Math.round((p.y-sel.y)/1.25)); } } }
+  function up(){ mode=null; }
+  canvas.addEventListener('mousedown',down); canvas.addEventListener('mousemove',move); window.addEventListener('mouseup',up);
+  canvas.addEventListener('touchstart',down,{passive:false}); canvas.addEventListener('touchmove',move,{passive:false}); window.addEventListener('touchend',up);
+  canvas.addEventListener('dblclick',()=>{ if(sel&&sel.type==='text'){ const t=prompt('Edit text:',sel.text); if(t!=null) sel.text=t; } });
+
+  function placeLogo(x,y,w){ if(!(ASSETS&&ASSETS.logo)) return; const im=new Image(); im.crossOrigin='anonymous'; im.onload=()=>{ const h=w*(im.naturalHeight/im.naturalWidth||0.5); layers.push({id:newId(),type:'image',img:im,src:ASSETS.logo,x,y,w,h}); }; im.src=ASSETS.logo; }
+  function applyTemplate(name){ const P=(typeof PROFILE!=='undefined'&&PROFILE)||{}; const biz=P.businessName||(ASSETS&&ASSETS.tagline)||'Your Business'; const offer=P.currentOffers||'Book today'; const phone=P.phone||(ASSETS&&ASSETS.phone)||''; layers=[]; sel=null; const S=(o)=>layers.push(Object.assign({id:newId(),type:'shape',fill:'#0b1020',opacity:0.6,radius:0},o)); const T=(o)=>layers.push(Object.assign({id:newId(),type:'text',text:'Text',size:Math.round(ch*0.06),color:'#fff',weight:'700'},o));
+    if(name==='bar'){ S({x:0,y:Math.round(ch*0.80),w:cw,h:Math.round(ch*0.20),fill:'#0b1020',opacity:0.62}); T({text:biz,x:Math.round(cw*0.04),y:Math.round(ch*0.825),size:Math.round(ch*0.08)}); if(phone||offer) T({text:phone||offer,x:Math.round(cw*0.04),y:Math.round(ch*0.925),size:Math.round(ch*0.045),color:'#e5e7eb',weight:'500'}); placeLogo(Math.round(cw*0.80),Math.round(ch*0.835),Math.round(cw*0.16)); }
+    else if(name==='ribbon'){ S({x:0,y:0,w:cw,h:Math.round(ch*0.13),fill:'#111827',opacity:0.9}); T({text:('★ '+offer).toUpperCase(),x:Math.round(cw*0.04),y:Math.round(ch*0.035),size:Math.round(ch*0.055),color:'#fde68a',weight:'800'}); placeLogo(Math.round(cw*0.86),Math.round(ch*0.02),Math.round(cw*0.10)); }
+    else if(name==='logo'){ placeLogo(Math.round(cw*0.04),Math.round(ch*0.05),Math.round(cw*0.20)); }
+  }
+  tt.append(el('span','appsub','Templates:'));
+  [['▁ Lower third','bar'],['▔ Top ribbon','ribbon'],['🏷 Logo only','logo']].forEach(([lbl,nm])=>{ const b=el('button','adsave',lbl); b.style.cssText='flex:none;padding:5px 10px;font-size:12px'; b.onclick=()=>applyTemplate(nm); tt.append(b); });
+
+  const bLogo=el('button','go','🏷️ Add logo'); bLogo.style.cssText='flex:none;padding:6px 12px'; bLogo.onclick=()=>{ if(!(ASSETS&&ASSETS.logo)){ toast('Upload your logo in Assets first'); return; } placeLogo(Math.round(cw*0.04),Math.round(ch*0.04),Math.round(cw*0.24)); };
+  const bText=el('button','adsave','＋ Text'); bText.onclick=()=>{ const t=prompt('Text to add:', (typeof PROFILE!=='undefined'&&PROFILE&&PROFILE.currentOffers)||'Book today'); if(t==null) return; layers.push({id:newId(),type:'text',text:t||'Text',x:Math.round(cw*0.1),y:Math.round(ch*0.1),size:Math.max(20,Math.round(ch*0.08)),color:'#fff',weight:'700'}); };
+  const color=el('input'); color.type='color'; color.value='#ffffff'; color.style.cssText='width:38px;height:32px;border:1px solid var(--line);border-radius:6px;background:none;cursor:pointer'; color.oninput=()=>{ if(sel&&sel.type==='text') sel.color=color.value; };
+  const bDel=el('button','idel','🗑 Delete'); bDel.onclick=()=>{ if(sel){ layers=layers.filter(x=>x!==sel); sel=null; } };
+  tb.append(bLogo,bText,el('span','appsub','Text color:'),color,bDel);
+
+  const play=el('button','adsave','▶ Play'); play.onclick=()=>{ if(v.paused){ v.play().then(()=>play.textContent='⏸ Pause').catch(()=>{}); } else { v.pause(); play.textContent='▶ Play'; } };
+  ctrl.append(play,el('span','appsub','Drag to move · pull the corner to resize · double-click text to edit'));
+
+  const status=el('span','appsub');
+  const bExport=el('button','go','⤓ Export branded video'); bExport.style.cssText='flex:none;padding:6px 14px';
+  bExport.onclick=async()=>{
+    if(!v.videoWidth){ toast('Video still loading…'); return; }
+    if(typeof MediaRecorder==='undefined'||!canvas.captureStream){ status.textContent='This browser can’t export video — try Chrome.'; return; }
+    bExport.disabled=true; sel=null;
+    const ec=document.createElement('canvas'); ec.width=v.videoWidth; ec.height=v.videoHeight; const eo=ec.getContext('2d'); const f=v.videoWidth/cw;
+    let stream; try{ stream=ec.captureStream(30); }catch(e){ status.textContent='Export not supported here.'; bExport.disabled=false; return; }
+    try{ const vs=v.captureStream?v.captureStream():(v.mozCaptureStream?v.mozCaptureStream():null); const at=vs&&vs.getAudioTracks&&vs.getAudioTracks()[0]; if(at) stream.addTrack(at); }catch(e){}
+    let rec; try{ rec=new MediaRecorder(stream,{mimeType:'video/webm'}); }catch(e){ status.textContent='Export not supported here.'; bExport.disabled=false; return; }
+    const chunks=[]; rec.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); };
+    const done=new Promise(res=>{ rec.onstop=res; });
+    v.pause(); try{ v.currentTime=0; await new Promise(r=>{ v.onseeked=r; setTimeout(r,400); }); }catch(e){}
+    let tainted=false;
+    rec.start(); try{ await v.play(); }catch(e){}
+    const dur=(v.duration&&isFinite(v.duration))?v.duration:8;
+    const step=()=>{ try{ eo.drawImage(v,0,0,ec.width,ec.height); drawOverlays(eo,f); }catch(err){ tainted=true; } status.textContent='Rendering… '+Math.min(99,Math.round((v.currentTime/dur)*100))+'%'; if(!tainted && !v.ended && v.currentTime<dur-0.05){ requestAnimationFrame(step); } else { try{ rec.stop(); }catch(e){} v.pause(); play.textContent='▶ Play'; } };
+    step();
+    await done; bExport.disabled=false;
+    if(tainted||!chunks.length){ status.textContent='⚠︎ Couldn’t bake it in — this clip blocks cross-origin capture. Tell me and I’ll add a server render.'; return; }
+    const url=URL.createObjectURL(new Blob(chunks,{type:'video/webm'})); status.textContent='Done ✓ downloaded';
+    const a=el('a'); a.href=url; a.download='miles-branded.webm'; a.click();
+  };
+  foot.append(bExport,status);
+
+  close.onclick=()=>{ cancelAnimationFrame(raf); raf=0; window.removeEventListener('mouseup',up); window.removeEventListener('touchend',up); try{ v.pause(); }catch(e){} v.removeAttribute('src'); ov.remove(); };
   ov.addEventListener('mousedown',(e)=>{ if(e.target===ov) close.onclick(); });
 }
 function renderAdCards(cr){
