@@ -1654,7 +1654,7 @@ function renderStudioResult(r,spec){
     return;
   }
   if(r.kind==='video'){
-    if(r.url){ const v=el('video'); v.src=r.url; v.controls=true; v.style.cssText='max-width:100%;border-radius:12px'; box.append(v); const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px;flex-wrap:wrap'; bar.append(studioDownload(r.url,'miles-video.mp4')); const ed=el('button','adsave','✏️ Add branding'); ed.onclick=()=>openVideoEditor(r.url); const sv=el('button','adsave','📅 Schedule'); sv.onclick=()=>scheduleAsset(r.url,'video'); bar.append(ed,sv,studioPushBtn(spec)); box.append(bar); }
+    if(r.url){ const v=el('video'); v.src=r.url; v.controls=true; v.style.cssText='max-width:100%;border-radius:12px'; box.append(v); const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px;flex-wrap:wrap'; bar.append(studioDownload(r.url,'miles-video.mp4')); const ed=el('button','adsave','✏️ Add branding'); ed.onclick=()=>openVideoEditor(r.url); const sv=el('button','adsave','📅 Schedule'); sv.onclick=()=>scheduleAsset(r.url,'video'); bar.append(ed,sv,studioPushBtn(spec)); box.append(bar); if(r.note) box.append(el('div','appsub','⚠︎ '+esc(r.note))); }
     else box.append(el('div','verdict tight','🎬 To generate real video, add FAL_KEY (and optionally FAL_VIDEO_MODEL) on Render. Video is the priciest, slowest asset — everything else works today.'));
     return;
   }

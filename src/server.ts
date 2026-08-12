@@ -50,7 +50,8 @@ import { auditSite, buildAuditPrompt, fallbackAuditSummary } from './research/au
 import { applyMeter, summarizeUsage, type MeterKind, type Usage } from './usage/meter.js';
 import { modelsForKind, modelById, defaultModel, modelActive, recommendModel, type MediaKind } from './creative/models.js';
 import { openaiGenerateImage } from './creative/openai_image.js';
-import { higgsfieldGenerateImage } from './creative/higgsfield.js';
+import { higgsfieldGenerateImage, higgsfieldGenerateVideo } from './creative/higgsfield.js';
+import { googleGenerateImage } from './creative/google_image.js';
 import { PLATFORMS, platformById, postDue, rollupStatus, buildPost, type ScheduledPost, type PostResult } from './posts/schedule.js';
 import { aggregateNetwork, type WorkspaceSignal } from './usage/network.js';
 import { deliveryStatus, sendEmail, sendSms, smsExcerpt } from './delivery/send.js';
@@ -879,11 +880,19 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const prompt = buildVisualPrompt(spec.type, body.prompt ?? '', brand, body.style);
       const aspect = (body.aspect ?? spec.defaultAspect) as Aspect;
       if (spec.kind === 'video') {
-        let url = await falGenerateVideo(prompt, { aspect, duration: body.duration, model: chosen.falModel });
+        let url: string | null = null;
+        let vnote: string | undefined;
+        if (chosen.provider === 'higgsfield') {
+          const r = await higgsfieldGenerateVideo(prompt, { aspect });
+          url = r.url;
+          if (!url && r.error) vnote = r.error;
+        } else {
+          url = await falGenerateVideo(prompt, { aspect, duration: body.duration, model: chosen.falModel });
+        }
         // A premium pick that returns nothing falls back to the reliable default.
         if (!url && chosen.id !== def.id) url = await falGenerateVideo(prompt, { aspect, duration: body.duration, model: def.falModel });
         await meterUser(u.id, 'video', 1, chosen.credits);
-        return { type: spec.type, kind: 'video', url, prompt, model: chosen.id, live: falReady() };
+        return { type: spec.type, kind: 'video', url, prompt, model: chosen.id, note: vnote, live: falReady() };
       }
       // image — route by provider, always falling back to the default fal model.
       let url: string | null = null;
@@ -892,6 +901,8 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
         const r = await higgsfieldGenerateImage(prompt, { aspect });
         url = r.url;
         if (!url && r.error) note = `Higgsfield: ${r.error}`;
+      } else if (chosen.provider === 'google') {
+        url = await googleGenerateImage(prompt, { aspect });
       } else if (chosen.provider === 'openai') {
         url = await openaiGenerateImage(prompt, { aspect });
       } else {

@@ -8,7 +8,7 @@
  */
 
 export type MediaKind = 'image' | 'video' | 'audio';
-export type MediaProvider = 'fal' | 'openai' | 'higgsfield';
+export type MediaProvider = 'fal' | 'openai' | 'higgsfield' | 'google';
 
 export interface MediaModel {
   id: string;
@@ -40,9 +40,11 @@ export const MEDIA_MODELS: MediaModel[] = [
   { id: 'flux-pro', kind: 'image', label: 'Flux Pro 1.1 — Photoreal', blurb: 'Highest quality, most photorealistic. Best for hero shots and polished ads.', credits: 12, provider: 'fal', falModel: 'fal-ai/flux-pro/v1.1', recommendFor: /photo|realistic|hero|portrait|product|professional|lifestyle/i, quality: 3, etaSec: 25 },
   { id: 'gpt-image', kind: 'image', label: 'ChatGPT Image (GPT-Image-1)', blurb: 'OpenAI’s image model — excellent at following detailed instructions and rendering text.', credits: 15, provider: 'openai', requiresEnv: 'OPENAI_API_KEY', quality: 3, etaSec: 25 },
   { id: 'hf-soul', kind: 'image', label: 'Higgsfield Soul — Cinematic', blurb: 'Higgsfield’s cinematic image model — director-grade, premium quality.', credits: 18, provider: 'higgsfield', requiresEnv: 'HIGGSFIELD_API_KEY_SECRET', recommendFor: /cinematic|dramatic|film|movie|hero|editorial|moody/i, quality: 4, etaSec: 30 },
+  { id: 'google-imagen', kind: 'image', label: 'Google Imagen 3', blurb: 'Google’s Imagen — crisp, photorealistic, strong at scenes and lighting.', credits: 12, provider: 'google', requiresEnv: 'GEMINI_API_KEY', quality: 3, etaSec: 20 },
   // ── video ──
   { id: 'kling-std', kind: 'video', label: 'Kling — Standard', blurb: 'Reliable everyday video. The safe default that gets the job done.', credits: 20, provider: 'fal', falModel: 'fal-ai/kling-video/v1/standard/text-to-video', default: true, quality: 1, etaSec: 60 },
   { id: 'kling-pro', kind: 'video', label: 'Kling Pro — Cinematic', blurb: 'Smoother motion and more detail. Best for polished ads and hero videos.', credits: 35, provider: 'fal', falModel: 'fal-ai/kling-video/v1.5/pro/text-to-video', recommendFor: /.*/, quality: 2, etaSec: 90 },
+  { id: 'hf-video', kind: 'video', label: 'Higgsfield — Cinematic', blurb: 'Higgsfield’s cinematic pipeline (Soul → DoP). Director-grade motion; premium.', credits: 45, provider: 'higgsfield', requiresEnv: 'HIGGSFIELD_API_KEY_SECRET', quality: 3, etaSec: 120 },
   // ── audio ──
   { id: 'playai-tts', kind: 'audio', label: 'PlayAI Voice', blurb: 'Natural voiceover from any script.', credits: 3, provider: 'fal', falModel: 'fal-ai/playai/tts/v3', default: true, quality: 1, etaSec: 15 },
 ];
@@ -63,6 +65,7 @@ export function defaultModel(kind: MediaKind): MediaModel {
 export function modelActive(m: MediaModel, env: NodeJS.ProcessEnv = process.env): boolean {
   if (m.provider === 'fal') return !!env.FAL_KEY;
   if (m.provider === 'higgsfield') return !!(env.HIGGSFIELD_API_KEY_ID && env.HIGGSFIELD_API_KEY_SECRET);
+  if (m.provider === 'google') return !!env.GEMINI_API_KEY;
   return !!(m.requiresEnv && env[m.requiresEnv]);
 }
 

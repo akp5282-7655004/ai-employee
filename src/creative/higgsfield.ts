@@ -60,3 +60,32 @@ export async function higgsfieldGenerateImage(prompt: string, opts: { aspect?: A
     return { url: null, error: `higgsfield: ${(err as Error).message}` };
   }
 }
+
+/**
+ * Text-to-video via Higgsfield's two-step pipeline: text→image (Soul) then
+ * image→video (DoP). Returns the video URL or a clear error. Slow (two model runs).
+ */
+export async function higgsfieldGenerateVideo(prompt: string, opts: { aspect?: Aspect } = {}): Promise<HfResult> {
+  if (!higgsfieldReady()) return { url: null, error: 'Higgsfield keys not set' };
+  if (!prompt.trim()) return { url: null, error: 'empty prompt' };
+  try {
+    const hf = await hfClient();
+    // 1) generate a first frame
+    const img = await hf.subscribe('/v1/text2image/soul', {
+      input: { prompt, width_and_height: WH[opts.aspect ?? '9:16'], quality: '1080p', batch_size: 1, enhance_prompt: true },
+      withPolling: true,
+    });
+    const imgUrl = img?.images?.[0]?.url;
+    if (!imgUrl) return { url: null, error: 'higgsfield image step returned no url' };
+    // 2) animate it
+    const vid = await hf.subscribe('/v1/image2video/dop', {
+      input: { model: 'dop-turbo', prompt, input_images: [{ type: 'image_url', image_url: imgUrl }], enhance_prompt: true },
+      withPolling: true,
+    });
+    if (vid?.status && vid.status !== 'completed') return { url: null, error: `higgsfield video status: ${vid.status}` };
+    const url = vid?.video?.url ?? null;
+    return url ? { url } : { url: null, error: 'higgsfield video returned no url' };
+  } catch (err) {
+    return { url: null, error: `higgsfield video: ${(err as Error).message}` };
+  }
+}
