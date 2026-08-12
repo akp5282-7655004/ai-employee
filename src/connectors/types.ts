@@ -61,9 +61,18 @@ export interface Review {
   platform?: string;
 }
 export interface Lead {
+  /** Stable CRM id when the source provides one — used to dedup instant responses. */
+  id?: string;
   name?: string;
   service?: string;
   source?: string;
+  /** Contact channels, when the CRM exposes them (lets Miles send the first touch). */
+  phone?: string;
+  email?: string;
+  /** What the lead actually asked, when captured (form message / call note). */
+  message?: string;
+  /** When the lead came in (ISO) — used to measure speed-to-first-response. */
+  createdAt?: string;
   contacted?: boolean;
 }
 

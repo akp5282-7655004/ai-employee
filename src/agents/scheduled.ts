@@ -21,6 +21,7 @@ export type TaskType =
   | 'geo_agent'
   | 'social_poster'
   | 'social_report'
+  | 'speed_to_lead'
   | 'custom';
 
 export interface TaskSpec {

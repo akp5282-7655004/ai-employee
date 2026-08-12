@@ -54,6 +54,17 @@ import { higgsfieldGenerateImage, higgsfieldGenerateVideo } from './creative/hig
 import { googleGenerateImage } from './creative/google_image.js';
 import { PLATFORMS, platformById, postDue, rollupStatus, buildPost, type ScheduledPost, type PostResult } from './posts/schedule.js';
 import { recordSnapshot, buildSocialReport, type DailySnapshot } from './agents/social_report.js';
+import {
+  emptyState as emptyStlState,
+  selectNewLeads,
+  instantReplyAgent,
+  fallbackInstantReply,
+  smsFromReply,
+  responseSeconds,
+  recordContact,
+  responderStats,
+  type SpeedToLeadState,
+} from './agents/speed_to_lead.js';
 import { aggregateNetwork, type WorkspaceSignal } from './usage/network.js';
 import { deliveryStatus, sendEmail, sendSms, smsExcerpt } from './delivery/send.js';
 import { searchCompetitors } from './research/places.js';
@@ -617,6 +628,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       },
       marketing: { connected: spend.length > 0, spend: Math.round(totalSpend), conversions: totalConv, cpa: totalConv ? Math.round((totalSpend / totalConv) * 100) / 100 : null, revenue: Math.round(revenue), targetCpa: Number(p.targetCpa) || null },
       leads: { connected: leads.length > 0, count: leads.length, uncontacted: leads.filter((l) => !l.contacted).length },
+      speedToLead: responderStats(d.speedToLead as SpeedToLeadState | undefined, new Date().toISOString()),
       reviews: { connected: reviews.length > 0, count: reviews.length, avg: reviews.length ? Math.round((reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length) * 10) / 10 : null },
       social,
       upcomingPosts: posts.filter((x) => x.status === 'scheduled').sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt)).slice(0, 5).map((x) => ({ caption: x.caption, platforms: x.platforms, scheduledAt: x.scheduledAt, kind: x.kind })),
@@ -1264,6 +1276,97 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return post;
   }
 
+  // Speed-to-Lead — the keystone: answer brand-new leads within the tick they appear.
+  // Runs on every scheduler tick when enabled. Drafts a personalized first touch per
+  // new lead and sends it over the CRM when connected; otherwise holds it ready. Mutates
+  // `data.speedToLead` (the dedup ledger + log) and returns a run summary, or null when
+  // it's off or there's nothing new. Best-effort — a send failure just holds the draft.
+  async function runSpeedToLead(userId: string, data: Record<string, unknown>): Promise<{ run: { title: string; body: string } } | null> {
+    const st = (data.speedToLead as SpeedToLeadState) ?? null;
+    if (!st?.enabled) return null;
+    const leads = connector.getLeads ? await connector.getLeads(userId) : [];
+    const fresh = selectNewLeads(leads, st.contacted);
+    if (!fresh.length) return null;
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const ctx = {
+      business: p.businessName,
+      trade: p.industry || 'local-service',
+      city: (p.serviceAreas || '').split(',')[0]?.trim() || p.city,
+      services: p.services,
+      offers: p.currentOffers,
+    };
+    let connectedApps = new Set<string>();
+    try {
+      connectedApps = new Set((await connector.listAccounts(userId)).map((a) => a.app));
+    } catch {
+      /* nothing connected */
+    }
+    const canSend = connectedApps.has('gohighlevel') && !!connector.runAppTask;
+    const nowISO = new Date().toISOString();
+    let state = st;
+    const blocks: string[] = [];
+    for (const lead of fresh) {
+      const { system, user } = instantReplyAgent(lead, ctx);
+      const reply = (await generateText({ system, user, maxTokens: 400 })) ?? fallbackInstantReply(lead, ctx);
+      const channels: string[] = [];
+      if (canSend) {
+        try {
+          const r = await connector.runAppTask!({ externalUserId: userId, app: 'gohighlevel', query: 'Send SMS to new lead', params: { message: smsFromReply(reply), name: lead.name ?? '', phone: lead.phone ?? '' } });
+          if (r?.ok) channels.push('sms');
+        } catch {
+          /* held — draft stays ready */
+        }
+      }
+      const held = channels.length === 0;
+      state = recordContact(state, lead, nowISO, channels, held, responseSeconds(lead, nowISO));
+      blocks.push(`• ${lead.name || 'New lead'} — ${lead.service || 'inquiry'} (via ${lead.source || 'website'}): ${held ? 'drafted, ready to send' : `sent ${channels.join(' + ')}`}\n${reply}`);
+    }
+    data.speedToLead = state;
+    const title = `Speed-to-Lead: answered ${fresh.length} new lead${fresh.length === 1 ? '' : 's'}`;
+    const head = canSend ? '' : '⚠︎ Connect your CRM (GoHighLevel) in Integrations and these send automatically. Drafts are ready below.\n\n';
+    return { run: { title, body: head + blocks.join('\n\n') } };
+  }
+
+  // Speed-to-Lead config + live status.
+  app.get('/api/speed-to-lead', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
+    let canSend = false;
+    try {
+      canSend = new Set((await connector.listAccounts(u.id)).map((a) => a.app)).has('gohighlevel');
+    } catch {
+      /* none */
+    }
+    return { enabled: !!st.enabled, canSend, stats: responderStats(st, new Date().toISOString()), recent: st.log.slice(0, 10) };
+  });
+  app.post<{ Body: { enabled?: boolean } }>('/api/speed-to-lead', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
+    st.enabled = !!req.body?.enabled;
+    data.speedToLead = st;
+    await authStore.setUserData(u.id, data);
+    return { ok: true, enabled: st.enabled };
+  });
+  app.post('/api/speed-to-lead/run', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
+    if (!st.enabled) { st.enabled = true; data.speedToLead = st; }
+    const result = await runSpeedToLead(u.id, data);
+    if (result) {
+      const stlAgent: ScheduledAgent = { id: 'speed-to-lead', name: 'Speed-to-Lead', task: 'speed_to_lead', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' };
+      appendRun(data, stlAgent, result.run);
+      bumpMeter(data, 'agent_run');
+    }
+    await authStore.setUserData(u.id, data);
+    return { ok: true, ran: !!result, run: result?.run ?? null, stats: responderStats(data.speedToLead as SpeedToLeadState, new Date().toISOString()) };
+  });
+
   app.get('/api/posts', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
@@ -1371,6 +1474,14 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
         for (const post of posts) {
           if (!postDue(post, now)) continue;
           await publishPost(uid, post);
+          changed = true;
+        }
+        // Speed-to-Lead — answer brand-new leads on this tick (near real-time).
+        const stl = await runSpeedToLead(uid, data);
+        if (stl) {
+          const stlAgent: ScheduledAgent = { id: 'speed-to-lead', name: 'Speed-to-Lead', task: 'speed_to_lead', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' };
+          appendRun(data, stlAgent, stl.run);
+          bumpMeter(data, 'agent_run');
           changed = true;
         }
         if (changed) await authStore.setUserData(uid, data);

@@ -93,8 +93,13 @@ export class MockConnector implements Connector {
     };
   }
 
+  /** Accounts for a user, plus any seeded under the "*" wildcard (dev/demo). */
+  private acc(externalUserId: string): ConnectedAccount[] {
+    return [...(this.accounts.get(externalUserId) ?? []), ...(this.accounts.get('*') ?? [])];
+  }
+
   async listAccounts(externalUserId: string, app?: string): Promise<ConnectedAccount[]> {
-    const list = this.accounts.get(externalUserId) ?? [];
+    const list = this.acc(externalUserId);
     return app ? list.filter((a) => a.app === app) : list;
   }
 
@@ -105,7 +110,7 @@ export class MockConnector implements Connector {
   }
 
   async getAdSpend(externalUserId: string) {
-    const apps = new Set((this.accounts.get(externalUserId) ?? []).map((a) => a.app));
+    const apps = new Set((this.acc(externalUserId)).map((a) => a.app));
     const rows: import('../revenue/attribution.js').CampaignSpend[] = [];
     if (apps.has('google_ads')) {
       rows.push(
@@ -121,7 +126,7 @@ export class MockConnector implements Connector {
 
   async getDeals(externalUserId: string) {
     const CRMS = ['gohighlevel', 'servicetitan', 'jobber', 'hubspot', 'salesforce_rest_api', 'housecall_pro', 'service_fusion'];
-    const apps = new Set((this.accounts.get(externalUserId) ?? []).map((a) => a.app));
+    const apps = new Set((this.acc(externalUserId)).map((a) => a.app));
     if (!CRMS.some((c) => apps.has(c))) return [];
     return [
       { id: 'd1', value: 4200, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing' },
@@ -134,7 +139,7 @@ export class MockConnector implements Connector {
   }
 
   async getRecentEmails(externalUserId: string, limit = 25) {
-    const apps = new Set((this.accounts.get(externalUserId) ?? []).map((a) => a.app));
+    const apps = new Set((this.acc(externalUserId)).map((a) => a.app));
     if (!apps.has('gmail') && !apps.has('google_gmail')) return [];
     const demo: import('./types.js').EmailMessage[] = [
       { from: 'Sarah (new lead)', subject: 'Kitchen repaint quote?', snippet: 'Hi, saw your Google ad — can you quote a 2-room repaint this week?', unread: true },
@@ -147,12 +152,12 @@ export class MockConnector implements Connector {
   }
 
   async getSocialMetrics(externalUserId: string) {
-    const apps = new Set((this.accounts.get(externalUserId) ?? []).map((a) => a.app));
+    const apps = new Set((this.acc(externalUserId)).map((a) => a.app));
     if (!['facebook', 'instagram', 'linkedin'].some((a) => apps.has(a))) return null;
     return { impressions: 3420, clicks: 128, likes: 74, followers: 1290 };
   }
   async getReviews(externalUserId: string) {
-    const apps = new Set((this.accounts.get(externalUserId) ?? []).map((a) => a.app));
+    const apps = new Set((this.acc(externalUserId)).map((a) => a.app));
     if (!apps.has('google_my_business') && !apps.has('gmb')) return [];
     return [
       { author: 'Jenna M.', rating: 5, text: 'Showed up on time and did a beautiful job on our living room. Highly recommend!', platform: 'Google' },
@@ -161,7 +166,7 @@ export class MockConnector implements Connector {
   }
   async getLeads(externalUserId: string) {
     const CRMS = ['gohighlevel', 'servicetitan', 'jobber', 'hubspot', 'salesforce_rest_api', 'housecall_pro'];
-    const apps = new Set((this.accounts.get(externalUserId) ?? []).map((a) => a.app));
+    const apps = new Set((this.acc(externalUserId)).map((a) => a.app));
     if (!CRMS.some((c) => apps.has(c))) return [];
     return [
       { name: 'Sarah Kim', service: 'Kitchen repaint', source: 'Google Ads', contacted: false },
@@ -171,7 +176,7 @@ export class MockConnector implements Connector {
 
   async runAppTask(req: AppTaskRequest): Promise<AppTaskResult> {
     const summary = summarizeTask(req.app, req.query, req.params);
-    const connected = (this.accounts.get(req.externalUserId) ?? []).some((a) => a.app === req.app);
+    const connected = this.acc(req.externalUserId).some((a) => a.app === req.app);
     if (!connected) {
       return {
         ok: false,

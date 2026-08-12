@@ -1420,6 +1420,7 @@ function renderOverview(d){
   const g=el('div','stats'); g.style.cssText='margin:16px 0;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
   g.append(statCard('Pending approvals',k.pendingApprovals||0), statCard('Changes live',k.liveChanges||0), statCard('Agents deployed',k.agentsDeployed||0), statCard('Agent runs (7d)',k.agentRuns7d||0), statCard('Scheduled posts',k.scheduledPosts||0), statCard('Credits used',(k.creditsUsed||0).toLocaleString()), statCard('Weather triggers',k.weatherTriggers||0));
   box.append(g);
+  box.append(stlCard(d.speedToLead||{}));
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px';
   const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<h3 style="margin:0 0 10px">📈 Marketing performance</h3>';
   if(mk.connected){ const ss=el('div','stats'); ss.append(statCard('Ad spend','$'+(mk.spend||0).toLocaleString()), statCard('Cost / job', mk.cpa!=null?('$'+mk.cpa):'—'), statCard('Revenue','$'+(mk.revenue||0).toLocaleString())); mc.append(ss); if(mk.targetCpa&&mk.cpa!=null) mc.append(el('div','appsub','Target $'+mk.targetCpa+'/job · '+(mk.cpa<=mk.targetCpa?'✅ under target':'⚠︎ over target'))); }
@@ -1444,6 +1445,30 @@ function renderOverview(d){
   else ra.append(ovNudge('No agent runs yet. Deploy an agent in Agents & Specialists.'));
   grid2.append(ra);
   box.append(grid2);
+}
+// Speed-to-Lead — the keystone card: answer every new lead within the 5-minute window.
+function stlCard(st){
+  const on=!!st.enabled;
+  const card=el('div','mcard'); card.style.cssText='margin:16px 0;border:1px solid '+(on?'var(--brand)':'var(--line)');
+  const topb=el('div'); topb.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
+  const left=el('div');
+  left.innerHTML='<h3 style="margin:0">⚡ Speed-to-Lead <span class="appsub" style="font-weight:700;color:'+(on?'var(--brand)':'var(--faint)')+'">· '+(on?'On':'Off')+'</span></h3>'
+    +'<p class="mdesc" style="margin:4px 0 0;max-width:640px">78% of homeowners hire whoever answers first. When on, Miles texts &amp; emails every new lead within a minute — then hands off to nurture.</p>';
+  const toggle=el('button','go',on?'Turn off':'Turn on');
+  toggle.onclick=async()=>{ toggle.disabled=true; try{ await fetch('/api/speed-to-lead',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({enabled:!on})}); }catch(e){} openOverview(); };
+  topb.append(left,toggle); card.append(topb);
+  if(on){
+    const ss=el('div','stats'); ss.style.marginTop='12px';
+    ss.append(statCard('Answered today',st.today||0), statCard('Avg response', st.avgResponse||'—'), statCard('Total answered',st.total||0));
+    card.append(ss);
+    if(st.held) card.append(ovNudge('⚠︎ '+st.held+' draft'+(st.held===1?'':'s')+' ready but not sent — connect your CRM (GoHighLevel) in Integrations so replies send automatically.'));
+    const run=el('button',null,'Run now'); run.style.cssText='margin-top:12px;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans)';
+    run.onclick=async()=>{ run.disabled=true; run.textContent='Answering new leads…'; try{ const r=await(await fetch('/api/speed-to-lead/run',{method:'POST'})).json(); toast(r.ran?('Answered '+((r.stats&&r.stats.today)||0)+' today'):'No new leads right now'); }catch(e){} openOverview(); };
+    card.append(run);
+  } else {
+    card.append(ovNudge('Turn it on and Miles watches for new leads every minute — the single highest-ROI play in home services.'));
+  }
+  return card;
 }
 function renderAnalytics(){
   const bar=$('#a-subtabs'); bar.innerHTML=A_TABS.map(t=>`<button class="tab${t[0]===aTab?' on':''}" data-atab="${t[0]}">${t[1]}</button>`).join('');
@@ -2283,7 +2308,7 @@ function deliveryControl(a){
 }
 async function saveSchedules(){ if(!REMOTE) return; try{ await fetch('/api/schedules',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({agents:SCHED.agents})}); }catch(e){} }
 function schedSummary(a){ const days=a.days.length===7?'Every day':(a.days.join(',')==='1,2,3,4,5'?'Weekdays':(a.days.join(',')==='0,6'?'Weekends':a.days.map(d=>DOW[d]).join(', '))); return days+' at '+a.time; }
-const TASK_ICON={morning_brief:'☀️',cpa_report:'📈',email_tasklist:'✉️',daily_wrapup:'🌙',social_content:'📱',review_responder:'⭐',lead_followup:'📞',competitor_watch:'🔭',seo_agent:'🔎',content_writer:'✍️',geo_agent:'🤖',social_poster:'🚀',social_report:'📊',custom:'✨'};
+const TASK_ICON={morning_brief:'☀️',cpa_report:'📈',email_tasklist:'✉️',daily_wrapup:'🌙',social_content:'📱',review_responder:'⭐',lead_followup:'📞',competitor_watch:'🔭',seo_agent:'🔎',content_writer:'✍️',geo_agent:'🤖',social_poster:'🚀',social_report:'📊',speed_to_lead:'⚡',custom:'✨'};
 function deployAgent(t){
   if((SCHED.agents||[]).some(a=>a.task===t.task)){ toast('Already deployed'); return; }
   const a={id:newId(),name:t.label,task:t.task,time:t.defaultTime||'08:00',days:[0,1,2,3,4,5,6],enabled:true,tzOffset:new Date().getTimezoneOffset(),createdAt:new Date().toISOString()};
