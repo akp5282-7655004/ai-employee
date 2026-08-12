@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isDue, buildCpaReport, buildMorningBrief, type ScheduledAgent } from '../src/agents/scheduled.js';
+import { isDue, buildCpaReport, buildMorningBrief, buildTaskListPrompt, fallbackTaskList, type ScheduledAgent } from '../src/agents/scheduled.js';
 
 const agent = (o: Partial<ScheduledAgent> = {}): ScheduledAgent => ({
   id: 'a1', name: 'Brief', task: 'morning_brief', time: '08:30', days: [1, 2, 3, 4, 5], enabled: true, tzOffset: 0, createdAt: '', ...o,
@@ -58,6 +58,26 @@ describe('buildCpaReport', () => {
   it('says so cleanly when there is no ad data at all', () => {
     const r = buildCpaReport([], [], 85);
     expect(r.body.toLowerCase()).toContain('connect');
+  });
+});
+
+describe('email → task list', () => {
+  const emails = [
+    { from: 'Sarah', subject: 'Kitchen repaint quote?', snippet: 'can you quote a repaint this week', unread: true },
+    { from: 'QuickBooks', subject: 'Invoice #1042 is overdue', snippet: '$1,850 is 5 days overdue', unread: false },
+    { from: 'Newsletter', subject: 'Weekly digest', snippet: 'top articles', unread: true },
+  ];
+  it('prompt lists the inbox and asks for a prioritized to-do', () => {
+    const { system, user } = buildTaskListPrompt(emails, 'Painters In Philly');
+    expect(system.toLowerCase()).toContain('prioriti');
+    expect(user).toContain('Kitchen repaint quote');
+    expect(user).toContain('Painters In Philly');
+  });
+  it('fallback puts leads & overdue invoices in "Do first"', () => {
+    const out = fallbackTaskList(emails);
+    const doFirst = out.split('🟡')[0]!;
+    expect(doFirst).toContain('Kitchen repaint quote?');
+    expect(doFirst).toContain('Invoice #1042 is overdue');
   });
 });
 

@@ -5,8 +5,9 @@
  * turn real data into a written result. The runner + persistence live in server.ts.
  */
 import type { CampaignSpend, Deal } from '../revenue/attribution.js';
+import type { EmailMessage } from '../connectors/types.js';
 
-export type TaskType = 'morning_brief' | 'cpa_report';
+export type TaskType = 'morning_brief' | 'cpa_report' | 'email_tasklist';
 
 export interface TaskSpec {
   task: TaskType;
@@ -28,6 +29,12 @@ export const TASK_SPECS: TaskSpec[] = [
     label: 'Marketing performance report',
     description: 'Cost-per-acquisition across every ad platform vs. your target, with what to fix.',
     defaultTime: '09:00',
+  },
+  {
+    task: 'email_tasklist',
+    label: 'Morning email → task list',
+    description: 'Reads your inbox each morning and turns it into a prioritized to-do list — leads first.',
+    defaultTime: '08:00',
   },
 ];
 
@@ -99,6 +106,39 @@ export interface BriefContext {
   pendingApprovals: number;
   activeTriggers: number;
   focus?: string;
+}
+
+// ── morning email → task-list agent ──
+
+/** Prompt for the LLM to turn an inbox into a prioritized to-do list. */
+export function buildTaskListPrompt(emails: EmailMessage[], business?: string): { system: string; user: string } {
+  const list = emails
+    .map((e, i) => `${i + 1}. From: ${e.from || '?'} | Subject: ${e.subject || '(none)'} | ${e.snippet || ''}`)
+    .join('\n');
+  const system =
+    'You are the executive assistant to a busy local-service business owner. From their inbox, produce a prioritized daily to-do list. Group into three: "🔴 Do first" (money & time-sensitive — new leads, quotes, overdue invoices, anything that books a job), "🟡 Today", and "🟢 When you can". Each item is one short action naming who/what it relates to. Ignore newsletters and noise. Plain text, no preamble.';
+  const user = `${business ? `Business: ${business}.\n` : ''}Inbox (${emails.length} recent messages):\n${list}`;
+  return { system, user };
+}
+
+/** Deterministic task list when no LLM key is set (demo-safe). */
+export function fallbackTaskList(emails: EmailMessage[]): string {
+  const hot: EmailMessage[] = [];
+  const today: EmailMessage[] = [];
+  const later: EmailMessage[] = [];
+  for (const e of emails) {
+    const t = `${e.subject || ''} ${e.snippet || ''}`.toLowerCase();
+    if (/lead|quote|estimate|overdue|urgent|invoice|review|deposit|book|appointment/.test(t)) hot.push(e);
+    else if (e.unread) today.push(e);
+    else later.push(e);
+  }
+  const fmt = (e: EmailMessage) => `   • ${e.subject || '(no subject)'} — ${e.from || ''}`;
+  const parts: string[] = [];
+  if (hot.length) { parts.push('🔴 Do first:'); hot.forEach((e) => parts.push(fmt(e))); }
+  if (today.length) { parts.push('', '🟡 Today:'); today.forEach((e) => parts.push(fmt(e))); }
+  if (later.length) { parts.push('', '🟢 When you can:'); later.forEach((e) => parts.push(fmt(e))); }
+  parts.push('', '(Add an OpenRouter key and Miles will summarize and prioritize these intelligently.)');
+  return parts.join('\n');
 }
 
 export function buildMorningBrief(ctx: BriefContext): { title: string; body: string } {

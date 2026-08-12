@@ -48,6 +48,15 @@ export interface RunActionResult {
   note?: string;
 }
 
+/** One inbox message an agent can read (the raw material for the task-list agent). */
+export interface EmailMessage {
+  from?: string;
+  subject?: string;
+  snippet?: string;
+  date?: string;
+  unread?: boolean;
+}
+
 /** A "do this in my app" task, resolved from plain English (the "hands"). */
 export interface AppTaskRequest {
   externalUserId: string;
@@ -94,6 +103,8 @@ export interface Connector {
   getAdSpend?(externalUserId: string): Promise<CampaignSpend[]>;
   /** Deals from connected CRMs — for revenue attribution. */
   getDeals?(externalUserId: string): Promise<Deal[]>;
+  /** Recent inbox messages — the raw material for the morning task-list agent. */
+  getRecentEmails?(externalUserId: string, limit?: number): Promise<EmailMessage[]>;
   /**
    * Mark an app connected for a user. Present on the mock (a demo shortcut); on
    * live Pipedream the real connection happens through the connect-token flow, so

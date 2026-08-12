@@ -131,6 +131,45 @@ export class PipedreamConnector implements Connector {
   }
 
   /**
+   * Read recent inbox messages via a connected Gmail account. Best-effort: discovers
+   * a Gmail "list/find emails" action, runs it, and maps whatever it returns. Any
+   * failure (Gmail not connected, action shape differs) returns [] so the agent
+   * degrades to an honest "connect Gmail" message. Verify against a real account.
+   */
+  async getRecentEmails(externalUserId: string, limit = 25): Promise<import('./types.js').EmailMessage[]> {
+    let pd: any;
+    try {
+      pd = await this.backend();
+      const accts = await this.listAccounts(externalUserId, 'gmail');
+      const account = accts.find((a) => a.healthy) ?? accts[0];
+      if (!account) return [];
+      const list = await pd.actions.list({ app: 'gmail', q: 'list emails', limit: 8 });
+      const rows: any[] = list?.data ?? (Array.isArray(list) ? list : list?.items ?? []);
+      const comp = rows.find((c) => /list|find|search|recent/i.test(`${c.name} ${c.key ?? c.id}`)) ?? rows[0];
+      if (!comp) return [];
+      const key = comp.key ?? comp.id;
+      const props = comp.configurableProps ?? (await pd.actions.retrieve(key))?.data?.configurableProps ?? [];
+      const configuredProps: Record<string, unknown> = {};
+      const appProp = (props ?? []).find((p: any) => p?.type === 'app');
+      if (appProp?.name) configuredProps[appProp.name] = { authProvisionId: account.id };
+      const maxProp = (props ?? []).find((p: any) => /max|limit|count/i.test(`${p?.name} ${p?.label}`));
+      if (maxProp?.name) configuredProps[maxProp.name] = limit;
+      const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
+      const out = res?.ret ?? res?.exports ?? res ?? [];
+      const msgs: any[] = Array.isArray(out) ? out : out?.messages ?? out?.emails ?? out?.data ?? [];
+      return msgs.slice(0, limit).map((m: any) => ({
+        from: m.from ?? m.From ?? m.sender ?? m?.payload?.headers?.find?.((h: any) => /^from$/i.test(h.name))?.value,
+        subject: m.subject ?? m.Subject ?? m?.payload?.headers?.find?.((h: any) => /^subject$/i.test(h.name))?.value,
+        snippet: m.snippet ?? m.bodyText ?? m.text ?? '',
+        date: m.date ?? m.internalDate,
+        unread: Array.isArray(m.labelIds) ? m.labelIds.includes('UNREAD') : undefined,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Resolve a plain-English task to a real component and run it. Discovers the
    * action for the app, attaches the user's connected account, maps the semantic
    * params onto the component's real props, and executes. All failures return a

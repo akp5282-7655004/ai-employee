@@ -18,6 +18,8 @@ import {
   isDue,
   buildMorningBrief,
   buildCpaReport,
+  buildTaskListPrompt,
+  fallbackTaskList,
   type ScheduledAgent,
   type AgentRun,
   type TaskType,
@@ -763,6 +765,18 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const targetCpa = Number(p.targetCpa) || 85;
       const r = buildCpaReport(spend, deals, targetCpa);
       return { title: r.title, body: r.body };
+    }
+    if (task === 'email_tasklist') {
+      const emails = connector.getRecentEmails ? await connector.getRecentEmails(userId, 25) : [];
+      const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      if (!emails.length)
+        return {
+          title: 'Morning task list',
+          body: 'Connect Gmail in Integrations and each morning I’ll read your inbox and turn it into a prioritized to-do list — new leads and money items first, newsletters ignored.',
+        };
+      const { system, user } = buildTaskListPrompt(emails, p.businessName);
+      const body = (await generateText({ system, user, maxTokens: 800 })) ?? fallbackTaskList(emails);
+      return { title: `Morning task list — ${dateLabel}`, body };
     }
     // morning_brief
     let weatherLine: string | undefined;

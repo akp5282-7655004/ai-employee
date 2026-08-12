@@ -133,6 +133,19 @@ export class MockConnector implements Connector {
     ];
   }
 
+  async getRecentEmails(externalUserId: string, limit = 25) {
+    const apps = new Set((this.accounts.get(externalUserId) ?? []).map((a) => a.app));
+    if (!apps.has('gmail') && !apps.has('google_gmail')) return [];
+    const demo: import('./types.js').EmailMessage[] = [
+      { from: 'Sarah (new lead)', subject: 'Kitchen repaint quote?', snippet: 'Hi, saw your Google ad — can you quote a 2-room repaint this week?', unread: true },
+      { from: 'Mike Rivera', subject: 'Re: Tuesday job', snippet: 'Confirming we start the Thompson job at 8am. Need the deposit invoice.', unread: true },
+      { from: 'HomeAdvisor', subject: 'You have 3 new leads', snippet: '3 homeowners in Phoenix requested painting quotes.', unread: true },
+      { from: 'QuickBooks', subject: 'Invoice #1042 is overdue', snippet: 'Invoice for $1,850 to J. Thompson is 5 days overdue.', unread: false },
+      { from: 'Google Business Profile', subject: 'New 5-star review', snippet: 'A customer left you a 5-star review — reply to boost ranking.', unread: true },
+    ];
+    return demo.slice(0, limit);
+  }
+
   async runAppTask(req: AppTaskRequest): Promise<AppTaskResult> {
     const summary = summarizeTask(req.app, req.query, req.params);
     const connected = (this.accounts.get(req.externalUserId) ?? []).some((a) => a.app === req.app);
