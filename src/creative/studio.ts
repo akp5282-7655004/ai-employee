@@ -42,9 +42,9 @@ export function specFor(type: string): AssetTypeSpec | undefined {
  */
 export function optimizerSystem(kind: AssetKind): string {
   if (kind === 'image')
-    return "You are a world-class prompt engineer for AI image generation. Rewrite the user's rough idea into ONE vivid, detailed image prompt — name the subject, composition, setting, style, lighting, mood, colors, and quality cues (e.g. sharp, professional, photorealistic). Keep it realistic and on-brand for their business, and honor any specifics they gave (logo, offer text, colors). Return ONLY the improved prompt as plain text — no preamble, no quotes, no explanation, no lists.";
+    return "You are a world-class prompt engineer and photographer for AI image generation. Rewrite the user's rough idea into ONE vivid, detailed prompt. Specify: subject; composition and framing; setting; camera and lens (e.g. 50mm, shallow depth of field); lighting (direction, quality, time of day); color palette; mood; and quality cues (sharp, photorealistic, professional, high detail). Keep it realistic and on-brand for their business, and honor any specifics they gave (logo, offer text, colors). Return ONLY the improved prompt as plain text — no preamble, no quotes, no explanation, no lists.";
   if (kind === 'video')
-    return "You are a world-class prompt engineer for AI text-to-video. Rewrite the user's rough idea into ONE vivid prompt describing the scene, subject, action/motion, camera movement, lighting, and mood for a short clip. On-brand for their business; honor any specifics they gave. Return ONLY the improved prompt as plain text — no preamble, no quotes, no explanation.";
+    return "You are a film director and world-class prompt engineer for AI text-to-video (Veo / Kling / Sora class). Rewrite the user's rough idea into ONE cinematic, shot-designed prompt. Specify: the subject and its action/motion; shot type and composition (e.g. wide establishing shot, low-angle hero shot); camera body and lens (e.g. shot on ARRI Alexa, 35mm anamorphic); a single deliberate camera move (e.g. slow dolly-in, orbiting tracking shot, crane up); lighting (e.g. golden-hour rim light, volumetric haze); color grade (e.g. filmic teal-and-orange); and atmosphere (particles, reflections, shallow depth of field). Keep it ONE continuous, physically-plausible shot, and on-brand for their business; honor any specifics they gave. Return ONLY the improved prompt as plain text — no preamble, no quotes, no explanation.";
   if (kind === 'audio')
     return "You are an expert voiceover scriptwriter. Rewrite the user's rough idea into a natural, engaging spoken script — clear, warm, well-paced, ready to read aloud in about the requested length. On-brand for their business. Return ONLY the script text — no preamble, no stage directions, no quotes.";
   return "You are an expert marketing brief writer. Rewrite the user's rough idea into a clear, specific, effective brief that will produce great marketing content — spell out the audience, angle, key points, tone, and call to action. On-brand for their business. Return ONLY the improved brief as plain text — no preamble, no quotes.";
@@ -92,8 +92,8 @@ export function buildVisualPrompt(type: AssetType, prompt: string, brand: BrandC
     social: `Eye-catching social media graphic for ${bizLine(brand)}. ${idea}.${TEXT_RULES} Bold, thumb-stopping, high contrast.`,
     flyer: `Professional marketing flyer for ${bizLine(brand)}. ${idea}.${TEXT_RULES} Clean layout, trustworthy local-service look.`,
     card: `Elegant card or invitation for ${brand.business || 'the business'}. ${idea}.${TEXT_RULES}`,
-    image: `High-quality, realistic marketing photo for ${bizLine(brand)}. ${idea}. Professional lighting, sharp, authentic — not stocky. No text overlay.`,
-    video: `Short, dynamic marketing video clip for ${bizLine(brand)}. ${idea}. Professional, engaging first second, smooth motion.`,
+    image: `High-quality, photorealistic marketing photo for ${bizLine(brand)}. ${idea}. Cinematic lighting, shallow depth of field, sharp detail, authentic — not stocky. No text overlay.`,
+    video: `Cinematic marketing video for ${bizLine(brand)}. ${idea}. One continuous, physically-plausible shot with a deliberate camera move (dolly, orbit, or crane), professional cinematic lighting, filmic color grade, shallow depth of field, and a strong opening frame. Smooth, high-quality motion; no text overlay.`,
   };
   return `${base[type] ?? `${idea} — for ${bizLine(brand)}.`}${styleTag}`.trim();
 }
