@@ -102,9 +102,9 @@ describe('6pm daily wrap-up', () => {
 
 describe('the full agent roster', () => {
   const ctx = { business: 'Painters In Philly', trade: 'Home Services', city: 'Philadelphia', services: 'interior painting', offers: '10% off' };
-  it('ships all 12 agents', () => {
+  it('ships all 13 agents', () => {
     expect(TASK_SPECS.map((t) => t.task).sort()).toEqual(
-      ['competitor_watch', 'content_writer', 'cpa_report', 'daily_wrapup', 'email_tasklist', 'geo_agent', 'lead_followup', 'morning_brief', 'review_responder', 'seo_agent', 'social_content', 'social_poster'].sort(),
+      ['competitor_watch', 'content_writer', 'cpa_report', 'daily_wrapup', 'email_tasklist', 'geo_agent', 'lead_followup', 'morning_brief', 'review_responder', 'seo_agent', 'social_content', 'social_poster', 'social_report'].sort(),
     );
   });
   it('social prompt weaves in the business + offer', () => {

@@ -53,6 +53,7 @@ import { openaiGenerateImage } from './creative/openai_image.js';
 import { higgsfieldGenerateImage, higgsfieldGenerateVideo } from './creative/higgsfield.js';
 import { googleGenerateImage } from './creative/google_image.js';
 import { PLATFORMS, platformById, postDue, rollupStatus, buildPost, type ScheduledPost, type PostResult } from './posts/schedule.js';
+import { recordSnapshot, buildSocialReport, type DailySnapshot } from './agents/social_report.js';
 import { aggregateNetwork, type WorkspaceSignal } from './usage/network.js';
 import { deliveryStatus, sendEmail, sendSms, smsExcerpt } from './delivery/send.js';
 import { searchCompetitors } from './research/places.js';
@@ -158,7 +159,22 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   });
   app.get('/login', async (_req, reply) => reply.type('text/html').send(loginPage));
   app.get('/favicon.ico', async (_req, reply) => reply.code(204).send());
-  app.get('/health', async () => ({ ok: true, interpreter: interpreter.name, connector: connector.name, store: authStore.name }));
+  // Scheduler heartbeat — last time the due-tick ran (in-process or via cron).
+  let lastTickAt: string | null = null;
+  app.get('/health', async () => ({ ok: true, interpreter: interpreter.name, connector: connector.name, store: authStore.name, schedulerLastTick: lastTickAt }));
+
+  // External cron trigger — lets a durable pinger (Render Cron, cron-job.org, a
+  // GitHub Action) guarantee the schedule fires even if the in-process timer stalls
+  // or the instance sleeps. Protected by CRON_SECRET; a no-op if it isn't configured.
+  app.post('/api/cron/tick', async (req, reply) => {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) return reply.code(503).send({ error: 'Cron not configured — set CRON_SECRET in Render to enable an external heartbeat.' });
+    const given = (req.headers['x-cron-secret'] as string) || (req.query as { secret?: string })?.secret;
+    if (given !== secret) return reply.code(401).send({ error: 'bad cron secret' });
+    const runDue = (app as unknown as { runDueSchedules?: () => Promise<void> }).runDueSchedules;
+    if (runDue) await runDue().catch(() => {});
+    return { ok: true, ranAt: new Date().toISOString() };
+  });
 
   // ── auth ──
   app.post('/auth/signup', async (req, reply) => {
@@ -953,7 +969,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
 
   // ── Scheduled agents — recurring, unattended work (morning brief, CPA report) ──
   // Runs a task now and returns its written result. Reused by the endpoint + scheduler.
-  async function runScheduledTask(userId: string, task: TaskType, spec?: CustomAgentSpec): Promise<{ title: string; body: string }> {
+  async function runScheduledTask(userId: string, task: TaskType, spec?: CustomAgentSpec): Promise<{ title: string; body: string; patch?: Record<string, unknown> }> {
     const data = await authStore.getUserData(userId);
     const p = (data.profile ?? {}) as Record<string, string>;
     if (task === 'custom') {
@@ -1105,6 +1121,13 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const body = `${caption}\n\n${imageUrl ? `🖼 On-brand image generated: ${imageUrl}` : ''}\n${statusLine}`.trim();
       return { title: `Social media post — ${dLabel}`, body };
     }
+    if (task === 'social_report') {
+      const metrics = connector.getSocialMetrics ? await connector.getSocialMetrics(userId) : null;
+      const nowISO = new Date().toISOString();
+      const history = recordSnapshot((data.socialHistory as DailySnapshot[]) ?? [], metrics, nowISO);
+      const report = buildSocialReport(history, nowISO);
+      return { title: report.title, body: report.body, patch: { socialHistory: history } };
+    }
     // morning_brief
     let weatherLine: string | undefined;
     let weatherOpportunity: string | undefined;
@@ -1247,7 +1270,8 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const agent = ((data.schedules as ScheduledAgent[]) ?? []).find((a) => a.id === req.body?.id);
     if (!agent) return reply.code(404).send({ error: 'agent not found' });
     const result = await runScheduledTask(u.id, agent.task, agent.spec);
-    const run = appendRun(data, agent, result);
+    if (result.patch) Object.assign(data, result.patch);
+    const run = appendRun(data, agent, { title: result.title, body: result.body });
     agent.lastRunAt = run.ts;
     bumpMeter(data, 'agent_run');
     await authStore.setUserData(u.id, data);
@@ -1258,6 +1282,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   // The scheduler tick — find every due agent across all users and run it. Called
   // on an interval by index.ts (never during tests). Best-effort: logged, never throws.
   (app as unknown as { runDueSchedules: () => Promise<void> }).runDueSchedules = async () => {
+    lastTickAt = new Date().toISOString();
     const now = new Date();
     let ids: string[];
     try {
@@ -1274,7 +1299,8 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
         for (const agent of agents) {
           if (!isDue(agent, now)) continue;
           const result = await runScheduledTask(uid, agent.task, agent.spec);
-          const run = appendRun(data, agent, result);
+          if (result.patch) Object.assign(data, result.patch);
+          const run = appendRun(data, agent, { title: result.title, body: result.body });
           agent.lastRunAt = new Date().toISOString();
           bumpMeter(data, 'agent_run');
           if (agent.deliver?.email || agent.deliver?.sms) delivered.push({ agent, run });

@@ -20,6 +20,7 @@ export type TaskType =
   | 'content_writer'
   | 'geo_agent'
   | 'social_poster'
+  | 'social_report'
   | 'custom';
 
 export interface TaskSpec {
@@ -144,6 +145,15 @@ export const TASK_SPECS: TaskSpec[] = [
     reads: 'Your business profile, current offer, and connected social accounts.',
     produces: 'A freshly generated image + caption, auto-published to every connected platform (held until you connect one).',
     instruction: 'Each run: generate an on-brand social image from the business profile and current offer, write a scroll-stopping caption with a few relevant hashtags, then publish the image + caption to every connected social account. If no account is connected yet, prepare the post and report it as ready-to-publish rather than pretending it posted.',
+  },
+  {
+    task: 'social_report',
+    label: '30-day social report',
+    description: 'Logs your social metrics daily and compiles a rolling 30-day performance dataset.',
+    defaultTime: '18:30',
+    reads: 'Your social metrics (connect Facebook / Instagram / LinkedIn).',
+    produces: 'A 30-day rollup — impressions, CTR, likes, follower growth, best day + the daily dataset.',
+    instruction: 'Each run: record today’s social metrics as a daily snapshot, then compile the trailing 30 days into a summary (total impressions, clicks & CTR, likes, follower change, best day) plus the full day-by-day dataset. The dataset builds up over time as it runs daily.',
   },
 ];
 
