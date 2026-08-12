@@ -26,6 +26,9 @@ import {
   reviewAgent,
   leadAgent,
   competitorAgent,
+  seoAgent,
+  contentAgent,
+  geoAgent,
   metricsLine,
   agentFallback,
   type AgentCtx,
@@ -835,6 +838,21 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const { system, user } = competitorAgent(ctx);
       const body = (await generateText({ system, user, maxTokens: 700 })) ?? agentFallback('competitor_watch', ctx);
       return { title: `Competitor watch — ${dLabel}`, body };
+    }
+    if (task === 'seo_agent') {
+      const { system, user } = seoAgent(ctx);
+      const body = (await generateText({ system, user, maxTokens: 700 })) ?? agentFallback('seo_agent', ctx);
+      return { title: `Local SEO play — ${dLabel}`, body };
+    }
+    if (task === 'content_writer') {
+      const { system, user } = contentAgent(ctx);
+      const body = (await generateText({ system, user, maxTokens: 900 })) ?? agentFallback('content_writer', ctx);
+      return { title: `SEO blog draft — ${dLabel}`, body };
+    }
+    if (task === 'geo_agent') {
+      const { system, user } = geoAgent(ctx);
+      const body = (await generateText({ system, user, maxTokens: 800 })) ?? agentFallback('geo_agent', ctx);
+      return { title: `AI-search (GEO) kit — ${dLabel}`, body };
     }
     // morning_brief
     let weatherLine: string | undefined;

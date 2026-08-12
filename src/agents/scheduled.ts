@@ -15,7 +15,10 @@ export type TaskType =
   | 'social_content'
   | 'review_responder'
   | 'lead_followup'
-  | 'competitor_watch';
+  | 'competitor_watch'
+  | 'seo_agent'
+  | 'content_writer'
+  | 'geo_agent';
 
 export interface TaskSpec {
   task: TaskType;
@@ -74,6 +77,24 @@ export const TASK_SPECS: TaskSpec[] = [
     description: 'Scans your local competitors and tells you how to stay ahead.',
     defaultTime: '07:00',
   },
+  {
+    task: 'seo_agent',
+    label: 'Local SEO agent',
+    description: 'A weekly local-SEO play — Google Business Profile, local keywords, and citations.',
+    defaultTime: '07:30',
+  },
+  {
+    task: 'content_writer',
+    label: 'SEO content writer',
+    description: 'Drafts a local-SEO blog post that helps you rank for “service near me”.',
+    defaultTime: '09:30',
+  },
+  {
+    task: 'geo_agent',
+    label: 'AI-search (GEO) agent',
+    description: 'Gets your business recommended by ChatGPT & Gemini when locals ask for the best.',
+    defaultTime: '08:15',
+  },
 ];
 
 // ── content agents (social / reviews / leads / competitors) ──
@@ -124,6 +145,28 @@ export function competitorAgent(c: AgentCtx): { system: string; user: string } {
   };
 }
 
+export function seoAgent(c: AgentCtx): { system: string; user: string } {
+  return {
+    system:
+      'You are a local SEO specialist for home-services businesses. Produce this week’s local-SEO play: (1) one Google Business Profile post, (2) one blog topic + 4-point outline targeting a "service + city" keyword, (3) two citation/backlink or review actions. Concise, plain text.',
+    user: `Business: ${who(c)}.${c.services ? ` Services: ${c.services}.` : ''}${c.city ? ` City: ${c.city}.` : ''}`,
+  };
+}
+export function contentAgent(c: AgentCtx): { system: string; user: string } {
+  return {
+    system:
+      'You are an SEO content writer for local-service businesses. Write a complete ~400-word blog post draft optimized to rank for a "service near me / in city" search: a compelling title, a meta description (<155 chars), and a body with 2-3 H2 subheads and a clear call to action. Natural, helpful, not keyword-stuffed. Plain text.',
+    user: `Business: ${who(c)}.${c.services ? ` Services: ${c.services}.` : ''}${c.city ? ` City: ${c.city}.` : ''} Pick the most valuable service to target.`,
+  };
+}
+export function geoAgent(c: AgentCtx): { system: string; user: string } {
+  return {
+    system:
+      'You are a Generative Engine Optimization (GEO) specialist — you help local businesses get recommended by AI assistants (ChatGPT, Gemini, Perplexity) when people ask "who’s the best [service] near me". Produce: (1) a crisp, factual business description AI tools can cite, (2) 5 FAQ question+answer pairs matching how people ask AI, (3) 3 things to publish so AI models pick this business. Plain text.',
+    user: `Business: ${who(c)}.${c.services ? ` Services: ${c.services}.` : ''}${c.city ? ` City: ${c.city}.` : ''}`,
+  };
+}
+
 export function metricsLine(m?: import('../connectors/types.js').SocialMetrics | null): string {
   if (!m) return 'Connect your social accounts (Integrations) and I’ll report impressions, clicks & likes here — and compile a 30-day dataset.';
   return `📊 Yesterday: ${m.impressions.toLocaleString()} impressions · ${m.clicks} clicks · ${m.likes} likes${m.followers ? ` · ${m.followers.toLocaleString()} followers` : ''}.`;
@@ -142,6 +185,14 @@ export function agentFallback(task: TaskType, c: AgentCtx): string {
     return (c.leads || []).length
       ? (c.leads || []).map((l) => `${l.name || 'Lead'}: "Hi ${l.name || 'there'} — thanks for reaching out about ${l.service || 'your project'}! When's a good time for a quick call to get you a quote?"`).join('\n\n')
       : 'No new leads right now. Connect your CRM and I’ll draft a follow-up for every new lead automatically.';
+  const svc = c.services || 'your services';
+  const place = c.city || 'your area';
+  if (task === 'seo_agent')
+    return `This week's local-SEO play for ${biz}:\n\n1. Google Business Profile post: share a recent ${svc} job with 1-2 photos and your service area.\n2. Blog topic: "${svc} in ${place}: what it costs and how to choose a pro" — outline: intro · pricing factors · how to pick · your offer.\n3. Get 2 fresh 5-star reviews and add your business to one new local directory.\n\n(Add an OpenRouter key and Miles tailors this to your exact keywords each week.)`;
+  if (task === 'content_writer')
+    return `Blog draft for ${biz}:\n\nTitle: The Homeowner's Guide to ${svc} in ${place}\nMeta: Looking for ${svc} in ${place}? Here's what to expect, what it costs, and how to pick the right pro.\n\n[Intro] When you need ${svc} in ${place}, choosing the right team matters...\n## What to expect\n## What it costs\n## Why locals choose ${biz}\nCall to action: ${c.offers || 'Get a free quote today.'}\n\n(Add an OpenRouter key and Miles writes the full ~400-word post.)`;
+  if (task === 'geo_agent')
+    return `AI-search (GEO) starter for ${biz}:\n\n• Cite-ready description: "${biz} provides ${svc} in ${place}, known for fast response and quality work."\n• FAQ to publish: "Who offers the best ${svc} in ${place}?" · "How much does ${svc} cost?" · "How fast can I get an appointment?"\n• Publish clear pricing, service-area, and review content so ChatGPT & Gemini recommend you.\n\n(Add an OpenRouter key and Miles builds the full GEO kit.)`;
   return `Competitive tip for ${biz}: lead with speed-to-lead and reviews — respond to every inquiry in minutes and ask every happy customer for a review. (Add an OpenRouter key for a full competitor read.)`;
 }
 

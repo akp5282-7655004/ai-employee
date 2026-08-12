@@ -102,9 +102,9 @@ describe('6pm daily wrap-up', () => {
 
 describe('the full agent roster', () => {
   const ctx = { business: 'Painters In Philly', trade: 'Home Services', city: 'Philadelphia', services: 'interior painting', offers: '10% off' };
-  it('ships all 8 agents', () => {
+  it('ships all 11 agents', () => {
     expect(TASK_SPECS.map((t) => t.task).sort()).toEqual(
-      ['competitor_watch', 'cpa_report', 'daily_wrapup', 'email_tasklist', 'lead_followup', 'morning_brief', 'review_responder', 'social_content'].sort(),
+      ['competitor_watch', 'content_writer', 'cpa_report', 'daily_wrapup', 'email_tasklist', 'geo_agent', 'lead_followup', 'morning_brief', 'review_responder', 'seo_agent', 'social_content'].sort(),
     );
   });
   it('social prompt weaves in the business + offer', () => {
@@ -124,6 +124,11 @@ describe('the full agent roster', () => {
   it('fallbacks are usable with no LLM key', () => {
     expect(agentFallback('social_content', ctx)).toContain('Painters In Philly');
     expect(agentFallback('lead_followup', { ...ctx, leads: [{ name: 'Sarah', service: 'repaint' }] })).toContain('Sarah');
+  });
+  it('the competitive agents (SEO / content / GEO) have their own fallbacks', () => {
+    expect(agentFallback('seo_agent', ctx)).toContain('Philadelphia');
+    expect(agentFallback('content_writer', ctx)).toContain('interior painting');
+    expect(agentFallback('geo_agent', ctx).toLowerCase()).toContain('geo');
   });
 });
 
