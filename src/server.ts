@@ -505,6 +505,48 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { status: deliveryStatus() };
   });
 
+  // Overview dashboard — everything at a glance, from real workspace data. Numbers
+  // that need a connected tool say "connect" rather than showing a fake figure.
+  app.get('/api/dashboard', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const d = await authStore.getUserData(u.id);
+    const p = (d.profile ?? {}) as Record<string, string>;
+    const q = ((d.deploy as { queue?: Array<{ status?: string; ts?: string; label?: string; type?: string }> })?.queue) ?? [];
+    const runs = (d.agentRuns as AgentRun[]) ?? [];
+    const posts = (d.scheduledPosts as ScheduledPost[]) ?? [];
+    const agents = (d.schedules as ScheduledAgent[]) ?? [];
+    const within7 = (ts?: string) => { const t = Date.parse(ts || ''); return Number.isFinite(t) && Date.now() - t < 7 * 86_400_000; };
+    const safe = async <T,>(fn: (() => Promise<T>) | undefined, empty: T): Promise<T> => { try { return fn ? await fn() : empty; } catch { return empty; } };
+    const spend = await safe(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
+    const deals = await safe(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
+    const leads = await safe(connector.getLeads ? () => connector.getLeads!(u.id) : undefined, [] as import('./connectors/types.js').Lead[]);
+    const reviews = await safe(connector.getReviews ? () => connector.getReviews!(u.id) : undefined, [] as import('./connectors/types.js').Review[]);
+    const social = await safe(connector.getSocialMetrics ? () => connector.getSocialMetrics!(u.id) : undefined, null as import('./connectors/types.js').SocialMetrics | null);
+    const totalSpend = spend.reduce((s, x) => s + (x.spend || 0), 0);
+    const totalConv = spend.reduce((s, x) => s + (x.conversions || 0), 0);
+    const revenue = deals.filter((x) => x.won).reduce((s, x) => s + (x.value || 0), 0);
+    return {
+      business: p.businessName || '',
+      kpis: {
+        pendingApprovals: q.filter((c) => c.status === 'pending').length,
+        liveChanges: q.filter((c) => c.status === 'live').length,
+        agentsDeployed: agents.length,
+        agentRuns7d: runs.filter((r) => within7(r.ts)).length,
+        scheduledPosts: posts.filter((x) => x.status === 'scheduled').length,
+        publishedPosts: posts.filter((x) => x.status === 'published').length,
+        creditsUsed: summarizeUsage(d.usage as Usage | undefined, new Date()).credits,
+        weatherTriggers: ((d.weatherRules as Array<{ enabled?: boolean }>) ?? []).filter((r) => r.enabled).length,
+      },
+      marketing: { connected: spend.length > 0, spend: Math.round(totalSpend), conversions: totalConv, cpa: totalConv ? Math.round((totalSpend / totalConv) * 100) / 100 : null, revenue: Math.round(revenue), targetCpa: Number(p.targetCpa) || null },
+      leads: { connected: leads.length > 0, count: leads.length, uncontacted: leads.filter((l) => !l.contacted).length },
+      reviews: { connected: reviews.length > 0, count: reviews.length, avg: reviews.length ? Math.round((reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length) * 10) / 10 : null },
+      social,
+      upcomingPosts: posts.filter((x) => x.status === 'scheduled').sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt)).slice(0, 5).map((x) => ({ caption: x.caption, platforms: x.platforms, scheduledAt: x.scheduledAt, kind: x.kind })),
+      recentRuns: runs.slice(0, 6).map((r) => ({ title: r.title, ts: r.ts, task: r.task })),
+    };
+  });
+
   // Marketing Hub — campaigns/folders holding saved copy + images, per workspace.
   app.get('/api/hub', async (req, reply) => {
     const u = await requireUser(req, reply);
