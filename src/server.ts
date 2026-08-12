@@ -863,20 +863,21 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   // "Optimize prompt" — rewrite a customer's rough idea into an expert prompt for
   // the asset type, so non-prompt-engineers get great results. Returns just the
   // improved prompt to drop back into the input for review before Generate.
-  app.post<{ Body: { type?: string; prompt?: string } }>('/api/studio/optimize', async (req, reply) => {
+  app.post<{ Body: { type?: string; prompt?: string; mode?: string } }>('/api/studio/optimize', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
     const spec = specFor(req.body?.type ?? 'image') ?? specFor('image')!;
     const rough = (req.body?.prompt ?? '').trim();
     if (!rough) return reply.code(400).send({ error: 'Type a rough idea first.' });
+    // Two modes: weave in the business, or just optimize the idea (experiments).
+    const forBusiness = (req.body?.mode ?? 'business') !== 'general';
     const data = await authStore.getUserData(u.id);
     const p = (data.profile ?? {}) as Record<string, string>;
     const who = `${p.businessName || 'a local business'} — ${p.industry || 'local-service'}${p.serviceAreas ? `, ${p.serviceAreas}` : ''}${p.services ? `. Services: ${p.services}` : ''}`;
-    const improved = await generateText({
-      system: optimizerSystem(spec.kind),
-      user: `Business: ${who}.\nMaking: a ${spec.label.toLowerCase()}.\nTheir rough idea: "${rough}"\n\nRewrite it now.`,
-      maxTokens: 500,
-    });
+    const user = forBusiness
+      ? `Business: ${who}.\nMaking: a ${spec.label.toLowerCase()}.\nTheir rough idea: "${rough}"\n\nRewrite it now.`
+      : `Making: a ${spec.label.toLowerCase()}.\nRough idea: "${rough}"\n\nRewrite it now.`;
+    const improved = await generateText({ system: optimizerSystem(spec.kind, forBusiness), user, maxTokens: 500 });
     await meterUser(u.id, 'text');
     return { prompt: (improved || rough).trim(), improved: !!improved, live: textLlmReady() };
   });

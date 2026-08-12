@@ -1487,7 +1487,7 @@ function renderStudio(){
   else if(spec.kind==='audio') note.textContent = (STUDIO.imagesLive?'Text-to-speech from your script':'Demo state until FAL_KEY is added')+cr+'.';
   else note.textContent = (STUDIO.imagesLive?'Generated on-brand from your business details':'Demo preview until FAL_KEY is added')+cr+'.';
   $('#studio-go').onclick=studioGenerate;
-  const opt=$('#studio-optimize'); if(opt) opt.onclick=studioOptimize;
+  const opt=$('#studio-optimize'); if(opt) opt.onclick=studioOptimizeMenu;
 }
 async function loadStudioModels(){
   const spec=studioSpec(); if(!(spec.kind==='image'||spec.kind==='video'||spec.kind==='audio')) return;
@@ -1497,14 +1497,26 @@ async function loadStudioModels(){
     STUDIO_MODELS[t]=r; if(t===studioType){ studioRec=r.recommended; if(!studioModel||!(r.models||[]).some(m=>m.id===studioModel)) studioModel=r.defaultId; renderStudio(); }
   }catch(e){}
 }
-async function studioOptimize(){
+function studioOptimizeMenu(){
+  const ex=document.getElementById('opt-menu'); if(ex){ ex.remove(); return; }
+  const btn=$('#studio-optimize'); const m=el('div'); m.id='opt-menu';
+  m.style.cssText='position:absolute;z-index:60;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.28);padding:6px;min-width:250px';
+  const r=btn.getBoundingClientRect(); m.style.left=(window.scrollX+r.left)+'px'; m.style.top=(window.scrollY+r.bottom+6)+'px';
+  const mk=(label,desc,mode)=>{ const b=el('button'); b.style.cssText='display:block;width:100%;text-align:left;background:none;border:none;padding:9px 10px;border-radius:7px;cursor:pointer;color:inherit'; b.innerHTML='<div style="font-weight:600;font-size:13px">'+label+'</div><div class="appsub" style="margin-top:1px">'+desc+'</div>'; b.onmouseenter=()=>b.style.background='var(--panel-2)'; b.onmouseleave=()=>b.style.background='none'; b.onclick=()=>{ m.remove(); studioOptimize(mode); }; return b; };
+  m.append(mk('✨ Optimize for my business','Weave in your business, services & city.','business'));
+  m.append(mk('🔧 Just optimize the idea','General — for experiments, not tied to your business.','general'));
+  document.body.append(m);
+  setTimeout(()=>{ const close=(e)=>{ if(!m.contains(e.target)&&e.target!==btn){ m.remove(); document.removeEventListener('mousedown',close); } }; document.addEventListener('mousedown',close); },0);
+}
+async function studioOptimize(mode){
+  mode=mode||'business';
   const spec=studioSpec(); const rough=($('#studio-prompt').value||'').trim();
   if(!rough){ toast('Type a rough idea first, then I’ll make it great'); return; }
   if(!REMOTE){ toast('Optimize works on the live app'); return; }
   const btn=$('#studio-optimize'), old=btn.textContent; btn.disabled=true; btn.textContent='✨ Improving…';
-  const note=$('#studio-note'); const prev=note.textContent; note.textContent='Rewriting your prompt into an expert one…';
+  const note=$('#studio-note'); const prev=note.textContent; note.textContent=mode==='general'?'Optimizing your idea (general)…':'Rewriting your prompt for your business…';
   try{
-    const r=await(await fetch('/api/studio/optimize',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:studioType,prompt:rough})})).json();
+    const r=await(await fetch('/api/studio/optimize',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:studioType,prompt:rough,mode})})).json();
     if(r.prompt){ $('#studio-prompt').value=r.prompt; $('#studio-prompt').dispatchEvent(new Event('input')); }
     note.textContent = r.improved ? '✨ Prompt upgraded — review it and hit Generate.' : (r.prompt===rough ? 'Add an OpenRouter key to auto-improve prompts.' : prev);
     if(r.improved) toast('Prompt improved — review & Generate');
@@ -1635,8 +1647,9 @@ function openEditor(bgUrl){
   const tb=el('div'); tb.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center';
   const canvas=el('canvas'); canvas.style.cssText='max-width:100%;border-radius:10px;border:1px solid var(--line);touch-action:none;cursor:default;background:var(--panel-2)';
   const ctx=canvas.getContext('2d');
+  const tt=el('div'); tt.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center';
   const foot=el('div'); foot.style.cssText='display:flex;gap:8px;flex-wrap:wrap';
-  panel.append(head,tb,canvas,foot); ov.append(panel); document.body.append(ov);
+  panel.append(head,tb,tt,canvas,foot); ov.append(panel); document.body.append(ov);
 
   let layers=[], sel=null, mode=null, off={x:0,y:0}, cw=0, ch=0;
   const bg=new Image(); bg.crossOrigin='anonymous';
@@ -1650,6 +1663,7 @@ function openEditor(bgUrl){
     ctx.clearRect(0,0,cw,ch); if(bg.complete) ctx.drawImage(bg,0,0,cw,ch);
     for(const l of layers){
       if(l.type==='image'){ ctx.drawImage(l.img,l.x,l.y,l.w,l.h); }
+      else if(l.type==='shape'){ ctx.save(); ctx.globalAlpha=(l.opacity==null?1:l.opacity); ctx.fillStyle=l.fill||'#111'; if(l.radius){ roundRectPath(ctx,l.x,l.y,l.w,l.h,Math.min(l.radius,l.w/2,l.h/2)); ctx.fill(); } else ctx.fillRect(l.x,l.y,l.w,l.h); ctx.restore(); }
       else { ctx.font=(l.weight||'700')+' '+l.size+'px '+(l.font||'Inter, system-ui, sans-serif'); ctx.textBaseline='top'; ctx.fillStyle=l.color||'#ffffff'; if(l.shadow!==false){ ctx.shadowColor='rgba(0,0,0,.55)'; ctx.shadowBlur=Math.max(2,l.size*0.12); ctx.shadowOffsetY=1; } ctx.fillText(l.text,l.x,l.y); ctx.shadowColor='transparent'; ctx.shadowBlur=0; ctx.shadowOffsetY=0; }
     }
     if(sel){ const b=bounds(sel); ctx.save(); ctx.strokeStyle='#2b6cff'; ctx.setLineDash([5,4]); ctx.lineWidth=1.5; ctx.strokeRect(b.x-2,b.y-2,b.w+4,b.h+4); ctx.setLineDash([]); ctx.fillStyle='#2b6cff'; ctx.fillRect(b.x+b.w-4,b.y+b.h-4,12,12); ctx.restore(); }
@@ -1658,11 +1672,30 @@ function openEditor(bgUrl){
   function inHandle(p){ if(!sel) return false; const b=bounds(sel); return p.x>=b.x+b.w-6 && p.x<=b.x+b.w+12 && p.y>=b.y+b.h-6 && p.y<=b.y+b.h+12; }
   function hit(p){ for(let i=layers.length-1;i>=0;i--){ const b=bounds(layers[i]); if(p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h) return layers[i]; } return null; }
   function down(e){ e.preventDefault(); const p=pos(e); if(inHandle(p)){ mode='resize'; return; } const h=hit(p); sel=h; if(h){ mode='move'; off={x:p.x-h.x, y:p.y-h.y}; } render(); }
-  function move(e){ if(!mode||!sel) return; e.preventDefault(); const p=pos(e); if(mode==='move'){ sel.x=p.x-off.x; sel.y=p.y-off.y; } else if(mode==='resize'){ const b=bounds(sel); if(sel.type==='image'){ const ar=sel.w/sel.h; sel.w=Math.max(24,p.x-sel.x); sel.h=sel.w/ar; } else { sel.size=Math.max(10, Math.round((p.y-sel.y)/1.25)); } } render(); }
+  function move(e){ if(!mode||!sel) return; e.preventDefault(); const p=pos(e); if(mode==='move'){ sel.x=p.x-off.x; sel.y=p.y-off.y; } else if(mode==='resize'){ if(sel.type==='image'){ const ar=sel.w/sel.h; sel.w=Math.max(24,p.x-sel.x); sel.h=sel.w/ar; } else if(sel.type==='shape'){ sel.w=Math.max(12,p.x-sel.x); sel.h=Math.max(12,p.y-sel.y); } else { sel.size=Math.max(10, Math.round((p.y-sel.y)/1.25)); } } render(); }
   function up(){ mode=null; }
   canvas.addEventListener('mousedown',down); canvas.addEventListener('mousemove',move); window.addEventListener('mouseup',up);
   canvas.addEventListener('touchstart',down,{passive:false}); canvas.addEventListener('touchmove',move,{passive:false}); window.addEventListener('touchend',up);
   canvas.addEventListener('dblclick',()=>{ if(sel&&sel.type==='text'){ const t=prompt('Edit text:',sel.text); if(t!=null){ sel.text=t; render(); } } });
+
+  // ── one-click templates (brand overlays the client can then tweak) ──
+  function placeLogo(x,y,w){ if(!(ASSETS&&ASSETS.logo)) return; const im=new Image(); im.crossOrigin='anonymous'; im.onload=()=>{ const h=w*(im.naturalHeight/im.naturalWidth||0.5); layers.push({id:newId(),type:'image',img:im,src:ASSETS.logo,x,y,w,h}); render(); }; im.src=ASSETS.logo; }
+  function applyTemplate(name){
+    const P=(typeof PROFILE!=='undefined'&&PROFILE)||{};
+    const biz=P.businessName||(ASSETS&&ASSETS.tagline)||'Your Business';
+    const offer=P.currentOffers||(ASSETS&&ASSETS.tagline)||'Book today';
+    const phone=P.phone||(ASSETS&&ASSETS.phone)||'';
+    layers=[]; sel=null;
+    const S=(o)=>layers.push(Object.assign({id:newId(),type:'shape',fill:'#0b1020',opacity:0.6,radius:0},o));
+    const T=(o)=>layers.push(Object.assign({id:newId(),type:'text',text:'Text',size:Math.round(ch*0.06),color:'#ffffff',weight:'700'},o));
+    if(name==='bar'){ S({x:0,y:Math.round(ch*0.80),w:cw,h:Math.round(ch*0.20),fill:'#0b1020',opacity:0.62}); T({text:biz,x:Math.round(cw*0.04),y:Math.round(ch*0.825),size:Math.round(ch*0.08),color:'#ffffff'}); if(phone||offer) T({text:phone||offer,x:Math.round(cw*0.04),y:Math.round(ch*0.925),size:Math.round(ch*0.045),color:'#e5e7eb',weight:'500'}); placeLogo(Math.round(cw*0.80),Math.round(ch*0.835),Math.round(cw*0.16)); }
+    else if(name==='badge'){ const d=Math.round(cw*0.30); S({x:cw-d-Math.round(cw*0.05),y:Math.round(ch*0.05),w:d,h:d,fill:'#e11d48',opacity:0.95,radius:Math.round(d/2)}); T({text:offer,x:cw-d-Math.round(cw*0.02),y:Math.round(ch*0.05)+Math.round(d*0.36),size:Math.round(d*0.16),color:'#ffffff',weight:'800'}); }
+    else if(name==='ribbon'){ S({x:0,y:0,w:cw,h:Math.round(ch*0.13),fill:'#111827',opacity:0.9}); T({text:('★ '+offer).toUpperCase(),x:Math.round(cw*0.04),y:Math.round(ch*0.035),size:Math.round(ch*0.055),color:'#fde68a',weight:'800'}); placeLogo(Math.round(cw*0.86),Math.round(ch*0.02),Math.round(cw*0.10)); }
+    else if(name==='logo'){ placeLogo(Math.round(cw*0.04),Math.round(ch*0.05),Math.round(cw*0.24)); T({text:biz,x:Math.round(cw*0.04),y:Math.round(ch*0.86),size:Math.round(ch*0.07),color:'#ffffff'}); }
+    render();
+  }
+  tt.append(el('span','appsub','Templates:'));
+  [['▁ Bottom bar','bar'],['⬤ Offer badge','badge'],['▔ Top ribbon','ribbon'],['🏷 Logo + name','logo']].forEach(([lbl,nm])=>{ const b=el('button','adsave',lbl); b.style.cssText='flex:none;padding:5px 10px;font-size:12px'; b.onclick=()=>applyTemplate(nm); tt.append(b); });
 
   // toolbar
   const bAddLogo=el('button','go','🏷️ Add logo'); bAddLogo.style.cssText='flex:none;padding:6px 12px';
@@ -1673,7 +1706,7 @@ function openEditor(bgUrl){
   const bDel=el('button','idel','🗑 Delete'); bDel.onclick=()=>{ if(sel){ layers=layers.filter(x=>x!==sel); sel=null; render(); } };
   tb.append(bAddLogo,bAddText,el('span','appsub','Text color:'),color,bDel,el('span','appsub','Drag to move · pull the blue corner to resize · double-click text to edit'));
 
-  function exportPng(){ try{ const f=bg.naturalWidth/cw; const oc=document.createElement('canvas'); oc.width=bg.naturalWidth; oc.height=bg.naturalHeight; const o=oc.getContext('2d'); o.drawImage(bg,0,0,oc.width,oc.height); for(const l of layers){ if(l.type==='image'){ o.drawImage(l.img,l.x*f,l.y*f,l.w*f,l.h*f); } else { o.font=(l.weight||'700')+' '+(l.size*f)+'px '+(l.font||'Inter, system-ui, sans-serif'); o.textBaseline='top'; o.fillStyle=l.color||'#fff'; o.shadowColor='rgba(0,0,0,.55)'; o.shadowBlur=Math.max(2,l.size*f*0.12); o.shadowOffsetY=f; o.fillText(l.text,l.x*f,l.y*f); } } return oc.toDataURL('image/png'); }catch(err){ return null; } }
+  function exportPng(){ try{ const f=bg.naturalWidth/cw; const oc=document.createElement('canvas'); oc.width=bg.naturalWidth; oc.height=bg.naturalHeight; const o=oc.getContext('2d'); o.drawImage(bg,0,0,oc.width,oc.height); for(const l of layers){ if(l.type==='image'){ o.drawImage(l.img,l.x*f,l.y*f,l.w*f,l.h*f); } else if(l.type==='shape'){ o.save(); o.globalAlpha=(l.opacity==null?1:l.opacity); o.fillStyle=l.fill||'#111'; if(l.radius){ roundRectPath(o,l.x*f,l.y*f,l.w*f,l.h*f,Math.min(l.radius*f,l.w*f/2,l.h*f/2)); o.fill(); } else o.fillRect(l.x*f,l.y*f,l.w*f,l.h*f); o.restore(); } else { o.font=(l.weight||'700')+' '+(l.size*f)+'px '+(l.font||'Inter, system-ui, sans-serif'); o.textBaseline='top'; o.fillStyle=l.color||'#fff'; o.shadowColor='rgba(0,0,0,.55)'; o.shadowBlur=Math.max(2,l.size*f*0.12); o.shadowOffsetY=f; o.fillText(l.text,l.x*f,l.y*f); } } return oc.toDataURL('image/png'); }catch(err){ return null; } }
   const bSave=el('button','go','Save to Assets'); bSave.style.cssText='flex:none;padding:6px 14px';
   bSave.onclick=()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export (image is cross-origin). Save it to Assets first, then edit that copy.'); return; } ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:u,caption:'Edited design'}); saveAssets(); toast('Saved to Assets ✓'); };
   const bDl=el('button','adsave','⤓ Download'); bDl.onclick=()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export (cross-origin image).'); return; } const a=el('a'); a.href=u; a.download='miles-design.png'; a.click(); };

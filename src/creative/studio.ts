@@ -40,14 +40,19 @@ export function specFor(type: string): AssetTypeSpec | undefined {
  * don't know prompt engineering still get great results. Returns ONLY the rewritten
  * prompt so it can drop straight back into the input for the customer to review.
  */
-export function optimizerSystem(kind: AssetKind): string {
+export function optimizerSystem(kind: AssetKind, forBusiness = true): string {
+  // The one clause that differs between the two Optimize modes: tie it to the
+  // customer's business, or leave it a neutral experiment.
+  const biz = forBusiness
+    ? ' Keep it on-brand for their business, and honor any specifics they gave (logo, offer text, colors).'
+    : ' Do NOT force any particular business or brand into it — just make the idea as given great. Honor any specifics they gave.';
   if (kind === 'image')
-    return "You are a world-class prompt engineer and photographer for AI image generation. Rewrite the user's rough idea into ONE vivid, detailed prompt. Specify: subject; composition and framing; setting; camera and lens (e.g. 50mm, shallow depth of field); lighting (direction, quality, time of day); color palette; mood; and quality cues (sharp, photorealistic, professional, high detail). Keep it realistic and on-brand for their business, and honor any specifics they gave (logo, offer text, colors). Return ONLY the improved prompt as plain text — no preamble, no quotes, no explanation, no lists.";
+    return "You are a world-class prompt engineer and photographer for AI image generation. Rewrite the user's rough idea into ONE vivid, detailed prompt. Specify: subject; composition and framing; setting; camera and lens (e.g. 50mm, shallow depth of field); lighting (direction, quality, time of day); color palette; mood; and quality cues (sharp, photorealistic, professional, high detail)." + biz + ' Return ONLY the improved prompt as plain text — no preamble, no quotes, no explanation, no lists.';
   if (kind === 'video')
-    return "You are a film director and world-class prompt engineer for AI text-to-video (Veo / Kling / Sora class). Rewrite the user's rough idea into ONE cinematic, shot-designed prompt. Specify: the subject and its action/motion; shot type and composition (e.g. wide establishing shot, low-angle hero shot); camera body and lens (e.g. shot on ARRI Alexa, 35mm anamorphic); a single deliberate camera move (e.g. slow dolly-in, orbiting tracking shot, crane up); lighting (e.g. golden-hour rim light, volumetric haze); color grade (e.g. filmic teal-and-orange); and atmosphere (particles, reflections, shallow depth of field). Keep it ONE continuous, physically-plausible shot, and on-brand for their business; honor any specifics they gave. Return ONLY the improved prompt as plain text — no preamble, no quotes, no explanation.";
+    return "You are a film director and world-class prompt engineer for AI text-to-video (Veo / Kling / Sora class). Rewrite the user's rough idea into ONE cinematic, shot-designed prompt. Specify: the subject and its action/motion; shot type and composition (e.g. wide establishing shot, low-angle hero shot); camera body and lens (e.g. shot on ARRI Alexa, 35mm anamorphic); a single deliberate camera move (e.g. slow dolly-in, orbiting tracking shot, crane up); lighting (e.g. golden-hour rim light, volumetric haze); color grade (e.g. filmic teal-and-orange); and atmosphere (particles, reflections, shallow depth of field). Keep it ONE continuous, physically-plausible shot." + biz + ' Return ONLY the improved prompt as plain text — no preamble, no quotes, no explanation.';
   if (kind === 'audio')
-    return "You are an expert voiceover scriptwriter. Rewrite the user's rough idea into a natural, engaging spoken script — clear, warm, well-paced, ready to read aloud in about the requested length. On-brand for their business. Return ONLY the script text — no preamble, no stage directions, no quotes.";
-  return "You are an expert marketing brief writer. Rewrite the user's rough idea into a clear, specific, effective brief that will produce great marketing content — spell out the audience, angle, key points, tone, and call to action. On-brand for their business. Return ONLY the improved brief as plain text — no preamble, no quotes.";
+    return "You are an expert voiceover scriptwriter. Rewrite the user's rough idea into a natural, engaging spoken script — clear, warm, well-paced, ready to read aloud in about the requested length." + biz + ' Return ONLY the script text — no preamble, no stage directions, no quotes.';
+  return "You are an expert marketing brief writer. Rewrite the user's rough idea into a clear, specific, effective brief that will produce great marketing content — spell out the audience, angle, key points, tone, and call to action." + biz + ' Return ONLY the improved brief as plain text — no preamble, no quotes.';
 }
 
 export interface BrandContext {
