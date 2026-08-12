@@ -44,7 +44,7 @@ export function optimizerSystem(kind: AssetKind, forBusiness = true): string {
   // The one clause that differs between the two Optimize modes: tie it to the
   // customer's business, or leave it a neutral experiment.
   const biz = forBusiness
-    ? ' Keep it on-brand for their business, and honor any specifics they gave (logo, offer text, colors).'
+    ? ' Keep it on-brand: follow the brand guidelines provided (color palette, fonts, voice/tone, and do-nots) and honor any specifics they gave (logo, offer text, colors).'
     : ' Do NOT force any particular business or brand into it — just make the idea as given great. Honor any specifics they gave.';
   if (kind === 'image')
     return "You are a world-class prompt engineer and photographer for AI image generation. Rewrite the user's rough idea into ONE vivid, detailed prompt. Specify: subject; composition and framing; setting; camera and lens (e.g. 50mm, shallow depth of field); lighting (direction, quality, time of day); color palette; mood; and quality cues (sharp, photorealistic, professional, high detail)." + biz + ' Return ONLY the improved prompt as plain text — no preamble, no quotes, no explanation, no lists.';
@@ -61,6 +61,34 @@ export interface BrandContext {
   category?: string;
   city?: string;
   services?: string[];
+  /** Brand-kit guidance, so every asset comes out on-brand (from src/brand/kit.ts). */
+  colors?: string[];
+  fonts?: string;
+  voice?: string;
+  tagline?: string;
+  keywords?: string[];
+  avoid?: string;
+}
+
+/** A compact brand directive appended to visual prompts — palette, feel, do-nots. */
+export function brandVisualLine(brand: BrandContext): string {
+  const parts: string[] = [];
+  if (brand.colors?.length) parts.push(`use the brand color palette ${brand.colors.join(', ')} as the dominant colors`);
+  if (brand.voice) parts.push(`overall feel: ${brand.voice}`);
+  if (brand.avoid) parts.push(`avoid: ${brand.avoid}`);
+  if (!parts.length) return '';
+  return ` Brand guidelines: ${parts.join('; ')}. Leave a clean, uncluttered area where the logo can be placed.`;
+}
+
+/** Brand-voice guidance for text/copy/voiceover system prompts. */
+export function brandVoiceLine(brand: BrandContext): string {
+  const parts: string[] = [];
+  if (brand.voice) parts.push(`Voice & tone: ${brand.voice}.`);
+  if (brand.tagline) parts.push(`Stay consistent with the tagline "${brand.tagline}".`);
+  if (brand.keywords?.length) parts.push(`Lean into: ${brand.keywords.join(', ')}.`);
+  if (brand.avoid) parts.push(`Never: ${brand.avoid}.`);
+  if (!parts.length) return '';
+  return ' Follow the brand guidelines — ' + parts.join(' ');
 }
 
 function trade(brand: BrandContext): string {
@@ -100,17 +128,21 @@ export function buildVisualPrompt(type: AssetType, prompt: string, brand: BrandC
     image: `High-quality, photorealistic marketing photo for ${bizLine(brand)}. ${idea}. Cinematic lighting, shallow depth of field, sharp detail, authentic — not stocky. No text overlay.`,
     video: `Cinematic marketing video for ${bizLine(brand)}. ${idea}. One continuous, physically-plausible shot with a deliberate camera move (dolly, orbit, or crane), professional cinematic lighting, filmic color grade, shallow depth of field, and a strong opening frame. Smooth, high-quality motion; no text overlay.`,
   };
-  return `${base[type] ?? `${idea} — for ${bizLine(brand)}.`}${styleTag}`.trim();
+  // Logos are drawn from scratch, so palette/feel steer them; but skip the
+  // "leave room for the logo" clause there (the logo IS the subject).
+  const brandLine = type === 'logo' ? '' : brandVisualLine(brand);
+  return `${base[type] ?? `${idea} — for ${bizLine(brand)}.`}${brandLine}${styleTag}`.trim();
 }
 
 /** System + user prompts for the text asset types (copy / doc), for the LLM. */
 export function buildTextPrompt(type: AssetType, prompt: string, brand: BrandContext = {}): { system: string; user: string } {
   const who = `${brand.business || 'a local business'} (${trade(brand)}${brand.city ? `, ${brand.city}` : ''})`;
   const svc = brand.services?.length ? ` Services: ${brand.services.join(', ')}.` : '';
-  const system =
+  const base =
     type === 'copy'
       ? `You are a direct-response marketing copywriter for local-service businesses. Write tight, benefit-led ad copy that drives calls and bookings — no fluff, no clichés. Return 3 options, each as a short headline + one line of body. Plain text, numbered.`
       : `You write clear, friendly marketing content (emails, blog intros, one-pagers) for local-service businesses. Warm, credible, concrete. Return ready-to-send text with a subject/title line. Plain text.`;
+  const system = base + brandVoiceLine(brand);
   const user = `Business: ${who}.${svc}\nRequest: ${prompt || 'a strong general promotion'}`;
   return { system, user };
 }

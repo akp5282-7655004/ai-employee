@@ -326,6 +326,7 @@
       <a data-page="research" class="sub"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg> Research</a>
       <a data-page="weather"><svg class="ico" viewBox="0 0 24 24"><path d="M17 14a4 4 0 0 0-1-7.87A6 6 0 0 0 4 8a4 4 0 0 0 .5 8H17Z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/></svg> Weather Triggers</a>
       <a data-page="hub"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg> Marketing Hub</a>
+      <a data-page="brand" class="sub"><svg class="ico" viewBox="0 0 24 24"><path d="M12 2l2.4 5.3 5.8.6-4.3 3.9 1.2 5.7L12 20.4 6.9 23.4 8.1 17.7 3.8 13.8l5.8-.6Z" transform="scale(0.85) translate(2,1)"/><circle cx="12" cy="12" r="9"/></svg> Brand Guidelines</a>
       <a data-page="studio" class="sub"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4 3.6L17 19l-5-3-5 3 1-6.4L4 9l5.8-.7Z"/></svg> Creative Studio</a>
       <a data-page="adstudio" class="sub"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
       <a data-page="assets" class="sub"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/><path d="M3 3l18 18" opacity="0"/></svg> Assets</a>
@@ -471,6 +472,7 @@
       <div class="mcard" style="max-width:1000px">
         <h3>Creative Studio</h3>
         <p class="mdesc">Every marketing asset for your business, from one place. Pick what you're making, describe it, and Miles brings it to life — on-brand, using your business details.</p>
+        <div id="studio-brand" style="margin:0 0 14px"></div>
         <div class="subtabs" id="studio-types" style="margin-bottom:14px"></div>
         <textarea class="f" id="studio-prompt" placeholder="Describe your idea, and Miles will bring it to life…" style="width:100%;min-height:72px;margin:0"></textarea>
         <div id="studio-opts" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin:14px 0 4px"></div>
@@ -489,6 +491,10 @@
     </section>
 
     <!-- ASSETS -->
+    <section class="page" id="page-brand">
+      <div id="brand-body" style="max-width:900px"></div>
+    </section>
+
     <section class="page" id="page-assets">
       <div class="mcard pf" style="max-width:900px">
         <h3>Brand Assets</h3>
@@ -992,7 +998,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',agents:'Agents & Specialists',schedules:'Scheduled Agents',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',studio:'Creative Studio',hub:'Marketing Hub',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
+const TITLES={overview:'Dashboard',agents:'Agents & Specialists',schedules:'Scheduled Agents',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
@@ -1010,6 +1016,7 @@ function setPage(id){
   $('#page-adstudio').classList.toggle('on',id==='adstudio');
   $('#page-studio').classList.toggle('on',id==='studio');
   $('#page-hub').classList.toggle('on',id==='hub');
+  $('#page-brand').classList.toggle('on',id==='brand');
   $('#page-assets').classList.toggle('on',id==='assets');
   $('#page-audit').classList.toggle('on',id==='audit');
   $('#page-calendar').classList.toggle('on',id==='calendar');
@@ -1032,6 +1039,7 @@ function setPage(id){
   if(id==='adstudio') openAdStudio();
   if(id==='studio') openStudio();
   if(id==='hub') openHub();
+  if(id==='brand') openBrand();
   if(id==='assets') openAssets();
   if(id==='audit') openAudit();
   if(id==='calendar') openCalendar();
@@ -1470,6 +1478,54 @@ function stlCard(st){
   }
   return card;
 }
+// ═══ Brand Guidelines — one source of truth every creative surface follows ═══
+let BRAND=null;
+async function openBrand(){ const box=$('#brand-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading your brand…</p>'; BRAND={colors:[],keywords:[]}; if(REMOTE){ try{ const d=await(await fetch('/api/brand')).json(); BRAND=Object.assign({colors:[],keywords:[]},d.kit||{}); }catch(e){} } renderBrand(); }
+function brandField(label,hint,node){ const w=el('div'); w.style.marginTop='16px'; const l=el('label',null,label); w.append(l); if(hint){ const h=el('div','appsub',hint); h.style.margin='2px 0 6px'; w.append(h);} w.append(node); return w; }
+function renderBrand(){
+  const box=$('#brand-body'); if(!box) return; box.innerHTML='';
+  const card=el('div','mcard pf');
+  const head=el('div'); head.innerHTML='<h3 style="margin:0">Brand Guidelines</h3><p class="mdesc" style="margin:6px 0 0;max-width:640px">Your palette, logo, fonts and voice — pulled from your website &amp; profile automatically. Everything you create or optimize in Creative Studio, Ad Studio, Assets and the agents follows these, so every asset comes out on-brand.</p>';
+  card.append(head);
+
+  // Logo
+  const logoWrap=el('div'); logoWrap.style.cssText='display:flex;gap:16px;align-items:center;margin-top:16px;flex-wrap:wrap';
+  const logoBox=el('div'); logoBox.style.cssText='width:96px;height:96px;border:1px dashed var(--line);border-radius:12px;display:grid;place-items:center;background:var(--panel-2);overflow:hidden;cursor:pointer';
+  const setLogo=()=>{ logoBox.innerHTML=''; if(BRAND.logoUrl){ const im=el('img'); im.src=BRAND.logoUrl; im.style.cssText='max-width:100%;max-height:100%;object-fit:contain'; logoBox.append(im);} else logoBox.innerHTML='<span class="appsub" style="text-align:center">+ Logo</span>'; };
+  setLogo();
+  const logoInput=el('input'); logoInput.type='file'; logoInput.accept='image/*'; logoInput.style.display='none';
+  logoInput.onchange=()=>{ const f=logoInput.files&&logoInput.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ BRAND.logoUrl=r.result; setLogo(); }; r.readAsDataURL(f); };
+  logoBox.onclick=()=>logoInput.click();
+  const logoTxt=el('div'); logoTxt.innerHTML='<label>Logo</label><div class="appsub" style="max-width:320px">Uploaded here and composited onto your designs. AI never redraws it.</div>';
+  const rmLogo=el('button',null,'Remove'); rmLogo.style.cssText='margin-top:8px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:var(--sans)'; rmLogo.onclick=()=>{ BRAND.logoUrl=''; setLogo(); }; logoTxt.append(rmLogo);
+  logoWrap.append(logoBox,logoInput,logoTxt); card.append(logoWrap);
+
+  // Colors
+  const cwrap=el('div'); cwrap.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+  const renderColors=()=>{ cwrap.innerHTML=''; (BRAND.colors||[]).forEach((c,i)=>{ const chip=el('div'); chip.style.cssText='display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:4px 8px 4px 5px;background:var(--panel-2)'; const sw=el('span'); sw.style.cssText='width:20px;height:20px;border-radius:5px;border:1px solid rgba(0,0,0,.15);background:'+esc(c); const lab=el('span',null,c); lab.style.fontSize='12.5px'; const x=el('button',null,'✕'); x.style.cssText='border:none;background:none;cursor:pointer;color:var(--faint);font-size:12px'; x.onclick=()=>{ BRAND.colors.splice(i,1); renderColors(); }; chip.append(sw,lab,x); cwrap.append(chip); }); const add=el('input'); add.type='color'; add.value='#12a08f'; add.style.cssText='width:40px;height:34px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);cursor:pointer;padding:2px'; const addBtn=el('button',null,'+ Add color'); addBtn.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12.5px;cursor:pointer;font-family:var(--sans)'; addBtn.onclick=()=>{ if((BRAND.colors||[]).length>=5){ toast('Up to 5 brand colors'); return; } BRAND.colors=BRAND.colors||[]; if(!BRAND.colors.includes(add.value)) BRAND.colors.push(add.value); renderColors(); }; cwrap.append(add,addBtn); };
+  renderColors(); card.append(brandField('Brand colors','Primary first. Used as the dominant palette in generated images & designs.',cwrap));
+
+  // Simple text fields
+  const mkInput=(k,ph)=>{ const i=el('input'); i.value=BRAND[k]||''; if(ph)i.placeholder=ph; i.oninput=()=>BRAND[k]=i.value; return i; };
+  const mkArea=(k,ph)=>{ const t=el('textarea'); t.rows=2; t.value=BRAND[k]||''; if(ph)t.placeholder=ph; t.oninput=()=>BRAND[k]=t.value; return t; };
+  card.append(brandField('Tagline','A short line that captures your brand.',mkInput('tagline','e.g. Fast, honest home services')));
+  card.append(brandField('Fonts','Type direction for designs.',mkInput('fonts','e.g. Poppins for headlines, Inter for body')));
+  card.append(brandField('Voice & tone','How Miles should sound in every caption, ad and email.',mkInput('voice','e.g. friendly, trustworthy, local, no jargon')));
+  card.append(brandField('Who you speak to','Your customer.',mkInput('audience','e.g. homeowners in Austin')));
+
+  // Keywords (chips)
+  const kwrap=el('div'); kwrap.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+  const renderKw=()=>{ kwrap.innerHTML=''; (BRAND.keywords||[]).forEach((w,i)=>{ const chip=el('div'); chip.style.cssText='display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:16px;padding:4px 10px;background:var(--panel-2);font-size:12.5px'; chip.append(document.createTextNode(w)); const x=el('button',null,'✕'); x.style.cssText='border:none;background:none;cursor:pointer;color:var(--faint);font-size:11px'; x.onclick=()=>{ BRAND.keywords.splice(i,1); renderKw(); }; chip.append(x); kwrap.append(chip); }); const inp=el('input'); inp.placeholder='Add a word + Enter'; inp.style.maxWidth='200px'; inp.onkeydown=(e)=>{ if(e.key==='Enter'){ e.preventDefault(); const v=inp.value.trim(); if(v&&(BRAND.keywords||[]).length<20){ BRAND.keywords=BRAND.keywords||[]; BRAND.keywords.push(v); renderKw(); } } }; kwrap.append(inp); };
+  renderKw(); card.append(brandField('Words & themes to lean into','Miles will favor these in copy.',kwrap));
+
+  card.append(brandField('Things to avoid','Do-nots Miles must never break.',mkArea('avoid','e.g. no stock-photo clichés, never say “cheap”, no emojis')));
+
+  const save=el('button','go','Save brand guidelines'); save.style.marginTop='20px';
+  const note=el('span','appsub'); note.style.marginLeft='12px';
+  save.onclick=async()=>{ save.disabled=true; try{ const r=await fetch('/api/brand',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({kit:BRAND})}); const d=await r.json(); note.textContent=d.ok?'Saved ✓ — every creative tool now follows this.':'Could not save.'; toast('Brand guidelines saved'); }catch(e){ note.textContent='Could not save.'; } save.disabled=false; setTimeout(()=>note.textContent='',3500); };
+  const row=el('div'); row.append(save,note); card.append(row);
+  box.append(card);
+}
 function renderAnalytics(){
   const bar=$('#a-subtabs'); bar.innerHTML=A_TABS.map(t=>`<button class="tab${t[0]===aTab?' on':''}" data-atab="${t[0]}">${t[1]}</button>`).join('');
   bar.querySelectorAll('[data-atab]').forEach(b=>b.onclick=()=>{ aTab=b.dataset.atab; renderAnalytics(); });
@@ -1514,6 +1570,22 @@ async function openStudio(){
     STUDIO_LOADED=true;
   }
   renderStudio();
+  studioBrandBanner();
+}
+async function studioBrandBanner(){
+  const box=$('#studio-brand'); if(!box||!REMOTE) return; box.innerHTML='';
+  let d={}; try{ d=await(await fetch('/api/brand')).json(); }catch(e){ return; }
+  const b=el('div'); b.style.cssText='display:flex;align-items:center;gap:8px;font-size:12.5px;padding:8px 12px;border-radius:9px;background:var(--panel-2);border:1px solid var(--line);max-width:640px';
+  if(d.active){
+    const sw=el('span'); sw.style.cssText='display:inline-flex;gap:3px'; (d.kit&&d.kit.colors||[]).slice(0,4).forEach(c=>{ const s=el('span'); s.style.cssText='width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.15);background:'+esc(c); sw.append(s); });
+    b.innerHTML='<b style="color:var(--brand)">✓ On-brand</b> Following your brand guidelines. ';
+    b.append(sw);
+    const edit=el('a',null,'Edit'); edit.style.cssText='color:var(--accent);cursor:pointer;margin-left:auto'; edit.onclick=()=>setPage('brand'); b.append(edit);
+  } else {
+    b.innerHTML='<span>Set your palette, voice &amp; logo so every asset comes out on-brand. </span>';
+    const go=el('a',null,'Set up Brand Guidelines →'); go.style.cssText='color:var(--accent);cursor:pointer'; go.onclick=()=>setPage('brand'); b.append(go);
+  }
+  box.append(b);
 }
 function studioSpec(){ return (STUDIO.types||STUDIO_FALLBACK).find(t=>t.type===studioType)||STUDIO.types[0]; }
 function studioOpt(label,opts,val,onch){ const w=el('div'); w.innerHTML='<label class="f" style="display:block;margin-bottom:3px">'+label+'</label>'; const s=el('select','f'); s.style.margin='0'; for(const o of opts){ const op=el('option',null,o); op.value=o; if(String(o)===String(val))op.selected=true; s.append(op);} s.onchange=()=>onch(s.value); w.append(s); return w; }

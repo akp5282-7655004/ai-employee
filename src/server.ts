@@ -11,6 +11,7 @@ import { LSA_TRADES, LSA_BLENDED, LSA_VS_GOOGLE, BENCHMARK_META } from './packs/
 import { generateAdCopy, type CreativeRequest } from './creative/creative.js';
 import { falReady, falGenerateImage, falGenerateVideo, falGenerateAudio, type Aspect } from './creative/fal.js';
 import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText, optimizerSystem, type BrandContext } from './creative/studio.js';
+import { resolveKit, kitHasGuidance, type BrandKit } from './brand/kit.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { catalogForClient, findPlay } from './skills/catalog.js';
 import {
@@ -932,6 +933,64 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { kind, models, recommended: rec, defaultId: defaultModel(kind).id };
   });
 
+  // The Brand Kit — one source of truth folded into every creative surface, so
+  // generated & optimized assets follow the same palette, voice, and rules.
+  function brandKitFor(data: Record<string, unknown>): BrandKit {
+    return resolveKit(
+      data.brandKit as Partial<BrandKit> | undefined,
+      (data.profile ?? {}) as Record<string, unknown>,
+      (data.assets ?? {}) as Record<string, unknown>,
+    );
+  }
+  function brandContextFor(data: Record<string, unknown>): BrandContext {
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const kit = brandKitFor(data);
+    return {
+      business: p.businessName,
+      vertical: p.industry,
+      category: p.industry,
+      city: (p.serviceAreas || '').split(',')[0]?.trim(),
+      services: (p.services || '').split(',').map((s) => s.trim()).filter(Boolean),
+      colors: kit.colors,
+      fonts: kit.fonts,
+      voice: kit.voice,
+      tagline: kit.tagline,
+      keywords: kit.keywords,
+      avoid: kit.avoid,
+    };
+  }
+
+  // Brand Kit read/save. GET returns the resolved kit (auto-seeded from profile +
+  // assets) so the section is never blank on first open.
+  app.get('/api/brand', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const kit = brandKitFor(data);
+    return { kit, active: kitHasGuidance(kit), stored: !!data.brandKit };
+  });
+  app.put<{ Body: { kit?: Partial<BrandKit> } }>('/api/brand', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const inb = req.body?.kit ?? {};
+    // Store a clean, bounded kit.
+    const kit: BrandKit = {
+      name: (inb.name ?? '').toString().slice(0, 120) || undefined,
+      tagline: (inb.tagline ?? '').toString().slice(0, 200) || undefined,
+      colors: Array.isArray(inb.colors) ? inb.colors.map((c) => String(c).slice(0, 9)).slice(0, 5) : [],
+      fonts: (inb.fonts ?? '').toString().slice(0, 200) || undefined,
+      logoUrl: (inb.logoUrl ?? '').toString().slice(0, 500_000) || undefined,
+      voice: (inb.voice ?? '').toString().slice(0, 400) || undefined,
+      audience: (inb.audience ?? '').toString().slice(0, 300) || undefined,
+      keywords: Array.isArray(inb.keywords) ? inb.keywords.map((k) => String(k).slice(0, 60)).slice(0, 20) : [],
+      avoid: (inb.avoid ?? '').toString().slice(0, 400) || undefined,
+    };
+    data.brandKit = kit;
+    await authStore.setUserData(u.id, data);
+    return { ok: true, kit, active: kitHasGuidance(kit) };
+  });
+
   app.post<{ Body: { type?: string; prompt?: string; aspect?: Aspect; style?: string; quality?: 'standard' | 'premium'; duration?: number; model?: string } }>(
     '/api/studio',
     async (req, reply) => {
@@ -940,14 +999,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const body = req.body ?? {};
       const spec = specFor(body.type ?? 'image') ?? specFor('image')!;
       const data = await authStore.getUserData(u.id);
-      const p = (data.profile ?? {}) as Record<string, string>;
-      const brand: BrandContext = {
-        business: p.businessName,
-        vertical: p.industry,
-        category: p.industry,
-        city: (p.serviceAreas || '').split(',')[0]?.trim(),
-        services: (p.services || '').split(',').map((s) => s.trim()).filter(Boolean),
-      };
+      const brand = brandContextFor(data);
       if (spec.kind === 'text') {
         const { system, user } = buildTextPrompt(spec.type, body.prompt ?? '', brand);
         const text = (await generateText({ system, user })) ?? fallbackText(spec.type, body.prompt ?? '', brand);
@@ -1016,8 +1068,14 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const data = await authStore.getUserData(u.id);
     const p = (data.profile ?? {}) as Record<string, string>;
     const who = `${p.businessName || 'a local business'} — ${p.industry || 'local-service'}${p.serviceAreas ? `, ${p.serviceAreas}` : ''}${p.services ? `. Services: ${p.services}` : ''}`;
+    // Business mode carries the brand kit so the optimized prompt already reflects it.
+    const kit = brandKitFor(data);
+    const brandBlock =
+      forBusiness && kitHasGuidance(kit)
+        ? `\nBrand guidelines to follow:${kit.colors.length ? `\n- Colors: ${kit.colors.join(', ')}` : ''}${kit.fonts ? `\n- Fonts: ${kit.fonts}` : ''}${kit.voice ? `\n- Voice: ${kit.voice}` : ''}${kit.tagline ? `\n- Tagline: "${kit.tagline}"` : ''}${kit.keywords.length ? `\n- Themes: ${kit.keywords.join(', ')}` : ''}${kit.avoid ? `\n- Avoid: ${kit.avoid}` : ''}`
+        : '';
     const user = forBusiness
-      ? `Business: ${who}.\nMaking: a ${spec.label.toLowerCase()}.\nTheir rough idea: "${rough}"\n\nRewrite it now.`
+      ? `Business: ${who}.${brandBlock}\nMaking: a ${spec.label.toLowerCase()}.\nTheir rough idea: "${rough}"\n\nRewrite it now.`
       : `Making: a ${spec.label.toLowerCase()}.\nRough idea: "${rough}"\n\nRewrite it now.`;
     const improved = await generateText({ system: optimizerSystem(spec.kind, forBusiness), user, maxTokens: 500 });
     await meterUser(u.id, 'text');
@@ -1163,11 +1221,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     }
     if (task === 'social_poster') {
       // The full workflow in one run: generate image → write caption → publish to connected socials.
-      const brand: BrandContext = {
-        business: p.businessName, vertical: p.industry, category: p.industry,
-        city: (p.serviceAreas || '').split(',')[0]?.trim(),
-        services: (p.services || '').split(',').map((s) => s.trim()).filter(Boolean),
-      };
+      const brand = brandContextFor(data);
       const vprompt = buildVisualPrompt('social', p.currentOffers || p.services || 'a friendly promotion', brand);
       const imageUrl = falReady() ? await falGenerateImage(vprompt, { aspect: '4:5' }) : null;
       const sa = socialAgent(ctx);
