@@ -8,7 +8,7 @@
  */
 
 export type MediaKind = 'image' | 'video' | 'audio';
-export type MediaProvider = 'fal' | 'openai';
+export type MediaProvider = 'fal' | 'openai' | 'higgsfield';
 
 export interface MediaModel {
   id: string;
@@ -39,6 +39,7 @@ export const MEDIA_MODELS: MediaModel[] = [
   { id: 'flux-dev', kind: 'image', label: 'Flux Dev — Balanced', blurb: 'Sharper detail and cleaner text-in-image. Best for flyers, cards, and logos.', credits: 8, provider: 'fal', falModel: 'fal-ai/flux/dev', recommendFor: /logo|flyer|card|invite|poster|text|headline|menu/i, quality: 2, etaSec: 20 },
   { id: 'flux-pro', kind: 'image', label: 'Flux Pro 1.1 — Photoreal', blurb: 'Highest quality, most photorealistic. Best for hero shots and polished ads.', credits: 12, provider: 'fal', falModel: 'fal-ai/flux-pro/v1.1', recommendFor: /photo|realistic|hero|portrait|product|professional|lifestyle/i, quality: 3, etaSec: 25 },
   { id: 'gpt-image', kind: 'image', label: 'ChatGPT Image (GPT-Image-1)', blurb: 'OpenAI’s image model — excellent at following detailed instructions and rendering text.', credits: 15, provider: 'openai', requiresEnv: 'OPENAI_API_KEY', quality: 3, etaSec: 25 },
+  { id: 'hf-soul', kind: 'image', label: 'Higgsfield Soul — Cinematic', blurb: 'Higgsfield’s cinematic image model — director-grade, premium quality.', credits: 18, provider: 'higgsfield', requiresEnv: 'HIGGSFIELD_API_KEY_SECRET', recommendFor: /cinematic|dramatic|film|movie|hero|editorial|moody/i, quality: 4, etaSec: 30 },
   // ── video ──
   { id: 'kling-std', kind: 'video', label: 'Kling — Standard', blurb: 'Reliable everyday video. The safe default that gets the job done.', credits: 20, provider: 'fal', falModel: 'fal-ai/kling-video/v1/standard/text-to-video', default: true, quality: 1, etaSec: 60 },
   { id: 'kling-pro', kind: 'video', label: 'Kling Pro — Cinematic', blurb: 'Smoother motion and more detail. Best for polished ads and hero videos.', credits: 35, provider: 'fal', falModel: 'fal-ai/kling-video/v1.5/pro/text-to-video', recommendFor: /.*/, quality: 2, etaSec: 90 },
@@ -61,6 +62,7 @@ export function defaultModel(kind: MediaKind): MediaModel {
 /** Is a model usable right now? fal models need FAL_KEY; others need their own env key. */
 export function modelActive(m: MediaModel, env: NodeJS.ProcessEnv = process.env): boolean {
   if (m.provider === 'fal') return !!env.FAL_KEY;
+  if (m.provider === 'higgsfield') return !!(env.HIGGSFIELD_API_KEY_ID && env.HIGGSFIELD_API_KEY_SECRET);
   return !!(m.requiresEnv && env[m.requiresEnv]);
 }
 

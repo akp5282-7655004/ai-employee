@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@fal-ai/client": "^1.10.1",
+    "@higgsfield/client": "^0.2.1",
     "@pipedream/sdk": "^3.1.2",
     "fastify": "^5.1.0",
     "pg": "^8.13.0",

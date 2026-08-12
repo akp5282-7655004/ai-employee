@@ -1608,6 +1608,7 @@ function renderStudioResult(r,spec){
     const dl=studioDownload(r.url,spec.type+'.png');
     const edit=el('button','adsave','✏️ Edit'); edit.onclick=()=>openEditor(current);
     bar.append(save,dl,edit,studioPushBtn(spec)); box.append(bar);
+    if(r.note) box.append(el('div','appsub','⚠︎ '+esc(r.note)+' — showed the fallback model instead.'));
     const hasLogo=!!(ASSETS&&ASSETS.logo)&&spec.type!=='logo';
     if(hasLogo){
       let on=true; const tog=el('button','adsave','🏷️ Logo: On');
@@ -1617,6 +1618,7 @@ function renderStudioResult(r,spec){
       box.append(el('div','appsub','💡 Upload your logo in Assets and Miles will brand these automatically.'));
     }
   } else {
+    if(r.note) box.append(el('div','verdict tight','⚠︎ '+esc(r.note)));
     box.append(el('div','verdict tight','🖼️ Add FAL_KEY on Render to generate the real image. Here’s the on-brand prompt Miles built for you:'));
     const pc=el('div','acard'); pc.style.marginTop='8px'; pc.style.fontSize='13px'; pc.textContent=r.prompt||''; box.append(pc);
   }

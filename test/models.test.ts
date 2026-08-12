@@ -16,6 +16,13 @@ describe('media model catalog', () => {
     expect(modelActive(gpt, withFal)).toBe(false);
     expect(modelActive(gpt, { FAL_KEY: 'x', OPENAI_API_KEY: 'y' } as unknown as NodeJS.ProcessEnv)).toBe(true);
   });
+  it('Higgsfield needs BOTH the key id and secret to be active', () => {
+    const hf = modelById('hf-soul')!;
+    expect(hf.provider).toBe('higgsfield');
+    expect(modelActive(hf, { HIGGSFIELD_API_KEY_ID: 'a' } as unknown as NodeJS.ProcessEnv)).toBe(false);
+    expect(modelActive(hf, { HIGGSFIELD_API_KEY_SECRET: 'b' } as unknown as NodeJS.ProcessEnv)).toBe(false);
+    expect(modelActive(hf, { HIGGSFIELD_API_KEY_ID: 'a', HIGGSFIELD_API_KEY_SECRET: 'b' } as unknown as NodeJS.ProcessEnv)).toBe(true);
+  });
   it('recommends a prompt-fit model when the prompt hints at it', () => {
     const env = { FAL_KEY: 'x' } as unknown as NodeJS.ProcessEnv;
     expect(recommendModel('image', 'a clean logo with our name in text', env).id).toBe('flux-dev');
