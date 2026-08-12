@@ -31,6 +31,13 @@ import {
   geoAgent,
   metricsLine,
   agentFallback,
+  buildAgentDesignPrompt,
+  parseAgentSpec,
+  fallbackAgentDesign,
+  customAgentRun,
+  fallbackCustomAgent,
+  DATA_SOURCES,
+  type CustomAgentSpec,
   type AgentCtx,
   type ScheduledAgent,
   type AgentRun,
@@ -786,11 +793,59 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { prompt: (improved || rough).trim(), improved: !!improved, live: textLlmReady() };
   });
 
+  // Agent Studio — turn a plain-language problem into a runnable agent spec for the
+  // customer to approve, then deploy via /api/schedules like any other agent.
+  app.post<{ Body: { problem?: string } }>('/api/studio/agent', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const problem = (req.body?.problem ?? '').trim();
+    if (!problem) return reply.code(400).send({ error: 'Describe the problem you want an agent to solve.' });
+    const { system, user } = buildAgentDesignPrompt(problem);
+    const raw = await generateText({ system, user, maxTokens: 700 });
+    const spec = (raw && parseAgentSpec(raw)) || fallbackAgentDesign(problem);
+    const source = DATA_SOURCES.find((s) => s.id === spec.dataSource)!;
+    return { spec, source, live: textLlmReady() };
+  });
+
   // ── Scheduled agents — recurring, unattended work (morning brief, CPA report) ──
   // Runs a task now and returns its written result. Reused by the endpoint + scheduler.
-  async function runScheduledTask(userId: string, task: TaskType): Promise<{ title: string; body: string }> {
+  async function runScheduledTask(userId: string, task: TaskType, spec?: CustomAgentSpec): Promise<{ title: string; body: string }> {
     const data = await authStore.getUserData(userId);
     const p = (data.profile ?? {}) as Record<string, string>;
+    if (task === 'custom') {
+      const dl = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      if (!spec) return { title: 'Custom agent', body: 'This agent is missing its configuration — re-create it in the Agent Studio.' };
+      let dataText = '';
+      if (spec.dataSource === 'emails') {
+        const e = connector.getRecentEmails ? await connector.getRecentEmails(userId, 25) : [];
+        dataText = e.map((m, i) => `${i + 1}. From: ${m.from || '?'} | ${m.subject || '(none)'} | ${m.snippet || ''}`).join('\n');
+      } else if (spec.dataSource === 'reviews') {
+        const r = connector.getReviews ? await connector.getReviews(userId) : [];
+        dataText = r.map((x) => `${x.rating}★ from ${x.author || 'a customer'}: ${x.text || ''}`).join('\n');
+      } else if (spec.dataSource === 'leads') {
+        const l = connector.getLeads ? await connector.getLeads(userId) : [];
+        dataText = l.map((x) => `${x.name || 'Lead'} — ${x.service || 'inquiry'} (via ${x.source || 'unknown'})`).join('\n');
+      } else if (spec.dataSource === 'social') {
+        const m = connector.getSocialMetrics ? await connector.getSocialMetrics(userId) : null;
+        dataText = m ? `impressions ${m.impressions}, clicks ${m.clicks}, likes ${m.likes}${m.followers ? `, followers ${m.followers}` : ''}` : '';
+      } else if (spec.dataSource === 'adspend') {
+        const s = connector.getAdSpend ? await connector.getAdSpend(userId) : [];
+        dataText = s.map((x) => `${x.platform}/${x.campaign}: $${x.spend} spent, ${x.conversions} conversions`).join('\n');
+      } else if (spec.dataSource === 'deals') {
+        const d2 = connector.getDeals ? await connector.getDeals(userId) : [];
+        dataText = d2.map((x) => `$${x.value} ${x.won ? 'won' : 'lost'} via ${x.utmSource || 'unknown'}`).join('\n');
+      }
+      if (spec.dataSource !== 'none' && !dataText) {
+        const src = DATA_SOURCES.find((x) => x.id === spec.dataSource);
+        return {
+          title: `${spec.name} — ${dl}`,
+          body: `${spec.name} is ready: ${spec.description}. It just needs ${src?.connect || 'its data source'} connected in Integrations — there’s nothing to read yet. Once connected, it runs automatically and drops its report here.`,
+        };
+      }
+      const { system, user } = customAgentRun(spec, p.businessName, dataText);
+      const body = (await generateText({ system, user, maxTokens: 900 })) ?? fallbackCustomAgent(spec);
+      return { title: `${spec.name} — ${dl}`, body };
+    }
     if (task === 'cpa_report') {
       const spend = connector.getAdSpend ? await connector.getAdSpend(userId) : [];
       const deals = connector.getDeals ? await connector.getDeals(userId) : [];
@@ -923,7 +978,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const data = await authStore.getUserData(u.id);
     const agent = ((data.schedules as ScheduledAgent[]) ?? []).find((a) => a.id === req.body?.id);
     if (!agent) return reply.code(404).send({ error: 'agent not found' });
-    const result = await runScheduledTask(u.id, agent.task);
+    const result = await runScheduledTask(u.id, agent.task, agent.spec);
     const run = appendRun(data, agent, result);
     agent.lastRunAt = run.ts;
     await authStore.setUserData(u.id, data);
@@ -947,7 +1002,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
         let changed = false;
         for (const agent of agents) {
           if (!isDue(agent, now)) continue;
-          const result = await runScheduledTask(uid, agent.task);
+          const result = await runScheduledTask(uid, agent.task, agent.spec);
           appendRun(data, agent, result);
           agent.lastRunAt = new Date().toISOString();
           changed = true;

@@ -18,7 +18,8 @@ export type TaskType =
   | 'competitor_watch'
   | 'seo_agent'
   | 'content_writer'
-  | 'geo_agent';
+  | 'geo_agent'
+  | 'custom';
 
 export interface TaskSpec {
   task: TaskType;
@@ -196,10 +197,125 @@ export function agentFallback(task: TaskType, c: AgentCtx): string {
   return `Competitive tip for ${biz}: lead with speed-to-lead and reviews — respond to every inquiry in minutes and ask every happy customer for a review. (Add an OpenRouter key for a full competitor read.)`;
 }
 
+// ── Agent Studio — build a custom agent from a plain-language problem ──
+// A custom agent is, honestly, a stored instruction + a data binding + a schedule,
+// run by the same proven scheduler. It reads one data source we can actually access,
+// then writes a summary / draft / prioritized list / report. It does NOT take
+// real-world actions we haven't wired a connector for — the design step is told this.
+
+export type DataSource = 'emails' | 'social' | 'reviews' | 'leads' | 'adspend' | 'deals' | 'none';
+
+export interface DataSourceSpec {
+  id: DataSource;
+  label: string;
+  /** What the owner connects in Integrations to feed this agent live data. */
+  connect: string;
+}
+
+export const DATA_SOURCES: DataSourceSpec[] = [
+  { id: 'emails', label: 'your email inbox', connect: 'Gmail' },
+  { id: 'reviews', label: 'your customer reviews', connect: 'Google Business Profile' },
+  { id: 'leads', label: 'your new leads', connect: 'your CRM' },
+  { id: 'social', label: 'your social metrics', connect: 'Facebook / Instagram / LinkedIn' },
+  { id: 'adspend', label: 'your ad spend & performance', connect: 'Google Ads / Meta' },
+  { id: 'deals', label: 'your won & lost deals', connect: 'your CRM' },
+  { id: 'none', label: 'no live data (works from your business profile)', connect: '' },
+];
+
+export interface CustomAgentSpec {
+  name: string;
+  description: string;
+  dataSource: DataSource;
+  /** The instruction the LLM follows every time the agent runs. */
+  systemPrompt: string;
+  time: string;
+  days: number[];
+}
+
+/** Ask the LLM to compile a plain-language problem into a runnable agent spec (JSON). */
+export function buildAgentDesignPrompt(problem: string): { system: string; user: string } {
+  const sources = DATA_SOURCES.map((s) => `"${s.id}" (${s.label})`).join(', ');
+  const system =
+    'You design ONE automated agent for a local-service business owner from a problem they describe. ' +
+    'Respond with ONLY a JSON object (no markdown, no prose) with these keys:\n' +
+    '- name: a short, friendly agent name (e.g. "Inbox Triage")\n' +
+    '- description: one plain sentence on what it does for the owner\n' +
+    `- dataSource: EXACTLY one of ${sources} — the data the agent must read (use "none" if the business profile is enough)\n` +
+    '- systemPrompt: the instruction you would give an AI to do this job on every run. Be specific about what to produce and how to format/prioritize it. Write it as instructions to the AI.\n' +
+    '- time: suggested run time "HH:MM" 24h (e.g. "08:00")\n' +
+    '- days: array of weekday numbers to run, 0=Sun..6=Sat (e.g. [1,2,3,4,5])\n' +
+    'Design only what an AI can do by READING data and WRITING text — summaries, drafts, prioritized lists, reports. Never promise real-world actions (sending, posting, paying) it cannot take.';
+  return { system, user: `The business owner says:\n"${problem}"` };
+}
+
+/** Robustly parse the design LLM's JSON into a validated spec. Returns null if unusable. */
+export function parseAgentSpec(text: string): CustomAgentSpec | null {
+  if (!text) return null;
+  const m = text.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  let o: Record<string, unknown>;
+  try {
+    o = JSON.parse(m[0]) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const valid = new Set(DATA_SOURCES.map((s) => s.id));
+  const dataSource = (typeof o.dataSource === 'string' && valid.has(o.dataSource as DataSource) ? o.dataSource : 'none') as DataSource;
+  const systemPrompt = String(o.systemPrompt || '').trim().slice(0, 2000);
+  if (!systemPrompt) return null;
+  const name = String(o.name || '').trim().slice(0, 60) || 'Custom agent';
+  const description = String(o.description || '').trim().slice(0, 220);
+  const time = typeof o.time === 'string' && /^\d{1,2}:\d{2}$/.test(o.time) ? o.time : '08:00';
+  const days =
+    Array.isArray(o.days) && o.days.length && o.days.every((d) => Number.isInteger(d) && (d as number) >= 0 && (d as number) <= 6)
+      ? (o.days as number[])
+      : [1, 2, 3, 4, 5];
+  return { name, description, dataSource, systemPrompt, time, days };
+}
+
+/** Demo-safe design when no LLM key is set — keyword-maps the problem to a data source. */
+export function fallbackAgentDesign(problem: string): CustomAgentSpec {
+  const t = (problem || '').toLowerCase();
+  let dataSource: DataSource = 'none';
+  let name = 'Custom Agent';
+  if (/email|inbox|gmail/.test(t)) { dataSource = 'emails'; name = 'Inbox Triage'; }
+  else if (/review|reputation|rating|star/.test(t)) { dataSource = 'reviews'; name = 'Reputation Watch'; }
+  else if (/lead|inquir|prospect|quote request/.test(t)) { dataSource = 'leads'; name = 'Lead Concierge'; }
+  else if (/social|instagram|facebook|linkedin|follower|post/.test(t)) { dataSource = 'social'; name = 'Social Pulse'; }
+  else if (/ad spend|cpa|campaign|ads|budget|roas/.test(t)) { dataSource = 'adspend'; name = 'Ad Watchdog'; }
+  else if (/deal|sale|revenue|won|pipeline/.test(t)) { dataSource = 'deals'; name = 'Revenue Recap'; }
+  const src = DATA_SOURCES.find((s) => s.id === dataSource)!;
+  return {
+    name,
+    description: (problem || '').trim().slice(0, 180) || 'A recurring task tailored to your business.',
+    dataSource,
+    systemPrompt: `You help a local-service business owner with this recurring need: "${(problem || '').trim()}". Each run, ${dataSource !== 'none' ? `read the provided ${src.label} and ` : ''}produce a clear, prioritized, plain-text result the owner can act on right away. Be concise, specific, and practical.`,
+    time: '08:00',
+    days: [1, 2, 3, 4, 5],
+  };
+}
+
+/** The run-time prompt: the agent's stored instruction + whatever live data we gathered. */
+export function customAgentRun(spec: CustomAgentSpec, business: string | undefined, dataText: string): { system: string; user: string } {
+  return {
+    system: spec.systemPrompt,
+    user:
+      `${business ? `Business: ${business}.\n` : ''}` +
+      (dataText ? `Here is the data to work from:\n${dataText}` : 'No live data source is connected — use general best practice for this business.'),
+  };
+}
+
+export function fallbackCustomAgent(spec: CustomAgentSpec): string {
+  const src = DATA_SOURCES.find((s) => s.id === spec.dataSource);
+  return `${spec.name} is deployed and will run on schedule: ${spec.description}\n\n(Add an OpenRouter key and it produces this live${spec.dataSource !== 'none' ? `, reading ${src?.label || 'your data'}` : ''}.)`;
+}
+
 export interface ScheduledAgent {
   id: string;
   name: string;
   task: TaskType;
+  /** Present only for task==='custom' — the agent's stored instruction + data binding. */
+  spec?: CustomAgentSpec;
   /** Local wall-clock time, "HH:MM" (24h). */
   time: string;
   /** Weekday numbers to run on: 0=Sun … 6=Sat. */

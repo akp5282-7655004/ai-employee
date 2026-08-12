@@ -1864,16 +1864,59 @@ let SCHED={agents:[],runs:[],tasks:SCHED_TASKS_FB}, SCHED_LOADED=false;
 async function openSchedules(){ if(!SCHED_LOADED){ if(REMOTE){ try{ const r=await fetch('/api/schedules'); const d=await r.json(); SCHED=d; }catch(e){} } if(!SCHED.tasks||!SCHED.tasks.length) SCHED.tasks=SCHED_TASKS_FB; if(!SCHED.agents) SCHED.agents=[]; if(!SCHED.runs) SCHED.runs=[]; SCHED_LOADED=true; } renderSchedules(); }
 async function saveSchedules(){ if(!REMOTE) return; try{ await fetch('/api/schedules',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({agents:SCHED.agents})}); }catch(e){} }
 function schedSummary(a){ const days=a.days.length===7?'Every day':(a.days.join(',')==='1,2,3,4,5'?'Weekdays':(a.days.join(',')==='0,6'?'Weekends':a.days.map(d=>DOW[d]).join(', '))); return days+' at '+a.time; }
-const TASK_ICON={morning_brief:'☀️',cpa_report:'📈',email_tasklist:'✉️',daily_wrapup:'🌙',social_content:'📱',review_responder:'⭐',lead_followup:'📞',competitor_watch:'🔭',seo_agent:'🔎',content_writer:'✍️',geo_agent:'🤖'};
+const TASK_ICON={morning_brief:'☀️',cpa_report:'📈',email_tasklist:'✉️',daily_wrapup:'🌙',social_content:'📱',review_responder:'⭐',lead_followup:'📞',competitor_watch:'🔭',seo_agent:'🔎',content_writer:'✍️',geo_agent:'🤖',custom:'✨'};
 function deployAgent(t){
   if((SCHED.agents||[]).some(a=>a.task===t.task)){ toast('Already deployed'); return; }
   const a={id:newId(),name:t.label,task:t.task,time:t.defaultTime||'08:00',days:[0,1,2,3,4,5,6],enabled:true,tzOffset:new Date().getTimezoneOffset(),createdAt:new Date().toISOString()};
   SCHED.agents.push(a); saveSchedules(); renderSchedules(); toast(t.label+' deployed — runs every day 🎉');
 }
+const DS_LABEL={emails:'your email inbox',reviews:'your customer reviews',leads:'your new leads',social:'your social metrics',adspend:'your ad spend & performance',deals:'your won & lost deals',none:'no live data — your business profile'};
+function schedSummaryFrom(days,time){ const j=days.join(','); const d=days.length===7?'Every day':(j==='1,2,3,4,5'?'Weekdays':(j==='0,6'?'Weekends':days.map(x=>DOW[x]).join(', '))); return d+' at '+time; }
+async function designCustomAgent(){
+  const problem=$('#studio-agent-problem').value.trim();
+  const note=$('#studio-agent-note'), out=$('#studio-agent-out');
+  if(!problem){ note.textContent='Describe the job first.'; return; }
+  if(!REMOTE){ note.textContent='Agent Studio runs on the live app.'; return; }
+  const btn=$('#studio-agent-go'); btn.disabled=true; note.textContent='Designing your agent…'; out.innerHTML='';
+  try{
+    const r=await fetch('/api/studio/agent',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({problem})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ note.textContent=d.error||'Could not design that agent.'; btn.disabled=false; return; }
+    note.textContent=''; renderAgentSpec(d.spec);
+  }catch(e){ note.textContent='Error: '+e.message; }
+  btn.disabled=false;
+}
+function renderAgentSpec(spec){
+  const out=$('#studio-agent-out'); out.innerHTML='';
+  const card=el('div','acard'); card.style.cssText='background:var(--panel);border:1px solid var(--accent,#4f46e5)';
+  const dl=DS_LABEL[spec.dataSource]||spec.dataSource;
+  card.innerHTML='<div style="font-size:14px;font-weight:700">✨ '+esc(spec.name)+'</div>'+
+    '<p class="mdesc" style="margin:4px 0 10px">'+esc(spec.description)+'</p>'+
+    '<div class="appsub">📥 Reads: '+esc(dl)+'</div>'+
+    '<div class="appsub">🕒 Runs: '+esc(schedSummaryFrom(spec.days,spec.time))+'</div>'+
+    '<details style="margin-top:8px"><summary class="appsub" style="cursor:pointer">See exactly how it will think</summary><div style="white-space:pre-wrap;font-size:12.5px;line-height:1.5;margin-top:6px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:10px">'+esc(spec.systemPrompt)+'</div></details>';
+  const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:14px';
+  const yes=el('button','go','Approve & deploy'); yes.style.flex='none'; yes.onclick=()=>deployCustomAgent(spec);
+  const no=el('button','adsave','Discard'); no.onclick=()=>{ out.innerHTML=''; };
+  bar.append(yes,no); card.append(bar); out.append(card);
+}
+function deployCustomAgent(spec){
+  const a={id:newId(),name:spec.name,task:'custom',spec,time:spec.time||'08:00',days:(spec.days&&spec.days.length?spec.days:[1,2,3,4,5]),enabled:true,tzOffset:new Date().getTimezoneOffset(),createdAt:new Date().toISOString()};
+  SCHED.agents.push(a); saveSchedules(); $('#studio-agent-problem').value=''; renderSchedules(); toast(spec.name+' deployed — runs '+schedSummaryFrom(a.days,a.time)+' 🎉');
+}
 function renderSchedules(){
   const box=$('#schedules-body'); if(!box) return; box.innerHTML='';
   const head=el('div'); head.innerHTML='<h3 style="margin:0">Agents</h3><p class="mdesc" style="margin:4px 0 0;max-width:720px">Your always-on workforce. Deploy a ready-made agent below and it runs on its own, every day — reading your email, wrapping up your day, tracking performance — and drops its report in your inbox.</p>';
   box.append(head);
+  // ── Agent Studio — describe a problem, get a custom agent ──
+  const studio=el('div','acard'); studio.style.cssText='margin:16px 0 6px;background:linear-gradient(135deg,var(--panel-2),transparent);border:1px solid var(--line)';
+  studio.innerHTML='<div style="font-size:15px;font-weight:700">✨ Agent Studio — build your own</div>'+
+    '<p class="mdesc" style="margin:5px 0 10px;max-width:640px">Describe a job in plain English and Miles designs a custom agent for it. Review it, approve it, and it joins your workforce — running every day.</p>'+
+    '<textarea id="studio-agent-problem" placeholder="e.g. Every morning, read my email, summarize it, sort by priority, and tell me which to reply to and which to ignore." style="width:100%;min-height:70px;resize:vertical"></textarea>'+
+    '<button class="go" id="studio-agent-go" style="margin-top:10px">Design my agent →</button><span id="studio-agent-note" class="appsub" style="margin-left:10px"></span>'+
+    '<div id="studio-agent-out" style="margin-top:14px"></div>';
+  box.append(studio);
+  $('#studio-agent-go').onclick=designCustomAgent;
   // ── ready-made agents you can one-click deploy ──
   box.append(el('div','sect-label','DEPLOY AN AGENT'));
   const gal=el('div','folgrid');

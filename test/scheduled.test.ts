@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isDue, buildCpaReport, buildMorningBrief, buildTaskListPrompt, fallbackTaskList, buildWrapupPrompt, fallbackWrapup, TASK_SPECS, socialAgent, reviewAgent, leadAgent, metricsLine, agentFallback, type ScheduledAgent } from '../src/agents/scheduled.js';
+import { isDue, buildCpaReport, buildMorningBrief, buildTaskListPrompt, fallbackTaskList, buildWrapupPrompt, fallbackWrapup, TASK_SPECS, socialAgent, reviewAgent, leadAgent, metricsLine, agentFallback, buildAgentDesignPrompt, parseAgentSpec, fallbackAgentDesign, customAgentRun, DATA_SOURCES, type ScheduledAgent } from '../src/agents/scheduled.js';
 
 const agent = (o: Partial<ScheduledAgent> = {}): ScheduledAgent => ({
   id: 'a1', name: 'Brief', task: 'morning_brief', time: '08:30', days: [1, 2, 3, 4, 5], enabled: true, tzOffset: 0, createdAt: '', ...o,
@@ -129,6 +129,50 @@ describe('the full agent roster', () => {
     expect(agentFallback('seo_agent', ctx)).toContain('Philadelphia');
     expect(agentFallback('content_writer', ctx)).toContain('interior painting');
     expect(agentFallback('geo_agent', ctx).toLowerCase()).toContain('geo');
+  });
+});
+
+describe('Agent Studio — build a custom agent from a problem', () => {
+  const emailProblem = 'Every morning read my email, summarize it, sort by priority, and tell me which to reply to and which to ignore.';
+
+  it('design prompt asks for JSON and lists the real data sources', () => {
+    const { system, user } = buildAgentDesignPrompt(emailProblem);
+    expect(system).toContain('JSON');
+    expect(system).toContain('"emails"');
+    expect(user).toContain('summarize it');
+  });
+
+  it('parses a valid LLM JSON spec and validates the data source', () => {
+    const raw = 'Sure!\n```json\n{"name":"Inbox Triage","description":"Reads and prioritizes your email","dataSource":"emails","systemPrompt":"Read the inbox and produce a ranked to-do list.","time":"08:00","days":[1,2,3,4,5]}\n```';
+    const spec = parseAgentSpec(raw)!;
+    expect(spec).not.toBeNull();
+    expect(spec.name).toBe('Inbox Triage');
+    expect(spec.dataSource).toBe('emails');
+    expect(spec.days).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('coerces an unknown data source to "none" and rejects an empty prompt', () => {
+    expect(parseAgentSpec('{"name":"X","dataSource":"telepathy","systemPrompt":"do it"}')!.dataSource).toBe('none');
+    expect(parseAgentSpec('{"name":"X","dataSource":"emails","systemPrompt":""}')).toBeNull();
+    expect(parseAgentSpec('not json at all')).toBeNull();
+  });
+
+  it('fallback design keyword-maps the problem to the right data source', () => {
+    expect(fallbackAgentDesign(emailProblem).dataSource).toBe('emails');
+    expect(fallbackAgentDesign('respond to my new google reviews').dataSource).toBe('reviews');
+    expect(fallbackAgentDesign('summarize my day').dataSource).toBe('none');
+  });
+
+  it('the run prompt uses the stored instruction and injects gathered data', () => {
+    const spec = fallbackAgentDesign(emailProblem);
+    const { system, user } = customAgentRun(spec, 'Rivera Plumbing', '1. From: Sarah | quote?');
+    expect(system).toBe(spec.systemPrompt);
+    expect(user).toContain('Rivera Plumbing');
+    expect(user).toContain('Sarah');
+  });
+
+  it('every data source has a connect hint (or is the no-data option)', () => {
+    for (const s of DATA_SOURCES) expect(s.id === 'none' ? s.connect === '' : s.connect.length > 0).toBe(true);
   });
 });
 
