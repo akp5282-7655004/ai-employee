@@ -11,6 +11,8 @@ export interface SkillPlay {
   label: string;
   /** The expert instruction the LLM follows to produce this deliverable. */
   system: string;
+  /** When set, this play's output can be pushed to a connected app (via the connector). */
+  push?: { app: string; verb: string };
 }
 
 export interface Skill {
@@ -24,7 +26,7 @@ export interface Skill {
   plays: SkillPlay[];
 }
 
-const P = (id: string, label: string, system: string): SkillPlay => ({ id, label, system });
+const P = (id: string, label: string, system: string, push?: { app: string; verb: string }): SkillPlay => ({ id, label, system, ...(push ? { push } : {}) });
 
 export const SKILL_CATALOG: Skill[] = [
   {
@@ -81,7 +83,7 @@ export const SKILL_CATALOG: Skill[] = [
     desc: 'Review-request templates and owner responses to protect and grow your reputation.',
     expertise: 'Reputation management — review generation and professional responses to good and bad reviews.',
     plays: [
-      P('requests', 'Review-request templates', 'You are a reputation expert. Write review-request templates: 2 SMS (short) and 1 email, sent after a completed job, that ethically maximize 5-star reviews. Include a placeholder for the review link. Plain text.'),
+      P('requests', 'Review-request templates', 'You are a reputation expert. Write review-request templates: 2 SMS (short) and 1 email, sent after a completed job, that ethically maximize 5-star reviews. Include a placeholder for the review link. Plain text.', { app: 'gohighlevel', verb: 'Send review request SMS' }),
       P('responses', 'Responses to a 5-star & 1-star review', 'You are a business-owner voice coach. Write a warm response to a 5-star review and a calm, professional, de-escalating response to a 1-star review for this business. Plain text.'),
     ],
   },
@@ -103,7 +105,7 @@ export const SKILL_CATALOG: Skill[] = [
     expertise: 'Lifecycle marketing — nurture, win-back, and reminder sequences across email and SMS.',
     plays: [
       P('nurture', '3-email nurture sequence', 'You are an email-marketing expert for local-service businesses. Write a 3-email nurture sequence (each: Subject, one-line preview, short body, one CTA) that turns a new lead into a booked job. Plain text, clearly separated.'),
-      P('reminders', 'Appointment reminder templates', 'You write appointment reminders. Produce SMS (T-1 day, T-2 hours) and one email reminder template with reschedule/confirm options. Plain text.'),
+      P('reminders', 'Appointment reminder templates', 'You write appointment reminders. Produce SMS (T-1 day, T-2 hours) and one email reminder template with reschedule/confirm options. Plain text.', { app: 'gohighlevel', verb: 'Send appointment reminder SMS' }),
     ],
   },
   {
@@ -113,7 +115,7 @@ export const SKILL_CATALOG: Skill[] = [
     desc: 'Missed-call text-back and lead-recovery sequences so no lead slips away.',
     expertise: 'Speed-to-lead — missed-call recovery and follow-up that books jobs from lost calls.',
     plays: [
-      P('textback', 'Missed-call text-back templates', 'You are a speed-to-lead expert. Write 3 missed-call text-back templates (sent seconds after a missed call) that book the job, with a scheduling CTA. Plain text, numbered.'),
+      P('textback', 'Missed-call text-back templates', 'You are a speed-to-lead expert. Write 3 missed-call text-back templates (sent seconds after a missed call) that book the job, with a scheduling CTA. Plain text, numbered.', { app: 'gohighlevel', verb: 'Send missed-call text-back SMS' }),
       P('recovery', 'Lead-recovery sequence', 'You write follow-up sequences. Produce a 4-touch lead-recovery sequence (SMS + email mix, over 7 days) for a lead who called but did not book. Plain text, labeled by day/channel.'),
     ],
   },

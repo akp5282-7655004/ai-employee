@@ -380,13 +380,27 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const loc = p.serviceAreas ? ` Area: ${p.serviceAreas}.` : '';
     const user = `Business: ${biz} (${trade}).${svc}${loc}`;
     const text = await generateText({ system: match.play.system, user, maxTokens: 900 });
-    if (text) return { text, live: true, skill: match.skill.name, play: match.play.label };
+    if (text) return { text, live: true, skill: match.skill.name, play: match.play.label, push: match.play.push ?? null };
     return {
       text: `“${match.play.label}” is ready to generate. Add an OpenRouter key on Render and Miles will write this custom for ${biz} — expert ${match.skill.category.toLowerCase()} output, on-brand, in seconds.`,
       live: false,
       skill: match.skill.name,
       play: match.play.label,
+      push: match.play.push ?? null,
     };
+  });
+  // Push a skill's output to a connected app (e.g. send a review-request SMS via the
+  // CRM). Honest: holds if the app isn't connected instead of pretending it sent.
+  app.post<{ Body: { skillId?: string; playId?: string; text?: string; recipient?: string } }>('/api/skills/push', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const match = findPlay(req.body?.skillId ?? '', req.body?.playId ?? '');
+    if (!match?.play.push) return reply.code(400).send({ error: 'This play can’t be pushed to an app.' });
+    const text = (req.body?.text ?? '').trim();
+    if (!text) return reply.code(400).send({ error: 'Nothing to send.' });
+    if (!connector.runAppTask) return reply.code(400).send({ error: 'Live actions need the connector — configure Pipedream.' });
+    const r = await connector.runAppTask({ externalUserId: u.id, app: match.play.push.app, query: match.play.push.verb, params: { message: text, phone: (req.body?.recipient ?? '').trim() } });
+    return { ok: !!r.ok, note: r.note || r.summary || (r.ok ? 'Sent.' : 'Could not send.'), held: !r.ok };
   });
 
   // ── settings: account, API keys, team, usage ──

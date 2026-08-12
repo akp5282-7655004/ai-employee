@@ -2706,8 +2706,20 @@ async function runPlay(skillId,playId,btn){
     const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px;flex-wrap:wrap';
     const cp=el('button','go','Copy'); cp.style.flex='none'; cp.onclick=()=>{ try{navigator.clipboard.writeText(r.text||'');}catch(e){} toast('Copied'); }; bar.append(cp);
     if(r.live){ const push=el('button','adsave','↗ Send to Deploy'); push.onclick=()=>{ queueChange('skill',(r.skill||'Skill')+': '+(r.play||''),'pending'); toast('Sent to Deploy — approve it there'); }; bar.append(push); }
+    if(r.push){ const sendb=el('button','go','📲 '+esc(r.push.verb)); sendb.style.flex='none'; sendb.onclick=()=>skillPush(skillId,playId,r.text,sendb); bar.append(sendb); }
     card.append(bar); out.append(card);
   }catch(e){ out.innerHTML=''; out.append(el('div','verdict bad','Couldn’t run that play — try again.')); }
+  btn.disabled=false; btn.textContent=old;
+}
+async function skillPush(skillId,playId,text,btn){
+  if(!REMOTE){ toast('Runs on the live app'); return; }
+  const recipient=prompt('Send to which phone number? (leave blank to send to your connected list)','');
+  if(recipient===null) return;
+  btn.disabled=true; const old=btn.textContent; btn.textContent='Sending…';
+  try{
+    const r=await(await fetch('/api/skills/push',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({skillId,playId,text,recipient})})).json();
+    if(r.ok) toast('Sent ✓'); else toast(r.note||'Held — connect your CRM in Integrations');
+  }catch(e){ toast('Send failed'); }
   btn.disabled=false; btn.textContent=old;
 }
 async function openSkills(){ if(!SKILLS_LOADED) await loadSkills(); renderSkills(); }
