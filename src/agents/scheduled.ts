@@ -19,6 +19,7 @@ export type TaskType =
   | 'seo_agent'
   | 'content_writer'
   | 'geo_agent'
+  | 'social_poster'
   | 'custom';
 
 export interface TaskSpec {
@@ -134,6 +135,15 @@ export const TASK_SPECS: TaskSpec[] = [
     reads: 'Your business profile, services, and city.',
     produces: 'A GEO kit: a cite-ready description, 5 AI-style FAQs, and 3 things to publish.',
     instruction: 'Act as a Generative Engine Optimization specialist — help the business get recommended by ChatGPT, Gemini and Perplexity when people ask “who’s the best [service] near me”. Produce a crisp, factual, cite-ready description, 5 FAQ question+answer pairs matching how people ask AI, and 3 things to publish so AI models pick this business.',
+  },
+  {
+    task: 'social_poster',
+    label: 'Social media posting agent',
+    description: 'Every day: generates an on-brand image + caption and posts it to your connected social accounts.',
+    defaultTime: '10:00',
+    reads: 'Your business profile, current offer, and connected social accounts.',
+    produces: 'A freshly generated image + caption, auto-published to every connected platform (held until you connect one).',
+    instruction: 'Each run: generate an on-brand social image from the business profile and current offer, write a scroll-stopping caption with a few relevant hashtags, then publish the image + caption to every connected social account. If no account is connected yet, prepare the post and report it as ready-to-publish rather than pretending it posted.',
   },
 ];
 

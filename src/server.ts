@@ -1020,6 +1020,38 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const body = (await generateText({ system, user, maxTokens: 800 })) ?? agentFallback('geo_agent', ctx);
       return { title: `AI-search (GEO) kit — ${dLabel}`, body };
     }
+    if (task === 'social_poster') {
+      // The full workflow in one run: generate image → write caption → publish to connected socials.
+      const brand: BrandContext = {
+        business: p.businessName, vertical: p.industry, category: p.industry,
+        city: (p.serviceAreas || '').split(',')[0]?.trim(),
+        services: (p.services || '').split(',').map((s) => s.trim()).filter(Boolean),
+      };
+      const vprompt = buildVisualPrompt('social', p.currentOffers || p.services || 'a friendly promotion', brand);
+      const imageUrl = falReady() ? await falGenerateImage(vprompt, { aspect: '4:5' }) : null;
+      const sa = socialAgent(ctx);
+      const caption = (await generateText({ system: sa.system, user: sa.user, maxTokens: 400 })) ?? agentFallback('social_content', ctx);
+      let accts: Array<{ app: string }> = [];
+      try {
+        accts = (await connector.listAccounts(userId)) as Array<{ app: string }>;
+      } catch {
+        /* none */
+      }
+      const connectedApps = new Set(accts.map((a) => a.app));
+      const targetIds = PLATFORMS.filter((pl) => connectedApps.has(pl.app)).map((pl) => pl.id);
+      let statusLine: string;
+      if (!imageUrl) statusLine = '🖼 Add FAL_KEY in Render so the daily image generates automatically.';
+      else if (!targetIds.length) statusLine = '✅ Image + caption are ready. Connect a social account in Integrations and next run I’ll auto-publish it.';
+      else {
+        const transient: ScheduledPost = { id: 'agent', assetUrl: imageUrl, kind: 'image', caption, platforms: targetIds, scheduledAt: new Date().toISOString(), status: 'scheduled', createdAt: '' };
+        await publishPost(userId, transient);
+        const ok = (transient.results || []).filter((r) => r.ok).map((r) => r.platform);
+        const bad = (transient.results || []).filter((r) => !r.ok).map((r) => r.platform);
+        statusLine = (ok.length ? `✅ Published to ${ok.join(', ')}. ` : '') + (bad.length ? `⚠︎ Couldn’t post to ${bad.join(', ')}.` : '');
+      }
+      const body = `${caption}\n\n${imageUrl ? `🖼 On-brand image generated: ${imageUrl}` : ''}\n${statusLine}`.trim();
+      return { title: `Social media post — ${dLabel}`, body };
+    }
     // morning_brief
     let weatherLine: string | undefined;
     let weatherOpportunity: string | undefined;
