@@ -59,11 +59,11 @@ export function blankUsage(period: string): Usage {
  * previous month (or missing), it starts fresh — metering is per calendar month.
  * Returns the updated usage (mutates and returns for convenience).
  */
-export function applyMeter(usage: Usage | undefined, kind: MeterKind, now: Date, n = 1): Usage {
+export function applyMeter(usage: Usage | undefined, kind: MeterKind, now: Date, n = 1, creditsOverride?: number): Usage {
   const period = periodOf(now);
   const u = usage && usage.period === period ? usage : blankUsage(period);
   u.actions[kind] = (u.actions[kind] ?? 0) + n;
-  u.credits += CREDIT_COST[kind] * n;
+  u.credits += typeof creditsOverride === 'number' ? creditsOverride : CREDIT_COST[kind] * n;
   return u;
 }
 

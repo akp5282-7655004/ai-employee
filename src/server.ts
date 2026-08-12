@@ -48,6 +48,8 @@ import { fetchWeather, evaluateWeatherTriggers } from './research/weather.js';
 import { importSite } from './research/site.js';
 import { auditSite, buildAuditPrompt, fallbackAuditSummary } from './research/audit.js';
 import { applyMeter, summarizeUsage, type MeterKind, type Usage } from './usage/meter.js';
+import { modelsForKind, modelById, defaultModel, modelActive, recommendModel, type MediaKind } from './creative/models.js';
+import { openaiGenerateImage } from './creative/openai_image.js';
 import { aggregateNetwork, type WorkspaceSignal } from './usage/network.js';
 import { deliveryStatus, sendEmail, sendSms, smsExcerpt } from './delivery/send.js';
 import { searchCompetitors } from './research/places.js';
@@ -442,13 +444,14 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   });
 
   // Credit metering — bump the current-month usage on the loaded blob (caller saves).
-  const bumpMeter = (data: Record<string, unknown>, kind: MeterKind, n = 1): void => {
-    data.usage = applyMeter(data.usage as Usage | undefined, kind, new Date(), n);
+  // Pass `credits` to override the flat per-kind cost (e.g. a specific media model).
+  const bumpMeter = (data: Record<string, unknown>, kind: MeterKind, n = 1, credits?: number): void => {
+    data.usage = applyMeter(data.usage as Usage | undefined, kind, new Date(), n, credits);
   };
   // For endpoints that don't otherwise persist: load, meter, save.
-  const meterUser = async (userId: string, kind: MeterKind, n = 1): Promise<void> => {
+  const meterUser = async (userId: string, kind: MeterKind, n = 1, credits?: number): Promise<void> => {
     const d = await authStore.getUserData(userId);
-    bumpMeter(d, kind, n);
+    bumpMeter(d, kind, n, credits);
     await authStore.setUserData(userId, d);
   };
 
@@ -780,7 +783,23 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!u) return;
     return { types: ASSET_TYPES, imagesLive: falReady(), textLive: textLlmReady() };
   });
-  app.post<{ Body: { type?: string; prompt?: string; aspect?: Aspect; style?: string; quality?: 'standard' | 'premium'; duration?: number } }>(
+  // Which models a given asset type can use, plus the recommended pick for a prompt.
+  app.get<{ Querystring: { type?: string; prompt?: string } }>('/api/studio/models', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const spec = specFor(req.query?.type ?? 'image') ?? specFor('image')!;
+    if (spec.kind === 'text') return { kind: 'text', models: [], recommended: null, defaultId: null };
+    const kind = spec.kind as MediaKind;
+    const models = modelsForKind(kind).map((m) => ({
+      id: m.id, label: m.label, blurb: m.blurb, credits: m.credits,
+      provider: m.provider, requiresEnv: m.requiresEnv, active: modelActive(m),
+      default: !!m.default,
+    }));
+    const rec = recommendModel(kind, req.query?.prompt ?? '');
+    return { kind, models, recommended: rec, defaultId: defaultModel(kind).id };
+  });
+
+  app.post<{ Body: { type?: string; prompt?: string; aspect?: Aspect; style?: string; quality?: 'standard' | 'premium'; duration?: number; model?: string } }>(
     '/api/studio',
     async (req, reply) => {
       const u = await requireUser(req, reply);
@@ -802,28 +821,33 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
         await meterUser(u.id, 'text');
         return { type: spec.type, kind: 'text', text, live: textLlmReady() };
       }
+      // Resolve the chosen media model (registry id) or the reliable default for the kind.
+      const mediaKind = spec.kind as MediaKind;
+      const picked = modelById(body.model);
+      const chosen = picked && picked.kind === mediaKind ? picked : defaultModel(mediaKind);
+      const def = defaultModel(mediaKind);
+
       if (spec.kind === 'audio') {
-        const url = await falGenerateAudio(body.prompt ?? '', { voice: body.style });
-        await meterUser(u.id, 'audio');
-        return { type: spec.type, kind: 'audio', url, live: falReady() };
+        const url = await falGenerateAudio(body.prompt ?? '', { voice: body.style, model: chosen.falModel });
+        await meterUser(u.id, 'audio', 1, chosen.credits);
+        return { type: spec.type, kind: 'audio', url, model: chosen.id, live: falReady() };
       }
       const prompt = buildVisualPrompt(spec.type, body.prompt ?? '', brand, body.style);
       const aspect = (body.aspect ?? spec.defaultAspect) as Aspect;
       if (spec.kind === 'video') {
-        const url = await falGenerateVideo(prompt, { aspect, duration: body.duration });
-        await meterUser(u.id, 'video');
-        return { type: spec.type, kind: 'video', url, prompt, live: falReady() };
+        let url = await falGenerateVideo(prompt, { aspect, duration: body.duration, model: chosen.falModel });
+        // A premium pick that returns nothing falls back to the reliable default.
+        if (!url && chosen.id !== def.id) url = await falGenerateVideo(prompt, { aspect, duration: body.duration, model: def.falModel });
+        await meterUser(u.id, 'video', 1, chosen.credits);
+        return { type: spec.type, kind: 'video', url, prompt, model: chosen.id, live: falReady() };
       }
-      // A text-capable model for designs (logo/flyer/social/card) is opt-in via
-      // FAL_TEXT_MODEL (must be verified against the live account first). By default
-      // everything uses the known-working flux model. If a custom text model returns
-      // nothing, fall back to the default so we never dead-end when the key is valid.
-      const textHeavy = ['logo', 'flyer', 'social', 'card'].includes(spec.type);
-      const model = textHeavy && process.env.FAL_TEXT_MODEL ? process.env.FAL_TEXT_MODEL : undefined;
-      let url = await falGenerateImage(prompt, { aspect, quality: body.quality, model });
-      if (!url && model) url = await falGenerateImage(prompt, { aspect, quality: body.quality });
-      await meterUser(u.id, 'image');
-      return { type: spec.type, kind: 'image', url, prompt, live: falReady() };
+      // image — route by provider, always falling back to the default fal model.
+      let url: string | null = chosen.provider === 'openai'
+        ? await openaiGenerateImage(prompt, { aspect })
+        : await falGenerateImage(prompt, { aspect, model: chosen.falModel });
+      if (!url && chosen.id !== def.id) url = await falGenerateImage(prompt, { aspect, model: def.falModel });
+      await meterUser(u.id, 'image', 1, chosen.credits);
+      return { type: spec.type, kind: 'image', url, prompt, model: chosen.id, live: falReady() };
     },
   );
 

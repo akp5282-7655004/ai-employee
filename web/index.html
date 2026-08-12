@@ -1431,6 +1431,7 @@ const STUDIO_FALLBACK=[
 const STUDIO_STYLES=['Auto','Photorealistic','Illustration','3D render','Minimal','Bold & vibrant','Vintage','Flat design'];
 let STUDIO={types:STUDIO_FALLBACK,imagesLive:false,textLive:false}, STUDIO_LOADED=false;
 let studioType='image', studioAspect='', studioStyle='Auto', studioQuality='standard', studioDuration=5;
+let STUDIO_MODELS={}, studioModel='', studioRec=null;
 async function openStudio(){
   if(!STUDIO_LOADED){
     if(REMOTE){ try{ const r=await fetch('/api/studio'); const d=await r.json(); if(d.types&&d.types.length) STUDIO=d; }catch(e){} }
@@ -1443,26 +1444,58 @@ function studioSpec(){ return (STUDIO.types||STUDIO_FALLBACK).find(t=>t.type===s
 function studioOpt(label,opts,val,onch){ const w=el('div'); w.innerHTML='<label class="f" style="display:block;margin-bottom:3px">'+label+'</label>'; const s=el('select','f'); s.style.margin='0'; for(const o of opts){ const op=el('option',null,o); op.value=o; if(String(o)===String(val))op.selected=true; s.append(op);} s.onchange=()=>onch(s.value); w.append(s); return w; }
 function renderStudio(){
   const tb=$('#studio-types'); if(!tb) return; tb.innerHTML='';
-  for(const t of (STUDIO.types||STUDIO_FALLBACK)){ const c=el('button','tab'+(studioType===t.type?' on':''),t.label); c.onclick=()=>{ studioType=t.type; studioAspect=''; renderStudio(); }; tb.append(c); }
+  for(const t of (STUDIO.types||STUDIO_FALLBACK)){ const c=el('button','tab'+(studioType===t.type?' on':''),t.label); c.onclick=()=>{ studioType=t.type; studioAspect=''; studioModel=''; studioRec=null; renderStudio(); }; tb.append(c); }
   const spec=studioSpec(); const ob=$('#studio-opts'); ob.innerHTML='';
+  const isMedia = spec.kind==='image'||spec.kind==='video'||spec.kind==='audio';
+  // Model picker (per asset type) with credits shown.
+  if(isMedia){
+    const cache=STUDIO_MODELS[studioType];
+    if(cache && cache.models && cache.models.length){
+      if(!studioModel || !cache.models.some(m=>m.id===studioModel)) studioModel=cache.defaultId||cache.models[0].id;
+      const w=el('div'); w.innerHTML='<label class="f" style="display:block;margin-bottom:3px">Model</label>';
+      const s=el('select','f'); s.style.margin='0';
+      for(const m of cache.models){ const op=el('option',null,m.label+' · '+m.credits+' cr'+(m.active?'':' (needs '+(m.requiresEnv||'key')+')')); op.value=m.id; if(!m.active) op.disabled=true; if(m.id===studioModel) op.selected=true; s.append(op); }
+      s.onchange=()=>{ studioModel=s.value; renderStudio(); };
+      w.append(s); ob.append(w);
+    } else if(REMOTE){ loadStudioModels(); }
+  }
   if(spec.kind==='image'){
     ob.append(studioOpt('Aspect ratio',['1:1','16:9','9:16','4:5','3:4'],studioAspect||spec.defaultAspect,v=>studioAspect=v));
     ob.append(studioOpt('Style',STUDIO_STYLES,studioStyle,v=>studioStyle=v));
-    ob.append(studioOpt('Quality',['standard','premium'],studioQuality,v=>studioQuality=v));
   } else if(spec.kind==='video'){
     ob.append(studioOpt('Aspect ratio',['16:9','9:16','1:1'],studioAspect||'16:9',v=>studioAspect=v));
     ob.append(studioOpt('Length (sec)',['5','10'],studioDuration,v=>studioDuration=Number(v)));
   } else if(spec.kind==='audio'){
     ob.append(studioOpt('Voice',['Josh','Anna','Wilder','Chloe'],studioStyle==='Auto'?'Anna':studioStyle,v=>studioStyle=v));
   }
-  const ta=$('#studio-prompt'); if(ta) ta.placeholder = spec.kind==='audio' ? 'Write exactly what the voice should read out loud…' : ('Describe your '+spec.label.toLowerCase()+', and Miles will bring it to life…');
+  // Recommendation banner — "for best results, use X".
+  if(isMedia && studioRec && STUDIO_MODELS[studioType]){
+    const bn=el('div'); bn.style.cssText='flex-basis:100%;margin-top:2px';
+    if(studioRec.id && studioRec.id!==studioModel){
+      const card=el('div'); card.style.cssText='display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--panel-2);border:1px solid var(--line);padding:8px 12px;border-radius:9px;font-size:13px';
+      const use=el('button','go','Use it'); use.style.cssText='flex:none;padding:4px 12px'; use.onclick=()=>{ studioModel=studioRec.id; renderStudio(); };
+      card.append(el('span','','💡 '+studioRec.reason), use); bn.append(card);
+    } else { bn.append(el('div','appsub','✓ Using the recommended model for this.')); }
+    ob.append(bn);
+  }
+  const ta=$('#studio-prompt'); if(ta){ ta.placeholder = spec.kind==='audio' ? 'Write exactly what the voice should read out loud…' : ('Describe your '+spec.label.toLowerCase()+', and Miles will bring it to life…'); ta.onchange=()=>{ if(isMedia) loadStudioModels(); }; }
   const note=$('#studio-note');
+  const sel=(STUDIO_MODELS[studioType]&&STUDIO_MODELS[studioType].models||[]).find(m=>m.id===studioModel);
+  const cr = sel ? (' · uses '+sel.credits+' credits') : '';
   if(spec.kind==='text') note.textContent = STUDIO.textLive?'Miles writes this custom for your business.':'Demo copy until an AI key is added.';
-  else if(spec.kind==='video') note.textContent = STUDIO.imagesLive?'Video takes ~1 minute and uses the most credits.':'Demo preview until FAL_KEY is added.';
-  else if(spec.kind==='audio') note.textContent = STUDIO.imagesLive?'Text-to-speech from your script.':'Demo state until FAL_KEY (+ a TTS model) is added.';
-  else note.textContent = STUDIO.imagesLive?'Generated on-brand from your business details.':'Demo preview until FAL_KEY is added for real images.';
+  else if(spec.kind==='video') note.textContent = (STUDIO.imagesLive?'Video takes ~1 minute':'Demo preview until FAL_KEY is added')+cr+'.';
+  else if(spec.kind==='audio') note.textContent = (STUDIO.imagesLive?'Text-to-speech from your script':'Demo state until FAL_KEY is added')+cr+'.';
+  else note.textContent = (STUDIO.imagesLive?'Generated on-brand from your business details':'Demo preview until FAL_KEY is added')+cr+'.';
   $('#studio-go').onclick=studioGenerate;
   const opt=$('#studio-optimize'); if(opt) opt.onclick=studioOptimize;
+}
+async function loadStudioModels(){
+  const spec=studioSpec(); if(!(spec.kind==='image'||spec.kind==='video'||spec.kind==='audio')) return;
+  const t=studioType, prompt=(($('#studio-prompt')||{}).value||'').trim();
+  try{
+    const r=await(await fetch('/api/studio/models?type='+encodeURIComponent(t)+'&prompt='+encodeURIComponent(prompt))).json();
+    STUDIO_MODELS[t]=r; if(t===studioType){ studioRec=r.recommended; if(!studioModel||!(r.models||[]).some(m=>m.id===studioModel)) studioModel=r.defaultId; renderStudio(); }
+  }catch(e){}
 }
 async function studioOptimize(){
   const spec=studioSpec(); const rough=($('#studio-prompt').value||'').trim();
@@ -1475,6 +1508,7 @@ async function studioOptimize(){
     if(r.prompt){ $('#studio-prompt').value=r.prompt; $('#studio-prompt').dispatchEvent(new Event('input')); }
     note.textContent = r.improved ? '✨ Prompt upgraded — review it and hit Generate.' : (r.prompt===rough ? 'Add an OpenRouter key to auto-improve prompts.' : prev);
     if(r.improved) toast('Prompt improved — review & Generate');
+    loadStudioModels();
   }catch(e){ toast('Couldn’t optimize — try again'); note.textContent=prev; }
   btn.disabled=false; btn.textContent=old;
 }
@@ -1484,7 +1518,7 @@ async function studioGenerate(){
   const btn=$('#studio-go'), old=btn.textContent; btn.disabled=true; btn.textContent = spec.kind==='video'?'Rendering…':'Generating…';
   const box=$('#studio-results'); box.innerHTML=''; box.append(el('div','appsub', spec.kind==='video'?'Rendering your video — this can take a minute.':'Working…'));
   try{
-    const body={type:studioType,prompt,aspect:studioAspect||spec.defaultAspect,style:studioStyle,quality:studioQuality,duration:studioDuration};
+    const body={type:studioType,prompt,aspect:studioAspect||spec.defaultAspect,style:studioStyle,quality:studioQuality,duration:studioDuration,model:studioModel};
     let r;
     if(REMOTE){ const resp=await fetch('/api/studio',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); r=await resp.json(); }
     else { r={type:studioType,kind:spec.kind,url:null,text:'(demo) '+prompt,live:false,prompt}; }
@@ -2084,7 +2118,7 @@ async function setUsage(box){
   const fill=el('div'); fill.style.cssText='height:100%;width:'+Math.min(100,m.pct||0)+'%;background:'+((m.pct||0)>=100?'#dc2626':(m.pct||0)>=80?'#d97706':'#16a34a');
   track.append(fill); barWrap.append(top,track); card.append(barWrap);
   if((m.rows||[]).length){ const br=el('div'); br.style.cssText='margin-top:14px'; br.append(el('div','sect-label','THIS MONTH'));
-    for(const r of m.rows){ const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px'; row.innerHTML='<span>'+esc(r.label)+' <span class="appsub">× '+r.count+'</span></span><span class="appsub">'+r.credits+' credits</span>'; br.append(row); }
+    for(const r of m.rows){ const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px'; row.innerHTML='<span>'+esc(r.label)+'</span><span class="appsub">× '+r.count+'</span>'; br.append(row); }
     card.append(br);
   } else { card.append(el('div','verdict ok','No credits used yet this month. Generate an asset or run an agent and it’ll show here.')); }
   box.append(card);
