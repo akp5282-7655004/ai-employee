@@ -47,6 +47,9 @@ import { fetchDemographics } from './research/census.js';
 import { fetchWeather, evaluateWeatherTriggers } from './research/weather.js';
 import { importSite } from './research/site.js';
 import { auditSite, buildAuditPrompt, fallbackAuditSummary } from './research/audit.js';
+import { applyMeter, summarizeUsage, type MeterKind, type Usage } from './usage/meter.js';
+import { aggregateNetwork, type WorkspaceSignal } from './usage/network.js';
+import { deliveryStatus, sendEmail, sendSms, smsExcerpt } from './delivery/send.js';
 import { searchCompetitors } from './research/places.js';
 import { attributeRevenue } from './revenue/attribution.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
@@ -438,6 +441,17 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { ok: true, model: data.model };
   });
 
+  // Credit metering — bump the current-month usage on the loaded blob (caller saves).
+  const bumpMeter = (data: Record<string, unknown>, kind: MeterKind, n = 1): void => {
+    data.usage = applyMeter(data.usage as Usage | undefined, kind, new Date(), n);
+  };
+  // For endpoints that don't otherwise persist: load, meter, save.
+  const meterUser = async (userId: string, kind: MeterKind, n = 1): Promise<void> => {
+    const d = await authStore.getUserData(userId);
+    bumpMeter(d, kind, n);
+    await authStore.setUserData(userId, d);
+  };
+
   app.get('/api/usage', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
@@ -448,7 +462,42 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const triggers = ((d.weatherRules as any[]) ?? []).length;
     const deploys = ((d.deploy as any)?.queue ?? []).filter((c: any) => c.status === 'live').length;
     const chats = ((d.chat as any[]) ?? []).length;
-    return { campaigns, savedAds, triggers, deploys, chats };
+    const meter = summarizeUsage(d.usage as Usage | undefined, new Date());
+    return { campaigns, savedAds, triggers, deploys, chats, meter };
+  });
+
+  // Network learning — anonymized, cross-workspace benchmarks (numbers only, no PII).
+  app.get('/api/network', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const mine = (await authStore.getUserData(u.id)).profile as Record<string, string> | undefined;
+    const yourTrade = mine?.industry;
+    let ids: string[] = [];
+    try {
+      ids = await authStore.listUserIds();
+    } catch {
+      ids = [];
+    }
+    const signals: WorkspaceSignal[] = [];
+    for (const id of ids) {
+      try {
+        const d = await authStore.getUserData(id);
+        const p = (d.profile ?? {}) as Record<string, string>;
+        const agents = (d.schedules as Array<{ task: string }>) ?? [];
+        const runs = ((d.agentRuns as unknown[]) ?? []).length;
+        signals.push({ trade: p.industry, agentTasks: agents.map((a) => a.task), targetCpa: Number(p.targetCpa) || undefined, agentRuns: runs });
+      } catch {
+        /* skip a workspace we can't read */
+      }
+    }
+    return { network: aggregateNetwork(signals, yourTrade) };
+  });
+
+  // Delivery — which channels (email/SMS) are live, based on configured provider keys.
+  app.get('/api/delivery/status', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    return { status: deliveryStatus() };
   });
 
   // Marketing Hub — campaigns/folders holding saved copy + images, per workspace.
@@ -529,6 +578,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       if (!result) return reply.code(404).send({ error: 'Couldn’t reach that site — check the URL and try again.' });
       const { system, user } = buildAuditPrompt(result, p.businessName);
       const summary = (await generateText({ system, user, maxTokens: 700 })) ?? fallbackAuditSummary(result);
+      await meterUser(u.id, 'audit');
       return { ...result, summary };
     } catch (err) {
       return reply.code(502).send({ error: String((err as Error).message) });
@@ -749,16 +799,19 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       if (spec.kind === 'text') {
         const { system, user } = buildTextPrompt(spec.type, body.prompt ?? '', brand);
         const text = (await generateText({ system, user })) ?? fallbackText(spec.type, body.prompt ?? '', brand);
+        await meterUser(u.id, 'text');
         return { type: spec.type, kind: 'text', text, live: textLlmReady() };
       }
       if (spec.kind === 'audio') {
         const url = await falGenerateAudio(body.prompt ?? '', { voice: body.style });
+        await meterUser(u.id, 'audio');
         return { type: spec.type, kind: 'audio', url, live: falReady() };
       }
       const prompt = buildVisualPrompt(spec.type, body.prompt ?? '', brand, body.style);
       const aspect = (body.aspect ?? spec.defaultAspect) as Aspect;
       if (spec.kind === 'video') {
         const url = await falGenerateVideo(prompt, { aspect, duration: body.duration });
+        await meterUser(u.id, 'video');
         return { type: spec.type, kind: 'video', url, prompt, live: falReady() };
       }
       // A text-capable model for designs (logo/flyer/social/card) is opt-in via
@@ -769,6 +822,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const model = textHeavy && process.env.FAL_TEXT_MODEL ? process.env.FAL_TEXT_MODEL : undefined;
       let url = await falGenerateImage(prompt, { aspect, quality: body.quality, model });
       if (!url && model) url = await falGenerateImage(prompt, { aspect, quality: body.quality });
+      await meterUser(u.id, 'image');
       return { type: spec.type, kind: 'image', url, prompt, live: falReady() };
     },
   );
@@ -790,6 +844,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       user: `Business: ${who}.\nMaking: a ${spec.label.toLowerCase()}.\nTheir rough idea: "${rough}"\n\nRewrite it now.`,
       maxTokens: 500,
     });
+    await meterUser(u.id, 'text');
     return { prompt: (improved || rough).trim(), improved: !!improved, live: textLlmReady() };
   });
 
@@ -804,6 +859,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const raw = await generateText({ system, user, maxTokens: 700 });
     const spec = (raw && parseAgentSpec(raw)) || fallbackAgentDesign(problem);
     const source = DATA_SOURCES.find((s) => s.id === spec.dataSource)!;
+    await meterUser(u.id, 'agent_design');
     return { spec, source, live: textLlmReady() };
   });
 
@@ -958,6 +1014,19 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return run;
   }
 
+  // Deliver a run to the owner via any channel they've enabled AND that's configured.
+  // Best-effort: delivery never breaks (or blocks) an agent run.
+  async function deliverRun(email: string | undefined, phone: string | undefined, agent: ScheduledAgent, run: { title: string; body: string }): Promise<void> {
+    if (!agent.deliver?.email && !agent.deliver?.sms) return;
+    const st = deliveryStatus();
+    try {
+      if (agent.deliver?.email && st.email && email) await sendEmail(email, run.title, run.body);
+      if (agent.deliver?.sms && st.sms && phone) await sendSms(phone, smsExcerpt(run.title, run.body));
+    } catch {
+      /* delivery failures never surface as run failures */
+    }
+  }
+
   app.get('/api/schedules', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
@@ -981,7 +1050,9 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const result = await runScheduledTask(u.id, agent.task, agent.spec);
     const run = appendRun(data, agent, result);
     agent.lastRunAt = run.ts;
+    bumpMeter(data, 'agent_run');
     await authStore.setUserData(u.id, data);
+    await deliverRun(u.email, (data.profile as Record<string, string>)?.phone, agent, run);
     return { ok: true, run };
   });
 
@@ -999,15 +1070,23 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       try {
         const data = await authStore.getUserData(uid);
         const agents = (data.schedules as ScheduledAgent[]) ?? [];
+        const delivered: Array<{ agent: ScheduledAgent; run: { title: string; body: string } }> = [];
         let changed = false;
         for (const agent of agents) {
           if (!isDue(agent, now)) continue;
           const result = await runScheduledTask(uid, agent.task, agent.spec);
-          appendRun(data, agent, result);
+          const run = appendRun(data, agent, result);
           agent.lastRunAt = new Date().toISOString();
+          bumpMeter(data, 'agent_run');
+          if (agent.deliver?.email || agent.deliver?.sms) delivered.push({ agent, run });
           changed = true;
         }
         if (changed) await authStore.setUserData(uid, data);
+        if (delivered.length) {
+          const user = await authStore.getUserById(uid);
+          const phone = (data.profile as Record<string, string>)?.phone;
+          for (const { agent, run } of delivered) await deliverRun(user?.email, phone, agent, run);
+        }
       } catch {
         /* one user's failure never stops the rest */
       }

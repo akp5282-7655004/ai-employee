@@ -355,6 +355,8 @@ export interface ScheduledAgent {
   task: TaskType;
   /** Present only for task==='custom' — the agent's stored instruction + data binding. */
   spec?: CustomAgentSpec;
+  /** Optional delivery of each run to the owner (activates when a provider key is set). */
+  deliver?: { email?: boolean; sms?: boolean };
   /** Local wall-clock time, "HH:MM" (24h). */
   time: string;
   /** Weekday numbers to run on: 0=Sun … 6=Sat. */

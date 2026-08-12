@@ -1861,7 +1861,19 @@ function renderLogs(){
 const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const SCHED_TASKS_FB=[{task:'morning_brief',label:'Morning brief + to-do list',description:'A daily rundown — weather, approvals, priorities.',defaultTime:'08:30'},{task:'cpa_report',label:'Marketing performance report',description:'CPA across platforms vs. your target.',defaultTime:'09:00'}];
 let SCHED={agents:[],runs:[],tasks:SCHED_TASKS_FB}, SCHED_LOADED=false;
-async function openSchedules(){ if(!SCHED_LOADED){ if(REMOTE){ try{ const r=await fetch('/api/schedules'); const d=await r.json(); SCHED=d; }catch(e){} } if(!SCHED.tasks||!SCHED.tasks.length) SCHED.tasks=SCHED_TASKS_FB; if(!SCHED.agents) SCHED.agents=[]; if(!SCHED.runs) SCHED.runs=[]; SCHED_LOADED=true; } renderSchedules(); }
+let DELIVERY={email:false,sms:false};
+async function openSchedules(){ if(!SCHED_LOADED){ if(REMOTE){ try{ const r=await fetch('/api/schedules'); const d=await r.json(); SCHED=d; }catch(e){} try{ DELIVERY=(await (await fetch('/api/delivery/status')).json()).status||DELIVERY; }catch(e){} } if(!SCHED.tasks||!SCHED.tasks.length) SCHED.tasks=SCHED_TASKS_FB; if(!SCHED.agents) SCHED.agents=[]; if(!SCHED.runs) SCHED.runs=[]; SCHED_LOADED=true; } renderSchedules(); }
+function deliveryControl(a){
+  a.deliver=a.deliver||{};
+  const wrap=el('div'); wrap.style.cssText='display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap';
+  wrap.append(el('span','appsub','Deliver each run:'));
+  const mk=(ch,label,icon)=>{ const b=el('button',a.deliver[ch]?'go':'adsave',icon+' '+label); b.style.cssText='flex:none;padding:5px 10px;font-size:12px'; b.onclick=()=>{ a.deliver[ch]=!a.deliver[ch]; saveSchedules(); renderSchedules(); }; return b; };
+  wrap.append(mk('email','Email','✉️'),mk('sms','SMS','💬'));
+  if(a.deliver.email||a.deliver.sms){ const need=[]; if(a.deliver.email&&!DELIVERY.email) need.push('Email'); if(a.deliver.sms&&!DELIVERY.sms) need.push('SMS');
+    wrap.append(el('span','appsub', need.length?('⚠︎ '+need.join(' & ')+' not active yet — add the provider key in Render to switch it on.'):'✓ active'));
+  }
+  return wrap;
+}
 async function saveSchedules(){ if(!REMOTE) return; try{ await fetch('/api/schedules',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({agents:SCHED.agents})}); }catch(e){} }
 function schedSummary(a){ const days=a.days.length===7?'Every day':(a.days.join(',')==='1,2,3,4,5'?'Weekdays':(a.days.join(',')==='0,6'?'Weekends':a.days.map(d=>DOW[d]).join(', '))); return days+' at '+a.time; }
 const TASK_ICON={morning_brief:'☀️',cpa_report:'📈',email_tasklist:'✉️',daily_wrapup:'🌙',social_content:'📱',review_responder:'⭐',lead_followup:'📞',competitor_watch:'🔭',seo_agent:'🔎',content_writer:'✍️',geo_agent:'🤖',custom:'✨'};
@@ -1956,6 +1968,7 @@ function renderSchedules(){
     const run=el('button','go','Run now'); run.style.cssText='flex:none;padding:6px 12px'; run.onclick=()=>schedRunNow(a,run);
     const del=el('button','idel','Delete'); del.onclick=()=>{ SCHED.agents=SCHED.agents.filter(x=>x.id!==a.id); saveSchedules(); renderSchedules(); };
     right.append(sw,run,del); top.append(l,right); row.append(top);
+    row.append(deliveryControl(a));
     const dt=deployedDetail(a); row.insertAdjacentHTML('beforeend',agentDetailsHtml(dt.reads,dt.produces,dt.instruction));
     list.append(row);
   }
@@ -2055,15 +2068,46 @@ function setKeys(box){
   box.append(card);
   $('#set-key-go').onclick=async()=>{ if(!REMOTE) return; const name=$('#set-key-name').value.trim()||'API key'; const r=await fetch('/api/keys',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name})}); const d=await r.json().catch(()=>({})); if(d.key){ showModal('<h3 style="margin:0 0 10px">Your new API key</h3><p class="mdesc" style="margin:0 0 12px">Copy it now — you won’t see it in full again.</p><div style="background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:12px;font-family:monospace;font-size:12px;word-break:break-all">'+esc(d.key)+'</div><button class="go" id="key-done" style="width:100%;margin-top:14px">Done</button>'); $('#key-done').onclick=async()=>{ closeModal(); await loadSettings(); renderSettings(); }; } };
 }
+const NET_TASK_LABEL={morning_brief:'Morning brief',cpa_report:'Marketing report',email_tasklist:'Email → tasks',daily_wrapup:'Daily wrap-up',social_content:'Social post',review_responder:'Review responder',lead_followup:'Lead follow-up',competitor_watch:'Competitor watch',seo_agent:'Local SEO',content_writer:'SEO writer',geo_agent:'AI-search (GEO)',custom:'Custom agents'};
 async function setUsage(box){
   box.append(el('div','appsub','Loading usage…'));
-  let u={}; if(REMOTE){ try{ u=await (await fetch('/api/usage')).json(); }catch(e){} }
+  let u={},net={}; if(REMOTE){ try{ u=await (await fetch('/api/usage')).json(); }catch(e){} try{ net=(await (await fetch('/api/network')).json()).network||{}; }catch(e){} }
   box.innerHTML='';
+  const m=u.meter||{credits:0,allowance:1000,pct:0,rows:[],period:''};
+  // ── credits ──
   const card=el('div','mcard'); card.style.maxWidth='860px';
-  card.innerHTML='<h3>Usage</h3><p class="mdesc">What Miles has done for your workspace.</p>';
+  card.innerHTML='<h3>Credits</h3><p class="mdesc">Your metered usage this month'+(m.period?' ('+esc(m.period)+')':'')+'. Every generation, agent run and audit draws from your monthly credits.</p>';
+  const barWrap=el('div'); barWrap.style.cssText='margin:10px 0 6px';
+  const top=el('div'); top.style.cssText='display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px';
+  top.innerHTML='<b>'+(m.credits||0).toLocaleString()+' / '+(m.allowance||1000).toLocaleString()+' credits</b><span class="appsub">'+(m.pct||0)+'% used'+(m.overage?' · '+m.overage+' over':'')+'</span>';
+  const track=el('div'); track.style.cssText='height:10px;border-radius:6px;background:var(--panel-2);overflow:hidden;border:1px solid var(--line)';
+  const fill=el('div'); fill.style.cssText='height:100%;width:'+Math.min(100,m.pct||0)+'%;background:'+((m.pct||0)>=100?'#dc2626':(m.pct||0)>=80?'#d97706':'#16a34a');
+  track.append(fill); barWrap.append(top,track); card.append(barWrap);
+  if((m.rows||[]).length){ const br=el('div'); br.style.cssText='margin-top:14px'; br.append(el('div','sect-label','THIS MONTH'));
+    for(const r of m.rows){ const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px'; row.innerHTML='<span>'+esc(r.label)+' <span class="appsub">× '+r.count+'</span></span><span class="appsub">'+r.credits+' credits</span>'; br.append(row); }
+    card.append(br);
+  } else { card.append(el('div','verdict ok','No credits used yet this month. Generate an asset or run an agent and it’ll show here.')); }
+  box.append(card);
+  // ── what Miles has done ──
+  const card2=el('div','mcard'); card2.style.maxWidth='860px'; card2.innerHTML='<h3>Activity</h3><p class="mdesc">What Miles has done for your workspace.</p>';
   const g=el('div','stats'); g.style.margin='4px 0 0';
   g.append(statCard('Campaigns',u.campaigns||0), statCard('Ads created',u.savedAds||0), statCard('Weather triggers',u.triggers||0), statCard('Deploys',u.deploys||0));
-  card.append(g); box.append(card);
+  card2.append(g); box.append(card2);
+  // ── network learning ──
+  const card3=el('div','mcard'); card3.style.maxWidth='860px';
+  card3.innerHTML='<h3>🌐 Network insights</h3><p class="mdesc">Anonymized benchmarks across every business on Miles — numbers only, never names or content. This gets smarter as more businesses join.</p>';
+  if(!net.workspaces){ card3.append(el('div','verdict tight','Network learning is just getting started — insights appear as more businesses join Miles.')); }
+  else{
+    const ns=el('div','stats'); ns.style.margin='4px 0 12px';
+    ns.append(statCard('Businesses',net.workspaces||0), statCard('Agents deployed',net.totalAgentsDeployed||0), statCard('Agent runs',net.totalAgentRuns||0), statCard('Median target CPA',net.medianTargetCpa?('$'+net.medianTargetCpa):'—'));
+    card3.append(ns);
+    if((net.topAgents||[]).length){ const t=el('div'); t.append(el('div','sect-label','MOST-DEPLOYED AGENTS ACROSS THE NETWORK'));
+      for(const a of net.topAgents){ const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px'; row.innerHTML='<span>'+esc(NET_TASK_LABEL[a.task]||a.task)+'</span><span class="appsub">'+a.count+' business'+(a.count===1?'':'es')+'</span>'; t.append(row); }
+      card3.append(t);
+    }
+    if(net.yourTrade){ card3.append(el('div','verdict ok','You’re 1 of '+net.yourTradeCount+' '+esc(net.yourTrade)+' business'+(net.yourTradeCount===1?'':'es')+' on Miles. As the network grows, you’ll see what’s working best for businesses like yours.')); }
+  }
+  box.append(card3);
 }
 function setBilling(box){
   const card=el('div','mcard'); card.style.maxWidth='680px';
