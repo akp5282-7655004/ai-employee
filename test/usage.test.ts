@@ -33,6 +33,17 @@ describe('credit metering', () => {
     expect(s.credits).toBe(0);
     expect(s.rows).toHaveLength(0);
   });
+  it('breakdown rows reconcile with the total when a model overrides the flat cost', () => {
+    // A premium image model costs 12 (not the flat 5); the row must reflect the
+    // real charge so the breakdown sums to the credit total shown above it.
+    let u = applyMeter(undefined, 'image', aug, 1, 12); // flux-pro
+    u = applyMeter(u, 'image', aug); // a default image at flat 5
+    const s = summarizeUsage(u, aug);
+    const imageRow = s.rows.find((r) => r.kind === 'image')!;
+    expect(imageRow.count).toBe(2);
+    expect(imageRow.credits).toBe(17); // 12 + 5, not 2 × 5
+    expect(s.rows.reduce((a, r) => a + r.credits, 0)).toBe(s.credits); // rows sum to total
+  });
   it('periodOf formats YYYY-MM', () => {
     expect(periodOf(new Date('2026-01-05T00:00:00Z'))).toBe('2026-01');
   });

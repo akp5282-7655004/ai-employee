@@ -28,14 +28,14 @@ describe('media model catalog', () => {
     expect(recommendModel('image', 'a clean logo with our name in text', env).id).toBe('flux-dev');
     expect(recommendModel('image', 'a photorealistic product hero shot', env).id).toBe('flux-pro');
   });
-  it('recommends the best-quality active model otherwise (and never an inactive one)', () => {
+  it('recommends the reliable DEFAULT for a generic prompt (never pushed onto a pricier model)', () => {
     const falOnly = { FAL_KEY: 'x' } as unknown as NodeJS.ProcessEnv;
     const rec = recommendModel('image', 'something generic', falOnly);
+    expect(rec.id).toBe('flux-schnell'); // the reliable image default, not flux-pro/hf-soul
     expect(modelActive(modelById(rec.id)!, falOnly)).toBe(true);
-    expect(rec.id).not.toBe('gpt-image'); // inactive without OPENAI_API_KEY
   });
-  it('video recommendation prefers the cinematic pro tier', () => {
-    expect(recommendModel('video', 'a promo clip', { FAL_KEY: 'x' } as unknown as NodeJS.ProcessEnv).id).toBe('kling-pro');
+  it('a generic video prompt recommends the reliable default, not the pricier pro tier', () => {
+    expect(recommendModel('video', 'a promo clip', { FAL_KEY: 'x' } as unknown as NodeJS.ProcessEnv).id).toBe('kling-std');
   });
   it('unknown model id resolves to nothing; ids are unique', () => {
     expect(modelById('nope')).toBeUndefined();

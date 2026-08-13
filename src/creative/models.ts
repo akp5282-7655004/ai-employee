@@ -76,8 +76,11 @@ export interface Recommendation {
 
 /**
  * The "for best results" recommendation for this kind + prompt, chosen among
- * models that are actually active. Prefers a model whose recommendFor matches the
- * prompt; otherwise the highest-quality active model. Falls back to the default.
+ * models that are actually active. Prefers a specialty model whose recommendFor
+ * matches the prompt; otherwise recommends the RELIABLE DEFAULT — we steer to the
+ * dependable model ~99% of the time and only suggest a premium/specialty model when
+ * the prompt specifically calls for it, so a plain request is never pushed onto a
+ * pricier, less predictable model just because it scores higher on paper.
  */
 export function recommendModel(kind: MediaKind, prompt: string, env: NodeJS.ProcessEnv = process.env): Recommendation {
   const active = modelsForKind(kind).filter((m) => modelActive(m, env));
@@ -90,10 +93,10 @@ export function recommendModel(kind: MediaKind, prompt: string, env: NodeJS.Proc
     const best = matches.sort((a, b) => b.quality - a.quality)[0]!;
     return { id: best.id, reason: `Your prompt looks like a job for ${best.label} — ${best.blurb}` };
   }
-  // 2) Otherwise the best-quality model above the default.
-  const byQuality = [...pool].sort((a, b) => b.quality - a.quality);
-  const best = byQuality[0]!;
+  // 2) Otherwise recommend the reliable default. We steer to the dependable model
+  //    ~99% of the time and only suggest a premium/specialty model when the prompt
+  //    specifically calls for it (step 1) — a plain request is never pushed onto a
+  //    pricier, less predictable model just because it scores higher on paper.
   const def = defaultModel(kind);
-  if (best.id === def.id) return { id: def.id, reason: `${def.label} is the right pick here — ${def.blurb}` };
-  return { id: best.id, reason: `For the best result, use ${best.label} (${best.credits} credits) — ${best.blurb}` };
+  return { id: def.id, reason: `${def.label} is the reliable pick here — ${def.blurb}` };
 }

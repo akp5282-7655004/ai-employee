@@ -97,6 +97,17 @@ const SESSION_DAYS = 30;
 // Served from the repo root (npm start / npm run dev both run from there).
 const WEB_DIR = join(process.cwd(), 'web');
 
+// Read external data through a connector method, degrading to an empty value if the
+// method is missing or throws. Keeps a flaky live connector from 500-ing an endpoint
+// or — worse — throwing out of a scheduler tick and discarding sibling work.
+async function safeConn<T>(fn: (() => Promise<T>) | undefined, empty: T): Promise<T> {
+  try {
+    return fn ? await fn() : empty;
+  } catch {
+    return empty;
+  }
+}
+
 export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   const app = Fastify({ logger: false });
   const store = deps.store ?? new MemorySessionStore();
@@ -816,8 +827,8 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const sessionId = req.query?.sessionId;
     if (!sessionId) return { report: null, deals: [], connected: false };
     try {
-      const spend = connector.getAdSpend ? await connector.getAdSpend(sessionId) : [];
-      const deals = connector.getDeals ? await connector.getDeals(sessionId) : [];
+      const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(sessionId) : undefined, []);
+      const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(sessionId) : undefined, []);
       return { report: attributeRevenue(spend, deals), deals, connected: spend.length > 0 || deals.length > 0 };
     } catch (err) {
       return { report: null, deals: [], connected: false, error: String((err as Error).message) };
@@ -859,7 +870,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const q = req.query?.q;
     const limit = req.query?.limit ? Math.min(Number(req.query.limit) || 48, 100) : 48;
     try {
-      return connector.listApps ? await connector.listApps(q, limit, req.query?.after) : { apps: [] };
+      return await safeConn(connector.listApps ? () => connector.listApps!(q, limit, req.query?.after) : undefined, { apps: [] });
     } catch (err) {
       return { apps: [], error: String((err as Error).message) };
     }
@@ -1002,9 +1013,10 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const brand = brandContextFor(data);
       if (spec.kind === 'text') {
         const { system, user } = buildTextPrompt(spec.type, body.prompt ?? '', brand);
-        const text = (await generateText({ system, user })) ?? fallbackText(spec.type, body.prompt ?? '', brand);
-        await meterUser(u.id, 'text');
-        return { type: spec.type, kind: 'text', text, live: textLlmReady() };
+        const gen = await generateText({ system, user });
+        const text = gen ?? fallbackText(spec.type, body.prompt ?? '', brand);
+        if (gen) await meterUser(u.id, 'text'); // only bill for a real generation
+        return { type: spec.type, kind: 'text', text, live: !!gen };
       }
       // Resolve the chosen media model (registry id) or the reliable default for the kind.
       const mediaKind = spec.kind as MediaKind;
@@ -1014,33 +1026,39 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
 
       if (spec.kind === 'audio') {
         const url = await falGenerateAudio(body.prompt ?? '', { voice: body.style, model: chosen.falModel });
-        await meterUser(u.id, 'audio', 1, chosen.credits);
-        return { type: spec.type, kind: 'audio', url, model: chosen.id, live: falReady() };
+        if (url) await meterUser(u.id, 'audio', 1, chosen.credits); // bill only on a real render
+        return { type: spec.type, kind: 'audio', url, model: chosen.id, live: !!url };
       }
       const prompt = buildVisualPrompt(spec.type, body.prompt ?? '', brand, body.style);
       const aspect = (body.aspect ?? spec.defaultAspect) as Aspect;
       if (spec.kind === 'video') {
         let url: string | null = null;
-        let vnote: string | undefined;
+        let errNote: string | undefined;
         if (chosen.provider === 'higgsfield') {
           const r = await higgsfieldGenerateVideo(prompt, { aspect });
           url = r.url;
-          if (!url && r.error) vnote = r.error;
+          if (!url && r.error) errNote = r.error;
         } else {
           url = await falGenerateVideo(prompt, { aspect, duration: body.duration, model: chosen.falModel });
         }
-        // A premium pick that returns nothing falls back to the reliable default.
-        if (!url && chosen.id !== def.id) url = await falGenerateVideo(prompt, { aspect, duration: body.duration, model: def.falModel });
-        await meterUser(u.id, 'video', 1, chosen.credits);
-        return { type: spec.type, kind: 'video', url, prompt, model: chosen.id, note: vnote, live: falReady() };
+        // A premium pick that returns nothing falls back to the reliable default —
+        // then bill for and report the model that actually produced the asset.
+        let used = chosen;
+        let note = errNote;
+        if (!url && chosen.id !== def.id) {
+          const fb = await falGenerateVideo(prompt, { aspect, duration: body.duration, model: def.falModel });
+          if (fb) { url = fb; used = def; note = `${chosen.label} was unavailable — generated with ${def.label} instead.`; }
+        }
+        if (url) await meterUser(u.id, 'video', 1, used.credits);
+        return { type: spec.type, kind: 'video', url, prompt, model: used.id, note, live: !!url };
       }
       // image — route by provider, always falling back to the default fal model.
       let url: string | null = null;
-      let note: string | undefined;
+      let errNote: string | undefined;
       if (chosen.provider === 'higgsfield') {
         const r = await higgsfieldGenerateImage(prompt, { aspect });
         url = r.url;
-        if (!url && r.error) note = `Higgsfield: ${r.error}`;
+        if (!url && r.error) errNote = `Higgsfield: ${r.error}`;
       } else if (chosen.provider === 'google') {
         url = await googleGenerateImage(prompt, { aspect });
       } else if (chosen.provider === 'openai') {
@@ -1048,9 +1066,14 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       } else {
         url = await falGenerateImage(prompt, { aspect, model: chosen.falModel });
       }
-      if (!url && chosen.id !== def.id) url = await falGenerateImage(prompt, { aspect, model: def.falModel });
-      await meterUser(u.id, 'image', 1, chosen.credits);
-      return { type: spec.type, kind: 'image', url, prompt, model: chosen.id, note, live: falReady() };
+      let used = chosen;
+      let note = errNote;
+      if (!url && chosen.id !== def.id) {
+        const fb = await falGenerateImage(prompt, { aspect, model: def.falModel });
+        if (fb) { url = fb; used = def; note = `${chosen.label} was unavailable — generated with ${def.label} instead.`; }
+      }
+      if (url) await meterUser(u.id, 'image', 1, used.credits); // bill only on a real render, for the model that ran
+      return { type: spec.type, kind: 'image', url, prompt, model: used.id, note, live: !!url };
     },
   );
 
@@ -1078,8 +1101,8 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       ? `Business: ${who}.${brandBlock}\nMaking: a ${spec.label.toLowerCase()}.\nTheir rough idea: "${rough}"\n\nRewrite it now.`
       : `Making: a ${spec.label.toLowerCase()}.\nRough idea: "${rough}"\n\nRewrite it now.`;
     const improved = await generateText({ system: optimizerSystem(spec.kind, forBusiness), user, maxTokens: 500 });
-    await meterUser(u.id, 'text');
-    return { prompt: (improved || rough).trim(), improved: !!improved, live: textLlmReady() };
+    if (improved) await meterUser(u.id, 'text'); // only bill when the optimizer actually ran
+    return { prompt: (improved || rough).trim(), improved: !!improved, live: !!improved };
   });
 
   // Agent Studio — turn a plain-language problem into a runnable agent spec for the
@@ -1107,22 +1130,22 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       if (!spec) return { title: 'Custom agent', body: 'This agent is missing its configuration — re-create it in the Agent Studio.' };
       let dataText = '';
       if (spec.dataSource === 'emails') {
-        const e = connector.getRecentEmails ? await connector.getRecentEmails(userId, 25) : [];
+        const e = await safeConn(connector.getRecentEmails ? () => connector.getRecentEmails!(userId, 25) : undefined, []);
         dataText = e.map((m, i) => `${i + 1}. From: ${m.from || '?'} | ${m.subject || '(none)'} | ${m.snippet || ''}`).join('\n');
       } else if (spec.dataSource === 'reviews') {
-        const r = connector.getReviews ? await connector.getReviews(userId) : [];
+        const r = await safeConn(connector.getReviews ? () => connector.getReviews!(userId) : undefined, []);
         dataText = r.map((x) => `${x.rating}★ from ${x.author || 'a customer'}: ${x.text || ''}`).join('\n');
       } else if (spec.dataSource === 'leads') {
-        const l = connector.getLeads ? await connector.getLeads(userId) : [];
+        const l = await safeConn(connector.getLeads ? () => connector.getLeads!(userId) : undefined, []);
         dataText = l.map((x) => `${x.name || 'Lead'} — ${x.service || 'inquiry'} (via ${x.source || 'unknown'})`).join('\n');
       } else if (spec.dataSource === 'social') {
-        const m = connector.getSocialMetrics ? await connector.getSocialMetrics(userId) : null;
+        const m = await safeConn(connector.getSocialMetrics ? () => connector.getSocialMetrics!(userId) : undefined, null);
         dataText = m ? `impressions ${m.impressions}, clicks ${m.clicks}, likes ${m.likes}${m.followers ? `, followers ${m.followers}` : ''}` : '';
       } else if (spec.dataSource === 'adspend') {
-        const s = connector.getAdSpend ? await connector.getAdSpend(userId) : [];
+        const s = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(userId) : undefined, []);
         dataText = s.map((x) => `${x.platform}/${x.campaign}: $${x.spend} spent, ${x.conversions} conversions`).join('\n');
       } else if (spec.dataSource === 'deals') {
-        const d2 = connector.getDeals ? await connector.getDeals(userId) : [];
+        const d2 = await safeConn(connector.getDeals ? () => connector.getDeals!(userId) : undefined, []);
         dataText = d2.map((x) => `$${x.value} ${x.won ? 'won' : 'lost'} via ${x.utmSource || 'unknown'}`).join('\n');
       }
       if (spec.dataSource !== 'none' && !dataText) {
@@ -1137,14 +1160,14 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       return { title: `${spec.name} — ${dl}`, body };
     }
     if (task === 'cpa_report') {
-      const spend = connector.getAdSpend ? await connector.getAdSpend(userId) : [];
-      const deals = connector.getDeals ? await connector.getDeals(userId) : [];
+      const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(userId) : undefined, []);
+      const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(userId) : undefined, []);
       const targetCpa = Number(p.targetCpa) || 85;
       const r = buildCpaReport(spend, deals, targetCpa);
       return { title: r.title, body: r.body };
     }
     if (task === 'email_tasklist') {
-      const emails = connector.getRecentEmails ? await connector.getRecentEmails(userId, 25) : [];
+      const emails = await safeConn(connector.getRecentEmails ? () => connector.getRecentEmails!(userId, 25) : undefined, []);
       const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
       if (!emails.length)
         return {
@@ -1180,20 +1203,20 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       offers: p.currentOffers,
     };
     if (task === 'social_content') {
-      const metrics = connector.getSocialMetrics ? await connector.getSocialMetrics(userId) : null;
+      const metrics = await safeConn(connector.getSocialMetrics ? () => connector.getSocialMetrics!(userId) : undefined, null);
       const { system, user } = socialAgent(ctx);
       const post = (await generateText({ system, user, maxTokens: 500 })) ?? agentFallback('social_content', ctx);
       return { title: `Today's social post — ${dLabel}`, body: `${post}\n\n${metricsLine(metrics)}` };
     }
     if (task === 'review_responder') {
-      const reviews = connector.getReviews ? await connector.getReviews(userId) : [];
+      const reviews = await safeConn(connector.getReviews ? () => connector.getReviews!(userId) : undefined, []);
       const cctx: AgentCtx = { ...ctx, reviews };
       const { system, user } = reviewAgent(cctx);
       const body = (await generateText({ system, user, maxTokens: 700 })) ?? agentFallback('review_responder', cctx);
       return { title: reviews.length ? `Review replies (${reviews.length}) — ${dLabel}` : `Review reply templates — ${dLabel}`, body };
     }
     if (task === 'lead_followup') {
-      const leads = connector.getLeads ? await connector.getLeads(userId) : [];
+      const leads = await safeConn(connector.getLeads ? () => connector.getLeads!(userId) : undefined, []);
       const cctx: AgentCtx = { ...ctx, leads };
       const { system, user } = leadAgent(cctx);
       const body = (await generateText({ system, user, maxTokens: 700 })) ?? agentFallback('lead_followup', cctx);
@@ -1248,7 +1271,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       return { title: `Social media post — ${dLabel}`, body };
     }
     if (task === 'social_report') {
-      const metrics = connector.getSocialMetrics ? await connector.getSocialMetrics(userId) : null;
+      const metrics = await safeConn(connector.getSocialMetrics ? () => connector.getSocialMetrics!(userId) : undefined, null);
       const nowISO = new Date().toISOString();
       const history = recordSnapshot((data.socialHistory as DailySnapshot[]) ?? [], metrics, nowISO);
       const report = buildSocialReport(history, nowISO);
@@ -1338,7 +1361,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   async function runSpeedToLead(userId: string, data: Record<string, unknown>): Promise<{ run: { title: string; body: string } } | null> {
     const st = (data.speedToLead as SpeedToLeadState) ?? null;
     if (!st?.enabled) return null;
-    const leads = connector.getLeads ? await connector.getLeads(userId) : [];
+    const leads = await safeConn(connector.getLeads ? () => connector.getLeads!(userId) : undefined, []);
     const fresh = selectNewLeads(leads, st.contacted);
     if (!fresh.length) return null;
     const p = (data.profile ?? {}) as Record<string, string>;

@@ -43,6 +43,9 @@ export interface Usage {
   period: string; // 'YYYY-MM'
   actions: Partial<Record<MeterKind, number>>;
   credits: number;
+  /** Actual credits charged per kind (per-model aware) so the breakdown reconciles
+   *  with the total even when a non-default model overrides the flat cost. */
+  creditsByKind?: Partial<Record<MeterKind, number>>;
 }
 
 /** The calendar-month key for a date, e.g. "2026-08". */
@@ -62,8 +65,11 @@ export function blankUsage(period: string): Usage {
 export function applyMeter(usage: Usage | undefined, kind: MeterKind, now: Date, n = 1, creditsOverride?: number): Usage {
   const period = periodOf(now);
   const u = usage && usage.period === period ? usage : blankUsage(period);
+  const cost = typeof creditsOverride === 'number' ? creditsOverride : CREDIT_COST[kind] * n;
   u.actions[kind] = (u.actions[kind] ?? 0) + n;
-  u.credits += typeof creditsOverride === 'number' ? creditsOverride : CREDIT_COST[kind] * n;
+  u.creditsByKind = u.creditsByKind ?? {};
+  u.creditsByKind[kind] = (u.creditsByKind[kind] ?? 0) + cost;
+  u.credits += cost;
   return u;
 }
 
@@ -81,7 +87,14 @@ export function summarizeUsage(usage: Usage | undefined, now: Date, allowance = 
   const period = periodOf(now);
   const u = usage && usage.period === period ? usage : blankUsage(period);
   const rows = (Object.keys(CREDIT_COST) as MeterKind[])
-    .map((kind) => ({ kind, label: ACTION_LABEL[kind], count: u.actions[kind] ?? 0, credits: (u.actions[kind] ?? 0) * CREDIT_COST[kind] }))
+    .map((kind) => ({
+      kind,
+      label: ACTION_LABEL[kind],
+      count: u.actions[kind] ?? 0,
+      // Prefer the actual credits charged (per-model aware); fall back to the flat
+      // cost for older records saved before per-kind credits were tracked.
+      credits: u.creditsByKind?.[kind] ?? (u.actions[kind] ?? 0) * CREDIT_COST[kind],
+    }))
     .filter((r) => r.count > 0);
   return {
     period,

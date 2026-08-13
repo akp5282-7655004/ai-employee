@@ -964,7 +964,9 @@ const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=nu
 const money=n=>'$'+Number(n).toLocaleString('en-US');
 
 async function apiMessage(text){ if(REMOTE){const r=await fetch('/api/message',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId,text})});if(!r.ok)throw 0;return r.json();} return agent.handle(text); }
-async function apiConnectRun(actions){ if(REMOTE){const r=await fetch('/api/connect-and-run',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId,actions})});return r.json();} const launched=[];for(const a of actions){connector.connect(USER,a.app);const rr=connector.runAction(USER,a.actionId);if(rr.ok)launched.push(a.label);}return{launched}; }
+// Local (demo) mode only — in REMOTE the caller routes users to Integrations to
+// connect real accounts, so there's no server endpoint to hit here.
+async function apiConnectRun(actions){ const launched=[];for(const a of actions){connector.connect(USER,a.app);const rr=connector.runAction(USER,a.actionId);if(rr.ok)launched.push(a.label);}return{launched}; }
 async function apiValidate(vertical,monthlyBudget,targetLeads){ if(REMOTE){const r=await fetch('/api/validate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({vertical,monthlyBudget,targetLeads})});return r.json();} return validateIntake(vertical,monthlyBudget,targetLeads); }
 async function loadPacks(){ if(REMOTE){try{PACKMETA=await fetch('/api/packs').then(r=>r.json());return;}catch(e){}} PACKMETA=listPacks(); }
 
