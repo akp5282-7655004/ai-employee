@@ -3096,9 +3096,9 @@ async function openSchedules(){ if(!SCHED_LOADED){ if(REMOTE){ try{ const r=awai
 let wfTask=null, wfMode='blueprint', WF=null;
 const WF_KINDS=[['read','📥 Read data'],['generate','🧠 Create with AI'],['act','⚡ Do an action']];
 const WF_TOOLS={
-  read:[['emails','my email inbox'],['leads','my new leads'],['reviews','my reviews'],['social','my social metrics'],['adspend','my ad spend'],['deals','my won / lost deals']],
-  generate:[['summarize','summarize into a checklist / to-do list'],['write','write a reply or message'],['draft','draft an email or social post'],['plan','make a plan or recommendation']],
-  act:[['gohighlevel|Send SMS','send an SMS (CRM)'],['gohighlevel|Send Email','send an email (CRM)'],['gohighlevel|Create contact','add a contact (CRM)'],['gohighlevel|Create task','create a task / checklist (CRM)'],['social|Publish post','publish a social post']],
+  read:[['emails','my email inbox'],['leads','my new leads'],['reviews','my reviews'],['social','my social metrics'],['adspend','my ad spend'],['deals','my won / lost deals'],['custom','✏️ Custom — I’ll describe it']],
+  generate:[['summarize','summarize into a checklist / to-do list'],['write','write a reply or message'],['draft','draft an email or social post'],['plan','make a plan or recommendation'],['custom','✏️ Custom — I’ll describe it']],
+  act:[['gohighlevel|Send SMS','send an SMS (CRM)'],['gohighlevel|Send Email','send an email (CRM)'],['gohighlevel|Create contact','add a contact (CRM)'],['gohighlevel|Create task','create a task / checklist (CRM)'],['social|Publish post','publish a social post'],['custom','✏️ Custom — I’ll describe it']],
 };
 const WF_DAYS=[['Su',0],['Mo',1],['Tu',2],['We',3],['Th',4],['Fr',5],['Sa',6]];
 function newWF(){ return { name:'My custom agent', time:'09:00', days:[1,2,3,4,5], steps:[ {kind:'read',tool:'leads',instruction:''}, {kind:'generate',tool:'write',instruction:'Write a friendly first follow-up for each new lead.'} ] }; }
@@ -3163,8 +3163,9 @@ function renderBuilder(box){
     const kinds=el('div','wfkinds');
     for(const [k,lab] of WF_KINDS){ const b=el('button',st.kind===k?'on':'',lab); b.onclick=()=>{ st.kind=k; st.tool=(WF_TOOLS[k][0]||[''])[0]; renderWireframe(); }; kinds.append(b); }
     s.append(kinds);
-    const sel=el('select','f'); sel.style.cssText='margin:0 0 8px;max-width:420px'; sel.innerHTML=wfToolOptions(st.kind,st.tool); sel.onchange=()=>{ st.tool=sel.value; };
+    const sel=el('select','f'); sel.style.cssText='margin:0 0 8px;max-width:420px'; sel.innerHTML=wfToolOptions(st.kind,st.tool); sel.onchange=()=>{ st.tool=sel.value; renderWireframe(); };
     s.append(sel);
+    if(st.tool==='custom'){ const ci=el('input','f'); ci.style.cssText='margin:0 0 8px;max-width:420px'; ci.placeholder = st.kind==='read'?'What should Miles read? (e.g. my Stripe payments, my Calendly bookings)':st.kind==='act'?'What action should Miles take? (e.g. post to Google Business Profile)':'What should Miles create? (describe it)'; ci.value=st.custom||''; ci.oninput=()=>st.custom=ci.value; s.append(ci); }
     const ta=el('textarea','f'); ta.rows=2; ta.style.margin='0'; ta.placeholder = st.kind==='read'?'Optional note about what to look for…':st.kind==='act'?'What to send / do (Miles fills from earlier steps if blank)…':'What should Miles create in this step?'; ta.value=st.instruction||''; ta.oninput=()=>st.instruction=ta.value; s.append(ta);
     card.append(s);
   });

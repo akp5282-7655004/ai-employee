@@ -302,6 +302,8 @@ export interface AgentStep {
   kind: 'read' | 'generate' | 'act';
   tool: string;
   instruction: string;
+  /** Free-text description when tool === 'custom' (user-defined source/action). */
+  custom?: string;
 }
 
 export interface CustomAgentSpec {

@@ -1568,18 +1568,29 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     for (let i = 0; i < steps.length; i++) {
       const st = steps[i]!;
       const n = i + 1;
+      const custom = (st.custom || '').trim();
       if (st.kind === 'read') {
-        const { text, summary } = await readSourceText(st.tool, userId);
-        ctx += `\n\n[Data from ${st.tool}]\n${text || '(nothing to read — source not connected)'}`;
-        const need = DATA_SOURCES.find((d) => d.id === st.tool)?.connect;
-        lines.push(`📥 Step ${n} · Read ${st.tool} — ${text ? summary : `needs ${need || 'a connection'}`}`);
+        if (st.tool === 'custom') {
+          ctx += `\n\n[Custom source the owner defined]\n${custom || '(no description given)'}`;
+          lines.push(`📥 Step ${n} · Read (custom): ${custom || 'describe the source'} — connect this source in Integrations to pull it live`);
+        } else {
+          const { text, summary } = await readSourceText(st.tool, userId);
+          ctx += `\n\n[Data from ${st.tool}]\n${text || '(nothing to read — source not connected)'}`;
+          const need = DATA_SOURCES.find((d) => d.id === st.tool)?.connect;
+          lines.push(`📥 Step ${n} · Read ${st.tool} — ${text ? summary : `needs ${need || 'a connection'}`}`);
+        }
       } else if (st.kind === 'generate') {
-        const sys = `You are performing ONE step of an automated workflow for the business. Task: ${st.instruction || 'produce the requested output'}. Use the context provided by earlier steps. Return only the output, plain text.`;
-        const out = (await generateText({ system: sys, user: ctx, maxTokens: 700 })) ?? `(${st.instruction || 'generated output'} — add an OpenRouter key to run this live.)`;
+        const task = st.tool === 'custom' ? (custom || st.instruction) : st.instruction;
+        const sys = `You are performing ONE step of an automated workflow for the business. Task: ${task || 'produce the requested output'}. Use the context provided by earlier steps. Return only the output, plain text.`;
+        const out = (await generateText({ system: sys, user: ctx, maxTokens: 700 })) ?? `(${task || 'generated output'} — add an OpenRouter key to run this live.)`;
         lastOut = out;
         ctx += `\n\n[Step ${n} output]\n${out}`;
-        lines.push(`🧠 Step ${n} · ${st.instruction || 'Create'}\n${out}`);
+        lines.push(`🧠 Step ${n} · ${task || 'Create'}\n${out}`);
       } else if (st.kind === 'act') {
+        if (st.tool === 'custom') {
+          lines.push(`⚡ Step ${n} · Custom action: ${custom || 'describe the action'} — ready (connect the tool in Integrations to run it) ⚠︎`);
+          continue;
+        }
         const [app = '', verb = ''] = String(st.tool).split('|');
         let ok = false;
         if (connector.runAppTask && connectedApps.has(app)) {
@@ -2004,9 +2015,11 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       .map((s) => {
         const o = (s ?? {}) as Record<string, unknown>;
         const kind = o.kind === 'read' || o.kind === 'generate' || o.kind === 'act' ? o.kind : 'generate';
-        return { kind, tool: String(o.tool ?? '').slice(0, 80), instruction: String(o.instruction ?? '').slice(0, 500) } as AgentStep;
+        const step: AgentStep = { kind, tool: String(o.tool ?? '').slice(0, 80), instruction: String(o.instruction ?? '').slice(0, 500) };
+        if (o.tool === 'custom' && o.custom) step.custom = String(o.custom).slice(0, 300);
+        return step;
       })
-      .filter((s) => s.tool || s.instruction);
+      .filter((s) => s.tool || s.instruction || s.custom);
   }
   function specFromWireframe(wf: { name?: string; time?: string; days?: number[]; steps?: unknown }): CustomAgentSpec {
     const steps = cleanSteps(wf.steps);
