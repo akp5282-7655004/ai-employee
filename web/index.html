@@ -1801,11 +1801,105 @@ function renderStudioLaunch(){
   const go=el('a',null,'Open the Editor →'); go.style.cssText='color:var(--accent);cursor:pointer;margin-left:auto;white-space:nowrap'; go.onclick=()=>setPage('editor'); b.append(go);
   box.append(b);
 }
-// ── The Editor tab (Canva-style home): upload a photo, brand a short video, or
-// click any of your saved/generated creations to open the full editor. ──
+// ═══ Template engine ═══════════════════════════════════════════════════════
+// Pick a trade + offer → dozens of professional layouts render crisply, auto-
+// filled with the shop's name, phone, brand colors and logo. Every design is a
+// real layout (background + typeset text), so the text is always sharp — never
+// AI-garbled — and can then be tweaked in the editor. Templates are just data,
+// so the library scales to hundreds.
+function _rgb(h){ h=(h||'').replace('#',''); if(h.length===3)h=h.split('').map(c=>c+c).join(''); const n=parseInt(h||'000000',16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; }
+function _lum(h){ const c=_rgb(h); return (0.299*c.r+0.587*c.g+0.114*c.b)/255; }
+function _ink(bg){ return _lum(bg)>0.62?'#0b1020':'#ffffff'; }
+function _scheme(d,v){
+  const b=(d.colors&&d.colors[0])||'#12a08f';
+  if(v===0){ const ik=_ink(b); return {bg:b, ink:ik, sub:ik==='#ffffff'?'rgba(255,255,255,.85)':'rgba(0,0,0,.7)', hi:ik==='#ffffff'?'#ffe27a':'#b91c1c', btn:ik, btnInk:b}; }
+  if(v===1){ return {bg:'#0b1020', ink:'#ffffff', sub:'#c9d2e2', hi:b, btn:b, btnInk:_ink(b)}; }
+  return {bg:'#f4f6f9', ink:'#0b1020', sub:'#5b6472', hi:b, btn:b, btnInk:_ink(b)};
+}
+function _setF(ctx,w,s){ ctx.font=w+' '+Math.max(1,Math.round(s))+'px Inter, "Helvetica Neue", Arial, sans-serif'; }
+function _fit(ctx,txt,maxW,w,start,min){ let s=start; _setF(ctx,w,s); while(ctx.measureText(txt||'').width>maxW && s>min){ s-=2; _setF(ctx,w,s);} return s; }
+function _wrap(ctx,txt,maxW){ const ws=(txt||'').split(/\s+/).filter(Boolean); const out=[]; let ln=''; for(const wd of ws){ const t=ln?ln+' '+wd:wd; if(ctx.measureText(t).width>maxW&&ln){ out.push(ln); ln=wd; } else ln=t; } if(ln)out.push(ln); return out; }
+function _T(ctx,txt,x,y,o){ o=o||{}; _setF(ctx,o.weight||'700',o.size||40); ctx.fillStyle=o.color||'#fff'; ctx.textAlign=o.align||'left'; ctx.textBaseline=o.base||'alphabetic'; if(o.shadow){ ctx.save(); ctx.shadowColor='rgba(0,0,0,.35)'; ctx.shadowBlur=(o.size||40)*0.12; ctx.shadowOffsetY=(o.size||40)*0.04; } ctx.fillText(txt||'',x,y); if(o.shadow) ctx.restore(); }
+function _btn(ctx,cx,y,txt,bg,fg,h){ _setF(ctx,'800',h*0.42); const pad=h*0.6; const w=ctx.measureText(txt||'').width+pad*2; const x=cx-w/2; ctx.fillStyle=bg; roundRectPath(ctx,x,y,w,h,h/2); ctx.fill(); ctx.fillStyle=fg; ctx.textAlign='center'; ctx.textBaseline='middle'; _setF(ctx,'800',h*0.42); ctx.fillText(txt||'',cx,y+h/2); ctx.textBaseline='alphabetic'; return {w,h}; }
+function _logo(ctx,d,x,y,maxW,maxH,align){ const im=d.logo; if(!im||!im.complete||!im.naturalWidth) return 0; const ar=im.naturalWidth/im.naturalHeight; let w=maxW,h=w/ar; if(h>maxH){ h=maxH; w=h*ar; } const dx=align==='right'?(x+maxW-w):(align==='center'?(x+(maxW-w)/2):x); ctx.drawImage(im,dx,y,w,h); return h; }
+function _offer(ctx,txt,x,yTop,maxW,color,align,startFrac,W){ _setF(ctx,'900',1); const s=_fit(ctx,txt,maxW,'900',W*startFrac,W*0.075); _setF(ctx,'900',s); const lines=_wrap(ctx,txt,maxW); let y=yTop+s; const cx=align==='center'?x:x; for(const ln of lines){ _T(ctx,ln,cx,y,{size:s,weight:'900',color:color,align:align||'left'}); y+=s*1.02; } return y; }
+
+// ── Layout painters (each draws a full 1080² design from filled data d) ──
+function tplBold(ctx,W,H,d,v){ const s=_scheme(d,v); ctx.fillStyle=s.bg; ctx.fillRect(0,0,W,H); const m=W*0.09;
+  _T(ctx,(d.headline||'').toUpperCase(),m,H*0.19,{size:_fit(ctx,(d.headline||'').toUpperCase(),W*0.6,'800',W*0.075,W*0.04),weight:'800',color:s.ink});
+  _offer(ctx,d.offer||'',m,H*0.24,W-2*m,s.hi,'left',0.20,W);
+  _btn(ctx,W*0.5,H*0.70,(d.cta||'Call Today')+(d.phone?('   '+d.phone):''),s.btn,s.btnInk,H*0.095);
+  _T(ctx,d.company,m,H*0.91,{size:W*0.05,weight:'800',color:s.ink});
+  if(d.area) _T(ctx,d.area,m,H*0.955,{size:W*0.03,weight:'600',color:s.sub});
+  _logo(ctx,d,W-m-W*0.2,H*0.055,W*0.2,H*0.12,'right'); }
+function tplBadge(ctx,W,H,d,v){ const s=_scheme(d,v); ctx.fillStyle=s.bg; ctx.fillRect(0,0,W,H); const m=W*0.09;
+  ctx.fillStyle=s.hi; ctx.fillRect(0,0,W,H*0.145);
+  _T(ctx,d.company,W*0.5,H*0.098,{size:_fit(ctx,d.company,W-2*m,'800',W*0.05,W*0.03),weight:'800',color:_ink(s.hi),align:'center'});
+  _T(ctx,d.headline||'',W*0.5,H*0.31,{size:_fit(ctx,d.headline||'',W-2*m,'800',W*0.078,W*0.045),weight:'800',color:s.ink,align:'center'});
+  const r=W*0.215,cx=W*0.5,cy=H*0.545; ctx.fillStyle=s.hi; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+  const bs=_fit(ctx,d.offer||'',r*1.7,'900',r*0.5,r*0.16); _T(ctx,d.offer||'',cx,cy+bs*0.33,{size:bs,weight:'900',color:_ink(s.hi),align:'center'});
+  _btn(ctx,cx,H*0.80,d.cta||'Call Today',s.btn,s.btnInk,H*0.085);
+  if(d.phone) _T(ctx,d.phone,cx,H*0.935,{size:W*0.052,weight:'800',color:s.ink,align:'center'});
+  _logo(ctx,d,m,H*0.03,W*0.16,H*0.085,'left'); }
+function tplSplit(ctx,W,H,d,v){ const s=_scheme(d,v); const b=(d.colors&&d.colors[0])||'#12a08f'; const ik=_ink(b); const topH=H*0.6; const m=W*0.08;
+  ctx.fillStyle=b; ctx.fillRect(0,0,W,topH);
+  _T(ctx,(d.headline||'').toUpperCase(),m,H*0.15,{size:_fit(ctx,(d.headline||'').toUpperCase(),W-2*m,'700',W*0.055,W*0.032),weight:'700',color:ik});
+  _offer(ctx,d.offer||'',m,H*0.19,W-2*m,ik,'left',0.17,W);
+  ctx.fillStyle='#ffffff'; ctx.fillRect(0,topH,W,H-topH);
+  _T(ctx,d.company,m,topH+H*0.11,{size:W*0.05,weight:'800',color:'#0b1020'});
+  if(d.phone) _T(ctx,'📞 '+d.phone,m,topH+H*0.19,{size:W*0.044,weight:'700',color:b});
+  _btn(ctx,W*0.72,topH+H*0.055,d.cta||'Book Now',b,ik,H*0.08);
+  _logo(ctx,d,W-m-W*0.2,topH+H*0.14,W*0.2,H*0.1,'right'); }
+function tplCoupon(ctx,W,H,d,v){ const s=_scheme(d,v); ctx.fillStyle=s.bg; ctx.fillRect(0,0,W,H); const m=W*0.1;
+  ctx.strokeStyle=s.hi; ctx.lineWidth=Math.max(3,W*0.006); ctx.setLineDash([W*0.03,W*0.02]); ctx.strokeRect(m*0.6,m*0.6,W-1.2*m,H-1.2*m); ctx.setLineDash([]);
+  _T(ctx,'★ SPECIAL OFFER ★',W*0.5,H*0.2,{size:W*0.045,weight:'800',color:s.hi,align:'center'});
+  _T(ctx,d.headline||'',W*0.5,H*0.29,{size:_fit(ctx,d.headline||'',W-2*m,'700',W*0.06,W*0.035),weight:'700',color:s.ink,align:'center'});
+  _setF(ctx,'900',1); const os=_fit(ctx,d.offer||'',W-2*m,'900',W*0.2,W*0.09); _setF(ctx,'900',os); const ls=_wrap(ctx,d.offer||'',W-2*m); let y=H*0.42+os; for(const ln of ls){ _T(ctx,ln,W*0.5,y,{size:os,weight:'900',color:s.hi,align:'center'}); y+=os*1.02; }
+  _T(ctx,d.company,W*0.5,H*0.78,{size:W*0.05,weight:'800',color:s.ink,align:'center'});
+  if(d.phone) _T(ctx,'Call '+d.phone+' — mention this ad',W*0.5,H*0.85,{size:W*0.032,weight:'600',color:s.sub,align:'center'});
+  _logo(ctx,d,W*0.5-W*0.11,H*0.63,W*0.22,H*0.1,'center'); }
+function tplDark(ctx,W,H,d,v){ const s=_scheme(d,1); ctx.fillStyle=s.bg; ctx.fillRect(0,0,W,H); const b=(d.colors&&d.colors[0])||'#12a08f'; const m=W*0.09;
+  ctx.fillStyle=b; ctx.fillRect(m,H*0.16,W*0.16,H*0.012);
+  _T(ctx,(d.headline||'').toUpperCase(),m,H*0.24,{size:_fit(ctx,(d.headline||'').toUpperCase(),W*0.6,'800',W*0.07,W*0.04),weight:'800',color:'#ffffff'});
+  _offer(ctx,d.offer||'',m,H*0.30,W-2*m,b,'left',0.18,W);
+  _btn(ctx,W*0.5,H*0.72,(d.cta||'Call Today')+(d.phone?('   '+d.phone):''),b,_ink(b),H*0.095);
+  _T(ctx,d.company,m,H*0.91,{size:W*0.048,weight:'800',color:'#ffffff'});
+  if(d.area) _T(ctx,d.area,m,H*0.955,{size:W*0.03,weight:'600',color:s.sub});
+  _logo(ctx,d,W-m-W*0.2,H*0.06,W*0.2,H*0.12,'right'); }
+function tplMinimal(ctx,W,H,d,v){ const s=_scheme(d,2); ctx.fillStyle=s.bg; ctx.fillRect(0,0,W,H); const b=(d.colors&&d.colors[0])||'#12a08f'; const m=W*0.1;
+  ctx.strokeStyle=b; ctx.lineWidth=W*0.02; ctx.strokeRect(m*0.5,m*0.5,W-m,H-m);
+  _T(ctx,d.company.toUpperCase(),W*0.5,H*0.24,{size:_fit(ctx,d.company.toUpperCase(),W-2*m,'700',W*0.045,W*0.028),weight:'700',color:s.sub,align:'center'});
+  _T(ctx,d.headline||'',W*0.5,H*0.4,{size:_fit(ctx,d.headline||'',W-2*m,'800',W*0.075,W*0.045),weight:'800',color:'#0b1020',align:'center'});
+  const os=_fit(ctx,d.offer||'',W-2*m,'900',W*0.17,W*0.08); _T(ctx,d.offer||'',W*0.5,H*0.56,{size:os,weight:'900',color:b,align:'center'});
+  _btn(ctx,W*0.5,H*0.68,d.cta||'Call Today',b,_ink(b),H*0.085);
+  if(d.phone) _T(ctx,d.phone,W*0.5,H*0.82,{size:W*0.05,weight:'800',color:'#0b1020',align:'center'});
+  _logo(ctx,d,W*0.5-W*0.09,H*0.85,W*0.18,H*0.07,'center'); }
+const TPL_PAINTERS=[
+  {name:'Bold',draw:tplBold},{name:'Badge',draw:tplBadge},{name:'Split',draw:tplSplit},
+  {name:'Coupon',draw:tplCoupon},{name:'Dark',draw:tplDark},{name:'Minimal',draw:tplMinimal},
+];
+const TPL_TRADES=['Plumbing','HVAC / Air Conditioning','Electrical','Roofing','Painting','Landscaping / Lawn Care','House Cleaning','Pest Control','Handyman','Garage Doors','Flooring','Auto Repair','Pressure Washing','Window Cleaning','Concrete / Masonry','Fencing','Tree Service','Pool Service','Locksmith','Moving'];
+let TPL_LOGO=null, TPL_LOGO_SRC=null;
+function preloadTplLogo(){ const src=(ASSETS&&ASSETS.logo)||null; if(!src){ TPL_LOGO=null; return Promise.resolve(); } if(src===TPL_LOGO_SRC && TPL_LOGO) return Promise.resolve(); return new Promise(r=>{ const im=new Image(); im.crossOrigin='anonymous'; im.onload=()=>{ TPL_LOGO=im; TPL_LOGO_SRC=src; r(); }; im.onerror=()=>{ TPL_LOGO=null; r(); }; im.src=src; }); }
+function tplData(trade,offer){ const P=(typeof PROFILE!=='undefined'&&PROFILE)||{}; return {
+  company: P.businessName||(ASSETS&&ASSETS.tagline)||'Your Company',
+  phone: P.phone||(ASSETS&&ASSETS.phone)||'',
+  area: P.serviceAreas||'',
+  headline: trade||P.industry||'Our Services',
+  offer: offer||P.currentOffers||'Special Offer',
+  cta: 'Call Today',
+  colors: (typeof BRAND!=='undefined'&&BRAND&&BRAND.colors&&BRAND.colors.length)?BRAND.colors.slice():[],
+  logo: TPL_LOGO,
+}; }
+function renderTplCanvas(painter,variant,d,size){ const W=size||1080,H=size||1080; const cv=document.createElement('canvas'); cv.width=W; cv.height=H; const ctx=cv.getContext('2d'); ctx.textAlign='left'; ctx.textBaseline='alphabetic'; try{ painter.draw(ctx,W,H,d,variant); }catch(e){} return cv; }
+function tplMatchTrade(){ const P=(typeof PROFILE!=='undefined'&&PROFILE)||{}; const hay=((P.industry||'')+' '+(P.services||'')).toLowerCase(); for(const t of TPL_TRADES){ const key=t.split(/[ \/]/)[0].toLowerCase(); if(key&&hay.includes(key)) return t; } return P.industry||TPL_TRADES[0]; }
+
+// ── The Editor tab (Canva-style home): start from a template, upload a photo,
+// brand a short video, or click any saved/generated creation to open the editor. ──
 async function openEditorPage(){
   const box=$('#editor-body'); if(!box) return;
   if(!ASSETS_LOADED) await loadAssets();
+  if(REMOTE && !BRAND){ try{ const bd=await(await fetch('/api/brand')).json(); BRAND=Object.assign({colors:[],keywords:[]}, bd.kit||{}); }catch(e){} }
   box.innerHTML='';
   const card=el('div','mcard'); card.style.maxWidth='1000px';
   card.append(el('h3',null,'Editor'));
@@ -1822,6 +1916,8 @@ async function openEditorPage(){
   bVid.onclick=()=>fVid.click();
   fVid.onchange=()=>{ const f=fVid.files&&fVid.files[0]; if(!f) return; try{ const url=URL.createObjectURL(f); openVideoEditor(url); }catch(e){ toast('Couldn’t open that video.'); } fVid.value=''; };
 
+  renderTemplatePicker(card);
+
   const gt=el('div'); gt.style.cssText='margin:0 0 10px'; gt.innerHTML='<b>Your creations</b> <span class="appsub">— everything you’ve saved or generated. Click one to edit.</span>'; card.append(gt);
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px';
   const plus=el('div'); plus.style.cssText='cursor:pointer;border:2px dashed var(--line);border-radius:10px;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;flex-direction:column;color:var(--muted);gap:2px'; plus.innerHTML='<div style="font-size:30px;line-height:1">＋</div><div class="appsub">Add image</div>'; plus.onclick=()=>fImg.click(); grid.append(plus);
@@ -1830,6 +1926,34 @@ async function openEditorPage(){
   card.append(grid);
   if(!photos.length){ const empty=el('div','appsub'); empty.style.marginTop='12px'; empty.append(document.createTextNode('No creations yet. Upload an image above, or generate one in ')); const lnk=el('a',null,'Creative Studio'); lnk.style.cssText='color:var(--accent);cursor:pointer'; lnk.onclick=()=>setPage('studio'); empty.append(lnk); empty.append(document.createTextNode(' and Save to Assets — it’ll show up here.')); card.append(empty); }
   box.append(card);
+}
+// The "Start from a template" block: choose service + offer, see auto-filled
+// templates, click one to open it in the editor.
+function renderTemplatePicker(card){
+  const sec=el('div'); sec.style.cssText='margin:0 0 28px';
+  const h=el('div'); h.style.cssText='margin:0 0 10px'; h.innerHTML='<b>Start from a template</b> <span class="appsub">— pick your service and offer; Miles fills in your name, phone, colors &amp; logo. Click one to edit.</span>'; sec.append(h);
+  const ctrls=el('div'); ctrls.style.cssText='display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px';
+  const tw=el('div'); tw.innerHTML='<label class="f" style="display:block;margin-bottom:3px">Service</label>'; const tsel=el('select','f'); tsel.style.margin='0'; TPL_TRADES.forEach(t=>{ const o=el('option',null,t); o.value=t; tsel.append(o); }); const dt=tplMatchTrade(); if(![...tsel.options].some(o=>o.value===dt)){ const o=el('option',null,dt); o.value=dt; tsel.insertBefore(o,tsel.firstChild); } tsel.value=dt; tw.append(tsel);
+  const ow=el('div'); ow.style.cssText='flex:1;min-width:220px'; ow.innerHTML='<label class="f" style="display:block;margin-bottom:3px">Your offer</label>'; const oin=el('input','f'); oin.style.cssText='margin:0;width:100%'; oin.placeholder='e.g. 10% Off Repairs · $89 Tune-Up · Free Estimate'; oin.value=((typeof PROFILE!=='undefined'&&PROFILE&&PROFILE.currentOffers)||''); ow.append(oin);
+  const btn=el('button','go','Show templates'); btn.style.flex='none';
+  ctrls.append(tw,ow,btn); sec.append(ctrls);
+  const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px'; sec.append(grid);
+  card.append(sec);
+  const fill=async()=>{
+    grid.innerHTML='<div class="appsub">Designing your templates…</div>';
+    await preloadTplLogo();
+    const trade=tsel.value, offer=oin.value.trim();
+    grid.innerHTML='';
+    for(const p of TPL_PAINTERS){ for(let v=0; v<3; v++){
+      const cv=renderTplCanvas(p,v,tplData(trade,offer),540); const url=cv.toDataURL('image/png');
+      const cell=el('div'); cell.style.cssText='cursor:pointer;border:1px solid var(--line);border-radius:10px;overflow:hidden;aspect-ratio:1/1;background:#fff';
+      const im=el('img'); im.src=url; im.loading='lazy'; im.style.cssText='width:100%;height:100%;object-fit:cover;display:block'; cell.append(im);
+      cell.onclick=()=>{ const big=renderTplCanvas(p,v,tplData(tsel.value,oin.value.trim()),1080); openEditor(big.toDataURL('image/png')); };
+      grid.append(cell);
+    } }
+  };
+  btn.onclick=fill; tsel.onchange=fill; oin.addEventListener('keydown',(e)=>{ if(e.key==='Enter') fill(); });
+  fill();
 }
 // A small grid chooser over the saved Assets photos.
 function openAssetPicker(photos,onPick){
