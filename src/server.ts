@@ -609,7 +609,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const data = await authStore.getUserData(u.id);
     return { model: data.model ?? { mode: 'auto', quality: 'balanced' } };
   });
-  app.put<{ Body: { model?: { mode?: string; quality?: string } } }>('/api/model', async (req, reply) => {
+  app.put<{ Body: { model?: { mode?: string; quality?: string; manualModel?: string } } }>('/api/model', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
@@ -617,6 +617,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     data.model = {
       mode: m.mode === 'manual' ? 'manual' : 'auto',
       quality: ['value', 'balanced', 'max'].includes(m.quality ?? '') ? m.quality : 'balanced',
+      manualModel: typeof m.manualModel === 'string' ? m.manualModel.slice(0, 100) : undefined,
     };
     await authStore.setUserData(u.id, data);
     return { ok: true, model: data.model };

@@ -3372,6 +3372,28 @@ let IS_ADMIN=false;
 const SET_TABS=[['account','Account'],['model','Model'],['team','Team'],['keys','API Keys'],['usage','Usage'],['billing','Billing']];
 function setTabsList(){ return IS_ADMIN ? SET_TABS.concat([['admin','Users'],['feedback','Feedback']]) : SET_TABS; }
 let MODEL={mode:'auto',quality:'balanced'}, MODEL_LOADED=false;
+// The specific models a user can pin under Manual mode (routed via OpenRouter).
+const MODEL_CATALOG=[
+  {vendor:'Anthropic — Claude', models:[
+    {id:'anthropic/claude-opus-4.1',name:'Claude Opus 4.1',note:'Top reasoning · ~4x'},
+    {id:'anthropic/claude-sonnet-4.5',name:'Claude Sonnet 4.5',note:'Balanced · ~2x'},
+    {id:'anthropic/claude-haiku-4.5',name:'Claude Haiku 4.5',note:'Fast & cheap · ~1x'},
+  ]},
+  {vendor:'OpenAI — GPT', models:[
+    {id:'openai/gpt-5',name:'GPT-5',note:'Flagship · ~4x'},
+    {id:'openai/gpt-5-mini',name:'GPT-5 mini',note:'Fast · ~1.5x'},
+    {id:'openai/gpt-4o',name:'GPT-4o',note:'Reliable · ~2x'},
+  ]},
+  {vendor:'Google — Gemini', models:[
+    {id:'google/gemini-2.5-pro',name:'Gemini 2.5 Pro',note:'Strong · ~2x'},
+    {id:'google/gemini-2.5-flash',name:'Gemini 2.5 Flash',note:'Fast · ~1x'},
+  ]},
+  {vendor:'Open source', models:[
+    {id:'meta-llama/llama-3.3-70b-instruct',name:'Llama 3.3 70B',note:'~1x'},
+    {id:'deepseek/deepseek-chat',name:'DeepSeek V3',note:'Cheap · ~1x'},
+    {id:'qwen/qwen-2.5-72b-instruct',name:'Qwen 2.5 72B',note:'~1x'},
+  ]},
+];
 async function loadModel(){ if(!REMOTE){ MODEL_LOADED=true; return; } try{ const r=await fetch('/api/model'); MODEL=(await r.json()).model||MODEL; }catch(e){} MODEL_LOADED=true; }
 async function saveModel(){ if(!REMOTE) return; try{ await fetch('/api/model',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({model:MODEL})}); }catch(e){} }
 function renderSettings(){
@@ -3388,18 +3410,34 @@ function setModel(box){
   [['auto','Auto · recommended'],['manual','Manual']].forEach(md=>{ const b=el('button','tab'+(MODEL.mode===md[0]?' on':''),md[1]); b.onclick=()=>{ MODEL.mode=md[0]; saveModel(); renderSettings(); }; modeRow.append(b); });
   card.append(modeRow);
   const an=el('div','mdesc'); an.style.margin='0 0 6px'; an.textContent=MODEL.mode==='auto'?'Auto picks the cheapest model that clears the bar per task — the profit-optimal path. Most workspaces never leave it.':'Manual locks your workspace to a quality tier. Better output costs more credits; cheaper output makes your balance last longer.'; card.append(an);
-  card.append(el('div','sect-label',MODEL.mode==='manual'?'QUALITY TIER (LOCKED)':'DEFAULT QUALITY'));
-  const tiers=[
-    {v:'value',label:'Value',burn:'~1x',desc:'Lowest cost — favors the cheapest trusted models that still pass quality checks. Best for volume and stretching your balance.'},
-    {v:'balanced',label:'Balanced',burn:'~1.5–2x',desc:'Default. The bar is set by task complexity and your brand — the right model for the job, most of the time.'},
-    {v:'max',label:'Max Intelligence',burn:'~3–5x',desc:'Highest quality — prefers the strongest reasoners even at higher cost. For your most important, customer-facing work.'},
-  ];
-  const opts=el('div'); opts.style.cssText='display:flex;flex-direction:column;gap:10px';
-  for(const t of tiers){ const sel=MODEL.quality===t.v; const row=el('button','acard'); row.style.cssText='text-align:left;cursor:pointer;margin:0;width:100%;border:'+(sel?'2px solid var(--accent)':'1px solid var(--line)');
-    row.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>'+t.label+' <span class="appsub" style="font-weight:500">· '+t.burn+' credit burn</span></b>'+(sel?'<span class="apill active">CURRENT</span>':'<span class="appsub">Select</span>')+'</div><div class="mdesc" style="margin:5px 0 0">'+t.desc+'</div>';
-    row.onclick=()=>{ MODEL.quality=t.v; saveModel(); renderSettings(); toast('Quality set to '+t.label); };
-    opts.append(row); }
-  card.append(opts);
+  if(MODEL.mode==='manual'){
+    card.append(el('div','sect-label','PICK A MODEL'));
+    card.append(el('div','mdesc','Lock Miles to one specific model for every task. Routed through OpenRouter, so any vendor works with a single key. (Auto is smarter for most shops — it picks the best value per task.)'));
+    const wrap=el('div'); wrap.style.cssText='display:flex;flex-direction:column;gap:16px;margin-top:6px';
+    for(const g of MODEL_CATALOG){
+      const grp=el('div'); grp.append(el('div','sect-label',g.vendor));
+      const list=el('div'); list.style.cssText='display:flex;flex-direction:column;gap:8px';
+      for(const m of g.models){ const sel=MODEL.manualModel===m.id; const row=el('button','acard'); row.style.cssText='text-align:left;cursor:pointer;margin:0;width:100%;border:'+(sel?'2px solid var(--accent)':'1px solid var(--line)');
+        row.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>'+esc(m.name)+' <span class="appsub" style="font-weight:500">· '+esc(m.note)+'</span></b>'+(sel?'<span class="apill active">SELECTED</span>':'<span class="appsub">Select</span>')+'</div>';
+        row.onclick=()=>{ MODEL.manualModel=m.id; saveModel(); renderSettings(); toast('Model set to '+m.name); };
+        list.append(row); }
+      grp.append(list); wrap.append(grp);
+    }
+    card.append(wrap);
+  } else {
+    card.append(el('div','sect-label','DEFAULT QUALITY'));
+    const tiers=[
+      {v:'value',label:'Value',burn:'~1x',desc:'Lowest cost — favors the cheapest trusted models that still pass quality checks. Best for volume and stretching your balance.'},
+      {v:'balanced',label:'Balanced',burn:'~1.5–2x',desc:'Default. The bar is set by task complexity and your brand — the right model for the job, most of the time.'},
+      {v:'max',label:'Max Intelligence',burn:'~3–5x',desc:'Highest quality — prefers the strongest reasoners even at higher cost. For your most important, customer-facing work.'},
+    ];
+    const opts=el('div'); opts.style.cssText='display:flex;flex-direction:column;gap:10px';
+    for(const t of tiers){ const sel=MODEL.quality===t.v; const row=el('button','acard'); row.style.cssText='text-align:left;cursor:pointer;margin:0;width:100%;border:'+(sel?'2px solid var(--accent)':'1px solid var(--line)');
+      row.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>'+t.label+' <span class="appsub" style="font-weight:500">· '+t.burn+' credit burn</span></b>'+(sel?'<span class="apill active">CURRENT</span>':'<span class="appsub">Select</span>')+'</div><div class="mdesc" style="margin:5px 0 0">'+t.desc+'</div>';
+      row.onclick=()=>{ MODEL.quality=t.v; saveModel(); renderSettings(); toast('Quality set to '+t.label); };
+      opts.append(row); }
+    card.append(opts);
+  }
   card.append(el('div','verdict tight','🔒 Safety floor: whatever the setting, any money-moving action (launching, pausing, or spending budget) always escalates to a trusted model — Value can make things cheaper, never reckless.'));
   box.append(card);
 }
