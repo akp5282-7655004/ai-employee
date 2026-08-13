@@ -58,6 +58,92 @@ export const BENCHMARK_META = {
   leads: 126_650,
 };
 
+// ── Benchmark Hub — every channel × trade × metric SearchLight publishes ──
+// Modeled on searchlightdigital.io/benchmark-hub. Cells we can source from the LSA
+// benchmark already in this file are filled with REAL numbers; cells that live in a
+// SearchLight article we haven't ingested carry value:null and link to the source,
+// so the hub is honest — a real number or an explicit "add from source", never a
+// fabricated figure.
+
+export interface HubEntry {
+  trade: string;
+  /** 'CPL' | 'ROAS' | 'ROI' | 'Book Rate' | 'Cost/Customer' | 'Insight' … */
+  metric: string;
+  /** The benchmark value, or null when it still needs to be sourced from the article. */
+  value: number | null;
+  unit: 'usd' | 'x' | 'pct' | '';
+  /** The SearchLight article this figure comes from (or should be read from). */
+  source: string;
+  note?: string;
+}
+
+export interface HubChannel {
+  id: string;
+  channel: string;
+  blurb: string;
+  entries: HubEntry[];
+}
+
+const SL = 'https://searchlightdigital.io/';
+
+/** Assemble the hub — LSA filled from the real per-trade benchmark, others linked. */
+export function buildBenchmarkHub(): HubChannel[] {
+  const lsa: HubEntry[] = [
+    { trade: 'All Trades', metric: 'CPL', value: LSA_BLENDED.cpl, unit: 'usd', source: SL + 'google-local-service-ads-cost-per-lead/' },
+    { trade: 'All Trades', metric: 'Cost/Customer', value: LSA_BLENDED.costPerCustomer, unit: 'usd', source: SL + 'google-local-service-ads-cost-per-lead/' },
+  ];
+  for (const t of LSA_TRADES) {
+    const roasSrc = t.trade === 'HVAC' ? SL + 'what-is-a-good-roas-for-hvac-local-services-ads/' : SL + 'google-local-service-ads-cost-per-lead/';
+    lsa.push({ trade: t.trade, metric: 'CPL', value: t.cpl, unit: 'usd', source: SL + 'google-local-service-ads-cost-per-lead/' });
+    lsa.push({ trade: t.trade, metric: 'ROAS', value: t.roas, unit: 'x', source: roasSrc });
+  }
+  // Trades SearchLight publishes for LSA that aren't in our per-trade table yet.
+  lsa.push({ trade: 'Roofing', metric: 'CPL', value: null, unit: 'usd', source: SL + 'roofing-google-lsa-cost-per-lead/' });
+  lsa.push({ trade: 'Garage Door', metric: 'CPL', value: null, unit: 'usd', source: SL + 'garage-door-google-lsa-cost-per-lead/' });
+  lsa.push({ trade: 'Garage Door', metric: 'ROAS', value: null, unit: 'x', source: SL + 'what-is-a-good-roas-for-garage-door-local-services-ads/' });
+
+  return [
+    {
+      id: 'google_ads',
+      channel: 'Google Ads',
+      blurb: 'Search & PMax cost-per-lead and return on ad spend, by trade.',
+      entries: [
+        { trade: 'All Trades', metric: 'CPL', value: 104, unit: 'usd', source: SL + 'what-is-a-good-cost-per-lead-for-hvac-google-ads/', note: 'Blended brand CPL ($149 non-brand) — SearchLight LSA-vs-Google companion.' },
+        { trade: 'HVAC', metric: 'CPL', value: null, unit: 'usd', source: SL + 'what-is-a-good-cost-per-lead-for-hvac-google-ads/' },
+        { trade: 'Plumbing', metric: 'CPL', value: null, unit: 'usd', source: SL + 'plumbing-google-ads-cost-per-lead/' },
+        { trade: 'Roofing', metric: 'CPL', value: null, unit: 'usd', source: SL + 'roofing-google-ads-cost-per-lead/' },
+        { trade: 'Garage Door', metric: 'CPL', value: null, unit: 'usd', source: SL + 'garage-door-google-ads-cost-per-lead/' },
+        { trade: 'HVAC', metric: 'ROAS', value: null, unit: 'x', source: SL + 'what-is-a-good-roas-for-hvac-google-ads' },
+        { trade: 'Garage Door', metric: 'ROAS', value: null, unit: 'x', source: SL + 'what-is-a-good-roas-for-garage-door-google-ads/' },
+      ],
+    },
+    { id: 'lsa', channel: 'Google Local Service Ads', blurb: 'Google Guaranteed — the lowest cost-per-lead channel in home services. Sourced from the SearchLight LSA benchmark.', entries: lsa },
+    { id: 'facebook', channel: 'Facebook Ads', blurb: 'Meta / Facebook return on ad spend for home services.', entries: [{ trade: 'HVAC', metric: 'ROAS', value: null, unit: 'x', source: SL + 'what-is-a-good-roas-for-hvac-facebook-ads/' }] },
+    { id: 'direct_mail', channel: 'Direct Mail', blurb: 'Print & EDDM return on investment.', entries: [{ trade: 'HVAC', metric: 'ROI', value: null, unit: 'x', source: SL + 'what-is-a-good-roi-for-hvac-direct-mail/' }] },
+    { id: 'seo', channel: 'SEO', blurb: 'Organic search return on investment.', entries: [{ trade: 'HVAC', metric: 'ROI', value: null, unit: 'x', source: SL + 'hvac-seo/' }] },
+    {
+      id: 'ai',
+      channel: 'AI',
+      blurb: 'AI ad channels and AI lead-grading performance.',
+      entries: [
+        { trade: 'ChatGPT Ads', metric: 'Insight', value: null, unit: '', source: SL + 'chatgpt-ads-home-services-benchmarks/' },
+        { trade: 'AI Lead Grading', metric: 'Insight', value: null, unit: '', source: SL + 'ai-lead-grading-benchmark-home-services/' },
+      ],
+    },
+    { id: 'lead_quality', channel: 'Lead Quality', blurb: 'How many leads actually turn into booked jobs.', entries: [{ trade: 'Home Services', metric: 'Book Rate', value: LSA_BLENDED.bookRate, unit: 'pct', source: SL + 'book-rate-benchmarks-home-services/' }] },
+  ];
+}
+
+export const BENCHMARK_HUB = buildBenchmarkHub();
+
+/** Count of sourced vs. total benchmark cells across the hub. */
+export function hubCoverage(hub: HubChannel[] = BENCHMARK_HUB): { sourced: number; total: number } {
+  let sourced = 0;
+  let total = 0;
+  for (const c of hub) for (const e of c.entries) { total++; if (e.value != null) sourced++; }
+  return { sourced, total };
+}
+
 export interface Profitability {
   /** Fraction of leads that become paying customers (book × match), as a %. */
   leadToCustomerPct: number;

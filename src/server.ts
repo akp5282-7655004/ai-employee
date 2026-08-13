@@ -7,7 +7,7 @@ import { LlmInterpreter } from './agent/llm.js';
 import { getConnector, type Connector } from './connectors/index.js';
 import { loadConfig, pipedreamReady } from './config.js';
 import { getPack, listPacks, validateIntake } from './packs/index.js';
-import { LSA_TRADES, LSA_BLENDED, LSA_VS_GOOGLE, BENCHMARK_META } from './packs/benchmarks.js';
+import { LSA_TRADES, LSA_BLENDED, LSA_VS_GOOGLE, BENCHMARK_META, BENCHMARK_HUB, hubCoverage } from './packs/benchmarks.js';
 import { generateAdCopy, type CreativeRequest } from './creative/creative.js';
 import { falReady, falGenerateImage, falGenerateVideo, falGenerateAudio, type Aspect } from './creative/fal.js';
 import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText, optimizerSystem, type BrandContext } from './creative/studio.js';
@@ -1597,6 +1597,8 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     blended: LSA_BLENDED,
     vsGoogle: LSA_VS_GOOGLE,
     meta: BENCHMARK_META,
+    hub: BENCHMARK_HUB,
+    coverage: hubCoverage(),
   }));
 
   // Weather-triggered marketing — live conditions for a ZIP + the campaign

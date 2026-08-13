@@ -148,6 +148,19 @@
   .gauge-cap{color:var(--muted);font-size:12px;}
   .legend{display:flex;gap:16px;justify-content:center;margin-top:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);}
   .legend .d{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:middle;}
+  /* Benchmark Hub */
+  .benchsec{border-top:1px solid var(--line);padding-top:14px;margin-top:14px;}
+  .benchsec:first-of-type{border-top:none;padding-top:0;margin-top:0;}
+  .benchsec-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+  .benchsec-h b{font-size:14.5px;}
+  .benchgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+  .benchchip{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel-2);}
+  .benchchip.pending{background:transparent;border-style:dashed;}
+  .bc-lab{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.02em;}
+  .bc-val{font-size:20px;font-weight:800;letter-spacing:-.01em;margin-top:3px;}
+  .bc-add{display:inline-block;margin-top:5px;font-size:12.5px;color:var(--accent);text-decoration:none;}
+  .bc-add:hover{text-decoration:underline;}
+  .bc-note{font-size:11px;color:var(--faint);margin-top:4px;line-height:1.35;}
   label.f{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 5px;}
   input.f,select.f,textarea.f{width:100%;border:1px solid var(--line);background:var(--panel-2);border-radius:9px;padding:10px 12px;font-size:14px;color:var(--ink);font-family:var(--sans);}
   input.f:focus,select.f:focus,textarea.f:focus{outline:none;border-color:var(--accent);background:var(--card);}
@@ -444,6 +457,7 @@
           <div class="verdict" id="verdict"></div>
         </div>
       </div>
+      <div id="benchhub" style="margin-top:16px"></div>
       <div id="bench" style="margin-top:16px"></div>
     </section>
 
@@ -1140,6 +1154,7 @@ function renderMeters(){
     <span><span class="d" style="background:var(--teal)"></span>Typical (${money(pack.cpa.low)}–${money(pack.cpa.high)})</span>
     <span><span class="d" style="background:var(--warn)"></span>High (>${money(pack.cpa.high)})</span>`;
   runValidate();
+  renderBenchmarkHub();
   renderBenchmarks();
 }
 async function runValidate(){
@@ -2922,6 +2937,42 @@ function renderMarketList(){
   if(!items.length) g.append(el('div','appsub','No skills match that search.'));
 }
 
+// The Benchmark Hub — every channel × trade × metric SearchLight publishes. Real
+// numbers where we have them; an "Add from source →" link (honest, no fake figure)
+// where the value still lives in a SearchLight article we haven't ingested.
+let BENCH_HUB=null, BENCH_META=null, BENCH_COV=null;
+function benchVal(e){ if(e.value==null) return null; if(e.unit==='usd') return '$'+e.value.toLocaleString(); if(e.unit==='x') return e.value+'x'; if(e.unit==='pct') return e.value+'%'; return String(e.value); }
+async function renderBenchmarkHub(){
+  const host=$('#benchhub'); if(!host) return;
+  if(BENCH_HUB===null){ if(REMOTE){ try{ const d=await fetch('/api/benchmarks').then(r=>r.json()); BENCH_HUB=d.hub||[]; BENCH_META=d.meta; BENCH_COV=d.coverage; }catch(e){ BENCH_HUB=[]; } } else BENCH_HUB=[]; }
+  const hub=BENCH_HUB||[]; if(!hub.length){ host.innerHTML=''; return; }
+  const cov=BENCH_COV||{sourced:0,total:0};
+  const sections=hub.map(ch=>{
+    const chips=ch.entries.map(e=>{
+      const v=benchVal(e);
+      const val = v!=null
+        ? `<div class="bc-val">${esc(v)}</div>`
+        : `<a class="bc-add" href="${esc(e.source)}" target="_blank" rel="noopener">Add from source →</a>`;
+      return `<div class="benchchip${v==null?' pending':''}">
+        <div class="bc-lab">${esc(e.trade)} · ${esc(e.metric)}</div>
+        ${val}
+        ${e.note?`<div class="bc-note">${esc(e.note)}</div>`:''}
+      </div>`;
+    }).join('');
+    const n=ch.entries.length, live=ch.entries.filter(e=>e.value!=null).length;
+    return `<div class="benchsec">
+      <div class="benchsec-h"><b>${esc(ch.channel)}</b><span class="appsub">${live}/${n} sourced</span></div>
+      <div class="mdesc" style="margin:2px 0 10px">${esc(ch.blurb)}</div>
+      <div class="benchgrid">${chips}</div>
+    </div>`;
+  }).join('');
+  host.innerHTML=`<div class="acard">
+    <div class="ah">Benchmark Hub — CPL, ROAS &amp; ROI by channel and trade</div>
+    <div class="mdesc" style="margin:-8px 0 6px">First-party home-services advertising benchmarks. <b>${cov.sourced} of ${cov.total}</b> cells are live from the SearchLight LSA dataset; the rest link to the source article to add — nothing here is estimated or invented.</div>
+    ${BENCH_META?`<div class="appsub" style="margin-bottom:14px">Source: ${esc(BENCH_META.source)} · ${esc(BENCH_META.period)} · ${(BENCH_META.contractors||0).toLocaleString()} contractors · $${((BENCH_META.spend||0)/1e6).toFixed(1)}M tracked spend.</div>`:''}
+    ${sections}
+  </div>`;
+}
 function renderBenchmarks(){
   const host=$('#bench'); if(!host) return;
   const margin=25;

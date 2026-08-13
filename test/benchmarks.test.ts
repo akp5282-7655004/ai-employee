@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { profitability, LSA_TRADES, LSA_BLENDED } from '../src/packs/benchmarks.js';
+import { profitability, LSA_TRADES, LSA_BLENDED, BENCHMARK_HUB, buildBenchmarkHub, hubCoverage } from '../src/packs/benchmarks.js';
 
 describe('profitability math', () => {
   it('reproduces the article breakeven example (~$85 at 25% margin)', () => {
@@ -39,5 +39,39 @@ describe('profitability math', () => {
       expect(t.bookRate).toBeGreaterThan(0);
       expect(t.roas).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('Benchmark Hub', () => {
+  it('covers every SearchLight channel', () => {
+    const ids = BENCHMARK_HUB.map((c) => c.id);
+    expect(ids).toEqual(['google_ads', 'lsa', 'facebook', 'direct_mail', 'seo', 'ai', 'lead_quality']);
+  });
+
+  it('fills the LSA channel with REAL per-trade numbers (no nulls for our 6 trades)', () => {
+    const lsa = BENCHMARK_HUB.find((c) => c.id === 'lsa')!;
+    for (const t of LSA_TRADES) {
+      const cpl = lsa.entries.find((e) => e.trade === t.trade && e.metric === 'CPL');
+      const roas = lsa.entries.find((e) => e.trade === t.trade && e.metric === 'ROAS');
+      expect(cpl?.value).toBe(t.cpl);
+      expect(roas?.value).toBe(t.roas);
+    }
+  });
+
+  it('never fabricates — unsourced cells are null and carry a source link', () => {
+    for (const c of BENCHMARK_HUB) {
+      for (const e of c.entries) {
+        expect(e.source).toMatch(/^https:\/\/searchlightdigital\.io\//);
+        if (e.value == null) expect(e.source.length).toBeGreaterThan(30); // links out to add it
+        else expect(e.value).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('reports honest coverage (some sourced, some pending)', () => {
+    const cov = hubCoverage();
+    expect(cov.sourced).toBeGreaterThan(0);
+    expect(cov.sourced).toBeLessThan(cov.total); // there are still article cells to add
+    expect(buildBenchmarkHub().length).toBe(BENCHMARK_HUB.length);
   });
 });
