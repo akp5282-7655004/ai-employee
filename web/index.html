@@ -391,6 +391,7 @@
       <div class="navgroup" data-group="marketing">
         <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4 3.6L17 19l-5-3-5 3 1-6.4L4 9l5.8-.7Z"/></svg><span class="hlabel">Marketing</span><svg class="ico chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
         <div class="navkids">
+          <a data-page="editor"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> Editor</a>
           <a data-page="studio"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4 3.6L17 19l-5-3-5 3 1-6.4L4 9l5.8-.7Z"/></svg> Creative Studio</a>
           <a data-page="adstudio"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
           <a data-page="calendar"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg> Content Calendar</a>
@@ -560,6 +561,11 @@
     </section>
 
     <!-- CREATIVE STUDIO -->
+    <!-- EDITOR (Canva-style: pick a creation or upload, then edit) -->
+    <section class="page" id="page-editor">
+      <div id="editor-body" style="max-width:1000px"></div>
+    </section>
+
     <section class="page" id="page-studio">
       <div class="mcard" style="max-width:1000px">
         <h3>Creative Studio</h3>
@@ -1098,7 +1104,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',agents:'Agents & Specialists',schedules:'Scheduled Agents',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',agents:'Agents & Specialists',schedules:'Scheduled Agents',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1117,6 +1123,7 @@ function setPage(id){
   $('#page-weather').classList.toggle('on',id==='weather');
   $('#page-adstudio').classList.toggle('on',id==='adstudio');
   $('#page-studio').classList.toggle('on',id==='studio');
+  $('#page-editor').classList.toggle('on',id==='editor');
   $('#page-hub').classList.toggle('on',id==='hub');
   $('#page-brand').classList.toggle('on',id==='brand');
   $('#page-assets').classList.toggle('on',id==='assets');
@@ -1141,6 +1148,7 @@ function setPage(id){
   if(id==='weather') openWeather();
   if(id==='adstudio') openAdStudio();
   if(id==='studio') openStudio();
+  if(id==='editor') openEditorPage();
   if(id==='hub') openHub();
   if(id==='brand') openBrand();
   if(id==='assets') openAssets();
@@ -1785,27 +1793,43 @@ async function openStudio(){
   studioBrandBanner();
   renderStudioLaunch();
 }
-// ── Design Studio launcher: open the full editor on an uploaded photo, a photo
-// from Assets, or a short video clip — no generating required (this is the
-// "walk up and edit, like Canva" entry point). ──
+// A slim banner inside Creative Studio that routes editing to the dedicated Editor tab.
 function renderStudioLaunch(){
   const box=$('#studio-editor-launch'); if(!box) return; box.innerHTML='';
-  const card=el('div'); card.style.cssText='border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--panel-2)';
-  const h=el('div'); h.innerHTML='<b style="font-size:15px">🎨 Design Studio — edit any image or video</b><div class="appsub" style="margin:4px 0 12px">Upload a photo (or pick one from your Assets) to open the full editor — crop, filters, text and your logo. Or drop in a short video clip to brand it. Nothing to generate.</div>'; card.append(h);
-  const row=el('div'); row.style.cssText='display:flex;gap:8px;flex-wrap:wrap';
+  const b=el('div'); b.style.cssText='display:flex;align-items:center;gap:10px;font-size:13px;padding:10px 12px;border-radius:9px;background:var(--panel-2);border:1px solid var(--line)';
+  b.innerHTML='<span>🎨 <b>Want to edit or brand an image?</b> Upload a photo or open one of your creations in the Editor.</span>';
+  const go=el('a',null,'Open the Editor →'); go.style.cssText='color:var(--accent);cursor:pointer;margin-left:auto;white-space:nowrap'; go.onclick=()=>setPage('editor'); b.append(go);
+  box.append(b);
+}
+// ── The Editor tab (Canva-style home): upload a photo, brand a short video, or
+// click any of your saved/generated creations to open the full editor. ──
+async function openEditorPage(){
+  const box=$('#editor-body'); if(!box) return;
+  if(!ASSETS_LOADED) await loadAssets();
+  box.innerHTML='';
+  const card=el('div','mcard'); card.style.maxWidth='1000px';
+  card.append(el('h3',null,'Editor'));
+  card.append(el('p','mdesc','Edit any image like a design tool — crop, filters, text and your logo. Upload a photo, brand a short video clip, or click one of your creations below to open it.'));
+  const row=el('div'); row.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 22px';
   const bUp=el('button','go','📤 Upload image'); bUp.style.flex='none';
-  const bAsset=el('button','adsave','🖼️ From Assets');
   const bVid=el('button','adsave','🎬 Brand a video');
-  row.append(bUp,bAsset,bVid); card.append(row);
+  row.append(bUp,bVid); card.append(row);
   const fImg=el('input'); fImg.type='file'; fImg.accept='image/*'; fImg.style.display='none';
   const fVid=el('input'); fVid.type='file'; fVid.accept='video/*'; fVid.style.display='none';
-  card.append(fImg,fVid); box.append(card);
-
+  card.append(fImg,fVid);
   bUp.onclick=()=>fImg.click();
   fImg.onchange=async()=>{ const f=fImg.files&&fImg.files[0]; if(!f) return; try{ const url=await downscaleImage(f,1600,'image/png'); openEditor(url); }catch(e){ toast('Couldn’t read that image.'); } fImg.value=''; };
   bVid.onclick=()=>fVid.click();
   fVid.onchange=()=>{ const f=fVid.files&&fVid.files[0]; if(!f) return; try{ const url=URL.createObjectURL(f); openVideoEditor(url); }catch(e){ toast('Couldn’t open that video.'); } fVid.value=''; };
-  bAsset.onclick=async()=>{ if(!ASSETS_LOADED) await loadAssets(); const photos=(ASSETS&&ASSETS.photos)||[]; if(!photos.length){ toast('No photos in Assets yet — use “Upload image”, or add photos in Assets.'); return; } openAssetPicker(photos,(url)=>openEditor(url)); };
+
+  const gt=el('div'); gt.style.cssText='margin:0 0 10px'; gt.innerHTML='<b>Your creations</b> <span class="appsub">— everything you’ve saved or generated. Click one to edit.</span>'; card.append(gt);
+  const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px';
+  const plus=el('div'); plus.style.cssText='cursor:pointer;border:2px dashed var(--line);border-radius:10px;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;flex-direction:column;color:var(--muted);gap:2px'; plus.innerHTML='<div style="font-size:30px;line-height:1">＋</div><div class="appsub">Add image</div>'; plus.onclick=()=>fImg.click(); grid.append(plus);
+  const photos=((ASSETS&&ASSETS.photos)||[]).filter(p=>p&&p.url);
+  for(const p of photos.slice().reverse()){ const cell=el('div'); cell.style.cssText='cursor:pointer;border:1px solid var(--line);border-radius:10px;overflow:hidden;aspect-ratio:1/1;background:var(--panel-2);position:relative'; const im=el('img'); im.src=p.url; im.loading='lazy'; im.style.cssText='width:100%;height:100%;object-fit:cover'; im.onerror=()=>{ cell.style.display='none'; }; cell.append(im); if(p.caption){ const cap=el('div'); cap.textContent=p.caption; cap.style.cssText='position:absolute;left:0;right:0;bottom:0;font-size:10.5px;padding:4px 6px;background:linear-gradient(transparent,rgba(0,0,0,.7));color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'; cell.append(cap); } cell.onclick=()=>openEditor(p.url); grid.append(cell); }
+  card.append(grid);
+  if(!photos.length){ const empty=el('div','appsub'); empty.style.marginTop='12px'; empty.append(document.createTextNode('No creations yet. Upload an image above, or generate one in ')); const lnk=el('a',null,'Creative Studio'); lnk.style.cssText='color:var(--accent);cursor:pointer'; lnk.onclick=()=>setPage('studio'); empty.append(lnk); empty.append(document.createTextNode(' and Save to Assets — it’ll show up here.')); card.append(empty); }
+  box.append(card);
 }
 // A small grid chooser over the saved Assets photos.
 function openAssetPicker(photos,onPick){
