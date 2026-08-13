@@ -3898,8 +3898,15 @@ function mdToHtml(md){
   }
   closeList(); return html;
 }
-// Is this a "go build something" instruction (vs. a question to answer)?
-function isBuildRequest(t){ return /\b(create|make|build|write|draft|design|set ?up|launch|put together|generate|prepare|run|whip up)\b/i.test(t) && /\b(campaign|email|newsletter|ad|ads|post|posts|social|flyer|promo|sequence|blog|marketing)\b/i.test(t); }
+// A report/research/analysis ask is a QUESTION to answer, never a thing to build.
+function isReportRequest(t){ return /\b(report|research|analy[sz]|figure out|find out|look up|how much|how many|what('| i)?s the|demographics?|median (income|age)|who (are|lives|is)|insights?|market research|audience (profile|data)|data on|breakdown|overview of|tell me about|explain)\b/i.test(t); }
+// Is this a "go build/make a marketing asset" instruction (vs. a question)?
+function isBuildRequest(t){
+  if(isReportRequest(t)) return false;
+  const verb=/\b(create|build|write|draft|design|set ?up|launch|put together|generate|prepare|whip up|make me|make a|make an)\b/i.test(t);
+  const asset=/\b(campaign|email|newsletter|ad|ads|post|posts|social|flyer|promo|sequence|blog|landing page)\b/i.test(t);
+  return verb && asset;
+}
 async function send(text,silent){
   const msg=(text!=null?text:cinput.value).trim(); if(!msg) return;
   if(!silent) say('user',msg);
