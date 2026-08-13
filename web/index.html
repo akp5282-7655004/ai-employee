@@ -333,10 +333,16 @@
   .result{margin-top:10px;display:flex;flex-direction:column;gap:7px;} .res-row{display:flex;align-items:center;gap:9px;font-size:13.5px;}
   .rbadge{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 7px;border-radius:6px;flex:none;} .rbadge.ok{background:var(--good-soft);color:var(--good);} .rbadge.hold{background:var(--warn-soft);color:var(--warn);}
   .connect{margin-top:4px;align-self:flex-start;font-weight:600;font-size:13px;color:var(--accent);background:var(--accent-soft);border:none;border-radius:8px;padding:8px 13px;cursor:pointer;}
-  .composer{border-top:1px solid var(--line);padding-top:12px;display:flex;gap:10px;align-items:flex-end;}
-  .composer textarea{flex:1;resize:none;font-family:var(--sans);font-size:15px;color:var(--ink);background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;max-height:120px;outline:none;}
-  .csend{width:44px;height:44px;border-radius:11px;border:none;background:var(--primary);color:var(--primary-ink);font-size:17px;cursor:pointer;}
-  .cmode{height:44px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);border-radius:11px;padding:0 10px;font-size:13px;font-weight:600;font-family:var(--sans);cursor:pointer;outline:none;}
+  .composer{border:1px solid var(--line);background:var(--panel-2);border-radius:22px;padding:8px 10px 8px;display:flex;flex-direction:column;gap:6px;transition:border-color .15s,box-shadow .15s;}
+  .composer:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
+  .composer textarea{width:100%;resize:none;font-family:var(--sans);font-size:15px;color:var(--ink);background:none;border:none;border-radius:0;padding:7px 8px 2px;max-height:150px;outline:none;line-height:1.45;}
+  .cbar{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .cbar-side{display:flex;align-items:center;gap:6px;}
+  .csend{width:36px;height:36px;border-radius:50%;border:none;background:var(--primary);color:var(--primary-ink);font-size:16px;font-weight:700;cursor:pointer;display:grid;place-items:center;transition:transform .08s,opacity .15s;}
+  .csend:active{transform:scale(.92);}
+  .cmic{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer;font-size:16px;display:grid;place-items:center;padding:0;line-height:1;}
+  .cmic:hover{border-color:var(--accent);color:var(--ink);}
+  .cmode{height:34px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:0 12px;font-size:13px;font-weight:600;font-family:var(--sans);cursor:pointer;outline:none;}
   /* Rendered Markdown inside assistant bubbles */
   .emp .bubble h1,.emp .bubble h2,.emp .bubble h3{font-size:15px;font-weight:800;margin:12px 0 5px;}
   .emp .bubble h1:first-child,.emp .bubble h2:first-child,.emp .bubble h3:first-child{margin-top:0;}
@@ -348,9 +354,9 @@
   .emp .bubble.md{white-space:normal;}
   .typing{display:inline-flex;gap:4px}.typing span{width:6px;height:6px;border-radius:50%;background:var(--faint);animation:tb 1s infinite}.typing span:nth-child(2){animation-delay:.15s}.typing span:nth-child(3){animation-delay:.3s}@keyframes tb{0%,60%,100%{opacity:.3}30%{opacity:1}}
   .cplus-wrap{position:relative;flex:none;}
-  .cplus{width:44px;height:44px;border-radius:11px;border:1px solid var(--line);background:var(--panel-2);color:var(--muted);font-size:22px;line-height:1;cursor:pointer;display:grid;place-items:center;}
+  .cplus{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:21px;line-height:1;cursor:pointer;display:grid;place-items:center;}
   .cplus:hover{border-color:var(--accent);color:var(--ink);}
-  .cmenu{position:absolute;bottom:52px;left:0;min-width:210px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 34px rgba(0,0,0,.18);padding:6px;z-index:60;}
+  .cmenu{position:absolute;bottom:44px;left:0;min-width:210px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 34px rgba(0,0,0,.18);padding:6px;z-index:60;}
   .cmitem{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:8px;font-size:14px;color:var(--ink);cursor:pointer;}
   .cmitem:hover{background:var(--panel-2);}
   .cmitem span{width:20px;text-align:center;}
@@ -739,7 +745,19 @@
       <div class="chatview on">
         <span class="back" id="back"><svg class="ico" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Back</span>
         <div class="chat" id="chat" aria-live="polite"></div>
-        <div class="composer"><div class="cplus-wrap"><button class="cplus" id="cplus" title="Add" aria-label="Add">+</button><div class="cmenu" id="cmenu" style="display:none"></div></div><textarea id="cinput" rows="1" placeholder="Ask Miles anything…"></textarea><select id="cmode" class="cmode" title="Answer depth"><option value="easy">⚡ Quick</option><option value="medium" selected>💬 Standard</option><option value="high">🧠 Deep</option><option value="research">🔬 Research</option></select><button class="cmic" id="cmic" title="Speak to Miles" aria-label="Speak to Miles" style="background:none;border:none;cursor:pointer;font-size:18px;padding:0 6px;line-height:1;opacity:.75">🎤</button><button class="csend" id="csend">↑</button></div>
+        <div class="composer">
+          <textarea id="cinput" rows="1" placeholder="Ask Miles anything…"></textarea>
+          <div class="cbar">
+            <div class="cbar-side">
+              <div class="cplus-wrap"><button class="cplus" id="cplus" title="Add" aria-label="Add">+</button><div class="cmenu" id="cmenu" style="display:none"></div></div>
+              <select id="cmode" class="cmode" title="Answer depth"><option value="easy">⚡ Quick</option><option value="medium" selected>💬 Standard</option><option value="high">🧠 Deep</option><option value="research">🔬 Research</option></select>
+            </div>
+            <div class="cbar-side">
+              <button class="cmic" id="cmic" title="Speak to Miles" aria-label="Speak to Miles">🎤</button>
+              <button class="csend" id="csend" aria-label="Send">↑</button>
+            </div>
+          </div>
+        </div>
         <input type="file" id="chat-file" accept="image/*" style="display:none">
       </div>
     </section>
@@ -3963,11 +3981,11 @@ $('#cmode').onchange=()=>{ chatMode=$('#cmode').value; };
     if(!SR){ toast('Voice input needs Chrome or Edge.'); return; }
     if(on){ try{ rec.stop(); }catch(e){} return; }
     rec=new SR(); rec.lang='en-US'; rec.interimResults=true; rec.continuous=false; rec.maxAlternatives=1;
-    on=true; btn.style.opacity='1'; btn.style.color='#e0574a'; btn.textContent='⏺'; cinput.placeholder='Listening…';
+    on=true; btn.style.background='#e0574a'; btn.style.color='#fff'; btn.style.borderColor='#e0574a'; btn.textContent='⏹'; cinput.placeholder='Listening…';
     let finalT='';
     rec.onresult=(e)=>{ let interim=''; for(let i=e.resultIndex;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) finalT+=t; else interim+=t; } cinput.value=(finalT+interim).trim(); cinput.style.height='auto'; cinput.style.height=Math.min(cinput.scrollHeight,160)+'px'; };
     rec.onerror=(e)=>{ if(e&&e.error==='not-allowed') toast('Allow microphone access to talk to Miles.'); };
-    rec.onend=()=>{ on=false; btn.style.color=''; btn.style.opacity='.75'; btn.textContent='🎤'; cinput.placeholder='Ask Miles anything…'; if(cinput.value.trim()) send(); };
+    rec.onend=()=>{ on=false; btn.style.background=''; btn.style.color=''; btn.style.borderColor=''; btn.textContent='🎤'; cinput.placeholder='Ask Miles anything…'; if(cinput.value.trim()) send(); };
     try{ rec.start(); }catch(e){ on=false; }
   };
 })();
