@@ -1282,7 +1282,7 @@ function buildReviewCard(it,onResolved){
   const rev=el('button','adsave','👁 Review'); rev.onclick=()=>openReviewModal(it);
   const ap=el('button','go','✓ Approve & Deploy'); ap.style.flex='none';
   const dm=el('button','adsave','Dismiss');
-  ap.onclick=async()=>{ ap.disabled=true; dm.disabled=true; try{ const r=await(await fetch('/api/review/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:it.id})})).json(); bar.remove(); card.style.opacity='.7'; const done=el('div','verdict ok'); done.textContent=(r&&r.status==='live')?'✓ Approved & deployed — see the Change Log.':'✓ Approved — queued in Deploy to push live.'; card.append(done); onResolved&&onResolved(); }catch(e){ ap.disabled=false; dm.disabled=false; toast('Couldn’t approve — try again.'); } };
+  ap.onclick=async()=>{ ap.disabled=true; dm.disabled=true; try{ const r=await(await fetch('/api/review/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:it.id})})).json(); bar.remove(); card.style.opacity='.7'; const done=el('div','verdict ok'); let msg=(r&&r.status==='live')?'✓ Approved & deployed — see the Change Log.':'✓ Approved — queued in Deploy to push live.'; if(it.kind==='email'){ msg += r&&r.emailed ? ' 📧 Sent to your inbox.' : (r&&r.emailReady===false ? ' Connect an email provider on Render to send it.' : ''); } done.textContent=msg; card.append(done); onResolved&&onResolved(); }catch(e){ ap.disabled=false; dm.disabled=false; toast('Couldn’t approve — try again.'); } };
   dm.onclick=async()=>{ try{ await fetch('/api/review/dismiss',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:it.id})}); }catch(e){} card.style.transition='opacity .2s'; card.style.opacity='0'; setTimeout(()=>{ card.remove(); onResolved&&onResolved(); },200); };
   bar.append(rev,ap,dm); card.append(bar);
   return card;
@@ -3916,17 +3916,21 @@ async function send(text,silent){
 // Miles takes the request, picks the workflow, builds it on-brand, and leaves it
 // in the dashboard review queue.
 async function milesDoTask(text){
-  const b=addRow('emp'); const typ=el('div','typing'); typ.innerHTML='<span></span><span></span><span></span>'; b.append(typ);
-  try{
-    const r=await fetch('/api/miles/task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({request:text})});
-    const d=await r.json(); b.className='bubble md';
-    if(d&&d.ok){
-      b.innerHTML=mdToHtml('🛠️ **On it.** I built your **'+(d.title||'draft')+'** using your brand and offer.\n\nIt’s on your **Dashboard → “For your review.”** Take a look and hit **Approve & Deploy** when it looks right.'+(d.live?'':'\n\n_Demo draft — add an OPENROUTER_API_KEY on Render and I’ll write it fully custom for you._'));
-      logChat('emp','Built: '+(d.title||''));
-      const goto=el('button','go','Go to my review →'); goto.style.marginTop='8px'; goto.onclick=()=>setPage('overview'); b.append(goto);
-    } else { b.textContent='I couldn’t build that just now — try rephrasing what you want.'; }
-    chat.scrollTop=chat.scrollHeight;
-  }catch(e){ b.textContent='Sorry — I couldn’t reach the server just now.'; }
+  const b=addRow('emp'); b.className='bubble';
+  const steps=['Picking the right workflow','Designing with your brand','Writing the copy','Saving it for your review'];
+  const list=el('div'); list.style.cssText='display:flex;flex-direction:column;gap:7px;font-size:13.5px';
+  const rows=steps.map(s=>{ const r=el('div'); r.style.cssText='display:flex;align-items:center;gap:9px;color:var(--muted);transition:color .2s'; const dot=el('span',null,'○'); dot.style.cssText='width:16px;text-align:center;font-weight:700'; r.append(dot,el('span',null,s)); list.append(r); return {r,dot}; });
+  b.append(list); chat.scrollTop=chat.scrollHeight;
+  // Kick off the real build, then play the steps so it always reads as "working".
+  const p=fetch('/api/miles/task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({request:text})}).then(r=>r.json()).catch(()=>null);
+  for(const row of rows){ row.dot.textContent='●'; row.dot.style.color='var(--accent)'; row.r.style.color='var(--ink)'; await new Promise(r=>setTimeout(r,620)); row.dot.textContent='✓'; row.dot.style.color='#16a34a'; }
+  const d=await p; b.className='bubble md'; b.innerHTML='';
+  if(d&&d.ok){
+    b.innerHTML=mdToHtml('✅ **Done.** I built your **'+(d.title||'draft')+'** using your brand and offer.\n\nIt’s on your **Dashboard → “For your review.”** Take a look and hit **Approve & Deploy** when it looks right.'+(d.live?'':'\n\n_Demo draft — add an OPENROUTER_API_KEY on Render and I’ll write it fully custom for you._'));
+    logChat('emp','Built: '+(d.title||''));
+    const goto=el('button','go','Go to my review →'); goto.style.marginTop='8px'; goto.onclick=()=>setPage('overview'); b.append(goto);
+  } else { b.textContent='I couldn’t build that just now — try rephrasing what you want.'; }
+  chat.scrollTop=chat.scrollHeight;
 }
 async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId})}); }catch(e){} } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER); } }
 let CHAT_LOG=[], CHAT_LOADED=false, chatSaveT;

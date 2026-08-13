@@ -929,7 +929,22 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     deploy.queue = deploy.queue.slice(0, 300);
     data.deploy = deploy;
     await authStore.setUserData(u.id, data);
-    return { ok: true, status };
+    // For an email draft, actually send it once a provider is connected. Without a
+    // customer list we send the finished campaign to the owner's own inbox (their
+    // broadcast list lives in their email tool); honest about that either way.
+    let emailed = false;
+    if (item.kind === 'email' && deliveryStatus().email && u.email) {
+      const m = /subject[:*\s]+([^\n]+)/i.exec(String(item.body || ''));
+      const subject = (m?.[1] || item.title).replace(/[*#]/g, '').trim().slice(0, 160);
+      const bodyText = String(item.body || '').replace(/\*\*/g, '').replace(/^#+\s*/gm, '');
+      try {
+        await sendEmail(u.email, subject, bodyText);
+        emailed = true;
+      } catch {
+        /* delivery is best-effort */
+      }
+    }
+    return { ok: true, status, emailed, emailReady: deliveryStatus().email };
   });
   app.post<{ Body: { id?: string } }>('/api/review/dismiss', async (req, reply) => {
     const u = await requireUser(req, reply);
