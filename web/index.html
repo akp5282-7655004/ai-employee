@@ -1594,6 +1594,19 @@ let aTab='overview';
 async function openOverview(){ const box=$('#overview-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading your dashboard…</p>'; let d={}; if(REMOTE){ try{ d=await(await fetch('/api/dashboard')).json(); }catch(e){} } renderOverview(d); }
 function ovNudge(t){ return el('div','verdict tight',t); }
 function ovSync(t){ return el('div','verdict ok',t); }
+// Diagnostic: confirm a connected app actually returns live data, with a clear result.
+async function diagProbe(app,btn){ btn.disabled=true; const old=btn.textContent; btn.textContent='Testing…';
+  try{ const d=await(await fetch('/api/diag/probe?app='+encodeURIComponent(app))).json(); const pr=d.probe||{};
+    let msg;
+    if(d.connector!=='pipedream') msg='This preview uses the demo connector — connect live via Render to pull real data.';
+    else if(!pr.connected) msg='Not connected yet — link '+app.replace('_',' ')+' in Integrations.';
+    else if(pr.error) msg='Connected, but the read errored: '+pr.error;
+    else if(pr.count>0) msg='✓ Live — Miles can read '+pr.count+' record(s). Numbers show on the next refresh.';
+    else msg='Connected, but no data came back yet — the report may still be syncing, or the field mapping needs a tweak. Send me a screenshot of /api/diag/probe?app='+app+' and I’ll lock it in.';
+    toast(msg);
+  }catch(e){ toast('Test failed — try again in a moment.'); }
+  btn.disabled=false; btn.textContent=old;
+}
 function renderOverview(d){
   const box=$('#overview-body'); if(!box) return; box.innerHTML=''; const k=d.kpis||{};
   const head=el('div'); head.innerHTML='<h3 style="margin:0">'+(d.business?esc(d.business):'Your workspace')+' — Dashboard</h3><p class="mdesc" style="margin:4px 0 0;max-width:680px">Everything at a glance. Numbers pull from your live data; anything that needs a connected tool says so instead of showing a fake figure.</p>';
@@ -1605,7 +1618,7 @@ function renderOverview(d){
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px';
   const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<h3 style="margin:0 0 10px">📈 Marketing performance</h3>';
   if(mk.hasData){ const ss=el('div','stats'); ss.append(statCard('Ad spend','$'+(mk.spend||0).toLocaleString()), statCard('Cost / job', mk.cpa!=null?('$'+mk.cpa):'—'), statCard('Revenue','$'+(mk.revenue||0).toLocaleString())); mc.append(ss); if(mk.targetCpa&&mk.cpa!=null) mc.append(el('div','appsub','Target $'+mk.targetCpa+'/job · '+(mk.cpa<=mk.targetCpa?'✅ under target':'⚠︎ over target'))); }
-  else if(mk.connected){ mc.append(ovSync('✓ Google Ads / Meta connected. Miles is pulling your spend & conversions — live numbers land here as soon as your first report syncs (usually within a day).')); }
+  else if(mk.connected){ mc.append(ovSync('✓ Google Ads / Meta connected. Miles is pulling your spend & conversions — live numbers land here as soon as your first report syncs (usually within a day).')); const tb=el('button',null,'Test the connection now →'); tb.style.cssText='margin-top:8px;background:none;border:none;color:var(--accent);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:0'; tb.onclick=()=>diagProbe('google_ads',tb); mc.append(tb); }
   else mc.append(ovNudge('Connect Google Ads / Meta in Integrations to see real spend, cost-per-job & revenue.'));
   grid.append(mc);
   const lk=d.leads||{}, rk=d.reviews||{}; const lc=el('div','mcard'); lc.innerHTML='<h3 style="margin:0 0 10px">📞 Leads & reputation</h3>';

@@ -678,6 +678,22 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     };
   });
 
+  // Diagnostic — confirm a connected app actually returns live data (and expose the
+  // raw shape so the field mapping can be locked in). Reads only the caller's own data.
+  app.get<{ Querystring: { app?: string; query?: string } }>('/api/diag/probe', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const app = (req.query?.app || 'google_ads').toString();
+    let linked: string[] = [];
+    try {
+      linked = [...new Set((await connector.listAccounts(u.id)).map((a) => a.app))];
+    } catch {
+      /* none */
+    }
+    const probe = connector.probe ? await connector.probe(u.id, app, req.query?.query) : { connected: linked.includes(app), count: 0, sample: null, error: 'probe not supported by this connector' };
+    return { connector: connector.name, requestedApp: app, connectedApps: linked, probe };
+  });
+
   // Marketing Hub — campaigns/folders holding saved copy + images, per workspace.
   app.get('/api/hub', async (req, reply) => {
     const u = await requireUser(req, reply);

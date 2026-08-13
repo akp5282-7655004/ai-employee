@@ -330,6 +330,22 @@ export class PipedreamConnector implements Connector {
     }
   }
 
+  // Diagnostic — run the raw read for an app and report exactly what came back,
+  // so the live field mapping can be verified/fixed against a real account.
+  async probe(externalUserId: string, app: string, query?: string): Promise<{ connected: boolean; count: number; sample: unknown; error?: string }> {
+    try {
+      const accts = await this.listAccounts(externalUserId, app);
+      if (!accts.length) return { connected: false, count: 0, sample: null };
+      const gaql = app === 'google_ads' ? 'SELECT campaign.name, metrics.cost_micros, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date DURING LAST_30_DAYS' : undefined;
+      const q = query || (app === 'google_ads' ? 'search report query campaign' : app.includes('facebook') || app.includes('instagram') || app.includes('linkedin') ? 'insights metrics' : app === 'google_my_business' ? 'list reviews' : 'list contacts');
+      const raw = await this.runRead(app, q, externalUserId, gaql ? { query: gaql } : {});
+      const rows = asRows(raw);
+      return { connected: true, count: rows.length, sample: rows[0] ?? raw ?? null };
+    } catch (e) {
+      return { connected: true, count: 0, sample: null, error: String((e as Error).message) };
+    }
+  }
+
   async getLeads(externalUserId: string): Promise<import('./types.js').Lead[]> {
     for (const app of ['gohighlevel', 'hubspot', 'salesforce_rest_api', 'servicetitan', 'jobber', 'housecall_pro']) {
       try {

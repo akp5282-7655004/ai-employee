@@ -173,6 +173,10 @@ export class MockConnector implements Connector {
       { name: 'Tom B.', service: 'Exterior painting quote', source: 'Website form', contacted: false },
     ];
   }
+  async probe(externalUserId: string, app: string): Promise<{ connected: boolean; count: number; sample: unknown; error?: string }> {
+    const connected = this.acc(externalUserId).some((a) => a.app === app);
+    return { connected, count: connected ? 1 : 0, sample: connected ? { note: 'offline mock connector — returns demo data, not live figures', app } : null };
+  }
 
   async runAppTask(req: AppTaskRequest): Promise<AppTaskResult> {
     const summary = summarizeTask(req.app, req.query, req.params);
