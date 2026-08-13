@@ -199,6 +199,28 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   });
   app.get('/login', async (_req, reply) => reply.type('text/html').send(loginPage));
   app.get('/favicon.ico', async (_req, reply) => reply.code(204).send());
+  // Self-hosted third-party assets (the TOAST UI image editor + fabric.js). Served
+  // from web/vendor so the editor has no runtime CDN dependency. Read-only, no auth.
+  app.get<{ Params: Record<string, string> }>('/vendor/*', async (req, reply) => {
+    const rel = req.params['*'] ?? '';
+    if (!rel || rel.includes('..') || rel.startsWith('/')) return reply.code(400).send('bad path');
+    const ext = rel.slice(rel.lastIndexOf('.') + 1).toLowerCase();
+    const types: Record<string, string> = {
+      js: 'application/javascript; charset=utf-8',
+      css: 'text/css; charset=utf-8',
+      svg: 'image/svg+xml',
+      png: 'image/png',
+      map: 'application/json',
+    };
+    try {
+      const buf = readFileSync(join(WEB_DIR, 'vendor', rel));
+      reply.header('content-type', types[ext] ?? 'application/octet-stream');
+      reply.header('cache-control', 'public, max-age=86400');
+      return reply.send(buf);
+    } catch {
+      return reply.code(404).send('not found');
+    }
+  });
   // Scheduler heartbeat — last time the due-tick ran (in-process or via cron).
   let lastTickAt: string | null = null;
   app.get('/health', async () => ({ ok: true, interpreter: interpreter.name, connector: connector.name, store: authStore.name, schedulerLastTick: lastTickAt }));

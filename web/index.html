@@ -1994,10 +1994,84 @@ function renderStudioResult(r,spec){
     const pc=el('div','acard'); pc.style.marginTop='8px'; pc.style.fontSize='13px'; pc.textContent=r.prompt||''; box.append(pc);
   }
 }
-// ═══ Design Editor (v1) — drag your logo & text onto a generated image, then export ═══
-// A lightweight Canva-style canvas editor: background image + movable/resizable
-// logo and text layers, exported to a branded PNG. Video editing is a later phase.
-function openEditor(bgUrl){
+// ═══ Image Editor — TOAST UI Image Editor (MIT, self-hosted under /vendor/tui) ═══
+// The primary photo editor: crop, rotate/flip, filters, free-draw, shapes, icons and
+// text on any generated or uploaded image. Self-hosted, so there's no CDN at runtime.
+// If the library can't load for any reason we fall back to the built-in canvas
+// editor (openEditorLegacy) so editing never breaks.
+let _imgEdLib=null;
+function loadCssOnce(href){ if(document.querySelector('link[data-vendor="'+href+'"]')) return; const l=document.createElement('link'); l.rel='stylesheet'; l.href=href; l.dataset.vendor=href; document.head.appendChild(l); }
+function loadScriptOnce(src){ return new Promise((res,rej)=>{ const has=document.querySelector('script[data-vendor="'+src+'"]'); if(has){ if(has.dataset.ok) res(); else { has.addEventListener('load',()=>res()); has.addEventListener('error',()=>rej(new Error(src))); } return; } const s=document.createElement('script'); s.src=src; s.dataset.vendor=src; s.onload=()=>{ s.dataset.ok='1'; res(); }; s.onerror=()=>rej(new Error(src)); document.head.appendChild(s); }); }
+function ensureImageEditorLib(){
+  if(window.tui&&window.tui.ImageEditor) return Promise.resolve(true);
+  if(_imgEdLib) return _imgEdLib;
+  // The editor bundles fabric but needs the color picker loaded first (it reads
+  // window.tui.colorPicker at construction). CSS first, then picker, then editor.
+  loadCssOnce('/vendor/tui/tui-color-picker.min.css');
+  loadCssOnce('/vendor/tui/tui-image-editor.min.css');
+  _imgEdLib=loadScriptOnce('/vendor/tui/tui-color-picker.min.js')
+    .then(()=>loadScriptOnce('/vendor/tui/tui-image-editor.min.js'))
+    .then(()=>!!(window.tui&&window.tui.ImageEditor))
+    .catch(()=>false);
+  return _imgEdLib;
+}
+const TUI_SVG='/vendor/tui/svg/';
+const TUI_THEME={
+  'common.bi.image':'', 'common.bisize.width':'0','common.bisize.height':'0',
+  'common.backgroundColor':'#0b1020',
+  'header.display':'none',
+  'menu.normalIcon.path':TUI_SVG+'icon-d.svg','menu.normalIcon.name':'icon-d',
+  'menu.activeIcon.path':TUI_SVG+'icon-b.svg','menu.activeIcon.name':'icon-b',
+  'menu.disabledIcon.path':TUI_SVG+'icon-a.svg','menu.disabledIcon.name':'icon-a',
+  'menu.hoverIcon.path':TUI_SVG+'icon-c.svg','menu.hoverIcon.name':'icon-c',
+  'submenu.normalIcon.path':TUI_SVG+'icon-d.svg','submenu.normalIcon.name':'icon-d',
+  'submenu.activeIcon.path':TUI_SVG+'icon-c.svg','submenu.activeIcon.name':'icon-c',
+};
+async function openEditor(bgUrl){
+  const ok=await ensureImageEditorLib();
+  if(!ok){ toast('Loading the full editor failed — opening the quick editor.'); return openEditorLegacy(bgUrl); }
+  const ov=el('div'); ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;display:flex;align-items:center;justify-content:center;padding:12px';
+  const panel=el('div'); panel.style.cssText='background:var(--panel);border:1px solid var(--line);border-radius:14px;width:min(1080px,97vw);max-height:96vh;overflow:hidden;display:flex;flex-direction:column';
+  const head=el('div'); head.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap';
+  const hl=el('div'); hl.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap'; hl.append(el('b',null,'🖼️ Image Editor'));
+  const bLogo=el('button','adsave','🏷️ Add logo'); bLogo.style.cssText='padding:5px 10px;font-size:12px';
+  const bText=el('button','adsave','＋ Text'); bText.style.cssText='padding:5px 10px;font-size:12px';
+  hl.append(bLogo,bText);
+  const close=el('button','idel','✕ Close');
+  head.append(hl,close);
+  const holder=el('div'); holder.style.cssText='width:100%;height:70vh;min-height:340px;position:relative';
+  const foot=el('div'); foot.style.cssText='display:flex;gap:8px;flex-wrap:wrap;padding:12px 14px;border-top:1px solid var(--line)';
+  panel.append(head,holder,foot); ov.append(panel); document.body.append(ov);
+
+  let editor;
+  try{
+    editor=new tui.ImageEditor(holder,{
+      includeUI:{ loadImage:{ path:bgUrl, name:'creative' }, theme:TUI_THEME, menu:['crop','flip','rotate','draw','shape','icon','text','filter'], initMenu:'', menuBarPosition:'bottom', uiSize:{ width:'100%', height:'100%' } },
+      cssMaxWidth:2000, cssMaxHeight:1400,
+      selectionStyle:{ cornerSize:18, rotatingPointOffset:60 },
+      usageStatistics:false,
+    });
+  }catch(e){ ov.remove(); toast('Editor failed to start — opening the quick editor.'); return openEditorLegacy(bgUrl); }
+
+  const brandColor=()=>{ try{ return (BRAND&&BRAND.colors&&BRAND.colors[0])||'#ffffff'; }catch(_){ return '#ffffff'; } };
+  bLogo.onclick=()=>{ if(!(ASSETS&&ASSETS.logo)){ toast('Upload your logo in Assets first'); return; } editor.addImageObject(ASSETS.logo).catch(()=>toast('Couldn’t add the logo (it may block cross-origin).')); };
+  bText.onclick=()=>{ const t=prompt('Text to add:', (typeof PROFILE!=='undefined'&&PROFILE&&PROFILE.currentOffers)||'Book today'); if(t==null) return; editor.addText(t||'Text',{ styles:{ fill:brandColor(), fontSize:48, fontWeight:'bold' }, position:{ x:60, y:60 } }).catch(()=>{}); };
+
+  const exportPng=()=>{ try{ return editor.toDataURL({ format:'png' }); }catch(e){ return null; } };
+  const bSave=el('button','go','Save to Assets'); bSave.style.cssText='padding:6px 14px';
+  bSave.onclick=()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export this image (it blocks cross-origin capture).'); return; } ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:u,caption:'Edited design'}); saveAssets(); toast('Saved to Assets ✓'); };
+  const bDl=el('button','adsave','⤓ Download'); bDl.onclick=()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export (cross-origin image).'); return; } const a=el('a'); a.href=u; a.download='miles-design.png'; a.click(); };
+  const bDeploy=el('button','go','↗ Send to Deploy'); bDeploy.style.cssText='padding:6px 14px';
+  bDeploy.onclick=()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export (cross-origin image).'); return; } if(typeof queueChange==='function') queueChange('creative','Edited design','pending'); ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:u,caption:'Edited design (sent to Deploy)'}); saveAssets(); toast('Sent to Deploy (pending approval)'); };
+  foot.append(bSave,bDl,bDeploy);
+
+  const shut=()=>{ try{ editor.destroy(); }catch(e){} ov.remove(); };
+  close.onclick=shut;
+  ov.addEventListener('mousedown',(e)=>{ if(e.target===ov) shut(); });
+}
+// ═══ Quick Editor (fallback) — the built-in canvas editor: brand-overlay templates,
+// movable logo/text/shapes, PNG export. Used only if the full editor can't load. ═══
+function openEditorLegacy(bgUrl){
   const ov=el('div'); ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px';
   const panel=el('div'); panel.style.cssText='background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:96vw;max-height:96vh;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px';
   const head=el('div'); head.style.cssText='display:flex;justify-content:space-between;align-items:center';
