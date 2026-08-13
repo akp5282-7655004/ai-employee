@@ -14,6 +14,7 @@ import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText,
 import { resolveKit, kitHasGuidance, type BrandKit } from './brand/kit.js';
 import { templatedReady, templatedListTemplates, templatedRender, type RenderLayer } from './creative/templated.js';
 import { buildRecommendations, type Recommendation } from './agents/recommend.js';
+import { adLibraryReady, searchCompetitorAds } from './research/adlibrary.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { catalogForClient, findPlay } from './skills/catalog.js';
 import {
@@ -852,6 +853,24 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     data.deploy = d;
     await authStore.setUserData(u.id, data);
     return { ok: true };
+  });
+
+  // ── Competitor Ad Watch (Meta Ad Library) ────────────────────────────────
+  // Shows the ads a shop's local competitors are running, so the owner can make
+  // their own version of what's already converting. Gated by META_AD_LIBRARY_TOKEN.
+  app.get<{ Querystring: { q?: string } }>('/api/competitor-ads', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (!adLibraryReady()) return { ready: false, ads: [] as unknown[], query: '' };
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const q =
+      (req.query?.q ?? '').trim() ||
+      [p.industry, (p.serviceAreas || '').split(',')[0]?.trim()].filter(Boolean).join(' ') ||
+      p.industry ||
+      'home services';
+    const ads = await searchCompetitorAds({ terms: q, countries: ['US'], limit: 24 });
+    return { ready: true, ads, query: q };
   });
 
   // ── Agent Recommendation Engine ──────────────────────────────────────────
