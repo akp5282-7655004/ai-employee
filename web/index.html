@@ -163,6 +163,13 @@
   .bc-add{display:inline-block;margin-top:5px;font-size:12.5px;color:var(--accent);text-decoration:none;}
   .bc-add:hover{text-decoration:underline;}
   .bc-note{font-size:11px;color:var(--faint);margin-top:4px;line-height:1.35;}
+  /* Agent Wireframe */
+  .wfflow{display:flex;align-items:stretch;margin-top:10px;overflow-x:auto;padding-bottom:8px;}
+  .wfblock{flex:0 0 210px;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel-2);}
+  .wf-n{font-size:9.5px;font-weight:800;color:var(--faint);letter-spacing:.1em;}
+  .wf-h{font-weight:800;font-size:13px;margin:3px 0 6px;}
+  .wf-b{font-size:12px;color:var(--muted);line-height:1.45;}
+  .wfarrow{flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:var(--faint);font-weight:800;padding:0 9px;font-size:18px;}
   label.f{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 5px;}
   input.f,select.f,textarea.f{width:100%;border:1px solid var(--line);background:var(--panel-2);border-radius:9px;padding:10px 12px;font-size:14px;color:var(--ink);font-family:var(--sans);}
   input.f:focus,select.f:focus,textarea.f:focus{outline:none;border-color:var(--accent);background:var(--card);}
@@ -350,6 +357,7 @@
         <div class="navkids">
           <a data-page="agents"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/></svg> Agents &amp; Specialists</a>
           <a data-page="schedules"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M12 3h.01M5 4L3 6M19 4l2 2"/></svg> Scheduled Agents</a>
+          <a data-page="wireframe"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11M3 14h6"/></svg> Agent Wireframe</a>
           <a data-page="autopilot"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M12 12l4-2"/></svg> Autopilot</a>
           <a data-page="skills"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 2.2 5.6L20 9l-4.3 3.8L17 19l-5-3-5 3 1.3-6.2L4 9l5.8-.4Z"/></svg> Skills &amp; Playbooks</a>
         </div>
@@ -358,13 +366,13 @@
       <div class="navgroup" data-group="marketing">
         <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4 3.6L17 19l-5-3-5 3 1-6.4L4 9l5.8-.7Z"/></svg><span class="hlabel">Marketing</span><svg class="ico chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
         <div class="navkids">
-          <a data-page="hub"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg> Marketing Hub</a>
           <a data-page="studio"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4 3.6L17 19l-5-3-5 3 1-6.4L4 9l5.8-.7Z"/></svg> Creative Studio</a>
           <a data-page="adstudio"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
           <a data-page="calendar"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg> Content Calendar</a>
           <a data-page="brand"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7l1.3 3 3.2.2-2.4 2.1.8 3.1L12 13.9 9.1 15.5l.8-3.1L7.5 10.2 10.7 10Z"/></svg> Brand Guidelines</a>
           <a data-page="assets"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Assets</a>
           <a data-page="audit"><svg class="ico" viewBox="0 0 24 24"><path d="M4 4h16v12H4z"/><path d="M4 8h16M8 12h6"/><circle cx="17" cy="18" r="3"/><path d="M19.5 20.5L22 23"/></svg> Website Audit</a>
+          <a data-page="hub"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg> Marketing Hub</a>
         </div>
       </div>
 
@@ -629,6 +637,11 @@
     <!-- SCHEDULED AGENTS -->
     <section class="page" id="page-schedules">
       <div id="schedules-body"></div>
+    </section>
+
+    <!-- AGENT WIREFRAME -->
+    <section class="page" id="page-wireframe">
+      <div id="wireframe-body"></div>
     </section>
 
     <!-- SKILLS -->
@@ -1058,7 +1071,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',agents:'Agents & Specialists',schedules:'Scheduled Agents',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
+const TITLES={overview:'Dashboard',agents:'Agents & Specialists',schedules:'Scheduled Agents',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1068,6 +1081,7 @@ function setPage(id){
   $('#page-overview').classList.toggle('on',id==='overview');
   $('#page-autopilot').classList.toggle('on',id==='autopilot');
   $('#page-schedules').classList.toggle('on',id==='schedules');
+  $('#page-wireframe').classList.toggle('on',id==='wireframe');
   $('#page-skills').classList.toggle('on',id==='skills');
   $('#page-market').classList.toggle('on',id==='market');
   $('#page-meters').classList.toggle('on',id==='meters');
@@ -1091,6 +1105,7 @@ function setPage(id){
   if(id==='overview') openOverview();
   if(id==='autopilot') openAutopilot();
   if(id==='schedules') openSchedules();
+  if(id==='wireframe') openWireframe();
   if(id==='skills') openSkills();
   if(id==='market') openMarket();
   if(homeIds.includes(id) && activeCat==='Math Skills'){ activeCat='Popular tasks'; renderTabs(); renderCards(); }
@@ -1124,10 +1139,12 @@ function openNavGroupFor(id){
     const head=g.querySelector('.navhead'); if(head) head.classList.toggle('active',has);
   });
 }
+// Clicking a group header opens the group AND jumps to its first tab, so the screen
+// changes on the first click (no need to then click the first child separately).
 document.querySelectorAll('#nav .navhead').forEach(h=>h.onclick=()=>{
-  const g=h.closest('.navgroup'); const willOpen=!g.classList.contains('open');
-  document.querySelectorAll('#nav .navgroup').forEach(x=>x.classList.remove('open'));
-  if(willOpen) g.classList.add('open');
+  const g=h.closest('.navgroup');
+  const first=g.querySelector('.navkids a[data-page]');
+  if(first) setPage(first.dataset.page);
 });
 
 // ═══ meters ═══
@@ -2458,6 +2475,36 @@ const SCHED_TASKS_FB=[{task:'morning_brief',label:'Morning brief + to-do list',d
 let SCHED={agents:[],runs:[],tasks:SCHED_TASKS_FB}, SCHED_LOADED=false;
 let DELIVERY={email:false,sms:false};
 async function openSchedules(){ if(!SCHED_LOADED){ if(REMOTE){ try{ const r=await fetch('/api/schedules'); const d=await r.json(); SCHED=d; }catch(e){} try{ DELIVERY=(await (await fetch('/api/delivery/status')).json()).status||DELIVERY; }catch(e){} } if(!SCHED.tasks||!SCHED.tasks.length) SCHED.tasks=SCHED_TASKS_FB; if(!SCHED.agents) SCHED.agents=[]; if(!SCHED.runs) SCHED.runs=[]; SCHED_LOADED=true; } renderSchedules(); }
+
+// ═══ Agent Wireframe — the blueprint of any agent, trigger → delivery ═══
+let wfTask=null;
+async function ensureSched(){ if(SCHED_LOADED) return; if(REMOTE){ try{ const d=await (await fetch('/api/schedules')).json(); SCHED=d; }catch(e){} } if(!SCHED.tasks||!SCHED.tasks.length) SCHED.tasks=SCHED_TASKS_FB; if(!SCHED.agents) SCHED.agents=[]; if(!SCHED.runs) SCHED.runs=[]; SCHED_LOADED=true; }
+async function openWireframe(){ const box=$('#wireframe-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading…</p>'; await ensureSched(); const tasks=(SCHED.tasks||SCHED_TASKS_FB).filter(t=>t.task!=='custom'); if(!wfTask||!tasks.find(t=>t.task===wfTask)) wfTask=tasks[0]&&tasks[0].task; renderWireframe(); }
+function wfBlock(n,icon,label,body){ return '<div class="wfblock"><div class="wf-n">'+n+'</div><div class="wf-h">'+icon+' '+esc(label)+'</div><div class="wf-b">'+esc(body||'')+'</div></div>'; }
+function renderWireframe(){
+  const box=$('#wireframe-body'); if(!box) return;
+  const tasks=(SCHED.tasks||SCHED_TASKS_FB).filter(t=>t.task!=='custom');
+  const t=tasks.find(x=>x.task===wfTask)||tasks[0]; if(!t){ box.innerHTML='<div class="mcard"><p class="mdesc">No agents to wireframe yet.</p></div>'; return; }
+  const card=el('div','mcard');
+  card.innerHTML='<h3 style="margin:0">Agent Wireframe</h3><p class="mdesc" style="margin:6px 0 12px;max-width:660px">The blueprint of any agent — its trigger, what it reads, what Miles does, what it produces, and where it lands. A quick way to see (and sanity-check) exactly how an agent works before you deploy it.</p>';
+  const pick=el('div','vpick'); pick.style.flexWrap='wrap';
+  for(const x of tasks){ const b=el('button',x.task===wfTask?'on':'',(TASK_ICON[x.task]||'🤖')+' '+x.label); b.onclick=()=>{ wfTask=x.task; renderWireframe(); }; pick.append(b); }
+  card.append(pick);
+  const flow=el('div','wfflow');
+  flow.innerHTML=[
+    wfBlock('STEP 1','⏰','Trigger','Runs on a schedule — daily at '+(t.defaultTime||'08:00')+'. You choose the time & days when you deploy it.'),
+    wfBlock('STEP 2','📥','Reads', t.reads||'Your business profile.'),
+    wfBlock('STEP 3','🧠','Miles works', t.instruction||t.description||''),
+    wfBlock('STEP 4','📤','Produces', t.produces||t.description||''),
+    wfBlock('STEP 5','📬','Delivers','Saved to this workspace and sent to you by email or SMS once you turn on delivery.'),
+  ].join('<div class="wfarrow">→</div>');
+  card.append(flow);
+  const row=el('div'); row.style.cssText='display:flex;gap:10px;flex-wrap:wrap;margin-top:16px';
+  const deploy=el('button','go','Deploy this agent →'); deploy.onclick=()=>setPage('schedules');
+  const ask=el('button',null,'Design a custom agent'); ask.style.cssText='background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans)'; ask.onclick=()=>setPage('schedules');
+  row.append(deploy,ask); card.append(row);
+  box.innerHTML=''; box.append(card);
+}
 function deliveryControl(a){
   a.deliver=a.deliver||{};
   const wrap=el('div'); wrap.style.cssText='display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap';
