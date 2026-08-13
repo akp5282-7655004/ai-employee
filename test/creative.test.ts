@@ -37,4 +37,17 @@ describe('generateAdCopy', () => {
     const roofing = generateAdCopy({ vertical: 'home_services', category: 'roofing' });
     expect(roofing[0]!.imagePrompt).toContain('roof');
   });
+
+  it('honors a custom (typed-in) service over the packaged categories', () => {
+    const ads = generateAdCopy({ vertical: 'home_services', customService: 'gutter cleaning', businessName: 'Acme', city: 'Austin, TX' });
+    expect(ads).toHaveLength(3);
+    expect(ads[0]!.body.toLowerCase()).toContain('gutter cleaning');
+    expect(ads[0]!.imagePrompt.toLowerCase()).toContain('gutter cleaning');
+  });
+
+  it('adds anatomy guidance to reduce artifacts (distorted hands/extra limbs)', () => {
+    const ads = generateAdCopy({ vertical: 'home_services', category: 'electrical' });
+    expect(ads[0]!.imagePrompt).toContain('correct human anatomy');
+    expect(ads[0]!.imagePrompt).toContain('no extra limbs');
+  });
 });

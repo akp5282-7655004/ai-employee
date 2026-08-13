@@ -12,12 +12,16 @@ import { suggestOffers } from '../packs/apply.js';
 export interface CreativeRequest {
   vertical?: string;
   category?: string;
+  /** A free-text service the customer typed (the "Custom" option). Overrides category. */
+  customService?: string;
   /** An offer line to feature; if omitted we pick from the pack's offer library. */
   offer?: string;
   businessName?: string;
   city?: string;
   /** The customer's services (first-party), woven into the copy when present. */
   services?: string;
+  /** Chosen image model id (Good/Better/Best/Elite tiers map to these). */
+  model?: string;
 }
 
 export interface AdCreative {
@@ -57,14 +61,22 @@ function firstName(city?: string): string {
  */
 export function generateAdCopy(req: CreativeRequest): AdCreative[] {
   const pack = getPack(req.vertical);
-  const cat = pack.categories.find((c) => c.id === req.category) ?? pack.categories[0]!;
+  const custom = req.customService?.trim();
+  // A typed-in custom service overrides the packaged category list entirely.
+  const cat = custom
+    ? { id: 'custom', label: custom, urgency: 0.5 }
+    : pack.categories.find((c) => c.id === req.category) ?? pack.categories[0]!;
   const biz = req.businessName?.trim() || 'Your Company';
   const place = firstName(req.city);
   const offer =
-    req.offer?.trim() || suggestOffers(pack, cat.id, 1)[0]?.headline || 'Fast, reliable service';
-  const subject = IMAGE_SUBJECT[cat.id] ?? DEFAULT_SUBJECT;
+    req.offer?.trim() || (custom ? '' : suggestOffers(pack, cat.id, 1)[0]?.headline) || 'Fast, reliable service';
+  const subject = custom
+    ? `a friendly professional ${custom.toLowerCase()} specialist helping a customer at their home, clean uniform`
+    : IMAGE_SUBJECT[cat.id] ?? DEFAULT_SUBJECT;
   const urgent = cat.urgency >= 0.7;
-  const imageBase = `professional advertising photography, ${subject}, high quality, natural light, sharp focus`;
+  // Anatomy guidance up front — image models otherwise invent extra hands/arms/limbs
+  // (the "arm coming out of the breaker box" artifact). Keep it realistic and clean.
+  const imageBase = `professional advertising photography, ${subject}, correct human anatomy, natural hands and arms, no extra limbs, no distortions, realistic proportions, high quality, natural light, sharp focus`;
 
   return [
     {

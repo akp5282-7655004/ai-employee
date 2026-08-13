@@ -108,6 +108,22 @@ async function safeConn<T>(fn: (() => Promise<T>) | undefined, empty: T): Promis
   }
 }
 
+// Render one image with the chosen model (routing by provider), always falling back
+// to the reliable default so a premium pick that isn't configured never dead-ends.
+async function renderAdImage(prompt: string, modelId?: string): Promise<string | null> {
+  const picked = modelById(modelId);
+  const chosen = picked && picked.kind === 'image' ? picked : defaultModel('image');
+  const def = defaultModel('image');
+  const aspect: Aspect = '4:5';
+  let url: string | null = null;
+  if (chosen.provider === 'higgsfield') url = (await higgsfieldGenerateImage(prompt, { aspect })).url;
+  else if (chosen.provider === 'google') url = await googleGenerateImage(prompt, { aspect });
+  else if (chosen.provider === 'openai') url = await openaiGenerateImage(prompt, { aspect });
+  else url = await falGenerateImage(prompt, { aspect, model: chosen.falModel });
+  if (!url && chosen.id !== def.id) url = await falGenerateImage(prompt, { aspect, model: def.falModel });
+  return url;
+}
+
 export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   const app = Fastify({ logger: false });
   const store = deps.store ?? new MemorySessionStore();
@@ -909,15 +925,17 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   app.post<{ Body: CreativeRequest }>('/api/creative', async (req) => {
     const body = req.body ?? {};
     const creatives = generateAdCopy(body);
-    if (falReady()) {
-      await Promise.all(
-        creatives.map(async (c) => {
-          const url = await falGenerateImage(c.imagePrompt);
-          if (url) c.imageUrl = url;
-        }),
-      );
-    }
-    return { creatives, imagesLive: falReady() };
+    // Generate each visual with the chosen quality tier (routing by provider, with a
+    // reliable fallback). Attempt regardless of which single key is set; imagesLive
+    // reflects whether anything actually came back.
+    await Promise.all(
+      creatives.map(async (c) => {
+        const url = await renderAdImage(c.imagePrompt, body.model);
+        if (url) c.imageUrl = url;
+      }),
+    );
+    const usedModel = modelById(body.model)?.kind === 'image' ? modelById(body.model)!.id : defaultModel('image').id;
+    return { creatives, imagesLive: creatives.some((c) => !!c.imageUrl), model: usedModel };
   });
 
   // Creative Studio — every marketing asset from one place. Visual types render

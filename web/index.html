@@ -453,8 +453,14 @@
         <div class="vpick" id="ad-vpick"></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px">
           <div><label class="f" style="display:block">Service</label><select class="f" id="ad-cat" style="margin:0;min-width:180px"></select></div>
-          <div style="flex:1;min-width:220px"><label class="f" style="display:block">Offer (optional)</label><input class="f" id="ad-offer" placeholder="e.g. $79 AC tune-up" style="margin:0"></div>
+          <div id="ad-custom-wrap" style="display:none;flex:1;min-width:200px"><label class="f" style="display:block">Your service</label><input class="f" id="ad-custom" placeholder="e.g. gutter cleaning" style="margin:0"></div>
+          <div style="flex:1;min-width:200px"><label class="f" style="display:block">Offer (optional)</label><input class="f" id="ad-offer" placeholder="e.g. $79 AC tune-up" style="margin:0"></div>
           <button class="go" id="ad-go" style="flex:none">Generate ads ✨</button>
+        </div>
+        <div style="margin:12px 0 2px">
+          <label class="f" style="display:block;margin-bottom:6px">Image quality — pick the model, then generate and choose the best result</label>
+          <div class="vpick" id="ad-tier"></div>
+          <div id="ad-tier-hint" class="appsub" style="margin-top:6px"></div>
         </div>
         <div id="ad-imgrow" style="margin:10px 0 0;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
           <span style="font-weight:600">Ad photo:</span>
@@ -1550,9 +1556,20 @@ function breakevenCpl(avgTicket,bookRate,marginPct){ const l2c=(bookRate/100)*(L
 // ═══ ad studio (creative engine) ═══
 let adVert='home_services';
 function adCats(){ const p=PACKMETA.find(x=>x.id===adVert)||PACKMETA[0]; return (p&&p.categories&&p.categories.length)?p.categories:[{id:'',label:'General'}]; }
-function fillAdCats(){ const sel=$('#ad-cat'); if(!sel)return; sel.innerHTML=adCats().filter(c=>c&&c.label).map(c=>`<option value="${c.id}">${c.label}</option>`).join(''); }
+function fillAdCats(){ const sel=$('#ad-cat'); if(!sel)return; const opts=adCats().filter(c=>c&&c.label).map(c=>`<option value="${c.id}">${c.label}</option>`).join(''); sel.innerHTML=opts+'<option value="__custom__">✏️ Custom — enter your own service…</option>'; toggleAdCustom(); }
+function toggleAdCustom(){ const w=$('#ad-custom-wrap'); if(w) w.style.display = ($('#ad-cat')&&$('#ad-cat').value==='__custom__') ? 'block' : 'none'; }
+// Image-quality tiers — plain-language ladder over the media models. Higher tiers
+// render more accurate anatomy/detail (fewer artifacts like distorted hands).
+const AD_TIERS=[
+  {id:'flux-schnell',label:'Good',cr:5,hint:'Fast everyday photos — great for volume.'},
+  {id:'flux-dev',label:'Better',cr:8,hint:'Sharper detail and cleaner results.'},
+  {id:'flux-pro',label:'Best',cr:12,hint:'Most photorealistic — the best pick to avoid artifacts like distorted hands.'},
+  {id:'hf-soul',label:'Elite',cr:18,hint:'Cinematic, director-grade quality (needs Higgsfield set up).'},
+];
+let adTier='flux-schnell';
+function renderAdTiers(){ const box=$('#ad-tier'); if(!box)return; box.innerHTML=''; for(const t of AD_TIERS){ const b=el('button',t.id===adTier?'on':'',t.label+' · '+t.cr+' cr'); b.onclick=()=>{ adTier=t.id; renderAdTiers(); }; box.append(b); } const cur=AD_TIERS.find(t=>t.id===adTier); const h=$('#ad-tier-hint'); if(h) h.textContent=cur?cur.hint:''; }
 function renderAdVpick(){ const vp=$('#ad-vpick'); if(!vp)return; vp.innerHTML=''; for(const p of PACKMETA){ const b=el('button',p.id===adVert?'on':'',p.label); b.onclick=()=>{ adVert=p.id; renderAdVpick(); fillAdCats(); }; vp.append(b); } }
-function openAdStudio(){ if(!PACKMETA.length){ loadPacks().then(()=>{ renderAdVpick(); fillAdCats(); }); return; } renderAdVpick(); fillAdCats(); }
+function openAdStudio(){ if(!PACKMETA.length){ loadPacks().then(()=>{ renderAdVpick(); fillAdCats(); renderAdTiers(); }); return; } renderAdVpick(); fillAdCats(); renderAdTiers(); }
 
 // ═══ creative studio (every marketing asset from one place) ═══
 const STUDIO_FALLBACK=[
@@ -1979,7 +1996,10 @@ async function generateAds(){
   const btn=$('#ad-go'); btn.disabled=true; note.textContent='Miles is writing your ads…'; box.innerHTML='';
   if(!ASSETS_LOADED) await loadAssets();
   try{
-    const payload={vertical:adVert,category:$('#ad-cat').value,offer:($('#ad-offer').value||'').trim(),businessName:(PROFILE&&PROFILE.businessName)||'',city:(PROFILE&&PROFILE.serviceAreas)||'',services:(ASSETS&&ASSETS.services)||(PROFILE&&PROFILE.services)||''};
+    const catVal=$('#ad-cat').value, isCustom=catVal==='__custom__';
+    const customService=isCustom?($('#ad-custom').value||'').trim():'';
+    if(isCustom && !customService){ note.textContent='Enter the service you want ads for.'; btn.disabled=false; return; }
+    const payload={vertical:adVert,category:isCustom?'':catVal,customService,model:adTier,offer:($('#ad-offer').value||'').trim(),businessName:(PROFILE&&PROFILE.businessName)||'',city:(PROFILE&&PROFILE.serviceAreas)||'',services:(ASSETS&&ASSETS.services)||(PROFILE&&PROFILE.services)||''};
     const r=await fetch('/api/creative',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
     const d=await r.json().catch(()=>({}));
     if(!r.ok){ note.textContent=d.error||('HTTP '+r.status); btn.disabled=false; return; }
@@ -1992,6 +2012,7 @@ async function generateAds(){
   btn.disabled=false;
 }
 $('#ad-go').onclick=generateAds;
+$('#ad-cat').onchange=toggleAdCustom;
 
 // ═══ marketing hub (campaigns/folders of copy + images) ═══
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
