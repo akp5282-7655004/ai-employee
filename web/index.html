@@ -1247,6 +1247,47 @@ function gaugeSVG(cpa){
     <circle cx="${cx}" cy="${cy}" r="7" fill="var(--ink)"/></svg>`;
 }
 // ── Agent Recommendation Engine: daily, data-driven, one-click-approve optimizations ──
+const REC_SEV={high:{c:'#e0574a',l:'Act now'},medium:{c:'#f59e0b',l:'Worth doing'},low:{c:'#12a08f',l:'Nice to have'}};
+const REC_CAT={ads:'Ads',leads:'Leads',email:'Email',reputation:'Reputation',content:'Content',speed:'Speed-to-Lead'};
+// One recommendation card, shared by the Dashboard and the Recommendations tab.
+// onResolved(kind) fires after approve/dismiss so callers can update surrounding UI.
+function buildRecCard(r,onResolved){
+  const sev=REC_SEV[r.severity]||REC_SEV.low;
+  const card=el('div','mcard'); card.style.cssText='padding:16px;border-left:4px solid '+sev.c;
+  const top=el('div'); top.style.cssText='display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap';
+  const chip=el('span',null,sev.l); chip.style.cssText='font-size:11px;font-weight:700;color:#fff;background:'+sev.c+';padding:2px 8px;border-radius:999px';
+  const cat=el('span',null,REC_CAT[r.category]||r.category); cat.style.cssText='font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)';
+  top.append(chip,cat); card.append(top);
+  const title=el('div',null,r.title); title.style.cssText='font-weight:700;font-size:15px;margin-bottom:4px'; card.append(title);
+  card.append(el('p','appsub',r.why));
+  const act=el('div'); act.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin:8px 0;font-size:13px'; act.innerHTML='<b>Recommended:</b> '+esc(r.action); card.append(act);
+  const bar=el('div'); bar.style.cssText='display:flex;gap:8px';
+  const ap=el('button','go','✓ Approve'); ap.style.flex='none';
+  const dm=el('button','adsave','Dismiss');
+  ap.onclick=async()=>{ ap.disabled=true; dm.disabled=true; ap.textContent='Applying…'; try{ const res=await(await fetch('/api/recommendations/apply',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rec:r})})).json(); bar.remove(); card.style.opacity='.7'; const done=el('div','verdict ok'); done.textContent=(res&&res.status==='live')?'✓ Approved & applied — see the Change Log.':'✓ Approved — queued in Deploy for you to push live.'; card.append(done); onResolved&&onResolved('approved'); }catch(e){ ap.disabled=false; dm.disabled=false; ap.textContent='✓ Approve'; toast('Couldn’t apply that — try again.'); } };
+  dm.onclick=async()=>{ try{ await fetch('/api/recommendations/dismiss',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id})}); }catch(e){} card.style.transition='opacity .2s'; card.style.opacity='0'; setTimeout(()=>{ card.remove(); onResolved&&onResolved('dismissed'); },200); };
+  bar.append(ap,dm); card.append(bar);
+  return card;
+}
+// The top few recommendations, surfaced right on the Dashboard so approvals need no digging.
+async function fillDashRecs(wrap){
+  if(!REMOTE) return;
+  let d={recommendations:[]};
+  try{ d=await(await fetch('/api/recommendations')).json(); }catch(e){ return; }
+  const recs=d.recommendations||[]; if(!recs.length){ wrap.remove(); return; }
+  wrap.innerHTML='';
+  const head=el('div'); head.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px';
+  head.innerHTML='<h3 style="margin:0">💡 Recommendations for you</h3>';
+  const see=el('a',null,'See all ('+recs.length+') →'); see.style.cssText='color:var(--accent);cursor:pointer;font-size:13px;white-space:nowrap'; see.onclick=()=>setPage('recs'); head.append(see);
+  wrap.append(head);
+  const list=el('div'); list.style.cssText='display:flex;flex-direction:column;gap:12px'; wrap.append(list);
+  const shown=recs.slice(0,3);
+  const foot=el('div','appsub'); foot.style.marginTop='8px';
+  const refresh=()=>{ if(!list.querySelector('.mcard')){ foot.textContent='✅ All caught up — nice work.'; } };
+  shown.forEach(r=>list.append(buildRecCard(r,refresh)));
+  if(recs.length>3){ foot.textContent='+ '+(recs.length-3)+' more — open Recommendations to see the rest.'; foot.style.cursor='pointer'; foot.onclick=()=>setPage('recs'); wrap.append(foot); }
+  else wrap.append(foot);
+}
 async function openRecs(){
   const box=$('#recs-body'); if(!box) return;
   box.innerHTML='<p class="appsub">Reviewing your marketing…</p>';
@@ -1265,26 +1306,7 @@ async function openRecs(){
     box.append(empty); return;
   }
   const wrap=el('div'); wrap.style.cssText='display:flex;flex-direction:column;gap:12px;margin-top:14px';
-  const SEV={high:{c:'#e0574a',l:'Act now'},medium:{c:'#f59e0b',l:'Worth doing'},low:{c:'#12a08f',l:'Nice to have'}};
-  const CAT={ads:'Ads',leads:'Leads',email:'Email',reputation:'Reputation',content:'Content',speed:'Speed-to-Lead'};
-  for(const r of recs){
-    const sev=SEV[r.severity]||SEV.low;
-    const card=el('div','mcard'); card.style.cssText='padding:16px;border-left:4px solid '+sev.c;
-    const top=el('div'); top.style.cssText='display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap';
-    const chip=el('span',null,sev.l); chip.style.cssText='font-size:11px;font-weight:700;color:#fff;background:'+sev.c+';padding:2px 8px;border-radius:999px';
-    const cat=el('span',null,CAT[r.category]||r.category); cat.style.cssText='font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)';
-    top.append(chip,cat); card.append(top);
-    const title=el('div',null,r.title); title.style.cssText='font-weight:700;font-size:15px;margin-bottom:4px'; card.append(title);
-    card.append(el('p','appsub',r.why));
-    const act=el('div'); act.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin:8px 0;font-size:13px'; act.innerHTML='<b>Recommended:</b> '+esc(r.action); card.append(act);
-    const bar=el('div'); bar.style.cssText='display:flex;gap:8px';
-    const ap=el('button','go','✓ Approve'); ap.style.flex='none';
-    const dm=el('button','adsave','Dismiss');
-    ap.onclick=async()=>{ ap.disabled=true; dm.disabled=true; ap.textContent='Applying…'; try{ const res=await(await fetch('/api/recommendations/apply',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rec:r})})).json(); bar.remove(); card.style.opacity='.7'; const done=el('div','verdict ok'); done.textContent=(res&&res.status==='live')?'✓ Approved & applied — see the Change Log.':'✓ Approved — queued in Deploy for you to push live.'; card.append(done); }catch(e){ ap.disabled=false; dm.disabled=false; ap.textContent='✓ Approve'; toast('Couldn’t apply that — try again.'); } };
-    dm.onclick=async()=>{ try{ await fetch('/api/recommendations/dismiss',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id})}); }catch(e){} card.style.transition='opacity .2s'; card.style.opacity='0'; setTimeout(()=>card.remove(),200); };
-    bar.append(ap,dm); card.append(bar);
-    wrap.append(card);
-  }
+  for(const r of recs) wrap.append(buildRecCard(r));
   box.append(wrap);
 }
 function renderMeters(){
@@ -1680,6 +1702,8 @@ function renderOverview(d){
   const box=$('#overview-body'); if(!box) return; box.innerHTML=''; const k=d.kpis||{};
   const head=el('div'); head.innerHTML='<h3 style="margin:0">'+(d.business?esc(d.business):'Your workspace')+' — Dashboard</h3><p class="mdesc" style="margin:4px 0 0;max-width:680px">Everything at a glance. Numbers pull from your live data; anything that needs a connected tool says so instead of showing a fake figure.</p>';
   box.append(head);
+  // Recommendations, front and center — approve right here, no digging through tabs.
+  const recWrap=el('div'); recWrap.style.cssText='margin:18px 0'; box.append(recWrap); fillDashRecs(recWrap);
   const g=el('div','stats'); g.style.cssText='margin:16px 0;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
   g.append(statCard('Pending approvals',k.pendingApprovals||0), statCard('Changes live',k.liveChanges||0), statCard('Agents deployed',k.agentsDeployed||0), statCard('Agent runs (7d)',k.agentRuns7d||0), statCard('Scheduled posts',k.scheduledPosts||0), statCard('Credits used',(k.creditsUsed||0).toLocaleString()), statCard('Weather triggers',k.weatherTriggers||0));
   box.append(g);
