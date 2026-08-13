@@ -282,14 +282,28 @@ export const DATA_SOURCES: DataSourceSpec[] = [
   { id: 'none', label: 'no live data (works from your business profile)', connect: '' },
 ];
 
+/**
+ * One node in a wireframe-built agent. Steps run in order; each either READS a data
+ * source, CREATES something with the LLM, or DOES an action through a connected app.
+ * `tool` is: a DataSource id (read), a generate mode like 'summarize'|'write'|'draft'
+ * (generate), or "app|verb" e.g. "gohighlevel|Send SMS" (act).
+ */
+export interface AgentStep {
+  kind: 'read' | 'generate' | 'act';
+  tool: string;
+  instruction: string;
+}
+
 export interface CustomAgentSpec {
   name: string;
   description: string;
   dataSource: DataSource;
-  /** The instruction the LLM follows every time the agent runs. */
+  /** The instruction the LLM follows every time the agent runs (single-step agents). */
   systemPrompt: string;
   time: string;
   days: number[];
+  /** Present for wireframe-built agents — an ordered multi-step flow. */
+  steps?: AgentStep[];
 }
 
 /** Ask the LLM to compile a plain-language problem into a runnable agent spec (JSON). */

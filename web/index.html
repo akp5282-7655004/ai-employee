@@ -170,6 +170,20 @@
   .wf-h{font-weight:800;font-size:13px;margin:3px 0 6px;}
   .wf-b{font-size:12px;color:var(--muted);line-height:1.45;}
   .wfarrow{flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:var(--faint);font-weight:800;padding:0 9px;font-size:18px;}
+  /* Agent Wireframe builder */
+  .wfstep{border:1.5px solid var(--line);border-radius:12px;padding:14px;background:var(--panel-2);}
+  .wfconn{display:flex;justify-content:center;color:var(--faint);font-size:18px;padding:5px 0;}
+  .wfstep-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;}
+  .wfstep-h b{font-size:13px;}
+  .wf-x{border:none;background:none;color:var(--faint);cursor:pointer;font-size:16px;line-height:1;}
+  .wfkinds{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px;}
+  .wfkinds button{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:var(--sans);color:var(--muted);}
+  .wfkinds button.on{background:var(--ink);color:var(--card);border-color:var(--ink);}
+  .wfday{width:32px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--card);cursor:pointer;font-size:11px;font-weight:700;color:var(--muted);}
+  .wfday.on{background:var(--brand);color:#fff;border-color:var(--brand);}
+  .wftabs{display:inline-flex;gap:4px;background:var(--panel-2);border-radius:10px;padding:4px;margin-bottom:16px;}
+  .wftabs button{border:none;background:transparent;padding:8px 14px;border-radius:7px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:var(--sans);}
+  .wftabs button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow);}
   label.f{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 5px;}
   input.f,select.f,textarea.f{width:100%;border:1px solid var(--line);background:var(--panel-2);border-radius:9px;padding:10px 12px;font-size:14px;color:var(--ink);font-family:var(--sans);}
   input.f:focus,select.f:focus,textarea.f:focus{outline:none;border-color:var(--accent);background:var(--card);}
@@ -2541,17 +2555,32 @@ let SCHED={agents:[],runs:[],tasks:SCHED_TASKS_FB}, SCHED_LOADED=false;
 let DELIVERY={email:false,sms:false};
 async function openSchedules(){ if(!SCHED_LOADED){ if(REMOTE){ try{ const r=await fetch('/api/schedules'); const d=await r.json(); SCHED=d; }catch(e){} try{ DELIVERY=(await (await fetch('/api/delivery/status')).json()).status||DELIVERY; }catch(e){} } if(!SCHED.tasks||!SCHED.tasks.length) SCHED.tasks=SCHED_TASKS_FB; if(!SCHED.agents) SCHED.agents=[]; if(!SCHED.runs) SCHED.runs=[]; SCHED_LOADED=true; } renderSchedules(); }
 
-// ═══ Agent Wireframe — the blueprint of any agent, trigger → delivery ═══
-let wfTask=null;
+// ═══ Agent Wireframe — prebuilt blueprints + a visual builder for custom agents ═══
+let wfTask=null, wfMode='blueprint', WF=null;
+const WF_KINDS=[['read','📥 Read data'],['generate','🧠 Create with AI'],['act','⚡ Do an action']];
+const WF_TOOLS={
+  read:[['emails','my email inbox'],['leads','my new leads'],['reviews','my reviews'],['social','my social metrics'],['adspend','my ad spend'],['deals','my won / lost deals']],
+  generate:[['summarize','summarize into a checklist / to-do list'],['write','write a reply or message'],['draft','draft an email or social post'],['plan','make a plan or recommendation']],
+  act:[['gohighlevel|Send SMS','send an SMS (CRM)'],['gohighlevel|Send Email','send an email (CRM)'],['gohighlevel|Create contact','add a contact (CRM)'],['gohighlevel|Create task','create a task / checklist (CRM)'],['social|Publish post','publish a social post']],
+};
+const WF_DAYS=[['Su',0],['Mo',1],['Tu',2],['We',3],['Th',4],['Fr',5],['Sa',6]];
+function newWF(){ return { name:'My custom agent', time:'09:00', days:[1,2,3,4,5], steps:[ {kind:'read',tool:'leads',instruction:''}, {kind:'generate',tool:'write',instruction:'Write a friendly first follow-up for each new lead.'} ] }; }
 async function ensureSched(){ if(SCHED_LOADED) return; if(REMOTE){ try{ const d=await (await fetch('/api/schedules')).json(); SCHED=d; }catch(e){} } if(!SCHED.tasks||!SCHED.tasks.length) SCHED.tasks=SCHED_TASKS_FB; if(!SCHED.agents) SCHED.agents=[]; if(!SCHED.runs) SCHED.runs=[]; SCHED_LOADED=true; }
-async function openWireframe(){ const box=$('#wireframe-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading…</p>'; await ensureSched(); const tasks=(SCHED.tasks||SCHED_TASKS_FB).filter(t=>t.task!=='custom'); if(!wfTask||!tasks.find(t=>t.task===wfTask)) wfTask=tasks[0]&&tasks[0].task; renderWireframe(); }
-function wfBlock(n,icon,label,body){ return '<div class="wfblock"><div class="wf-n">'+n+'</div><div class="wf-h">'+icon+' '+esc(label)+'</div><div class="wf-b">'+esc(body||'')+'</div></div>'; }
+async function openWireframe(){ const box=$('#wireframe-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading…</p>'; await ensureSched(); const tasks=(SCHED.tasks||SCHED_TASKS_FB).filter(t=>t.task!=='custom'); if(!wfTask||!tasks.find(t=>t.task===wfTask)) wfTask=tasks[0]&&tasks[0].task; if(!WF) WF=newWF(); renderWireframe(); }
 function renderWireframe(){
-  const box=$('#wireframe-body'); if(!box) return;
+  const box=$('#wireframe-body'); if(!box) return; box.innerHTML='';
+  const tabs=el('div','wftabs');
+  const t1=el('button',wfMode==='blueprint'?'on':'','📐 Prebuilt blueprints'); t1.onclick=()=>{ wfMode='blueprint'; renderWireframe(); };
+  const t2=el('button',wfMode==='build'?'on':'','🛠 Design a custom agent'); t2.onclick=()=>{ wfMode='build'; renderWireframe(); };
+  tabs.append(t1,t2); box.append(tabs);
+  if(wfMode==='build') renderBuilder(box); else renderBlueprint(box);
+}
+function wfBlock(n,icon,label,body){ return '<div class="wfblock"><div class="wf-n">'+n+'</div><div class="wf-h">'+icon+' '+esc(label)+'</div><div class="wf-b">'+esc(body||'')+'</div></div>'; }
+function renderBlueprint(box){
   const tasks=(SCHED.tasks||SCHED_TASKS_FB).filter(t=>t.task!=='custom');
-  const t=tasks.find(x=>x.task===wfTask)||tasks[0]; if(!t){ box.innerHTML='<div class="mcard"><p class="mdesc">No agents to wireframe yet.</p></div>'; return; }
+  const t=tasks.find(x=>x.task===wfTask)||tasks[0]; if(!t){ box.append(el('div','mcard')); return; }
   const card=el('div','mcard');
-  card.innerHTML='<h3 style="margin:0">Agent Wireframe</h3><p class="mdesc" style="margin:6px 0 12px;max-width:660px">The blueprint of any agent — its trigger, what it reads, what Miles does, what it produces, and where it lands. A quick way to see (and sanity-check) exactly how an agent works before you deploy it.</p>';
+  card.innerHTML='<h3 style="margin:0">Prebuilt agent blueprints</h3><p class="mdesc" style="margin:6px 0 12px;max-width:660px">See how any ready-made agent works — trigger → what it reads → what Miles does → what it produces → where it lands. Amazing agents, already wired up. Want your own? Hit <b>Design a custom agent</b> above.</p>';
   const pick=el('div','vpick'); pick.style.flexWrap='wrap';
   for(const x of tasks){ const b=el('button',x.task===wfTask?'on':'',(TASK_ICON[x.task]||'🤖')+' '+x.label); b.onclick=()=>{ wfTask=x.task; renderWireframe(); }; pick.append(b); }
   card.append(pick);
@@ -2566,9 +2595,72 @@ function renderWireframe(){
   card.append(flow);
   const row=el('div'); row.style.cssText='display:flex;gap:10px;flex-wrap:wrap;margin-top:16px';
   const deploy=el('button','go','Deploy this agent →'); deploy.onclick=()=>setPage('schedules');
-  const ask=el('button',null,'Design a custom agent'); ask.style.cssText='background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans)'; ask.onclick=()=>setPage('schedules');
-  row.append(deploy,ask); card.append(row);
-  box.innerHTML=''; box.append(card);
+  const build=el('button',null,'🛠 Design a custom agent'); build.style.cssText='background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans)'; build.onclick=()=>{ wfMode='build'; renderWireframe(); };
+  row.append(deploy,build); card.append(row);
+  box.append(card);
+}
+// ── the visual builder: Trigger → steps, any tool, any task ──
+function wfToolOptions(kind,sel){ return (WF_TOOLS[kind]||[]).map(([v,l])=>'<option value="'+esc(v)+'"'+(v===sel?' selected':'')+'>'+esc(l)+'</option>').join(''); }
+function renderBuilder(box){
+  const card=el('div','mcard'); card.style.maxWidth='860px';
+  card.innerHTML='<h3 style="margin:0">Design a custom agent</h3><p class="mdesc" style="margin:6px 0 14px;max-width:660px">Build an agent from scratch — a trigger, then any number of steps, using any tool in your stack to do any task. Miles runs the steps in order, on your schedule.</p>';
+  // name
+  const nameWrap=el('div'); nameWrap.style.marginBottom='14px'; nameWrap.innerHTML='<label class="f" style="display:block;margin-bottom:4px">Agent name</label>';
+  const nameInp=el('input','f'); nameInp.value=WF.name; nameInp.style.maxWidth='360px'; nameInp.oninput=()=>WF.name=nameInp.value; nameWrap.append(nameInp); card.append(nameWrap);
+  // trigger card
+  const trig=el('div','wfstep');
+  const th=el('div','wfstep-h'); th.innerHTML='<b>⏰ Trigger — Run on a schedule</b>'; trig.append(th);
+  const trow=el('div'); trow.style.cssText='display:flex;gap:14px;align-items:center;flex-wrap:wrap';
+  const timeWrap=el('div'); timeWrap.innerHTML='<label class="f" style="display:block;margin-bottom:4px">Time</label>';
+  const timeInp=el('input','f'); timeInp.type='time'; timeInp.value=WF.time; timeInp.style.width='130px'; timeInp.onchange=()=>WF.time=timeInp.value; timeWrap.append(timeInp);
+  const daysWrap=el('div'); daysWrap.innerHTML='<label class="f" style="display:block;margin-bottom:4px">Days</label>';
+  const dchips=el('div'); dchips.style.cssText='display:flex;gap:5px';
+  for(const [lab,n] of WF_DAYS){ const b=el('button','wfday'+(WF.days.includes(n)?' on':''),lab); b.onclick=()=>{ if(WF.days.includes(n)) WF.days=WF.days.filter(x=>x!==n); else WF.days=[...WF.days,n].sort(); renderWireframe(); }; dchips.append(b); }
+  daysWrap.append(dchips); trow.append(timeWrap,daysWrap); trig.append(trow); card.append(trig);
+  // steps
+  WF.steps.forEach((st,i)=>{
+    card.append(Object.assign(el('div','wfconn'),{textContent:'↓'}));
+    const s=el('div','wfstep');
+    const sh=el('div','wfstep-h'); sh.innerHTML='<b>Step '+(i+1)+'</b>';
+    const x=el('button','wf-x','✕'); x.title='Remove step'; x.onclick=()=>{ WF.steps.splice(i,1); renderWireframe(); }; sh.append(x); s.append(sh);
+    const kinds=el('div','wfkinds');
+    for(const [k,lab] of WF_KINDS){ const b=el('button',st.kind===k?'on':'',lab); b.onclick=()=>{ st.kind=k; st.tool=(WF_TOOLS[k][0]||[''])[0]; renderWireframe(); }; kinds.append(b); }
+    s.append(kinds);
+    const sel=el('select','f'); sel.style.cssText='margin:0 0 8px;max-width:420px'; sel.innerHTML=wfToolOptions(st.kind,st.tool); sel.onchange=()=>{ st.tool=sel.value; };
+    s.append(sel);
+    const ta=el('textarea','f'); ta.rows=2; ta.style.margin='0'; ta.placeholder = st.kind==='read'?'Optional note about what to look for…':st.kind==='act'?'What to send / do (Miles fills from earlier steps if blank)…':'What should Miles create in this step?'; ta.value=st.instruction||''; ta.oninput=()=>st.instruction=ta.value; s.append(ta);
+    card.append(s);
+  });
+  // add step
+  const addWrap=el('div'); addWrap.style.marginTop='12px';
+  const add=el('button',null,'＋ Add step'); add.style.cssText='background:var(--panel-2);color:var(--ink);border:1px dashed var(--line);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans)'; add.onclick=()=>{ WF.steps.push({kind:'generate',tool:'write',instruction:''}); renderWireframe(); }; addWrap.append(add); card.append(addWrap);
+  // actions
+  const row=el('div'); row.style.cssText='display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;align-items:center';
+  const prev=el('button',null,'▶ Preview run'); prev.style.cssText='background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--sans)'; prev.onclick=()=>wfPreview(prev);
+  const dep=el('button','go','🚀 Deploy agent'); dep.onclick=()=>wfDeploy(dep);
+  const note=el('span','appsub'); note.id='wf-note';
+  row.append(prev,dep,note); card.append(row);
+  const out=el('div'); out.id='wf-out'; out.style.marginTop='16px'; card.append(out);
+  box.append(card);
+}
+async function wfPreview(btn){
+  if(!WF.steps.length){ toast('Add at least one step'); return; }
+  btn.disabled=true; const old=btn.textContent; btn.textContent='Running…'; const out=$('#wf-out'); if(out) out.innerHTML='<p class="appsub">Miles is running your steps…</p>';
+  try{ const r=await fetch('/api/wireframes/run',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:WF.name,time:WF.time,days:WF.days,steps:WF.steps})}); const d=await r.json();
+    if(!r.ok){ if(out) out.innerHTML=''; toast(d.error||'Could not run'); }
+    else if(out){ const c=el('div','acard'); c.innerHTML='<div class="ah">▶ Preview — '+esc(d.run.title||WF.name)+'</div><div style="white-space:pre-wrap;font-size:13.5px;line-height:1.5">'+esc(d.run.body||'')+'</div>'; out.innerHTML=''; out.append(c); }
+  }catch(e){ if(out) out.innerHTML=''; toast('Run failed'); }
+  btn.disabled=false; btn.textContent=old;
+}
+async function wfDeploy(btn){
+  if(!WF.steps.length){ toast('Add at least one step'); return; }
+  btn.disabled=true; const old=btn.textContent; btn.textContent='Deploying…';
+  try{ const tz=new Date().getTimezoneOffset(); const r=await fetch('/api/wireframes/deploy',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:WF.name,time:WF.time,days:WF.days,steps:WF.steps,tzOffset:tz})}); const d=await r.json();
+    if(!r.ok){ toast(d.error||'Could not deploy'); btn.disabled=false; btn.textContent=old; return; }
+    SCHED_LOADED=false; // refresh schedules next open
+    toast('Deployed — “'+(WF.name||'agent')+'” will run on schedule'); queueChange('agent','Deployed custom agent: '+(WF.name||'agent'));
+    setTimeout(()=>setPage('schedules'),600);
+  }catch(e){ toast('Deploy failed'); btn.disabled=false; btn.textContent=old; }
 }
 function deliveryControl(a){
   a.deliver=a.deliver||{};

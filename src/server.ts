@@ -39,6 +39,7 @@ import {
   fallbackCustomAgent,
   DATA_SOURCES,
   type CustomAgentSpec,
+  type AgentStep,
   type AgentCtx,
   type ScheduledAgent,
   type AgentRun,
@@ -1140,32 +1141,88 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
 
   // ── Scheduled agents — recurring, unattended work (morning brief, CPA report) ──
   // Runs a task now and returns its written result. Reused by the endpoint + scheduler.
+  // Read one data source to text (+ a short summary), degrading cleanly if unconnected.
+  async function readSourceText(source: string, userId: string): Promise<{ text: string; summary: string }> {
+    if (source === 'emails') {
+      const e = await safeConn(connector.getRecentEmails ? () => connector.getRecentEmails!(userId, 25) : undefined, []);
+      return { text: e.map((m, i) => `${i + 1}. From: ${m.from || '?'} | ${m.subject || '(none)'} | ${m.snippet || ''}`).join('\n'), summary: `${e.length} emails` };
+    }
+    if (source === 'reviews') {
+      const r = await safeConn(connector.getReviews ? () => connector.getReviews!(userId) : undefined, []);
+      return { text: r.map((x) => `${x.rating}★ from ${x.author || 'a customer'}: ${x.text || ''}`).join('\n'), summary: `${r.length} reviews` };
+    }
+    if (source === 'leads') {
+      const l = await safeConn(connector.getLeads ? () => connector.getLeads!(userId) : undefined, []);
+      return { text: l.map((x) => `${x.name || 'Lead'} — ${x.service || 'inquiry'} (via ${x.source || 'unknown'})`).join('\n'), summary: `${l.length} leads` };
+    }
+    if (source === 'social') {
+      const m = await safeConn(connector.getSocialMetrics ? () => connector.getSocialMetrics!(userId) : undefined, null);
+      return { text: m ? `impressions ${m.impressions}, clicks ${m.clicks}, likes ${m.likes}${m.followers ? `, followers ${m.followers}` : ''}` : '', summary: m ? 'social metrics' : 'no metrics' };
+    }
+    if (source === 'adspend') {
+      const s = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(userId) : undefined, []);
+      return { text: s.map((x) => `${x.platform}/${x.campaign}: $${x.spend} spent, ${x.conversions} conversions`).join('\n'), summary: `${s.length} campaigns` };
+    }
+    if (source === 'deals') {
+      const d2 = await safeConn(connector.getDeals ? () => connector.getDeals!(userId) : undefined, []);
+      return { text: d2.map((x) => `$${x.value} ${x.won ? 'won' : 'lost'} via ${x.utmSource || 'unknown'}`).join('\n'), summary: `${d2.length} deals` };
+    }
+    return { text: '', summary: '' };
+  }
+
+  // Run a wireframe-built agent — its ordered steps (read → create → act), in sequence.
+  async function runAgentSteps(steps: AgentStep[], userId: string, business: string, title: string): Promise<{ title: string; body: string }> {
+    let connectedApps = new Set<string>();
+    try {
+      connectedApps = new Set((await connector.listAccounts(userId)).map((a) => a.app));
+    } catch {
+      /* nothing connected */
+    }
+    let ctx = `Business: ${business || 'the business'}.`;
+    let lastOut = '';
+    const lines: string[] = [];
+    for (let i = 0; i < steps.length; i++) {
+      const st = steps[i]!;
+      const n = i + 1;
+      if (st.kind === 'read') {
+        const { text, summary } = await readSourceText(st.tool, userId);
+        ctx += `\n\n[Data from ${st.tool}]\n${text || '(nothing to read — source not connected)'}`;
+        const need = DATA_SOURCES.find((d) => d.id === st.tool)?.connect;
+        lines.push(`📥 Step ${n} · Read ${st.tool} — ${text ? summary : `needs ${need || 'a connection'}`}`);
+      } else if (st.kind === 'generate') {
+        const sys = `You are performing ONE step of an automated workflow for the business. Task: ${st.instruction || 'produce the requested output'}. Use the context provided by earlier steps. Return only the output, plain text.`;
+        const out = (await generateText({ system: sys, user: ctx, maxTokens: 700 })) ?? `(${st.instruction || 'generated output'} — add an OpenRouter key to run this live.)`;
+        lastOut = out;
+        ctx += `\n\n[Step ${n} output]\n${out}`;
+        lines.push(`🧠 Step ${n} · ${st.instruction || 'Create'}\n${out}`);
+      } else if (st.kind === 'act') {
+        const [app = '', verb = ''] = String(st.tool).split('|');
+        let ok = false;
+        if (connector.runAppTask && connectedApps.has(app)) {
+          try {
+            const r = await connector.runAppTask({ externalUserId: userId, app, query: verb || st.instruction, params: { message: lastOut || st.instruction } });
+            ok = !!r.ok;
+          } catch {
+            /* held */
+          }
+        }
+        lines.push(ok ? `⚡ Step ${n} · ${verb || st.instruction} — done ✅` : `⚡ Step ${n} · ${verb || st.instruction} — ready (connect ${app || 'the app'} in Integrations to run it) ⚠︎`);
+      }
+    }
+    return { title, body: lines.join('\n\n') };
+  }
+
   async function runScheduledTask(userId: string, task: TaskType, spec?: CustomAgentSpec): Promise<{ title: string; body: string; patch?: Record<string, unknown> }> {
     const data = await authStore.getUserData(userId);
     const p = (data.profile ?? {}) as Record<string, string>;
     if (task === 'custom') {
       const dl = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
       if (!spec) return { title: 'Custom agent', body: 'This agent is missing its configuration — re-create it in the Agent Studio.' };
-      let dataText = '';
-      if (spec.dataSource === 'emails') {
-        const e = await safeConn(connector.getRecentEmails ? () => connector.getRecentEmails!(userId, 25) : undefined, []);
-        dataText = e.map((m, i) => `${i + 1}. From: ${m.from || '?'} | ${m.subject || '(none)'} | ${m.snippet || ''}`).join('\n');
-      } else if (spec.dataSource === 'reviews') {
-        const r = await safeConn(connector.getReviews ? () => connector.getReviews!(userId) : undefined, []);
-        dataText = r.map((x) => `${x.rating}★ from ${x.author || 'a customer'}: ${x.text || ''}`).join('\n');
-      } else if (spec.dataSource === 'leads') {
-        const l = await safeConn(connector.getLeads ? () => connector.getLeads!(userId) : undefined, []);
-        dataText = l.map((x) => `${x.name || 'Lead'} — ${x.service || 'inquiry'} (via ${x.source || 'unknown'})`).join('\n');
-      } else if (spec.dataSource === 'social') {
-        const m = await safeConn(connector.getSocialMetrics ? () => connector.getSocialMetrics!(userId) : undefined, null);
-        dataText = m ? `impressions ${m.impressions}, clicks ${m.clicks}, likes ${m.likes}${m.followers ? `, followers ${m.followers}` : ''}` : '';
-      } else if (spec.dataSource === 'adspend') {
-        const s = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(userId) : undefined, []);
-        dataText = s.map((x) => `${x.platform}/${x.campaign}: $${x.spend} spent, ${x.conversions} conversions`).join('\n');
-      } else if (spec.dataSource === 'deals') {
-        const d2 = await safeConn(connector.getDeals ? () => connector.getDeals!(userId) : undefined, []);
-        dataText = d2.map((x) => `$${x.value} ${x.won ? 'won' : 'lost'} via ${x.utmSource || 'unknown'}`).join('\n');
+      // Wireframe-built agents run their ordered steps.
+      if (spec.steps && spec.steps.length) {
+        return runAgentSteps(spec.steps, userId, p.businessName || '', `${spec.name || 'Custom agent'} — ${dl}`);
       }
+      const { text: dataText } = spec.dataSource === 'none' ? { text: '' } : await readSourceText(spec.dataSource, userId);
       if (spec.dataSource !== 'none' && !dataText) {
         const src = DATA_SOURCES.find((x) => x.id === spec.dataSource);
         return {
@@ -1535,6 +1592,80 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     await authStore.setUserData(u.id, data);
     await deliverRun(u.email, (data.profile as Record<string, string>)?.phone, agent, run);
     return { ok: true, run };
+  });
+
+  // ── Agent Wireframes — visually-built custom agents (Trigger → steps) ──
+  interface Wireframe { id: string; name: string; time: string; days: number[]; steps: AgentStep[]; createdAt: string }
+  function cleanSteps(raw: unknown): AgentStep[] {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .slice(0, 12)
+      .map((s) => {
+        const o = (s ?? {}) as Record<string, unknown>;
+        const kind = o.kind === 'read' || o.kind === 'generate' || o.kind === 'act' ? o.kind : 'generate';
+        return { kind, tool: String(o.tool ?? '').slice(0, 80), instruction: String(o.instruction ?? '').slice(0, 500) } as AgentStep;
+      })
+      .filter((s) => s.tool || s.instruction);
+  }
+  function specFromWireframe(wf: { name?: string; time?: string; days?: number[]; steps?: unknown }): CustomAgentSpec {
+    const steps = cleanSteps(wf.steps);
+    const time = typeof wf.time === 'string' && /^\d{1,2}:\d{2}$/.test(wf.time) ? wf.time : '09:00';
+    const days = Array.isArray(wf.days) && wf.days.length ? wf.days.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6) : [1, 2, 3, 4, 5];
+    return { name: String(wf.name ?? '').slice(0, 80) || 'Custom agent', description: `A ${steps.length}-step custom agent built in the wireframe.`, dataSource: 'none', systemPrompt: '', time, days, steps };
+  }
+
+  app.get('/api/wireframes', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return { wireframes: (data.wireframes as Wireframe[]) ?? [] };
+  });
+  app.put<{ Body: { wireframes?: Wireframe[] } }>('/api/wireframes', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const list = (req.body?.wireframes ?? []).slice(0, 30).map((w) => ({
+      id: String(w.id ?? newToken().slice(0, 10)),
+      name: String(w.name ?? '').slice(0, 80),
+      time: w.time ?? '09:00',
+      days: Array.isArray(w.days) ? w.days : [1, 2, 3, 4, 5],
+      steps: cleanSteps(w.steps),
+      createdAt: w.createdAt ?? new Date().toISOString(),
+    }));
+    data.wireframes = list;
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+  // Preview-run a wireframe without deploying it (builds a transient spec).
+  app.post<{ Body: { name?: string; time?: string; days?: number[]; steps?: unknown } }>('/api/wireframes/run', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const spec = specFromWireframe(req.body ?? {});
+    if (!spec.steps?.length) return reply.code(400).send({ error: 'Add at least one step first.' });
+    const result = await runScheduledTask(u.id, 'custom', spec);
+    return { ok: true, run: { title: result.title, body: result.body } };
+  });
+  // Deploy a wireframe as a scheduled custom agent that runs its steps on schedule.
+  app.post<{ Body: { name?: string; time?: string; days?: number[]; steps?: unknown; tzOffset?: number } }>('/api/wireframes/deploy', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const spec = specFromWireframe(req.body ?? {});
+    if (!spec.steps?.length) return reply.code(400).send({ error: 'Add at least one step before deploying.' });
+    const data = await authStore.getUserData(u.id);
+    const agent: ScheduledAgent = {
+      id: newToken().slice(0, 10),
+      name: spec.name,
+      task: 'custom',
+      spec,
+      time: spec.time,
+      days: spec.days,
+      enabled: true,
+      tzOffset: Number(req.body?.tzOffset) || 0,
+      createdAt: new Date().toISOString(),
+    };
+    data.schedules = ((data.schedules as ScheduledAgent[]) ?? []).concat(agent).slice(0, 25);
+    await authStore.setUserData(u.id, data);
+    return { ok: true, agent };
   });
 
   // The scheduler tick — find every due agent across all users and run it. Called
