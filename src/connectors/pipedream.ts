@@ -243,9 +243,137 @@ export class PipedreamConnector implements Connector {
       return { ok: false, actionId: key, componentKey: key, app: req.app, output: null, summary, note: `${req.app} rejected the run: ${String((err as Error).message)}` };
     }
   }
+
+  // ── Live data reads ──────────────────────────────────────────────────────────
+  // Each discovers a read component for the connected app, runs it on the user's
+  // behalf, and maps common output shapes to our types. Best-effort: any failure
+  // (app not connected, differing output shape) returns empty so the dashboard
+  // degrades honestly. Field mapping should be verified against a real account.
+  private async runRead(app: string, query: string, externalUserId: string, params: Record<string, string> = {}): Promise<unknown> {
+    const pd = await this.backend();
+    const accts = await this.listAccounts(externalUserId, app);
+    const account = accts.find((a) => a.healthy) ?? accts[0];
+    if (!account) return null;
+    const list = await pd.actions.list({ app, q: query, limit: 12 });
+    const rows: any[] = list?.data ?? (Array.isArray(list) ? list : list?.items ?? []);
+    const comp = pickComponent(rows, query);
+    if (!comp) return null;
+    const key: string = comp.key ?? comp.id ?? comp.componentKey;
+    let props: any[] = comp.configurableProps ?? comp.configurable_props ?? [];
+    if (!props.length) {
+      try {
+        const full = await pd.actions.retrieve(key);
+        const d = full?.data ?? full;
+        props = d?.configurableProps ?? d?.configurable_props ?? [];
+      } catch {
+        /* some components inline their props */
+      }
+    }
+    const configuredProps = buildConfiguredProps(props, account.id, params);
+    const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
+    return res?.ret ?? res?.exports ?? res ?? null;
+  }
+
+  async getAdSpend(externalUserId: string): Promise<import('../revenue/attribution.js').CampaignSpend[]> {
+    const out: import('../revenue/attribution.js').CampaignSpend[] = [];
+    try {
+      const gaql = 'SELECT campaign.name, metrics.cost_micros, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date DURING LAST_30_DAYS';
+      const g = await this.runRead('google_ads', 'search report query campaign', externalUserId, { query: gaql });
+      for (const r of asRows(g)) {
+        const name = r?.campaign?.name ?? r.campaignName ?? r.name ?? 'Google campaign';
+        const spend = num(r?.metrics?.costMicros ?? r?.metrics?.cost_micros) / 1e6 || num(r.cost ?? r.spend);
+        const clicks = num(r?.metrics?.clicks ?? r.clicks);
+        const conv = num(r?.metrics?.conversions ?? r.conversions);
+        if (spend || clicks || conv) out.push({ platform: 'google_ads', campaign: name, utm: '', spend: Math.round(spend), clicks, conversions: Math.round(conv) });
+      }
+    } catch {
+      /* Google Ads not connected or shape differs */
+    }
+    try {
+      const f = await this.runRead('facebook', 'insights campaign spend', externalUserId, {});
+      for (const r of asRows(f)) {
+        const spend = num(r.spend ?? r.amount_spent);
+        if (spend) out.push({ platform: 'facebook', campaign: r.campaign_name ?? r.name ?? 'Meta campaign', utm: '', spend: Math.round(spend), clicks: num(r.clicks), conversions: num(r.conversions ?? r.actions) });
+      }
+    } catch {
+      /* Meta not connected */
+    }
+    return out;
+  }
+
+  async getSocialMetrics(externalUserId: string): Promise<import('./types.js').SocialMetrics | null> {
+    for (const app of ['facebook', 'instagram', 'linkedin']) {
+      try {
+        const d = await this.runRead(app, 'page insights metrics followers', externalUserId, {});
+        const r = asRows(d)[0] ?? (d as Record<string, unknown>);
+        if (!r) continue;
+        const impressions = num((r as any).impressions ?? (r as any).reach ?? (r as any).page_impressions);
+        const clicks = num((r as any).clicks ?? (r as any).link_clicks ?? (r as any).website_clicks);
+        const likes = num((r as any).likes ?? (r as any).reactions ?? (r as any).engagement);
+        const followers = num((r as any).followers ?? (r as any).fan_count ?? (r as any).followers_count);
+        if (impressions || clicks || likes || followers) return { impressions, clicks, likes, followers };
+      } catch {
+        /* not connected */
+      }
+    }
+    return null;
+  }
+
+  async getReviews(externalUserId: string): Promise<import('./types.js').Review[]> {
+    try {
+      const d = await this.runRead('google_my_business', 'list reviews', externalUserId, {});
+      return asRows(d)
+        .map((r) => ({ author: r?.reviewer?.displayName ?? r.author ?? 'A customer', rating: starToNum(r.starRating ?? r.rating), text: r.comment ?? r.text ?? '', platform: 'Google' }))
+        .filter((r) => r.rating > 0);
+    } catch {
+      return [];
+    }
+  }
+
+  async getLeads(externalUserId: string): Promise<import('./types.js').Lead[]> {
+    for (const app of ['gohighlevel', 'hubspot', 'salesforce_rest_api', 'servicetitan', 'jobber', 'housecall_pro']) {
+      try {
+        const accts = await this.listAccounts(externalUserId, app);
+        if (!accts.length) continue;
+        const d = await this.runRead(app, 'list contacts leads', externalUserId, {});
+        const rows = asRows(d);
+        if (rows.length)
+          return rows.slice(0, 50).map((r) => ({
+            id: str(r.id ?? r.contactId),
+            name: r.name ?? [r.firstName, r.lastName].filter(Boolean).join(' ') ?? r.contactName,
+            service: r.service ?? (Array.isArray(r.tags) ? r.tags[0] : undefined),
+            source: r.source ?? app,
+            phone: str(r.phone),
+            email: str(r.email),
+            createdAt: str(r.dateAdded ?? r.createdAt),
+            contacted: !!(r.lastContacted ?? r.contacted),
+          }));
+      } catch {
+        /* try the next CRM */
+      }
+    }
+    return [];
+  }
 }
 
 const lower = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+const asRows = (out: unknown): any[] => {
+  if (!out) return [];
+  if (Array.isArray(out)) return out;
+  const o = out as Record<string, unknown>;
+  const c = o.results ?? o.data ?? o.rows ?? o.items ?? o.reviews ?? o.contacts ?? o.records ?? o.campaigns;
+  return Array.isArray(c) ? c : [];
+};
+const num = (v: unknown): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+const str = (v: unknown): string | undefined => (v == null ? undefined : String(v));
+const starToNum = (s: unknown): number => {
+  if (typeof s === 'number') return s;
+  const m: Record<string, number> = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5 };
+  return m[String(s).toUpperCase()] ?? num(s);
+};
 
 /** Pick the component whose name best matches the query (prefer create/add verbs). */
 function pickComponent(rows: any[], query: string): any {

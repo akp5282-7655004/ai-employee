@@ -643,6 +643,19 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const totalSpend = spend.reduce((s, x) => s + (x.spend || 0), 0);
     const totalConv = spend.reduce((s, x) => s + (x.conversions || 0), 0);
     const revenue = deals.filter((x) => x.won).reduce((s, x) => s + (x.value || 0), 0);
+    // Which apps are actually LINKED (OAuth done) — separate from whether data has
+    // synced yet, so a connected-but-empty card says "connected, syncing", not "connect".
+    let linked = new Set<string>();
+    try {
+      linked = new Set((await connector.listAccounts(u.id)).map((a) => a.app));
+    } catch {
+      /* none */
+    }
+    const has = (...apps: string[]) => apps.some((a) => linked.has(a));
+    const adsLinked = has('google_ads', 'facebook', 'google_lsa');
+    const crmLinked = has('gohighlevel', 'hubspot', 'salesforce_rest_api', 'servicetitan', 'jobber', 'housecall_pro');
+    const gmbLinked = has('google_my_business', 'gmb');
+    const socialLinked = has('facebook', 'instagram', 'linkedin');
     return {
       business: p.businessName || '',
       kpis: {
@@ -655,11 +668,11 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
         creditsUsed: summarizeUsage(d.usage as Usage | undefined, new Date()).credits,
         weatherTriggers: ((d.weatherRules as Array<{ enabled?: boolean }>) ?? []).filter((r) => r.enabled).length,
       },
-      marketing: { connected: spend.length > 0, spend: Math.round(totalSpend), conversions: totalConv, cpa: totalConv ? Math.round((totalSpend / totalConv) * 100) / 100 : null, revenue: Math.round(revenue), targetCpa: Number(p.targetCpa) || null },
-      leads: { connected: leads.length > 0, count: leads.length, uncontacted: leads.filter((l) => !l.contacted).length },
+      marketing: { connected: adsLinked || spend.length > 0, hasData: spend.length > 0, spend: Math.round(totalSpend), conversions: totalConv, cpa: totalConv ? Math.round((totalSpend / totalConv) * 100) / 100 : null, revenue: Math.round(revenue), targetCpa: Number(p.targetCpa) || null },
+      leads: { connected: crmLinked || leads.length > 0, hasData: leads.length > 0, count: leads.length, uncontacted: leads.filter((l) => !l.contacted).length },
       speedToLead: responderStats(d.speedToLead as SpeedToLeadState | undefined, new Date().toISOString()),
-      reviews: { connected: reviews.length > 0, count: reviews.length, avg: reviews.length ? Math.round((reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length) * 10) / 10 : null },
-      social,
+      reviews: { connected: gmbLinked || reviews.length > 0, hasData: reviews.length > 0, count: reviews.length, avg: reviews.length ? Math.round((reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length) * 10) / 10 : null },
+      social: social ? { connected: true, hasData: true, ...social } : (socialLinked ? { connected: true, hasData: false, impressions: 0, clicks: 0, likes: 0, followers: 0 } : null),
       upcomingPosts: posts.filter((x) => x.status === 'scheduled').sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt)).slice(0, 5).map((x) => ({ caption: x.caption, platforms: x.platforms, scheduledAt: x.scheduledAt, kind: x.kind })),
       recentRuns: runs.slice(0, 6).map((r) => ({ title: r.title, ts: r.ts, task: r.task })),
     };
