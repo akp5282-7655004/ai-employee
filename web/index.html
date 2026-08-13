@@ -739,7 +739,7 @@
       <div class="chatview on">
         <span class="back" id="back"><svg class="ico" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Back</span>
         <div class="chat" id="chat" aria-live="polite"></div>
-        <div class="composer"><div class="cplus-wrap"><button class="cplus" id="cplus" title="Add" aria-label="Add">+</button><div class="cmenu" id="cmenu" style="display:none"></div></div><textarea id="cinput" rows="1" placeholder="Ask Miles anything…"></textarea><select id="cmode" class="cmode" title="Answer depth"><option value="easy">⚡ Quick</option><option value="medium" selected>💬 Standard</option><option value="high">🧠 Deep</option><option value="research">🔬 Research</option></select><button class="csend" id="csend">↑</button></div>
+        <div class="composer"><div class="cplus-wrap"><button class="cplus" id="cplus" title="Add" aria-label="Add">+</button><div class="cmenu" id="cmenu" style="display:none"></div></div><textarea id="cinput" rows="1" placeholder="Ask Miles anything…"></textarea><select id="cmode" class="cmode" title="Answer depth"><option value="easy">⚡ Quick</option><option value="medium" selected>💬 Standard</option><option value="high">🧠 Deep</option><option value="research">🔬 Research</option></select><button class="cmic" id="cmic" title="Speak to Miles" aria-label="Speak to Miles" style="background:none;border:none;cursor:pointer;font-size:18px;padding:0 6px;line-height:1;opacity:.75">🎤</button><button class="csend" id="csend">↑</button></div>
         <input type="file" id="chat-file" accept="image/*" style="display:none">
       </div>
     </section>
@@ -1261,6 +1261,38 @@ function gaugeSVG(cpa){
   return `<svg width="260" height="140" viewBox="0 0 260 140">${seg}
     <line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="var(--ink)" stroke-width="3.5" stroke-linecap="round"/>
     <circle cx="${cx}" cy="${cy}" r="7" fill="var(--ink)"/></svg>`;
+}
+// ── "For your review": finished drafts Miles built, waiting for your approval ──
+async function fillDashReview(wrap){
+  if(!REMOTE) return;
+  let d={items:[]}; try{ d=await(await fetch('/api/review')).json(); }catch(e){ return; }
+  const items=d.items||[]; if(!items.length){ wrap.remove(); return; }
+  wrap.innerHTML='';
+  const head=el('div'); head.style.cssText='margin:0 0 10px'; head.innerHTML='<h3 style="margin:0">🗂️ For your review</h3><div class="appsub">Drafts Miles finished and left for your OK. Review, then approve to send to Deploy.</div>'; wrap.append(head);
+  const list=el('div'); list.style.cssText='display:flex;flex-direction:column;gap:12px'; wrap.append(list);
+  const refresh=()=>{ if(!list.querySelector('.mcard')) wrap.remove(); };
+  items.slice(0,5).forEach(it=>list.append(buildReviewCard(it,refresh)));
+}
+const REVIEW_KIND={email:'✉️ Email campaign',social:'📱 Social posts',ads:'📣 Ad campaign',campaign:'🎯 Full campaign'};
+function buildReviewCard(it,onResolved){
+  const card=el('div','mcard'); card.style.cssText='padding:16px;border-left:4px solid var(--accent)';
+  const title=el('div',null,it.title); title.style.cssText='font-weight:700;margin-bottom:2px'; card.append(title);
+  card.append(el('div','appsub',(REVIEW_KIND[it.kind]||it.kind)+' · '+fmtWhen(it.createdAt)));
+  const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px;flex-wrap:wrap';
+  const rev=el('button','adsave','👁 Review'); rev.onclick=()=>openReviewModal(it);
+  const ap=el('button','go','✓ Approve & Deploy'); ap.style.flex='none';
+  const dm=el('button','adsave','Dismiss');
+  ap.onclick=async()=>{ ap.disabled=true; dm.disabled=true; try{ const r=await(await fetch('/api/review/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:it.id})})).json(); bar.remove(); card.style.opacity='.7'; const done=el('div','verdict ok'); done.textContent=(r&&r.status==='live')?'✓ Approved & deployed — see the Change Log.':'✓ Approved — queued in Deploy to push live.'; card.append(done); onResolved&&onResolved(); }catch(e){ ap.disabled=false; dm.disabled=false; toast('Couldn’t approve — try again.'); } };
+  dm.onclick=async()=>{ try{ await fetch('/api/review/dismiss',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:it.id})}); }catch(e){} card.style.transition='opacity .2s'; card.style.opacity='0'; setTimeout(()=>{ card.remove(); onResolved&&onResolved(); },200); };
+  bar.append(rev,ap,dm); card.append(bar);
+  return card;
+}
+function openReviewModal(it){
+  const ov=el('div'); ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1001;display:flex;align-items:center;justify-content:center;padding:16px';
+  const panel=el('div'); panel.style.cssText='background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:720px;max-height:86vh;overflow:auto;padding:20px';
+  const h=el('div'); h.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px'; h.append(el('b',null,it.title)); const x=el('button','idel','✕'); x.onclick=()=>ov.remove(); h.append(x); panel.append(h);
+  const bd=el('div','md'); bd.innerHTML=mdToHtml(it.body||''); panel.append(bd);
+  ov.append(panel); document.body.append(ov); ov.addEventListener('mousedown',(e)=>{ if(e.target===ov) ov.remove(); });
 }
 // ── Agent Recommendation Engine: daily, data-driven, one-click-approve optimizations ──
 const REC_SEV={high:{c:'#e0574a',l:'Act now'},medium:{c:'#f59e0b',l:'Worth doing'},low:{c:'#12a08f',l:'Nice to have'}};
@@ -1805,6 +1837,8 @@ function renderOverview(d){
   const box=$('#overview-body'); if(!box) return; box.innerHTML=''; const k=d.kpis||{};
   const head=el('div'); head.innerHTML='<h3 style="margin:0">'+(d.business?esc(d.business):'Your workspace')+' — Dashboard</h3><p class="mdesc" style="margin:4px 0 0;max-width:680px">Everything at a glance. Numbers pull from your live data; anything that needs a connected tool says so instead of showing a fake figure.</p>';
   box.append(head);
+  // Finished drafts Miles built and left for your OK — front and center.
+  const reviewWrap=el('div'); reviewWrap.style.cssText='margin:18px 0'; box.append(reviewWrap); fillDashReview(reviewWrap);
   // Recommendations, front and center — approve right here, no digging through tabs.
   const recWrap=el('div'); recWrap.style.cssText='margin:18px 0'; box.append(recWrap); fillDashRecs(recWrap);
   const g=el('div','stats'); g.style.cssText='margin:16px 0;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
@@ -3864,15 +3898,34 @@ function mdToHtml(md){
   }
   closeList(); return html;
 }
+// Is this a "go build something" instruction (vs. a question to answer)?
+function isBuildRequest(t){ return /\b(create|make|build|write|draft|design|set ?up|launch|put together|generate|prepare|run|whip up)\b/i.test(t) && /\b(campaign|email|newsletter|ad|ads|post|posts|social|flyer|promo|sequence|blog|marketing)\b/i.test(t); }
 async function send(text,silent){
   const msg=(text!=null?text:cinput.value).trim(); if(!msg) return;
   if(!silent) say('user',msg);
+  logChat('user',msg);
   cinput.value=''; cinput.style.height='auto';
   if(!REMOTE){ const b=addRow('emp'); b.textContent='Chat runs on the live app.'; return; }
+  if(isBuildRequest(msg)) return milesDoTask(msg);
   const b=addRow('emp'); const typ=el('div','typing'); typ.innerHTML='<span></span><span></span><span></span>'; b.append(typ);
   try{
     const r=await fetch('/api/chat/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-16),mode:chatMode})});
     const d=await r.json(); b.className='bubble md'; b.innerHTML=mdToHtml(d.text||''); logChat('emp',d.text||''); chat.scrollTop=chat.scrollHeight;
+  }catch(e){ b.textContent='Sorry — I couldn’t reach the server just now.'; }
+}
+// Miles takes the request, picks the workflow, builds it on-brand, and leaves it
+// in the dashboard review queue.
+async function milesDoTask(text){
+  const b=addRow('emp'); const typ=el('div','typing'); typ.innerHTML='<span></span><span></span><span></span>'; b.append(typ);
+  try{
+    const r=await fetch('/api/miles/task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({request:text})});
+    const d=await r.json(); b.className='bubble md';
+    if(d&&d.ok){
+      b.innerHTML=mdToHtml('🛠️ **On it.** I built your **'+(d.title||'draft')+'** using your brand and offer.\n\nIt’s on your **Dashboard → “For your review.”** Take a look and hit **Approve & Deploy** when it looks right.'+(d.live?'':'\n\n_Demo draft — add an OPENROUTER_API_KEY on Render and I’ll write it fully custom for you._'));
+      logChat('emp','Built: '+(d.title||''));
+      const goto=el('button','go','Go to my review →'); goto.style.marginTop='8px'; goto.onclick=()=>setPage('overview'); b.append(goto);
+    } else { b.textContent='I couldn’t build that just now — try rephrasing what you want.'; }
+    chat.scrollTop=chat.scrollHeight;
   }catch(e){ b.textContent='Sorry — I couldn’t reach the server just now.'; }
 }
 async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId})}); }catch(e){} } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER); } }
@@ -3889,6 +3942,24 @@ $('#hprompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.
 document.querySelectorAll('[data-ask]').forEach(n=>n.onclick=()=>enterChat());
 $('#csend').onclick=()=>send();
 $('#cmode').onchange=()=>{ chatMode=$('#cmode').value; };
+// Microphone — speak to Miles. Uses the browser's built-in speech recognition
+// (Chrome/Edge); on finishing, it sends automatically so "just tell Miles" works.
+(function(){
+  const btn=$('#cmic'); if(!btn) return;
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  let rec=null, on=false;
+  btn.onclick=()=>{
+    if(!SR){ toast('Voice input needs Chrome or Edge.'); return; }
+    if(on){ try{ rec.stop(); }catch(e){} return; }
+    rec=new SR(); rec.lang='en-US'; rec.interimResults=true; rec.continuous=false; rec.maxAlternatives=1;
+    on=true; btn.style.opacity='1'; btn.style.color='#e0574a'; btn.textContent='⏺'; cinput.placeholder='Listening…';
+    let finalT='';
+    rec.onresult=(e)=>{ let interim=''; for(let i=e.resultIndex;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) finalT+=t; else interim+=t; } cinput.value=(finalT+interim).trim(); cinput.style.height='auto'; cinput.style.height=Math.min(cinput.scrollHeight,160)+'px'; };
+    rec.onerror=(e)=>{ if(e&&e.error==='not-allowed') toast('Allow microphone access to talk to Miles.'); };
+    rec.onend=()=>{ on=false; btn.style.color=''; btn.style.opacity='.75'; btn.textContent='🎤'; cinput.placeholder='Ask Miles anything…'; if(cinput.value.trim()) send(); };
+    try{ rec.start(); }catch(e){ on=false; }
+  };
+})();
 // "+" menu — attach a photo, or jump to a capability. Only honest, working actions.
 const CMENU=[
   {ic:'📎',label:'Add photo',sub:'→ Assets',act:()=>$('#chat-file').click()},

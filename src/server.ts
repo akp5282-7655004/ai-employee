@@ -16,6 +16,7 @@ import { templatedReady, templatedListTemplates, templatedRender, type RenderLay
 import { buildRecommendations, type Recommendation } from './agents/recommend.js';
 import { adLibraryReady, searchCompetitorAds } from './research/adlibrary.js';
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
+import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { catalogForClient, findPlay } from './skills/catalog.js';
 import {
@@ -852,6 +853,91 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const d = (req.body as { deploy?: any })?.deploy ?? { auto: false, queue: [] };
     if (Array.isArray(d.queue)) d.queue = d.queue.slice(0, 300);
     data.deploy = d;
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+
+  // ── "Miles, do this" — a plain-language request becomes a finished draft ───
+  // Miles picks the workflow, builds it on-brand, and drops it in the review queue.
+  app.post<{ Body: { request?: string } }>('/api/miles/task', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const request = (req.body?.request ?? '').toString().trim().slice(0, 600);
+    if (!request) return reply.code(400).send({ error: 'request is required' });
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const kit = brandKitFor(data);
+    const ctx: TeamCtx = {
+      business: p.businessName,
+      trade: p.industry,
+      city: (p.serviceAreas || '').split(',')[0]?.trim(),
+      services: p.services,
+      offers: p.currentOffers,
+      voice: kit.voice,
+    };
+    const kind = classifyRequest(request);
+    let body: string;
+    let live = false;
+    if (kind === 'campaign') {
+      const sp = strategistPrompt(request, ctx);
+      const rawAngle = await generateText({ system: sp.system, user: sp.user, maxTokens: 500 });
+      if (rawAngle) live = true;
+      const angle = rawAngle ?? fallbackStrategist(request, ctx);
+      const parts: string[] = [`### The angle\n\n${angle}`];
+      for (const id of ['content', 'social', 'ads']) {
+        const pr = id === 'content' ? contentPrompt(request, angle, ctx) : id === 'social' ? socialPrompt(request, angle, ctx) : adsPrompt(request, angle, ctx);
+        const raw = await generateText({ system: pr.system, user: pr.user, maxTokens: 700 });
+        if (raw) live = true;
+        parts.push(`### ${AREA_TITLE[id] ?? id}\n\n${raw ?? fallbackContribution(id, request, ctx)}`);
+      }
+      body = parts.join('\n\n');
+    } else {
+      const pr = kind === 'email' ? emailPrompt(request, ctx) : kind === 'social' ? dwSocialPrompt(request, ctx) : dwAdsPrompt(request, ctx);
+      const raw = await generateText({ system: pr.system, user: pr.user, maxTokens: 900 });
+      if (raw) live = true;
+      body = raw ?? fallbackWork(kind, request, ctx);
+    }
+    const item = { id: newToken().slice(0, 10), kind, title: titleFor(kind, request), request, body, createdAt: new Date().toISOString(), status: 'review' };
+    data.reviewQueue = [item, ...((data.reviewQueue as any[]) ?? [])].slice(0, 50);
+    await authStore.setUserData(u.id, data);
+    if (live) await meterUser(u.id, 'text');
+    return { ok: true, id: item.id, kind, title: item.title, live };
+  });
+
+  // The review queue — finished drafts waiting for the owner's OK.
+  app.get('/api/review', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const items = ((data.reviewQueue as any[]) ?? [])
+      .filter((i) => i.status === 'review')
+      .map((i) => ({ id: i.id, kind: i.kind, title: i.title, body: i.body, createdAt: i.createdAt }));
+    return { items };
+  });
+  app.post<{ Body: { id?: string } }>('/api/review/approve', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const id = (req.body?.id ?? '').toString();
+    const data = await authStore.getUserData(u.id);
+    const item = ((data.reviewQueue as any[]) ?? []).find((i) => i.id === id);
+    if (!item) return reply.code(404).send({ error: 'not found' });
+    item.status = 'approved';
+    const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
+    deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
+    const status = deploy.auto ? 'live' : 'pending';
+    deploy.queue.unshift({ id: item.id, label: item.title, type: item.kind, status, ts: new Date().toISOString() });
+    deploy.queue = deploy.queue.slice(0, 300);
+    data.deploy = deploy;
+    await authStore.setUserData(u.id, data);
+    return { ok: true, status };
+  });
+  app.post<{ Body: { id?: string } }>('/api/review/dismiss', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const id = (req.body?.id ?? '').toString();
+    const data = await authStore.getUserData(u.id);
+    const item = ((data.reviewQueue as any[]) ?? []).find((i) => i.id === id);
+    if (item) item.status = 'dismissed';
     await authStore.setUserData(u.id, data);
     return { ok: true };
   });
