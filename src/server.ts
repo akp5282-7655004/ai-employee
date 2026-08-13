@@ -200,6 +200,39 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return reply.type('text/html').send(u ? dashboardPage : loginPage);
   });
   app.get('/login', async (_req, reply) => reply.type('text/html').send(loginPage));
+  // ── Public demo — a no-login link that lands on a populated dashboard. It signs
+  // the visitor into a shared, isolated demo account seeded with sample data, so
+  // anyone can look around Miles without signing up. No real customer data here. ──
+  app.get('/demo', async (_req, reply) => {
+    let demo = await authStore.getUserByEmail('demo@miles.local');
+    if (!demo) {
+      demo = { id: newUserId(), email: 'demo@miles.local', name: 'Demo', passwordHash: hashPassword(newToken()), createdAt: new Date().toISOString() };
+      await authStore.createUser(demo);
+    }
+    const data = await authStore.getUserData(demo.id);
+    // Re-seed a clean sample business every visit so the demo always looks right.
+    data.profile = {
+      businessName: 'Painters In Philly',
+      industry: 'Painting',
+      serviceAreas: 'Philadelphia, PA',
+      phone: '(215) 555-0142',
+      targetCpa: '30',
+      currentOffers: '10% off interior painting',
+      services: 'Interior painting, exterior painting, cabinet refinishing',
+      updatedAt: new Date().toISOString(),
+    };
+    data.recState = { applied: {}, dismissed: {} };
+    data.deploy = (data.deploy as Record<string, unknown>) ?? { auto: false, queue: [] };
+    await authStore.setUserData(demo.id, data);
+    // Seed mock-connected accounts so the dashboard shows live-looking data.
+    const c = connector as unknown as { name: string; connect?: (u: string, app: string) => unknown; listAccounts: (u: string) => Promise<Array<{ app: string }>> };
+    if (c.name === 'mock' && typeof c.connect === 'function') {
+      const linked = new Set((await c.listAccounts(demo.id)).map((a) => a.app));
+      for (const app of ['google_ads', 'facebook', 'gohighlevel', 'google_my_business', 'gmail']) if (!linked.has(app)) c.connect(demo.id, app);
+    }
+    await startSession(reply, demo.id);
+    return reply.type('text/html').send(dashboardPage);
+  });
   app.get('/favicon.ico', async (_req, reply) => reply.code(204).send());
   // Self-hosted third-party assets (the TOAST UI image editor + fabric.js). Served
   // from web/vendor so the editor has no runtime CDN dependency. Read-only, no auth.
