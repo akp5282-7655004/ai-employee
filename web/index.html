@@ -453,8 +453,9 @@
           <h3>CPA / CPL Benchmark Speedometer</h3>
           <p class="mdesc">Real-time local market cost-per-lead positioning</p>
           <div class="vpick" id="meter-vpick"></div>
-          <div class="gauge-wrap"><div id="gauge"></div><div class="gauge-val" id="gauge-val">$110</div><div class="gauge-cap">Market Median</div></div>
+          <div class="gauge-wrap"><div id="gauge"></div><div class="gauge-val" id="gauge-val">$110</div><div class="gauge-cap" id="gauge-cap">Market Median</div></div>
           <div class="legend" id="legend"></div>
+          <div id="meter-note" class="appsub" style="margin-top:10px;text-align:center"></div>
         </div>
         <div class="mcard">
           <h3>Intake &amp; Math Validator</h3>
@@ -1148,7 +1149,50 @@ document.querySelectorAll('#nav .navhead').forEach(h=>h.onclick=()=>{
 });
 
 // ═══ meters ═══
-let meterVert='solar';
+let meterVert='solar', meterCustom='', meterInit=false;
+// Real per-trade cost-per-lead benchmarks (SearchLight Google Ads non-branded;
+// low/median/high ≈ 25th/50th/75th percentile where published). Powers the "Custom"
+// industry option and defaults the meter to the customer's own trade.
+const TRADE_BENCH={
+  plumbing:{label:'Plumbing',low:107,median:168,high:253},
+  hvac:{label:'HVAC',low:100,median:149,high:250},
+  roofing:{label:'Roofing',low:80,median:125,high:256},
+  electrical:{label:'Electrical',low:90,median:128,high:210},
+  'garage door':{label:'Garage Door',low:113,median:168,high:214},
+  'water heater':{label:'Water Heater',low:180,median:256,high:340},
+  drain:{label:'Drain / Sewer',low:120,median:166,high:250},
+};
+const BENCH_FALLBACK={low:90,median:149,high:253}; // general home-services blend
+function resolveTrade(text){
+  const t=(text||'').toLowerCase();
+  const hit=(o)=>({label:o.label,low:o.low,median:o.median,high:o.high,estimated:false,matched:true});
+  if(/plumb/.test(t)) return hit(TRADE_BENCH.plumbing);
+  if(/hvac|heating|cooling|furnace|air.?condition|\bac\b/.test(t)) return hit(TRADE_BENCH.hvac);
+  if(/roof/.test(t)) return hit(TRADE_BENCH.roofing);
+  if(/electric/.test(t)) return hit(TRADE_BENCH.electrical);
+  if(/garage/.test(t)) return hit(TRADE_BENCH['garage door']);
+  if(/water heater/.test(t)) return hit(TRADE_BENCH['water heater']);
+  if(/drain|sewer/.test(t)) return hit(TRADE_BENCH.drain);
+  if(/paint/.test(t)) return {label:'Painting',low:60,median:99,high:180,estimated:true,matched:true};
+  for(const k in TRADE_BENCH){ if(t.includes(k)) return hit(TRADE_BENCH[k]); }
+  const label=(text||'').trim();
+  return {label: label?(label.charAt(0).toUpperCase()+label.slice(1)):'Your industry', ...BENCH_FALLBACK, estimated:true, matched:false};
+}
+function benchFor(){
+  if(meterVert==='custom') return resolveTrade(meterCustom);
+  const p=PACKMETA.find(x=>x.id===meterVert)||PACKMETA[0]||{label:'Market',cpa:BENCH_FALLBACK};
+  return {label:p.label,low:p.cpa.low,median:p.cpa.median,high:p.cpa.high,estimated:false,matched:true};
+}
+// Default the meter to whatever business the customer filled out in their profile.
+function defaultMeterVert(){
+  const p=(typeof PROFILE!=='undefined'&&PROFILE)||{};
+  const hay=((p.businessName||'')+' '+(p.services||'')+' '+(p.industry||'')).toLowerCase();
+  const tr=resolveTrade(hay);
+  if(tr.matched){ meterVert='custom'; meterCustom=tr.label; return; }
+  const pack=(PACKMETA||[]).find(x=>(x.label||'').toLowerCase()===(p.industry||'').toLowerCase());
+  if(pack){ meterVert=pack.id; return; }
+  meterVert=((PACKMETA||[]).find(x=>x.id==='home_services')||PACKMETA[0]||{id:'solar'}).id;
+}
 function gaugeSVG(cpa){
   const max=Math.round(cpa.high*1.35), cx=130, cy=120, r=96;
   const ang=v=>Math.PI-(Math.min(v,max)/max)*Math.PI;
@@ -1161,25 +1205,46 @@ function gaugeSVG(cpa){
     <circle cx="${cx}" cy="${cy}" r="7" fill="var(--ink)"/></svg>`;
 }
 function renderMeters(){
-  const vp=$('#meter-vpick'), vp2=$('#val-vpick'); vp.innerHTML=''; vp2.innerHTML='';
-  for(const p of PACKMETA){
-    const mk=(host,onSel)=>{const b=el('button',p.id===meterVert?'on':'',p.label);b.onclick=()=>{meterVert=p.id;renderMeters();runValidate();};host.append(b);};
-    mk(vp); mk(vp2);
-  }
-  const pack=PACKMETA.find(p=>p.id===meterVert)||PACKMETA[0]; if(!pack)return;
-  $('#gauge').innerHTML=gaugeSVG(pack.cpa);
-  $('#gauge-val').textContent=money(pack.cpa.median);
-  $('#legend').innerHTML=`<span><span class="d" style="background:var(--good)"></span>Optimal (≤${money(pack.cpa.low)})</span>
-    <span><span class="d" style="background:var(--teal)"></span>Typical (${money(pack.cpa.low)}–${money(pack.cpa.high)})</span>
-    <span><span class="d" style="background:var(--warn)"></span>High (>${money(pack.cpa.high)})</span>`;
-  runValidate();
+  if(!meterInit){ try{ defaultMeterVert(); }catch(e){} meterInit=true; }
+  const vp=$('#meter-vpick'), vp2=$('#val-vpick'); if(!vp||!vp2) return; vp.innerHTML=''; vp2.innerHTML='';
+  const build=(host,withInput)=>{
+    for(const p of PACKMETA){ const b=el('button',p.id===meterVert?'on':'',p.label); b.onclick=()=>{ meterVert=p.id; renderMeters(); }; host.append(b); }
+    const cb=el('button',meterVert==='custom'?'on':'','＋ Custom'); cb.onclick=()=>{ meterVert='custom'; renderMeters(); if(withInput) setTimeout(()=>{ const i=$('#meter-custom'); i&&i.focus(); },0); }; host.append(cb);
+    if(meterVert==='custom' && withInput){ const inp=el('input','f'); inp.id='meter-custom'; inp.placeholder='Enter your industry — e.g. Painting, Plumbing, HVAC'; inp.value=meterCustom; inp.style.cssText='margin:8px 0 0;width:100%;flex:0 0 100%'; inp.oninput=()=>{ meterCustom=inp.value; refreshMeter(); }; host.append(inp); }
+  };
+  build(vp,true); build(vp2,false);
+  refreshMeter();
   renderBenchmarkHub();
   renderBenchmarks();
 }
+// Update the gauge, legend and validator from the resolved benchmark — WITHOUT
+// rebuilding the pickers, so typing in the Custom field never loses focus.
+function refreshMeter(){
+  const bm=benchFor();
+  const g=$('#gauge'); if(g) g.innerHTML=gaugeSVG({low:bm.low,median:bm.median,high:bm.high});
+  const gv=$('#gauge-val'); if(gv) gv.textContent=money(bm.median);
+  const gc=$('#gauge-cap'); if(gc) gc.textContent=(bm.label||'Market')+(bm.estimated?' · estimate':' median');
+  const lg=$('#legend'); if(lg) lg.innerHTML=`<span><span class="d" style="background:var(--good)"></span>Optimal (≤${money(bm.low)})</span>
+    <span><span class="d" style="background:var(--teal)"></span>Typical (${money(bm.low)}–${money(bm.high)})</span>
+    <span><span class="d" style="background:var(--warn)"></span>High (>${money(bm.high)})</span>`;
+  const note=$('#meter-note'); if(note) note.textContent = bm.estimated ? '≈ Estimated from the general home-services benchmark — no trade-specific dataset for '+(bm.label||'this industry')+' yet.' : '';
+  runValidate();
+}
+function localValidate(bm,budget,leads){
+  const cpl=leads>0?Math.round((budget/leads)*100)/100:0;
+  const rec=Math.round(leads*bm.median);
+  const status=cpl>=bm.median?'ok':cpl>=bm.low?'tight':'unrealistic';
+  const message=status==='ok'?`$${cpl}/lead is on-market for ${bm.label} (median ~$${bm.median}). This plan is achievable.`
+    :status==='tight'?`$${cpl}/lead is tight for ${bm.label} ($${bm.low}–$${bm.high} range) — possible, but expect a slower ramp.`
+    :`$${cpl}/lead is below the $${bm.low}–$${bm.high} range for ${bm.label}. For ${leads} leads, budget ~$${rec.toLocaleString()} (at the $${bm.median} median).`;
+  return {cpl,status,message};
+}
 async function runValidate(){
   const b=Number($('#v-budget').value)||0, l=Number($('#v-leads').value)||0;
-  const v=await apiValidate(meterVert,b,l);
-  const box=$('#verdict'); box.className='verdict '+v.status;
+  let v;
+  if(meterVert==='custom'){ v=localValidate(benchFor(),b,l); }
+  else { try{ v=await apiValidate(meterVert,b,l); }catch(e){ v=localValidate(benchFor(),b,l); } }
+  const box=$('#verdict'); if(!box) return; box.className='verdict '+v.status;
   const icon=v.status==='ok'?'✅':'⚠️';
   box.textContent=`${icon} ${v.message}`;
 }
