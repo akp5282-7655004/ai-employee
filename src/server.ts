@@ -848,7 +848,33 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const st = recState(data);
     const open = recs.filter((r) => !st.applied?.[r.id] && !st.dismissed?.[r.id]);
     const connected = spend.length + leads.length + reviews.length + emails.length > 0;
-    return { recommendations: open, connected, appliedToday: Object.keys(st.applied ?? {}).length };
+    const digestOn = ((data.schedules as ScheduledAgent[]) ?? []).some((a) => a.task === 'recommend' && a.enabled);
+    return { recommendations: open, connected, appliedToday: Object.keys(st.applied ?? {}).length, digestOn };
+  });
+
+  // Turn the daily morning recommendations digest on/off (a scheduled 'recommend' agent).
+  app.post<{ Body: { enabled?: boolean; tzOffset?: number } }>('/api/recommendations/digest', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const agents = ((data.schedules as ScheduledAgent[]) ?? []).slice();
+    const existing = agents.find((a) => a.task === 'recommend');
+    const enabled = req.body?.enabled !== false;
+    const tz = typeof req.body?.tzOffset === 'number' ? req.body!.tzOffset : existing?.tzOffset ?? 0;
+    if (enabled) {
+      if (existing) {
+        existing.enabled = true;
+        existing.deliver = { ...(existing.deliver ?? {}), email: true };
+        existing.tzOffset = tz;
+      } else {
+        agents.push({ id: newToken().slice(0, 10), name: 'Daily recommendations', task: 'recommend', deliver: { email: true }, time: '08:15', days: [1, 2, 3, 4, 5], enabled: true, tzOffset: tz, createdAt: new Date().toISOString() });
+      }
+    } else if (existing) {
+      existing.enabled = false;
+    }
+    data.schedules = agents.slice(0, 25);
+    await authStore.setUserData(u.id, data);
+    return { ok: true, digestOn: enabled, emailReady: deliveryStatus().email };
   });
 
   app.post<{ Body: { rec?: Recommendation } }>('/api/recommendations/apply', async (req, reply) => {
@@ -1402,6 +1428,23 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const targetCpa = Number(p.targetCpa) || 85;
       const r = buildCpaReport(spend, deals, targetCpa);
       return { title: r.title, body: r.body };
+    }
+    if (task === 'recommend') {
+      const dl = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(userId) : undefined, []);
+      const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(userId) : undefined, []);
+      const leads = await safeConn(connector.getLeads ? () => connector.getLeads!(userId) : undefined, []);
+      const reviews = await safeConn(connector.getReviews ? () => connector.getReviews!(userId) : undefined, []);
+      const emails = await safeConn(connector.getRecentEmails ? () => connector.getRecentEmails!(userId, 25) : undefined, []);
+      const social = await safeConn(connector.getSocialMetrics ? () => connector.getSocialMetrics!(userId) : undefined, null);
+      const scheduledPosts = ((data.scheduledPosts as ScheduledPost[]) ?? []).filter((x) => x.status === 'scheduled').length;
+      const stl = (data.speedToLead as { enabled?: boolean } | undefined)?.enabled ?? false;
+      const recs = buildRecommendations({ spend, deals, leads, reviews, emails, social, scheduledPosts, targetCpa: Number(p.targetCpa) || null, speedToLeadOn: stl }, new Date());
+      if (!recs.length) return { title: `Recommendations — ${dl}`, body: `You’re all optimized today — nothing needs your attention. Nice work.` };
+      const urgent = recs.filter((r) => r.severity === 'high').length;
+      const lines = recs.map((r, i) => `${i + 1}. ${r.title}\n   Why: ${r.why}\n   Do: ${r.action}`).join('\n\n');
+      const body = `You have ${recs.length} recommendation${recs.length > 1 ? 's' : ''}${urgent ? ` — ${urgent} need action now` : ''}. Open Miles and approve the ones you want:\n\n${lines}`;
+      return { title: `${recs.length} recommendation${recs.length > 1 ? 's' : ''} — ${dl}`, body };
     }
     if (task === 'email_tasklist') {
       const emails = await safeConn(connector.getRecentEmails ? () => connector.getRecentEmails!(userId, 25) : undefined, []);

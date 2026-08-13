@@ -22,6 +22,7 @@ export type TaskType =
   | 'social_poster'
   | 'social_report'
   | 'speed_to_lead'
+  | 'recommend'
   | 'custom';
 
 export interface TaskSpec {
@@ -39,6 +40,15 @@ export interface TaskSpec {
 }
 
 export const TASK_SPECS: TaskSpec[] = [
+  {
+    task: 'recommend',
+    label: 'Daily recommendations',
+    description: 'Each morning, reviews your marketing and lists the top optimizations to approve.',
+    defaultTime: '08:15',
+    reads: 'Your ad spend & cost-per-lead, leads, reviews, inbox, and scheduled posts.',
+    produces: 'A short digest of the day’s recommended optimizations, most urgent first, with what to approve.',
+    instruction: 'Review the shop’s marketing data and list the specific optimizations worth approving today, most urgent first, each with the evidence and the concrete action. Keep it short and actionable.',
+  },
   {
     task: 'morning_brief',
     label: 'Morning brief + to-do list',

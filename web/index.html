@@ -1295,8 +1295,12 @@ async function openRecs(){
   if(REMOTE){ try{ d=await(await fetch('/api/recommendations')).json(); }catch(e){} }
   box.innerHTML='';
   const head=el('div','mcard');
-  head.append(el('h3',null,'Recommendations'));
-  head.append(el('p','mdesc','Every day Miles reviews your ad performance, leads, emails and reviews, then suggests specific optimizations. Approve the ones you want — each approved change goes into your Deploy queue.'));
+  const hrow=el('div'); hrow.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap';
+  const hl=el('div'); hl.innerHTML='<h3 style="margin:0">Recommendations</h3>'; hrow.append(hl);
+  const dig=el('button'); const setDig=(on)=>{ dig.textContent=on?'🔔 Daily email: On':'🔔 Email me each morning'; dig.className=on?'go':'adsave'; dig.dataset.on=on?'1':''; }; setDig(!!d.digestOn);
+  dig.onclick=async()=>{ const on=!dig.dataset.on; dig.disabled=true; try{ const r=await(await fetch('/api/recommendations/digest',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({enabled:on,tzOffset:new Date().getTimezoneOffset()})})).json(); setDig(!!r.digestOn); toast(on?(r.emailReady?'Daily digest on — I’ll email you each morning.':'Daily digest on. Connect an email provider on Render to also get it by email.'):'Daily digest off.'); }catch(e){ toast('Couldn’t change that — try again.'); } dig.disabled=false; };
+  hrow.append(dig); head.append(hrow);
+  head.append(el('p','mdesc','Every morning Miles reviews your ad performance, leads, emails and reviews, then suggests specific optimizations. Approve the ones you want — each approved change goes into your Deploy queue.'));
   box.append(head);
   const recs=d.recommendations||[];
   if(!recs.length){
