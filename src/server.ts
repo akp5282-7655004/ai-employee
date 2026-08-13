@@ -13,6 +13,7 @@ import { falReady, falGenerateImage, falGenerateVideo, falGenerateAudio, type As
 import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText, optimizerSystem, type BrandContext } from './creative/studio.js';
 import { resolveKit, kitHasGuidance, type BrandKit } from './brand/kit.js';
 import { templatedReady, templatedListTemplates, templatedRender, type RenderLayer } from './creative/templated.js';
+import { buildRecommendations, type Recommendation } from './agents/recommend.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { catalogForClient, findPlay } from './skills/catalog.js';
 import {
@@ -816,6 +817,73 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const d = (req.body as { deploy?: any })?.deploy ?? { auto: false, queue: [] };
     if (Array.isArray(d.queue)) d.queue = d.queue.slice(0, 300);
     data.deploy = d;
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+
+  // ── Agent Recommendation Engine ──────────────────────────────────────────
+  // Reviews the shop's live marketing data daily and proposes specific, approvable
+  // optimizations. Approving one queues the change into the Deploy pipeline (or
+  // applies a direct toggle like Speed-to-Lead) — the same gate every change uses.
+  const recState = (data: Record<string, unknown>) =>
+    (data.recState as { applied?: Record<string, string>; dismissed?: Record<string, string> }) ?? { applied: {}, dismissed: {} };
+
+  app.get('/api/recommendations', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
+    const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
+    const leads = await safeConn(connector.getLeads ? () => connector.getLeads!(u.id) : undefined, [] as import('./connectors/types.js').Lead[]);
+    const reviews = await safeConn(connector.getReviews ? () => connector.getReviews!(u.id) : undefined, [] as import('./connectors/types.js').Review[]);
+    const emails = await safeConn(connector.getRecentEmails ? () => connector.getRecentEmails!(u.id, 25) : undefined, [] as import('./connectors/types.js').EmailMessage[]);
+    const social = await safeConn(connector.getSocialMetrics ? () => connector.getSocialMetrics!(u.id) : undefined, null as import('./connectors/types.js').SocialMetrics | null);
+    const scheduledPosts = ((data.scheduledPosts as ScheduledPost[]) ?? []).filter((x) => x.status === 'scheduled').length;
+    const stl = (data.speedToLead as { enabled?: boolean } | undefined)?.enabled ?? false;
+    const recs = buildRecommendations(
+      { spend, deals, leads, reviews, emails, social, scheduledPosts, targetCpa: Number(p.targetCpa) || null, speedToLeadOn: stl },
+      new Date(),
+    );
+    const st = recState(data);
+    const open = recs.filter((r) => !st.applied?.[r.id] && !st.dismissed?.[r.id]);
+    const connected = spend.length + leads.length + reviews.length + emails.length > 0;
+    return { recommendations: open, connected, appliedToday: Object.keys(st.applied ?? {}).length };
+  });
+
+  app.post<{ Body: { rec?: Recommendation } }>('/api/recommendations/apply', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const rec = req.body?.rec;
+    if (!rec?.id) return reply.code(400).send({ error: 'rec is required' });
+    const data = await authStore.getUserData(u.id);
+    const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
+    deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
+    const status = deploy.auto ? 'live' : 'pending';
+    if (rec.apply?.kind === 'enable_speed_to_lead') {
+      const s = (data.speedToLead as Record<string, unknown>) ?? {};
+      s.enabled = true;
+      data.speedToLead = s;
+    }
+    deploy.queue.unshift({ id: rec.id, label: rec.apply?.label || rec.title || 'Optimization', type: 'optimization', status, ts: new Date().toISOString() });
+    deploy.queue = deploy.queue.slice(0, 300);
+    data.deploy = deploy;
+    const st = recState(data);
+    st.applied = { ...(st.applied ?? {}), [rec.id]: new Date().toISOString() };
+    data.recState = st;
+    await authStore.setUserData(u.id, data);
+    return { ok: true, status };
+  });
+
+  app.post<{ Body: { id?: string } }>('/api/recommendations/dismiss', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const id = (req.body?.id ?? '').toString();
+    if (!id) return reply.code(400).send({ error: 'id is required' });
+    const data = await authStore.getUserData(u.id);
+    const st = recState(data);
+    st.dismissed = { ...(st.dismissed ?? {}), [id]: new Date().toISOString() };
+    data.recState = st;
     await authStore.setUserData(u.id, data);
     return { ok: true };
   });
