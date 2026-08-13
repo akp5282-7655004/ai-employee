@@ -86,51 +86,65 @@ export interface HubChannel {
 
 const SL = 'https://searchlightdigital.io/';
 
-/** Assemble the hub — LSA filled from the real per-trade benchmark, others linked. */
+/**
+ * Assemble the hub from SearchLight's published home-services benchmarks. Every
+ * value is a real, sourced figure (period + sample noted per channel); each cell
+ * links to the article it came from.
+ */
 export function buildBenchmarkHub(): HubChannel[] {
   const lsa: HubEntry[] = [
-    { trade: 'All Trades', metric: 'CPL', value: LSA_BLENDED.cpl, unit: 'usd', source: SL + 'google-local-service-ads-cost-per-lead/' },
-    { trade: 'All Trades', metric: 'Cost/Customer', value: LSA_BLENDED.costPerCustomer, unit: 'usd', source: SL + 'google-local-service-ads-cost-per-lead/' },
+    { trade: 'All Trades', metric: 'CPL', value: LSA_BLENDED.cpl, unit: 'usd', source: SL + 'google-local-service-ads-cost-per-lead/', note: `Book rate ${LSA_BLENDED.bookRate}% · cost/customer $${LSA_BLENDED.costPerCustomer} · ROAS ${LSA_BLENDED.roas}x` },
   ];
   for (const t of LSA_TRADES) {
     const roasSrc = t.trade === 'HVAC' ? SL + 'what-is-a-good-roas-for-hvac-local-services-ads/' : SL + 'google-local-service-ads-cost-per-lead/';
-    lsa.push({ trade: t.trade, metric: 'CPL', value: t.cpl, unit: 'usd', source: SL + 'google-local-service-ads-cost-per-lead/' });
+    lsa.push({ trade: t.trade, metric: 'CPL', value: t.cpl, unit: 'usd', source: SL + 'google-local-service-ads-cost-per-lead/', note: `Book rate ${t.bookRate}% · avg ticket $${t.avgTicket.toLocaleString()}` });
     lsa.push({ trade: t.trade, metric: 'ROAS', value: t.roas, unit: 'x', source: roasSrc });
   }
-  // Trades SearchLight publishes for LSA that aren't in our per-trade table yet.
-  lsa.push({ trade: 'Roofing', metric: 'CPL', value: null, unit: 'usd', source: SL + 'roofing-google-lsa-cost-per-lead/' });
-  lsa.push({ trade: 'Garage Door', metric: 'CPL', value: null, unit: 'usd', source: SL + 'garage-door-google-lsa-cost-per-lead/' });
-  lsa.push({ trade: 'Garage Door', metric: 'ROAS', value: null, unit: 'x', source: SL + 'what-is-a-good-roas-for-garage-door-local-services-ads/' });
+  // Roofing & garage-door LSA — now sourced from their dedicated living benchmarks.
+  lsa.push({ trade: 'Roofing', metric: 'CPL', value: 79, unit: 'usd', source: SL + 'roofing-google-lsa-cost-per-lead/', note: 'Q1 2026 · median $72 · 37% cheaper than Google Ads' });
+  lsa.push({ trade: 'Roofing', metric: 'ROAS', value: 4.82, unit: 'x', source: SL + 'roofing-google-lsa-cost-per-lead/' });
+  lsa.push({ trade: 'Garage Door', metric: 'CPL', value: 49, unit: 'usd', source: SL + 'garage-door-google-lsa-cost-per-lead/', note: 'Jan–Apr 2026 · book rate 38% · cost/customer $198' });
+  lsa.push({ trade: 'Garage Door', metric: 'ROAS', value: 5.78, unit: 'x', source: SL + 'what-is-a-good-roas-for-garage-door-local-services-ads/', note: 'Median 7.8x account-level' });
 
   return [
     {
       id: 'google_ads',
       channel: 'Google Ads',
-      blurb: 'Search & PMax cost-per-lead and return on ad spend, by trade.',
+      blurb: 'Search & PMax cost-per-lead and ROAS by trade (non-branded).',
       entries: [
-        { trade: 'All Trades', metric: 'CPL', value: 104, unit: 'usd', source: SL + 'what-is-a-good-cost-per-lead-for-hvac-google-ads/', note: 'Blended brand CPL ($149 non-brand) — SearchLight LSA-vs-Google companion.' },
-        { trade: 'HVAC', metric: 'CPL', value: null, unit: 'usd', source: SL + 'what-is-a-good-cost-per-lead-for-hvac-google-ads/' },
-        { trade: 'Plumbing', metric: 'CPL', value: null, unit: 'usd', source: SL + 'plumbing-google-ads-cost-per-lead/' },
-        { trade: 'Roofing', metric: 'CPL', value: null, unit: 'usd', source: SL + 'roofing-google-ads-cost-per-lead/' },
-        { trade: 'Garage Door', metric: 'CPL', value: null, unit: 'usd', source: SL + 'garage-door-google-ads-cost-per-lead/' },
-        { trade: 'HVAC', metric: 'ROAS', value: null, unit: 'x', source: SL + 'what-is-a-good-roas-for-hvac-google-ads' },
-        { trade: 'Garage Door', metric: 'ROAS', value: null, unit: 'x', source: SL + 'what-is-a-good-roas-for-garage-door-google-ads/' },
+        { trade: 'All Trades', metric: 'CPL', value: 104, unit: 'usd', source: SL + 'what-is-a-good-cost-per-lead-for-hvac-google-ads/', note: 'Blended · non-branded $149 · branded $34 · PMax $72' },
+        { trade: 'HVAC', metric: 'CPL', value: 149, unit: 'usd', source: SL + 'what-is-a-good-cost-per-lead-for-hvac-google-ads/', note: 'Non-branded · HVAC-general $198 · heating-repair $144' },
+        { trade: 'Plumbing', metric: 'CPL', value: 183, unit: 'usd', source: SL + 'plumbing-google-ads-cost-per-lead/', note: 'Non-branded · PMax $82 · median acct $168' },
+        { trade: 'Roofing', metric: 'CPL', value: 124, unit: 'usd', source: SL + 'roofing-google-ads-cost-per-lead/', note: 'Non-branded · branded $44 · PMax $64' },
+        { trade: 'Garage Door', metric: 'CPL', value: 173, unit: 'usd', source: SL + 'garage-door-google-ads-cost-per-lead/', note: 'Non-branded · blended $145 · branded $66' },
+        { trade: 'Electrical', metric: 'CPL', value: 128, unit: 'usd', source: SL + 'plumbing-google-ads-cost-per-lead/', note: 'Non-branded (Q1 2026)' },
+        { trade: 'HVAC', metric: 'ROAS', value: 4.37, unit: 'x', source: SL + 'what-is-a-good-roas-for-hvac-google-ads', note: 'Median blended · top quartile 10.24x · non-branded 2.95x' },
+        { trade: 'Garage Door', metric: 'ROAS', value: 3.51, unit: 'x', source: SL + 'what-is-a-good-roas-for-garage-door-google-ads/', note: 'Blended · median 2.90x · top quartile 11.37x' },
       ],
     },
-    { id: 'lsa', channel: 'Google Local Service Ads', blurb: 'Google Guaranteed — the lowest cost-per-lead channel in home services. Sourced from the SearchLight LSA benchmark.', entries: lsa },
-    { id: 'facebook', channel: 'Facebook Ads', blurb: 'Meta / Facebook return on ad spend for home services.', entries: [{ trade: 'HVAC', metric: 'ROAS', value: null, unit: 'x', source: SL + 'what-is-a-good-roas-for-hvac-facebook-ads/' }] },
-    { id: 'direct_mail', channel: 'Direct Mail', blurb: 'Print & EDDM return on investment.', entries: [{ trade: 'HVAC', metric: 'ROI', value: null, unit: 'x', source: SL + 'what-is-a-good-roi-for-hvac-direct-mail/' }] },
-    { id: 'seo', channel: 'SEO', blurb: 'Organic search return on investment.', entries: [{ trade: 'HVAC', metric: 'ROI', value: null, unit: 'x', source: SL + 'hvac-seo/' }] },
+    { id: 'lsa', channel: 'Google Local Service Ads', blurb: 'Google Guaranteed — the lowest cost-per-lead channel in home services (Feb 2026, 888 contractors).', entries: lsa },
+    { id: 'facebook', channel: 'Facebook Ads', blurb: 'Meta / Facebook closed-revenue ROAS (Q4 2025, 262 advertisers).', entries: [{ trade: 'HVAC', metric: 'ROAS', value: 1.65, unit: 'x', source: SL + 'what-is-a-good-roas-for-hvac-facebook-ads/', note: 'Closed · top quartile 5.17x · ROAS-potential 7.32x' }] },
+    { id: 'direct_mail', channel: 'Direct Mail', blurb: 'Print & EDDM return on investment (Q1 2026, MSI Direct).', entries: [{ trade: 'HVAC', metric: 'ROI', value: 5.9, unit: 'x', source: SL + 'what-is-a-good-roi-for-hvac-direct-mail/', note: 'Call-tracking · 12.2x with address-match · median 8.3x · cost/customer $287' }] },
+    { id: 'seo', channel: 'SEO', blurb: 'Organic search return on investment (Q4 2025, ~1,000 companies).', entries: [{ trade: 'HVAC', metric: 'ROI', value: 27.46, unit: 'x', source: SL + 'hvac-seo/', note: 'Median · bottom quartile 12.83x · top 60.54x · ~$3,604/mo' }] },
     {
       id: 'ai',
       channel: 'AI',
-      blurb: 'AI ad channels and AI lead-grading performance.',
+      blurb: 'AI ad channels and AI lead-grading performance (2026).',
       entries: [
-        { trade: 'ChatGPT Ads', metric: 'Insight', value: null, unit: '', source: SL + 'chatgpt-ads-home-services-benchmarks/' },
-        { trade: 'AI Lead Grading', metric: 'Insight', value: null, unit: '', source: SL + 'ai-lead-grading-benchmark-home-services/' },
+        { trade: 'ChatGPT Ads', metric: 'Book Rate', value: 33.9, unit: 'pct', source: SL + 'chatgpt-ads-home-services-benchmarks/', note: 'Paid · organic ChatGPT books 42.3% · avg ticket $1,259 · $151 closed/lead' },
+        { trade: 'AI Lead Grading', metric: 'Accuracy', value: 98, unit: 'pct', source: SL + 'ai-lead-grading-benchmark-home-services/', note: 'ClaraT domain model vs best general LLM ~90% (6,000 transcripts)' },
       ],
     },
-    { id: 'lead_quality', channel: 'Lead Quality', blurb: 'How many leads actually turn into booked jobs.', entries: [{ trade: 'Home Services', metric: 'Book Rate', value: LSA_BLENDED.bookRate, unit: 'pct', source: SL + 'book-rate-benchmarks-home-services/' }] },
+    {
+      id: 'lead_quality',
+      channel: 'Lead Quality',
+      blurb: 'How many leads actually book — neutrally graded (2026).',
+      entries: [
+        { trade: 'Qualified · on-call', metric: 'Book Rate', value: 58, unit: 'pct', source: SL + 'book-rate-benchmarks-home-services/', note: 'Qualified conversions booked during the call' },
+        { trade: 'Qualified · eventual', metric: 'Book Rate', value: 74, unit: 'pct', source: SL + 'book-rate-benchmarks-home-services/', note: 'Qualified, ever booked (incl. follow-up)' },
+        { trade: 'All leads · raw', metric: 'Book Rate', value: 22, unit: 'pct', source: SL + 'book-rate-benchmarks-home-services/', note: "Every conversion at the call — the marketer's number" },
+      ],
+    },
   ];
 }
 

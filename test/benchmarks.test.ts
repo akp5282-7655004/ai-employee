@@ -58,20 +58,27 @@ describe('Benchmark Hub', () => {
     }
   });
 
-  it('never fabricates — unsourced cells are null and carry a source link', () => {
+  it('every cell is a real, positive figure with a SearchLight source', () => {
     for (const c of BENCHMARK_HUB) {
       for (const e of c.entries) {
         expect(e.source).toMatch(/^https:\/\/searchlightdigital\.io\//);
-        if (e.value == null) expect(e.source.length).toBeGreaterThan(30); // links out to add it
-        else expect(e.value).toBeGreaterThan(0);
+        expect(e.value).not.toBeNull();
+        expect(e.value).toBeGreaterThan(0);
       }
     }
   });
 
-  it('reports honest coverage (some sourced, some pending)', () => {
+  it('is fully sourced now (no pending cells) with the real per-channel figures', () => {
     const cov = hubCoverage();
-    expect(cov.sourced).toBeGreaterThan(0);
-    expect(cov.sourced).toBeLessThan(cov.total); // there are still article cells to add
+    expect(cov.sourced).toBe(cov.total);
+    expect(cov.total).toBeGreaterThan(25);
+    const g = BENCHMARK_HUB.find((c) => c.id === 'google_ads')!;
+    expect(g.entries.find((e) => e.trade === 'Plumbing' && e.metric === 'CPL')!.value).toBe(183);
+    expect(BENCHMARK_HUB.find((c) => c.id === 'facebook')!.entries[0]!.value).toBe(1.65);
+    expect(BENCHMARK_HUB.find((c) => c.id === 'seo')!.entries[0]!.value).toBe(27.46);
+    const lsa = BENCHMARK_HUB.find((c) => c.id === 'lsa')!;
+    expect(lsa.entries.find((e) => e.trade === 'Roofing' && e.metric === 'CPL')!.value).toBe(79);
+    expect(lsa.entries.find((e) => e.trade === 'Garage Door' && e.metric === 'CPL')!.value).toBe(49);
     expect(buildBenchmarkHub().length).toBe(BENCHMARK_HUB.length);
   });
 });

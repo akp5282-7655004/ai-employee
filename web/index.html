@@ -158,6 +158,8 @@
   .benchchip.pending{background:transparent;border-style:dashed;}
   .bc-lab{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.02em;}
   .bc-val{font-size:20px;font-weight:800;letter-spacing:-.01em;margin-top:3px;}
+  .bc-link{display:block;color:inherit;text-decoration:none;}
+  .bc-link:hover{color:var(--accent);}
   .bc-add{display:inline-block;margin-top:5px;font-size:12.5px;color:var(--accent);text-decoration:none;}
   .bc-add:hover{text-decoration:underline;}
   .bc-note{font-size:11px;color:var(--faint);margin-top:4px;line-height:1.35;}
@@ -2951,7 +2953,7 @@ async function renderBenchmarkHub(){
     const chips=ch.entries.map(e=>{
       const v=benchVal(e);
       const val = v!=null
-        ? `<div class="bc-val">${esc(v)}</div>`
+        ? `<a class="bc-val bc-link" href="${esc(e.source)}" target="_blank" rel="noopener">${esc(v)}</a>`
         : `<a class="bc-add" href="${esc(e.source)}" target="_blank" rel="noopener">Add from source →</a>`;
       return `<div class="benchchip${v==null?' pending':''}">
         <div class="bc-lab">${esc(e.trade)} · ${esc(e.metric)}</div>
@@ -2968,8 +2970,8 @@ async function renderBenchmarkHub(){
   }).join('');
   host.innerHTML=`<div class="acard">
     <div class="ah">Benchmark Hub — CPL, ROAS &amp; ROI by channel and trade</div>
-    <div class="mdesc" style="margin:-8px 0 6px">First-party home-services advertising benchmarks. <b>${cov.sourced} of ${cov.total}</b> cells are live from the SearchLight LSA dataset; the rest link to the source article to add — nothing here is estimated or invented.</div>
-    ${BENCH_META?`<div class="appsub" style="margin-bottom:14px">Source: ${esc(BENCH_META.source)} · ${esc(BENCH_META.period)} · ${(BENCH_META.contractors||0).toLocaleString()} contractors · $${((BENCH_META.spend||0)/1e6).toFixed(1)}M tracked spend.</div>`:''}
+    <div class="mdesc" style="margin:-8px 0 6px">First-party home-services advertising benchmarks. All <b>${cov.total}</b> figures are live from SearchLight's published studies — real numbers, not estimates. Tap any metric to open its source.</div>
+    <div class="appsub" style="margin-bottom:14px">Source: SearchLight Digital home-services benchmarks (Google Ads, Local Service Ads, Facebook, Direct Mail, SEO &amp; AI) · 2026.</div>
     ${sections}
   </div>`;
 }
