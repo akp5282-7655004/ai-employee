@@ -1937,23 +1937,48 @@ function renderTemplatePicker(card){
   const ow=el('div'); ow.style.cssText='flex:1;min-width:220px'; ow.innerHTML='<label class="f" style="display:block;margin-bottom:3px">Your offer</label>'; const oin=el('input','f'); oin.style.cssText='margin:0;width:100%'; oin.placeholder='e.g. 10% Off Repairs · $89 Tune-Up · Free Estimate'; oin.value=((typeof PROFILE!=='undefined'&&PROFILE&&PROFILE.currentOffers)||''); ow.append(oin);
   const btn=el('button','go','Show templates'); btn.style.flex='none';
   ctrls.append(tw,ow,btn); sec.append(ctrls);
+  const note=el('div','appsub'); note.style.cssText='margin:0 0 12px;display:none;line-height:1.5'; sec.append(note);
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px'; sec.append(grid);
   card.append(sec);
-  const fill=async()=>{
-    grid.innerHTML='<div class="appsub">Designing your templates…</div>';
-    await preloadTplLogo();
-    const trade=tsel.value, offer=oin.value.trim();
+
+  // Pro library: render a chosen template server-side with the shop's brand + offer.
+  function fillFromApi(templates){
     grid.innerHTML='';
+    templates.forEach(t=>{
+      const cell=el('div'); cell.style.cssText='cursor:pointer;border:1px solid var(--line);border-radius:10px;overflow:hidden;aspect-ratio:1/1;background:var(--panel-2);position:relative';
+      const im=el('img'); im.src=t.thumbnail||''; im.loading='lazy'; im.alt=t.name||''; im.style.cssText='width:100%;height:100%;object-fit:cover;display:block'; im.onerror=()=>{ im.style.display='none'; }; cell.append(im);
+      cell.onclick=async()=>{
+        if(cell.dataset.busy) return; cell.dataset.busy='1'; cell.style.opacity='.5'; toast('Designing your template…');
+        try{ const r=await(await fetch('/api/templates/render',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({templateId:t.id, offer:oin.value.trim(), headline:tsel.value})})).json();
+          if(r&&r.url) openEditor(r.url); else toast((r&&r.note)||'Couldn’t render that template.');
+        }catch(e){ toast('Couldn’t render that template.'); }
+        cell.style.opacity=''; delete cell.dataset.busy;
+      };
+      grid.append(cell);
+    });
+  }
+  // Fallback: basic built-in layouts, used only until a design library is connected.
+  async function fillFromBuiltins(){
+    await preloadTplLogo(); grid.innerHTML='';
     for(const p of TPL_PAINTERS){ for(let v=0; v<3; v++){
-      const cv=renderTplCanvas(p,v,tplData(trade,offer),540); const url=cv.toDataURL('image/png');
+      const cv=renderTplCanvas(p,v,tplData(tsel.value,oin.value.trim()),540);
       const cell=el('div'); cell.style.cssText='cursor:pointer;border:1px solid var(--line);border-radius:10px;overflow:hidden;aspect-ratio:1/1;background:#fff';
-      const im=el('img'); im.src=url; im.loading='lazy'; im.style.cssText='width:100%;height:100%;object-fit:cover;display:block'; cell.append(im);
-      cell.onclick=()=>{ const big=renderTplCanvas(p,v,tplData(tsel.value,oin.value.trim()),1080); openEditor(big.toDataURL('image/png')); };
+      const im=el('img'); im.src=cv.toDataURL('image/png'); im.loading='lazy'; im.style.cssText='width:100%;height:100%;object-fit:cover;display:block'; cell.append(im);
+      cell.onclick=()=>{ openEditor(renderTplCanvas(p,v,tplData(tsel.value,oin.value.trim()),1080).toDataURL('image/png')); };
       grid.append(cell);
     } }
+  }
+  let API=null;
+  const load=async()=>{
+    grid.innerHTML='<div class="appsub">Loading your templates…</div>';
+    if(API===null){ if(REMOTE){ try{ API=await(await fetch('/api/templates')).json(); }catch(e){ API={ready:false,templates:[]}; } } else { API={ready:false,templates:[]}; } }
+    if(API && API.ready && API.templates && API.templates.length){ note.style.display='none'; fillFromApi(API.templates); }
+    else { note.style.display='block'; note.innerHTML='✨ <b>Connect your pro design library</b> for professional templates — add a <code>TEMPLATED_API_KEY</code> on Render and build templates at templated.io (name the layers <code>offer</code> / <code>headline</code> / <code>company</code> / <code>phone</code> / <code>cta</code> / <code>logo</code> and Miles fills them in). Until then, here are basic built-in layouts:'; fillFromBuiltins(); }
   };
-  btn.onclick=fill; tsel.onchange=fill; oin.addEventListener('keydown',(e)=>{ if(e.key==='Enter') fill(); });
-  fill();
+  btn.onclick=()=>{ if(API&&API.ready) fillFromApi(API.templates); else fillFromBuiltins(); };
+  tsel.onchange=()=>{ if(!(API&&API.ready)) fillFromBuiltins(); };
+  oin.addEventListener('keydown',(e)=>{ if(e.key==='Enter' && !(API&&API.ready)) fillFromBuiltins(); });
+  load();
 }
 // A small grid chooser over the saved Assets photos.
 function openAssetPicker(photos,onPick){

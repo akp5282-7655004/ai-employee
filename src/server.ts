@@ -12,6 +12,7 @@ import { generateAdCopy, type CreativeRequest } from './creative/creative.js';
 import { falReady, falGenerateImage, falGenerateVideo, falGenerateAudio, type Aspect } from './creative/fal.js';
 import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText, optimizerSystem, type BrandContext } from './creative/studio.js';
 import { resolveKit, kitHasGuidance, type BrandKit } from './brand/kit.js';
+import { templatedReady, templatedListTemplates, templatedRender, type RenderLayer } from './creative/templated.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { catalogForClient, findPlay } from './skills/catalog.js';
 import {
@@ -1071,6 +1072,48 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     await authStore.setUserData(u.id, data);
     return { ok: true, kit, active: kitHasGuidance(kit) };
   });
+
+  // ── Template library (Templated.io) ──────────────────────────────────────
+  // A curated library of professional, commercially-licensed templates. Miles
+  // fills each template's named layers with the shop's brand + offer and returns
+  // a finished image. Enabled by TEMPLATED_API_KEY; degrades honestly otherwise.
+  app.get('/api/templates', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (!templatedReady()) return { ready: false, templates: [] as unknown[] };
+    return { ready: true, templates: await templatedListTemplates() };
+  });
+
+  app.post<{ Body: { templateId?: string; offer?: string; headline?: string } }>(
+    '/api/templates/render',
+    async (req, reply) => {
+      const u = await requireUser(req, reply);
+      if (!u) return;
+      const templateId = (req.body?.templateId ?? '').toString();
+      if (!templateId) return reply.code(400).send({ error: 'templateId is required' });
+      if (!templatedReady()) return { url: null, live: false, note: 'Add TEMPLATED_API_KEY on Render to render designs.' };
+      const data = await authStore.getUserData(u.id);
+      const p = (data.profile ?? {}) as Record<string, string>;
+      const kit = brandKitFor(data);
+      const primary = (kit.colors ?? [])[0];
+      const logo = kit.logoUrl && /^https?:\/\//i.test(kit.logoUrl) ? kit.logoUrl : undefined;
+      const offer = (req.body?.offer ?? p.currentOffers ?? 'Special Offer').toString().slice(0, 200);
+      const headline = (req.body?.headline ?? p.industry ?? '').toString().slice(0, 120);
+      const layers: Record<string, RenderLayer> = { cta: { text: 'Call Today' } };
+      if (offer) layers.offer = { text: offer, ...(primary ? { color: primary } : {}) };
+      if (headline) layers.headline = { text: headline };
+      if (p.businessName) layers.company = { text: p.businessName };
+      if (p.phone) layers.phone = { text: p.phone };
+      if (logo) layers.logo = { image_url: logo };
+      const url = await templatedRender(templateId, layers);
+      if (url) await meterUser(u.id, 'image');
+      return {
+        url,
+        live: !!url,
+        note: url ? undefined : 'No image came back — check that the template uses layer names offer / headline / company / phone / cta / logo in Templated.',
+      };
+    },
+  );
 
   app.post<{ Body: { type?: string; prompt?: string; aspect?: Aspect; style?: string; quality?: 'standard' | 'premium'; duration?: number; model?: string } }>(
     '/api/studio',
