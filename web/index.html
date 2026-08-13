@@ -1866,7 +1866,7 @@ function renderOverview(d){
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px';
   const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<h3 style="margin:0 0 10px">📈 Marketing performance</h3>';
   if(mk.hasData){ const ss=el('div','stats'); ss.append(statCard('Ad spend','$'+(mk.spend||0).toLocaleString()), statCard('Cost / job', mk.cpa!=null?('$'+mk.cpa):'—'), statCard('Revenue','$'+(mk.revenue||0).toLocaleString())); mc.append(ss); if(mk.targetCpa&&mk.cpa!=null) mc.append(el('div','appsub','Target $'+mk.targetCpa+'/job · '+(mk.cpa<=mk.targetCpa?'✅ under target':'⚠︎ over target'))); }
-  else if(mk.connected){ mc.append(ovSync('✓ Google Ads / Meta connected. Miles is pulling your spend & conversions — live numbers land here as soon as your first report syncs (usually within a day).')); const tb=el('button',null,'Test the connection now →'); tb.style.cssText='margin-top:8px;background:none;border:none;color:var(--accent);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:0'; tb.onclick=()=>diagProbe('google_ads',tb); mc.append(tb); }
+  else if(mk.connected){ mc.append(ovSync('✓ Google Ads / Meta connected — Miles reads it live, on demand (no daily sync wait). Nothing showing yet means there’s no spend in the last 30 days on the account, not a delay.')); const row=el('div'); row.style.cssText='display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap'; const rb=el('button',null,'↻ Refresh now'); rb.style.cssText='background:none;border:1px solid var(--line);border-radius:8px;color:var(--accent);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:5px 10px'; rb.onclick=async()=>{ rb.disabled=true; const o=rb.textContent; rb.textContent='Pulling live…'; await openOverview(); }; const tb=el('button',null,'Diagnose connection →'); tb.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:0'; tb.onclick=()=>diagProbe('google_ads',tb); row.append(rb,tb); mc.append(row); }
   else mc.append(ovNudge('Connect Google Ads / Meta in Integrations to see real spend, cost-per-job & revenue.'));
   grid.append(mc);
   const lk=d.leads||{}, rk=d.reviews||{}; const lc=el('div','mcard'); lc.innerHTML='<h3 style="margin:0 0 10px">📞 Leads & reputation</h3>';
@@ -1876,7 +1876,7 @@ function renderOverview(d){
   grid.append(lc);
   const sc=el('div','mcard'); sc.innerHTML='<h3 style="margin:0 0 10px">📱 Social</h3>';
   if(d.social&&d.social.hasData){ const ss=el('div','stats'); ss.append(statCard('Impressions',(d.social.impressions||0).toLocaleString()), statCard('Clicks',d.social.clicks||0), statCard('Likes',d.social.likes||0), statCard('Followers',(d.social.followers||0).toLocaleString())); sc.append(ss); }
-  else if(d.social&&d.social.connected){ sc.append(ovSync('✓ Social connected. Impressions, clicks & followers appear here after the next sync.')); }
+  else if(d.social&&d.social.connected){ sc.append(ovSync('✓ Social connected — Miles reads it live. Impressions, clicks & followers show as soon as there’s activity on the account.')); }
   else sc.append(ovNudge('Connect Facebook / Instagram / LinkedIn to see impressions, clicks & followers.'));
   grid.append(sc);
   box.append(grid);
