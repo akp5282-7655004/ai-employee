@@ -1808,6 +1808,35 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return res.reply;
   });
 
+  // Conversational chat — a general assistant (ask questions, do research), seeded
+  // with the owner's business profile, with a selectable depth/research mode.
+  app.post<{ Body: { messages?: Array<{ role?: string; text?: string }>; mode?: string } }>('/api/chat/ask', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const mode = ['easy', 'medium', 'high', 'research'].includes(req.body?.mode ?? '') ? (req.body!.mode as string) : 'medium';
+    const cfg: Record<string, { tokens: number; style: string }> = {
+      easy: { tokens: 500, style: 'Answer briefly and plainly — a few sentences, straight to the point, no filler.' },
+      medium: { tokens: 900, style: 'Give a clear, helpful answer with light structure (a short intro and bullets where useful).' },
+      high: { tokens: 1500, style: 'Think it through thoroughly. Give a well-structured, step-by-step answer with specifics, examples, and the reasoning behind your advice.' },
+      research: { tokens: 2200, style: 'Act as a research analyst. Produce an in-depth, well-organized report: use Markdown headings and bullets, cover options and trade-offs, cite concrete numbers/benchmarks where you know them, state assumptions, and finish with clear, prioritized recommendations.' },
+    };
+    const m = cfg[mode]!;
+    const bizBits = [p.businessName && `the business "${p.businessName}"`, p.industry && `industry: ${p.industry}`, p.serviceAreas && `area: ${p.serviceAreas}`, p.services && `services: ${p.services}`].filter(Boolean).join('; ');
+    const system =
+      `You are Miles, an expert AI marketing and business assistant for local-service / home-services businesses. ` +
+      `Answer questions and do research for the owner like a sharp, practical consultant. ` +
+      (bizBits ? `Context about the owner's business — ${bizBits}. Use it when relevant. ` : '') +
+      m.style +
+      ` Be accurate and honest; if you don't know or can't verify something, say so plainly rather than guessing. Use plain text with light Markdown (headings, **bold**, bullet lists) for readability. Never invent statistics.`;
+    const msgs = (req.body?.messages ?? []).filter((x) => x && x.text).slice(-16);
+    const convo = msgs.map((x) => `${x.role === 'user' ? 'User' : 'Miles'}: ${x.text}`).join('\n\n') || 'The user just opened the chat.';
+    const text = await generateText({ system, user: convo, maxTokens: m.tokens });
+    if (text) await meterUser(u.id, 'text');
+    return { text: text ?? "I can't reach my language model right now — add an OPENROUTER_API_KEY on Render and I'll answer live.", live: !!text, mode };
+  });
+
   // Start a fresh conversation (clears the stored intake/pending for this user).
   app.post<{ Body: { sessionId?: string } }>('/api/reset', async (req, reply) => {
     const u = await getUser(req);

@@ -336,6 +336,17 @@
   .composer{border-top:1px solid var(--line);padding-top:12px;display:flex;gap:10px;align-items:flex-end;}
   .composer textarea{flex:1;resize:none;font-family:var(--sans);font-size:15px;color:var(--ink);background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;max-height:120px;outline:none;}
   .csend{width:44px;height:44px;border-radius:11px;border:none;background:var(--primary);color:var(--primary-ink);font-size:17px;cursor:pointer;}
+  .cmode{height:44px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);border-radius:11px;padding:0 10px;font-size:13px;font-weight:600;font-family:var(--sans);cursor:pointer;outline:none;}
+  /* Rendered Markdown inside assistant bubbles */
+  .emp .bubble h1,.emp .bubble h2,.emp .bubble h3{font-size:15px;font-weight:800;margin:12px 0 5px;}
+  .emp .bubble h1:first-child,.emp .bubble h2:first-child,.emp .bubble h3:first-child{margin-top:0;}
+  .emp .bubble ul,.emp .bubble ol{margin:6px 0;padding-left:20px;}
+  .emp .bubble li{margin:3px 0;}
+  .emp .bubble p{margin:8px 0;}
+  .emp .bubble p:first-child{margin-top:0;} .emp .bubble p:last-child{margin-bottom:0;}
+  .emp .bubble code{background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:12.5px;}
+  .emp .bubble.md{white-space:normal;}
+  .typing{display:inline-flex;gap:4px}.typing span{width:6px;height:6px;border-radius:50%;background:var(--faint);animation:tb 1s infinite}.typing span:nth-child(2){animation-delay:.15s}.typing span:nth-child(3){animation-delay:.3s}@keyframes tb{0%,60%,100%{opacity:.3}30%{opacity:1}}
   .cplus-wrap{position:relative;flex:none;}
   .cplus{width:44px;height:44px;border-radius:11px;border:1px solid var(--line);background:var(--panel-2);color:var(--muted);font-size:22px;line-height:1;cursor:pointer;display:grid;place-items:center;}
   .cplus:hover{border-color:var(--accent);color:var(--ink);}
@@ -362,7 +373,7 @@
   <aside class="side">
     <div class="brandrow"><svg class="milesmark" viewBox="0 0 100 100" width="26" height="26" role="img" aria-label="Miles"><rect x="1.5" y="1.5" width="97" height="97" rx="26" fill="#111112"/><g fill="none" stroke="#fff" stroke-width="8"><path d="M31.6 31.6A26 26 0 0 0 68.4 68.4" stroke-opacity=".22"/><path d="M31.6 31.6A26 26 0 0 1 68.4 68.4"/></g><circle cx="42" cy="50" r="4" fill="#fff"/><circle cx="58" cy="50" r="4" fill="#fff"/></svg><span class="wm">miles.ai</span></div>
     <div class="ws"><span class="sq" id="ws-av">·</span><b id="ws-name">Your Workspace</b><span class="cx"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg></span></div>
-    <div class="newtask" data-ask><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New task</div>
+    <div class="newtask" data-ask><svg class="ico" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-9 9c0 1.6.42 3.1 1.15 4.4L3 21l4.8-1.1A9 9 0 1 0 12 3Z"/></svg> Chat with Miles</div>
     <nav class="nav" id="nav">
       <a data-page="overview" class="on"><svg class="ico" viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0"/><path d="M12 13l4-3"/><path d="M4 13h1M19 13h1M12 3v1"/></svg> Dashboard</a>
 
@@ -703,7 +714,7 @@
       <div class="chatview on">
         <span class="back" id="back"><svg class="ico" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Back</span>
         <div class="chat" id="chat" aria-live="polite"></div>
-        <div class="composer"><div class="cplus-wrap"><button class="cplus" id="cplus" title="Add" aria-label="Add">+</button><div class="cmenu" id="cmenu" style="display:none"></div></div><textarea id="cinput" rows="1" placeholder="Reply to Miles…"></textarea><button class="csend" id="csend">↑</button></div>
+        <div class="composer"><div class="cplus-wrap"><button class="cplus" id="cplus" title="Add" aria-label="Add">+</button><div class="cmenu" id="cmenu" style="display:none"></div></div><textarea id="cinput" rows="1" placeholder="Ask Miles anything…"></textarea><select id="cmode" class="cmode" title="Answer depth"><option value="easy">⚡ Quick</option><option value="medium" selected>💬 Standard</option><option value="high">🧠 Deep</option><option value="research">🔬 Research</option></select><button class="csend" id="csend">↑</button></div>
         <input type="file" id="chat-file" accept="image/*" style="display:none">
       </div>
     </section>
@@ -1086,7 +1097,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',agents:'Agents & Specialists',schedules:'Scheduled Agents',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Ask Miles'};
+const TITLES={overview:'Dashboard',agents:'Agents & Specialists',schedules:'Scheduled Agents',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -3380,13 +3391,39 @@ function renderResult(reply){
   chat.scrollTop=chat.scrollHeight;
 }
 function dispatch(r){ if(r.plan){renderPlan(r); logChat('emp', r.summary || 'Here’s your plan.');} else if(r.task){ say('emp',r.text); if(r.task.ok) queueChange('action', r.task.summary, 'live'); } else if(r.launched!==undefined)renderResult(r); else say('emp',r.text); }
-async function send(text,silent){const msg=(text!=null?text:cinput.value).trim();if(!msg)return;if(!silent)say('user',msg);cinput.value='';try{dispatch(await apiMessage(msg));}catch(e){say('emp','Sorry — I couldn’t reach the server just now.');}}
+let chatMode='medium';
+// Light Markdown → HTML for assistant replies (headings, bold, code, bullets).
+function mdToHtml(md){
+  let s=esc(md||'');
+  s=s.replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+  const lines=s.split(/\n/); let html='', list=null;
+  const closeList=()=>{ if(list){ html+='</'+list+'>'; list=null; } };
+  for(const raw of lines){ const line=raw.trimEnd(); let m;
+    if(m=line.match(/^\s*#{1,6}\s+(.*)/)){ closeList(); html+='<h3>'+m[1]+'</h3>'; continue; }
+    if(m=line.match(/^\s*[-*•]\s+(.*)/)){ if(list!=='ul'){ closeList(); html+='<ul>'; list='ul'; } html+='<li>'+m[1]+'</li>'; continue; }
+    if(m=line.match(/^\s*\d+[.)]\s+(.*)/)){ if(list!=='ol'){ closeList(); html+='<ol>'; list='ol'; } html+='<li>'+m[1]+'</li>'; continue; }
+    if(!line.trim()){ closeList(); continue; }
+    closeList(); html+='<p>'+line+'</p>';
+  }
+  closeList(); return html;
+}
+async function send(text,silent){
+  const msg=(text!=null?text:cinput.value).trim(); if(!msg) return;
+  if(!silent) say('user',msg);
+  cinput.value=''; cinput.style.height='auto';
+  if(!REMOTE){ const b=addRow('emp'); b.textContent='Chat runs on the live app.'; return; }
+  const b=addRow('emp'); const typ=el('div','typing'); typ.innerHTML='<span></span><span></span><span></span>'; b.append(typ);
+  try{
+    const r=await fetch('/api/chat/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-16),mode:chatMode})});
+    const d=await r.json(); b.className='bubble md'; b.innerHTML=mdToHtml(d.text||''); logChat('emp',d.text||''); chat.scrollTop=chat.scrollHeight;
+  }catch(e){ b.textContent='Sorry — I couldn’t reach the server just now.'; }
+}
 async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId})}); }catch(e){} } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER); } }
 let CHAT_LOG=[], CHAT_LOADED=false, chatSaveT;
 function logChat(role,text){ if(!text) return; CHAT_LOG.push({role,text}); if(REMOTE){ clearTimeout(chatSaveT); chatSaveT=setTimeout(saveChat,600); } }
 function saveChat(){ if(!REMOTE) return; try{ fetch('/api/chat',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-200)})}); }catch(e){} }
-async function loadChat(){ CHAT_LOADED=true; if(!REMOTE) return; try{ const r=await fetch('/api/chat'); const d=await r.json(); CHAT_LOG=(d.messages||[]).filter(m=>m&&m.text); chat.innerHTML=''; for(const m of CHAT_LOG){ const b=addRow(m.role==='user'?'user':'emp'); b.textContent=m.text; } chat.scrollTop=chat.scrollHeight; }catch(e){} }
-async function enterChat(){ setPage('chat'); if(!CHAT_LOADED) await loadChat(); if(!chat.children.length){ say('emp',"Hi — I'm Miles. Tell me about your business and I'll build a plan you can approve. Everything we discuss is saved here."); } }
+async function loadChat(){ CHAT_LOADED=true; if(!REMOTE) return; try{ const r=await fetch('/api/chat'); const d=await r.json(); CHAT_LOG=(d.messages||[]).filter(m=>m&&m.text); chat.innerHTML=''; for(const m of CHAT_LOG){ const b=addRow(m.role==='user'?'user':'emp'); if(m.role==='user') b.textContent=m.text; else { b.className='bubble md'; b.innerHTML=mdToHtml(m.text); } } chat.scrollTop=chat.scrollHeight; }catch(e){} }
+async function enterChat(){ setPage('chat'); if(!CHAT_LOADED) await loadChat(); if(!chat.children.length){ say('emp',"Hi — I'm Miles, your marketing assistant. Ask me anything: marketing strategy, benchmarks, competitor research, ad copy, or help running your business. Pick an answer depth below — ⚡ Quick, 💬 Standard, 🧠 Deep, or 🔬 Research — and go."); } }
 async function openChat(seed){ await enterChat(); if(seed){ await resetSession(); send(seed); } }
 
 $('#back').onclick=()=>setPage('overview');
@@ -3394,6 +3431,7 @@ $('#hgo').onclick=()=>{const v=$('#hprompt').value.trim();if(v)openChat(v);};
 $('#hprompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#hgo').click();}});
 document.querySelectorAll('[data-ask]').forEach(n=>n.onclick=()=>enterChat());
 $('#csend').onclick=()=>send();
+$('#cmode').onchange=()=>{ chatMode=$('#cmode').value; };
 // "+" menu — attach a photo, or jump to a capability. Only honest, working actions.
 const CMENU=[
   {ic:'📎',label:'Add photo',sub:'→ Assets',act:()=>$('#chat-file').click()},
