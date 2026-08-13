@@ -15,6 +15,7 @@ import { resolveKit, kitHasGuidance, type BrandKit } from './brand/kit.js';
 import { templatedReady, templatedListTemplates, templatedRender, type RenderLayer } from './creative/templated.js';
 import { buildRecommendations, type Recommendation } from './agents/recommend.js';
 import { adLibraryReady, searchCompetitorAds } from './research/adlibrary.js';
+import { TEAM, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { catalogForClient, findPlay } from './skills/catalog.js';
 import {
@@ -871,6 +872,49 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       'home services';
     const ads = await searchCompetitorAds({ terms: q, countries: ['US'], limit: 24 });
     return { ready: true, ads, query: q };
+  });
+
+  // ── Your Marketing Team — named specialists that hand off to each other ────
+  app.get('/api/team', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    return { team: TEAM };
+  });
+
+  // Run a campaign: the Strategist sets the angle, then Content/Social/Ads each
+  // build their piece from that same angle so the whole campaign is coherent.
+  app.post<{ Body: { goal?: string } }>('/api/team/campaign', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const goal = (req.body?.goal ?? '').toString().trim().slice(0, 400);
+    if (!goal) return reply.code(400).send({ error: 'goal is required' });
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const kit = brandKitFor(data);
+    const ctx: TeamCtx = {
+      business: p.businessName,
+      trade: p.industry,
+      city: (p.serviceAreas || '').split(',')[0]?.trim(),
+      services: p.services,
+      offers: p.currentOffers,
+      voice: kit.voice,
+    };
+    // 1) Strategist sets the angle everyone builds on.
+    const sp = strategistPrompt(goal, ctx);
+    const rawAngle = await generateText({ system: sp.system, user: sp.user, maxTokens: 500 });
+    const angle = rawAngle ?? fallbackStrategist(goal, ctx);
+    let live = !!rawAngle;
+    // 2) The specialists each hand off from that brief.
+    const specs = TEAM.filter((s) => ['content', 'social', 'ads'].includes(s.id));
+    const contributions: Array<{ id: string; name: string; role: string; body: string }> = [];
+    for (const s of specs) {
+      const pr = s.id === 'content' ? contentPrompt(goal, angle, ctx) : s.id === 'social' ? socialPrompt(goal, angle, ctx) : adsPrompt(goal, angle, ctx);
+      const raw = await generateText({ system: pr.system, user: pr.user, maxTokens: 700 });
+      if (raw) live = true;
+      contributions.push({ id: s.id, name: s.name, role: s.role, body: raw ?? fallbackContribution(s, goal, ctx) });
+    }
+    if (live) await meterUser(u.id, 'text');
+    return { goal, angle, strategist: { name: 'Marcus', role: 'Marketing Strategist' }, contributions, live };
   });
 
   // ── Agent Recommendation Engine ──────────────────────────────────────────
