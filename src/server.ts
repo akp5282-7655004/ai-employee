@@ -15,7 +15,7 @@ import { resolveKit, kitHasGuidance, type BrandKit } from './brand/kit.js';
 import { templatedReady, templatedListTemplates, templatedRender, type RenderLayer } from './creative/templated.js';
 import { buildRecommendations, type Recommendation } from './agents/recommend.js';
 import { adLibraryReady, searchCompetitorAds } from './research/adlibrary.js';
-import { TEAM, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
+import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { catalogForClient, findPlay } from './skills/catalog.js';
 import {
@@ -874,15 +874,15 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { ready: true, ads, query: q };
   });
 
-  // ── Your Marketing Team — named specialists that hand off to each other ────
+  // ── Miles as CMO — one AI employee who runs the whole marketing function ───
   app.get('/api/team', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    return { team: TEAM };
+    return { areas: CMO_AREAS };
   });
 
-  // Run a campaign: the Strategist sets the angle, then Content/Social/Ads each
-  // build their piece from that same angle so the whole campaign is coherent.
+  // Run a campaign: Miles sets the angle first, then builds the content, social
+  // and ads from that same brief — one coherent campaign, one voice.
   app.post<{ Body: { goal?: string } }>('/api/team/campaign', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
@@ -899,22 +899,21 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       offers: p.currentOffers,
       voice: kit.voice,
     };
-    // 1) Strategist sets the angle everyone builds on.
+    // 1) Miles sets the angle the rest of the campaign is built on.
     const sp = strategistPrompt(goal, ctx);
     const rawAngle = await generateText({ system: sp.system, user: sp.user, maxTokens: 500 });
     const angle = rawAngle ?? fallbackStrategist(goal, ctx);
     let live = !!rawAngle;
-    // 2) The specialists each hand off from that brief.
-    const specs = TEAM.filter((s) => ['content', 'social', 'ads'].includes(s.id));
-    const contributions: Array<{ id: string; name: string; role: string; body: string }> = [];
-    for (const s of specs) {
-      const pr = s.id === 'content' ? contentPrompt(goal, angle, ctx) : s.id === 'social' ? socialPrompt(goal, angle, ctx) : adsPrompt(goal, angle, ctx);
+    // 2) Miles builds each part from that same brief.
+    const parts: Array<{ id: string; title: string; body: string }> = [];
+    for (const id of ['content', 'social', 'ads']) {
+      const pr = id === 'content' ? contentPrompt(goal, angle, ctx) : id === 'social' ? socialPrompt(goal, angle, ctx) : adsPrompt(goal, angle, ctx);
       const raw = await generateText({ system: pr.system, user: pr.user, maxTokens: 700 });
       if (raw) live = true;
-      contributions.push({ id: s.id, name: s.name, role: s.role, body: raw ?? fallbackContribution(s, goal, ctx) });
+      parts.push({ id, title: AREA_TITLE[id] ?? id, body: raw ?? fallbackContribution(id, goal, ctx) });
     }
     if (live) await meterUser(u.id, 'text');
-    return { goal, angle, strategist: { name: 'Marcus', role: 'Marketing Strategist' }, contributions, live };
+    return { goal, angle, parts, live };
   });
 
   // ── Agent Recommendation Engine ──────────────────────────────────────────

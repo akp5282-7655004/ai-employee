@@ -380,7 +380,7 @@
       <div class="navgroup" data-group="agents">
         <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/></svg><span class="hlabel">Agents</span><svg class="ico chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
         <div class="navkids">
-          <a data-page="team"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.4"/><path d="M3 19a6 6 0 0 1 12 0M15 19a5 5 0 0 1 6-4"/></svg> Marketing Team</a>
+          <a data-page="team"><svg class="ico" viewBox="0 0 24 24"><path d="M3 11l18-7-7 18-2.5-7.5L3 11z"/></svg> Campaigns</a>
           <a data-page="agents"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/></svg> Agents &amp; Specialists</a>
           <a data-page="schedules"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M12 3h.01M5 4L3 6M19 4l2 2"/></svg> Scheduled Agents</a>
           <a data-page="wireframe"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11M3 14h6"/></svg> Agent Wireframe</a>
@@ -1122,7 +1122,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Marketing Team',agents:'Agents & Specialists',schedules:'Scheduled Agents',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'Agents & Specialists',schedules:'Scheduled Agents',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1329,42 +1329,45 @@ async function openRecs(){
   for(const r of recs) wrap.append(buildRecCard(r));
   box.append(wrap);
 }
-// ── Your Marketing Team: named specialists + a campaign runner where they hand off ──
+// ── Miles as CMO: one AI employee who runs everything, and builds a full campaign ──
 async function openTeam(){
-  const box=$('#team-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading your team…</p>';
-  let team=[];
-  if(REMOTE){ try{ team=((await(await fetch('/api/team')).json()).team)||[]; }catch(e){} }
+  const box=$('#team-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading…</p>';
+  let areas=[];
+  if(REMOTE){ try{ areas=((await(await fetch('/api/team')).json()).areas)||[]; }catch(e){} }
   box.innerHTML='';
   const head=el('div','mcard');
-  head.append(el('h3',null,'Your Marketing Team'));
-  head.append(el('p','mdesc','A team of specialists who hand off to each other. Describe a goal and they collaborate — Marcus sets the angle, then Content, Social and Ads each build their part from it, so the whole campaign is consistent.'));
+  const hb=el('div'); hb.innerHTML='<div style="display:flex;align-items:center;gap:10px"><span style="width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#0b7d72);display:grid;place-items:center;color:#fff;font-size:18px">✦</span><div><h3 style="margin:0">Miles — your AI CMO</h3><div class="appsub">One employee who runs your whole marketing.</div></div></div>'; head.append(hb);
+  head.append(el('p','mdesc','Describe a goal and Miles builds the full campaign himself — first the angle, then the content, social and ads, all from the same brief so it’s one consistent campaign.'));
   const runner=el('div'); runner.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px';
   const inp=el('input','f'); inp.style.cssText='margin:0;flex:1;min-width:260px'; inp.placeholder='e.g. Launch a spring gutter-cleaning promo · Fill next week’s calendar';
   const go=el('button','go','Run a campaign'); go.style.flex='none';
   runner.append(inp,go); head.append(runner); box.append(head);
   const out=el('div'); out.style.marginTop='16px'; box.append(out);
-  const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-top:16px';
-  for(const s of team){
+  const wrap=el('div'); wrap.style.marginTop='16px';
+  wrap.append(el('div','mdesc','What Miles handles for you:'));
+  const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-top:8px';
+  for(const a of areas){
     const card=el('div','mcard'); card.style.padding='16px';
-    const top=el('div'); top.innerHTML='<div style="font-weight:800;font-size:16px">'+esc(s.name)+'</div><div class="appsub" style="margin-bottom:8px">'+esc(s.role)+'</div>'; card.append(top);
-    card.append(el('p','appsub',s.blurb));
+    const top=el('div',null,a.title); top.style.cssText='font-weight:800;font-size:15px;margin-bottom:6px'; card.append(top);
+    card.append(el('p','appsub',a.blurb));
     const sk=el('div'); sk.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin:10px 0';
-    (s.skills||[]).forEach(k=>{ const c=el('span',null,k); c.style.cssText='font-size:11px;background:var(--panel-2);border:1px solid var(--line);border-radius:999px;padding:3px 9px'; sk.append(c); });
+    (a.skills||[]).forEach(k=>{ const c=el('span',null,k); c.style.cssText='font-size:11px;background:var(--panel-2);border:1px solid var(--line);border-radius:999px;padding:3px 9px'; sk.append(c); });
     card.append(sk);
-    if(s.tool){ const b=el('button','adsave',s.tool.label+' →'); b.onclick=()=>setPage(s.tool.page); card.append(b); }
+    if(a.tool){ const b=el('button','adsave',a.tool.label+' →'); b.onclick=()=>setPage(a.tool.page); card.append(b); }
     grid.append(card);
   }
-  box.append(grid);
+  wrap.append(grid); box.append(wrap);
   const runCampaign=async()=>{
-    const goal=inp.value.trim(); if(!goal){ toast('Describe what you want the team to work on.'); return; }
-    grid.style.display='none'; out.innerHTML=''; const load=el('div','mcard'); load.append(el('div','appsub','🧠 Marcus is setting the angle, then the team builds from it…')); out.append(load);
+    const goal=inp.value.trim(); if(!goal){ toast('Tell Miles what the campaign is for.'); return; }
+    wrap.style.display='none'; out.innerHTML=''; const load=el('div','mcard'); load.append(el('div','appsub','🧠 Miles is setting the angle, then building the campaign from it…')); out.append(load);
     let d=null; try{ d=await(await fetch('/api/team/campaign',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({goal})})).json(); }catch(e){}
     out.innerHTML='';
-    const back=el('button','adsave','← Back to the team'); back.onclick=()=>{ out.innerHTML=''; grid.style.display=''; }; out.append(back);
-    if(!d||!d.angle){ out.append(el('div','verdict tight','Couldn’t run the team just now — try again.')); return; }
-    const brief=el('div','mcard'); brief.style.marginTop='12px'; brief.style.borderLeft='4px solid var(--accent)'; brief.innerHTML='<div style="font-weight:800">🎯 Marcus — Marketing Strategist set the angle</div>'; const ba=el('div','md'); ba.style.marginTop='6px'; ba.innerHTML=mdToHtml(d.angle); brief.append(ba); out.append(brief);
-    for(const c of (d.contributions||[])){ const card=el('div','mcard'); card.style.marginTop='12px'; card.innerHTML='<div style="font-weight:800">'+esc(c.name)+' — '+esc(c.role)+' <span class="appsub">· built on the angle above</span></div>'; const bd=el('div','md'); bd.style.marginTop='6px'; bd.innerHTML=mdToHtml(c.body); card.append(bd); out.append(card); }
-    if(!d.live){ const note=el('div','appsub'); note.style.marginTop='10px'; note.textContent='Demo output — add an OPENROUTER_API_KEY on Render and the team writes this custom for your business.'; out.append(note); }
+    const back=el('button','adsave','← Back'); back.onclick=()=>{ out.innerHTML=''; wrap.style.display=''; }; out.append(back);
+    if(!d||!d.angle){ out.append(el('div','verdict tight','Couldn’t run the campaign just now — try again.')); return; }
+    const brief=el('div','mcard'); brief.style.marginTop='12px'; brief.style.borderLeft='4px solid var(--accent)'; brief.innerHTML='<div style="font-weight:800">🎯 The angle</div>'; const ba=el('div','md'); ba.style.marginTop='6px'; ba.innerHTML=mdToHtml(d.angle); brief.append(ba); out.append(brief);
+    const ICON={content:'✍️',social:'📱',ads:'📣'};
+    for(const c of (d.parts||[])){ const card=el('div','mcard'); card.style.marginTop='12px'; card.innerHTML='<div style="font-weight:800">'+((ICON[c.id]||'•')+' '+esc(c.title))+' <span class="appsub">· built on the angle above</span></div>'; const bd=el('div','md'); bd.style.marginTop='6px'; bd.innerHTML=mdToHtml(c.body); card.append(bd); out.append(card); }
+    if(!d.live){ const note=el('div','appsub'); note.style.marginTop='10px'; note.textContent='Demo output — add an OPENROUTER_API_KEY on Render and Miles writes this custom for your business.'; out.append(note); }
   };
   go.onclick=runCampaign; inp.addEventListener('keydown',(e)=>{ if(e.key==='Enter') runCampaign(); });
 }
