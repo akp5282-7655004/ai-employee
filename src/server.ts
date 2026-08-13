@@ -925,7 +925,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
     deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
     const status = deploy.auto ? 'live' : 'pending';
-    deploy.queue.unshift({ id: item.id, label: item.title, type: item.kind, status, ts: new Date().toISOString() });
+    deploy.queue.unshift({ id: item.id, label: item.title, type: item.kind, status, ts: new Date().toISOString(), detail: String(item.body || '').slice(0, 4000) });
     deploy.queue = deploy.queue.slice(0, 300);
     data.deploy = deploy;
     await authStore.setUserData(u.id, data);
@@ -1087,7 +1087,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       s.enabled = true;
       data.speedToLead = s;
     }
-    deploy.queue.unshift({ id: rec.id, label: rec.apply?.label || rec.title || 'Optimization', type: 'optimization', status, ts: new Date().toISOString() });
+    deploy.queue.unshift({ id: rec.id, label: rec.apply?.label || rec.title || 'Optimization', type: 'optimization', status, ts: new Date().toISOString(), detail: [rec.why, rec.action && `Action: ${rec.action}`].filter(Boolean).join('\n\n') });
     deploy.queue = deploy.queue.slice(0, 300);
     data.deploy = deploy;
     const st = recState(data);

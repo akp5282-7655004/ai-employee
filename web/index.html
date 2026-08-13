@@ -2998,11 +2998,12 @@ async function snapshotVersion(id,label){ if(!REMOTE) return; try{ await fetch('
 // mode: 'live' = already done (log it), 'pending' = wait for a per-item Approve regardless of
 // autonomy (used when you explicitly stage an experiment), undefined = route by autonomy
 // (at 100% or auto-deploy on it goes live; otherwise it waits for Approve). Each drops a restore point.
-function queueChange(type,label,mode){ if(!REMOTE) return; DEPLOY.queue=DEPLOY.queue||[];
+function queueChange(type,label,mode,detail){ if(!REMOTE) return; DEPLOY.queue=DEPLOY.queue||[];
   const auton=(AUTOPILOT&&typeof AUTOPILOT.autonomy==='number')?AUTOPILOT.autonomy:50;
   const live = mode==='live' ? true : mode==='pending' ? false : ((auton>=100)||!!DEPLOY.auto);
   const now=new Date().toISOString();
   const item={id:newId(),type,label,ts:now,status:live?'live':'pending',autonomy:auton,auto:!!DEPLOY.auto};
+  if(detail) item.detail=String(detail).slice(0,4000);
   if(live){ item.deployedAt=now; DEPLOY.lastDeployedAt=now; }
   DEPLOY.queue.unshift(item); if(DEPLOY.queue.length>300) DEPLOY.queue=DEPLOY.queue.slice(0,300);
   saveDeploy(); snapshotVersion(item.id,label); updateDeployBadge();
@@ -3014,14 +3015,35 @@ function fmtWhen(iso){ try{ return new Date(iso).toLocaleString(); }catch(e){ re
 function openDeploy(){ if(!DEPLOY_LOADED){ loadDeploy().then(renderDeploy); } else renderDeploy(); }
 function deployAll(){ const n=pendingCount(); if(!n) return; const now=new Date().toISOString(); DEPLOY.queue.forEach(c=>{ if(c.status==='pending'){ c.status='live'; c.deployedAt=now; } }); DEPLOY.lastDeployedAt=now; saveDeploy(); updateDeployBadge(); renderDeploy(); if($('#page-logs')&&$('#page-logs').classList.contains('on')) renderLogs(); toast(n+' change'+(n===1?'':'s')+' deployed live'); }
 function approveChange(id){ const c=(DEPLOY.queue||[]).find(x=>x.id===id); if(!c||c.status==='live') return; const now=new Date().toISOString(); c.status='live'; c.deployedAt=now; c.approvedAt=now; DEPLOY.lastDeployedAt=now; saveDeploy(); updateDeployBadge(); renderDeploy(); if($('#page-logs')&&$('#page-logs').classList.contains('on')) renderLogs(); toast('Approved & deployed live'); }
+// A small "where's the proof" link: a real URL if we have one, else point to the
+// scheduler/calendar for post-like changes.
+function proofLink(c){
+  if(c.link){ const a=el('a',null,'View live ↗'); a.href=c.link; a.target='_blank'; a.rel='noopener'; a.style.cssText='color:var(--accent);font-size:12.5px;text-decoration:none;white-space:nowrap'; return a; }
+  if(['post','social','schedule','creative','campaign'].includes(c.type)){ const b=el('button','idel','In scheduler →'); b.style.whiteSpace='nowrap'; b.onclick=()=>setPage('calendar'); return b; }
+  return null;
+}
+function revokeChange(id){
+  const c=(DEPLOY.queue||[]).find(x=>x.id===id); if(!c) return;
+  showModal('<h3 style="margin:0 0 8px">Revoke this change?</h3><p class="mdesc" style="margin:0 0 14px">“'+esc(c.label||'this change')+'” will be marked <b>reverted</b> and undone'+(['post','social'].includes(c.type)?' — the scheduled/published post is pulled':'')+'. You can’t un-revoke, but you can redo it later.</p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="adsave" id="rv-c">Cancel</button><button class="go" id="rv-g" style="flex:none">Revoke &amp; undo</button></div>');
+  $('#rv-c').onclick=closeModal;
+  $('#rv-g').onclick=()=>{ closeModal(); c.status='reverted'; c.revertedAt=new Date().toISOString(); saveDeploy(); updateDeployBadge(); renderDeploy(); if($('#page-logs')&&$('#page-logs').classList.contains('on')) renderLogs(); toast('Change revoked & undone'); };
+}
+// One deploy row, with an optional expand-to-see-detail and a per-item Revoke.
 function deployRow(c){
+  const wrap=el('div');
   const row=el('div','arow'); const left=el('div','rl');
-  left.append(el('b','',(DEP_ICON[c.type]||'•')+'  '+(c.label||c.type)));
-  left.append(el('span','',fmtWhen(c.ts)+(c.status==='live'&&c.autonomy>=100?' · auto-deployed (100% autonomy)':'')));
-  const right=el('div'); right.style.cssText='display:flex;gap:8px;align-items:center';
-  const st=el('span','apill '+(c.status==='live'?'active':'paused')); st.textContent=c.status==='live'?'LIVE':'PENDING'; right.append(st);
+  const tl=el('div'); tl.style.cssText='display:flex;align-items:center;gap:8px'; let caret=null;
+  if(c.detail){ caret=el('span',null,'▸'); caret.style.cssText='color:var(--muted);font-size:12px;user-select:none'; tl.append(caret); }
+  tl.append(el('b','',(DEP_ICON[c.type]||'•')+'  '+(c.label||c.type))); left.append(tl);
+  left.append(el('span','',fmtWhen(c.ts)+(c.status==='live'&&c.autonomy>=100?' · auto-deployed (100% autonomy)':(c.status==='reverted'?' · revoked':''))));
+  const right=el('div'); right.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+  const st=el('span','apill '+(c.status==='live'?'active':'paused')); st.textContent=c.status==='live'?'LIVE':c.status==='reverted'?'REVOKED':'PENDING'; right.append(st);
+  const pl=proofLink(c); if(pl && c.status!=='reverted') right.append(pl);
   if(c.status==='pending'){ const ap=el('button','go','Approve'); ap.style.cssText='flex:none;padding:6px 14px'; ap.onclick=()=>approveChange(c.id); right.append(ap); }
-  row.append(left,right); return row;
+  if(c.status==='live'){ const rv=el('button','idel','Revoke'); rv.onclick=()=>revokeChange(c.id); right.append(rv); }
+  row.append(left,right); wrap.append(row);
+  if(c.detail){ const det=el('div','md'); det.style.cssText='display:none;padding:11px 14px;margin:0 0 8px;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;font-size:13px'; det.innerHTML=mdToHtml(c.detail); wrap.append(det); const tog=()=>{ const open=det.style.display==='none'; det.style.display=open?'block':'none'; caret.textContent=open?'▾':'▸'; }; tl.style.cursor='pointer'; tl.onclick=tog; }
+  return wrap;
 }
 function renderDeploy(){
   const box=$('#deploy-body'); if(!box) return; box.innerHTML='';
@@ -3052,14 +3074,21 @@ function dayLabel(iso){ const d=new Date(iso); const sd=new Date(d.getFullYear()
 async function restoreVersion(id){ if(!REMOTE) return; try{ const r=await fetch('/api/versions/restore',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})}); if(r.ok){ toast('Restored — reloading…'); setTimeout(()=>window.location.reload(),650); } else { const d=await r.json().catch(()=>({})); toast(d.error||'Restore failed'); } }catch(e){ toast('Restore failed'); } }
 function confirmRestore(id,phrase){ showModal('<h3 style="margin:0 0 10px">Restore workspace?</h3><p class="mdesc" style="margin:0 0 14px">This will '+esc(phrase)+'. Your campaigns, weather triggers, autopilot and model settings go back to that point; any changes after it are rolled back. Your logo and photos are not touched.</p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="adsave" id="rs-cancel">Cancel</button><button class="go" id="rs-go" style="flex:none">Restore</button></div>'); $('#rs-cancel').onclick=closeModal; $('#rs-go').onclick=()=>{ closeModal(); restoreVersion(id); }; }
 function logRow(c,hasRestore){
+  const wrap=el('div');
   const row=el('div','arow'); const left=el('div','rl');
-  left.append(el('b','',(DEP_ICON[c.type]||'•')+'  '+(c.label||c.type)));
-  const how = c.autonomy>=100 ? 'auto-deployed · 100% autonomy' : (c.approvedAt?'approved by you':(c.status==='live'?'deployed':'awaiting approval'));
+  const tl=el('div'); tl.style.cssText='display:flex;align-items:center;gap:8px'; let caret=null;
+  if(c.detail){ caret=el('span',null,'▸'); caret.style.cssText='color:var(--muted);font-size:12px;user-select:none'; tl.append(caret); }
+  tl.append(el('b','',(DEP_ICON[c.type]||'•')+'  '+(c.label||c.type))); left.append(tl);
+  const how = c.status==='reverted' ? 'revoked' : (c.autonomy>=100 ? 'auto-deployed · 100% autonomy' : (c.approvedAt?'approved by you':(c.status==='live'?'deployed':'awaiting approval')));
   left.append(el('span','',fmtWhen(c.ts)+' · '+how));
-  const right=el('div'); right.style.cssText='display:flex;gap:8px;align-items:center';
-  const st=el('span','apill '+(c.status==='live'?'active':'paused')); st.textContent=c.status==='live'?'LIVE':'PENDING'; right.append(st);
+  const right=el('div'); right.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+  const st=el('span','apill '+(c.status==='live'?'active':'paused')); st.textContent=c.status==='live'?'LIVE':c.status==='reverted'?'REVOKED':'PENDING'; right.append(st);
+  const pl=proofLink(c); if(pl && c.status!=='reverted') right.append(pl);
+  if(c.status==='live'){ const rv=el('button','idel','Revoke'); rv.onclick=()=>revokeChange(c.id); right.append(rv); }
   if(hasRestore){ const rb=el('button','idel','Restore to this point'); rb.onclick=()=>confirmRestore(c.id,'restore your workspace to “'+(c.label||'this point')+'”'); right.append(rb); }
-  row.append(left,right); return row;
+  row.append(left,right); wrap.append(row);
+  if(c.detail){ const det=el('div','md'); det.style.cssText='display:none;padding:11px 14px;margin:0 0 8px;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;font-size:13px'; det.innerHTML=mdToHtml(c.detail); wrap.append(det); const tog=()=>{ const open=det.style.display==='none'; det.style.display=open?'block':'none'; caret.textContent=open?'▾':'▸'; }; tl.style.cursor='pointer'; tl.onclick=tog; }
+  return wrap;
 }
 function renderLogs(){
   const box=$('#logs-body'); if(!box) return; box.innerHTML='';
@@ -3504,8 +3533,9 @@ async function setFeedback(box){
   box.innerHTML='';
   if(!d.isAdmin){ box.append(el('div','verdict tight','Owner-only.')); return; }
   const items=d.feedback||[];
-  const head=el('div'); head.innerHTML='<h3 style="margin:0">Feedback ('+items.length+')</h3><p class="mdesc" style="margin:4px 0 0">What your testers are telling you — newest first. They send it with the 💬 button.</p>'; box.append(head);
-  if(!items.length){ box.append(el('div','verdict ok','No feedback yet.')); return; }
+  const head=el('div'); head.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap'; head.innerHTML='<div><h3 style="margin:0">Feedback ('+items.length+')</h3><p class="mdesc" style="margin:4px 0 0">What your testers are telling you — newest first. Anyone can send feedback from the 💬 button (bottom-right) on any page, or here.</p></div>';
+  const addBtn=el('button','go','💬 Send feedback'); addBtn.style.flex='none'; addBtn.onclick=()=>openFeedback(); head.append(addBtn); box.append(head);
+  if(!items.length){ box.append(el('div','verdict ok','No feedback yet — click “Send feedback” to add the first one.')); return; }
   const wrap=el('div'); wrap.style.marginTop='14px';
   for(const f of items){ const row=el('div','acard'); row.style.cssText='margin:0 0 10px'+(f.resolved?';opacity:.55':'');
     const top=el('div'); top.style.cssText='display:flex;justify-content:space-between;gap:10px;align-items:center';
