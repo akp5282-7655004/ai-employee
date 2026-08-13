@@ -565,6 +565,7 @@
         <h3>Creative Studio</h3>
         <p class="mdesc">Every marketing asset for your business, from one place. Pick what you're making, describe it, and Miles brings it to life — on-brand, using your business details.</p>
         <div id="studio-brand" style="margin:0 0 14px"></div>
+        <div id="studio-editor-launch" style="margin:0 0 18px"></div>
         <div class="subtabs" id="studio-types" style="margin-bottom:14px"></div>
         <textarea class="f" id="studio-prompt" placeholder="Describe your idea, and Miles will bring it to life…" style="width:100%;min-height:72px;margin:0"></textarea>
         <div id="studio-opts" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin:14px 0 4px"></div>
@@ -1782,6 +1783,39 @@ async function openStudio(){
   }
   renderStudio();
   studioBrandBanner();
+  renderStudioLaunch();
+}
+// ── Design Studio launcher: open the full editor on an uploaded photo, a photo
+// from Assets, or a short video clip — no generating required (this is the
+// "walk up and edit, like Canva" entry point). ──
+function renderStudioLaunch(){
+  const box=$('#studio-editor-launch'); if(!box) return; box.innerHTML='';
+  const card=el('div'); card.style.cssText='border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--panel-2)';
+  const h=el('div'); h.innerHTML='<b style="font-size:15px">🎨 Design Studio — edit any image or video</b><div class="appsub" style="margin:4px 0 12px">Upload a photo (or pick one from your Assets) to open the full editor — crop, filters, text and your logo. Or drop in a short video clip to brand it. Nothing to generate.</div>'; card.append(h);
+  const row=el('div'); row.style.cssText='display:flex;gap:8px;flex-wrap:wrap';
+  const bUp=el('button','go','📤 Upload image'); bUp.style.flex='none';
+  const bAsset=el('button','adsave','🖼️ From Assets');
+  const bVid=el('button','adsave','🎬 Brand a video');
+  row.append(bUp,bAsset,bVid); card.append(row);
+  const fImg=el('input'); fImg.type='file'; fImg.accept='image/*'; fImg.style.display='none';
+  const fVid=el('input'); fVid.type='file'; fVid.accept='video/*'; fVid.style.display='none';
+  card.append(fImg,fVid); box.append(card);
+
+  bUp.onclick=()=>fImg.click();
+  fImg.onchange=async()=>{ const f=fImg.files&&fImg.files[0]; if(!f) return; try{ const url=await downscaleImage(f,1600,'image/png'); openEditor(url); }catch(e){ toast('Couldn’t read that image.'); } fImg.value=''; };
+  bVid.onclick=()=>fVid.click();
+  fVid.onchange=()=>{ const f=fVid.files&&fVid.files[0]; if(!f) return; try{ const url=URL.createObjectURL(f); openVideoEditor(url); }catch(e){ toast('Couldn’t open that video.'); } fVid.value=''; };
+  bAsset.onclick=async()=>{ if(!ASSETS_LOADED) await loadAssets(); const photos=(ASSETS&&ASSETS.photos)||[]; if(!photos.length){ toast('No photos in Assets yet — use “Upload image”, or add photos in Assets.'); return; } openAssetPicker(photos,(url)=>openEditor(url)); };
+}
+// A small grid chooser over the saved Assets photos.
+function openAssetPicker(photos,onPick){
+  const ov=el('div'); ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1001;display:flex;align-items:center;justify-content:center;padding:16px';
+  const panel=el('div'); panel.style.cssText='background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:720px;max-height:82vh;overflow:auto;padding:16px';
+  const head=el('div'); head.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px'; head.append(el('b',null,'Pick a photo to edit')); const x=el('button','idel','✕'); head.append(x); panel.append(head);
+  const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px';
+  for(const p of photos){ if(!p||!p.url) continue; const cell=el('div'); cell.style.cssText='cursor:pointer;border:1px solid var(--line);border-radius:10px;overflow:hidden;aspect-ratio:1/1;background:var(--panel-2)'; const im=el('img'); im.src=p.url; im.style.cssText='width:100%;height:100%;object-fit:cover'; cell.append(im); cell.onclick=()=>{ ov.remove(); onPick(p.url); }; grid.append(cell); }
+  panel.append(grid); ov.append(panel); document.body.append(ov);
+  x.onclick=()=>ov.remove(); ov.addEventListener('mousedown',(e)=>{ if(e.target===ov) ov.remove(); });
 }
 async function studioBrandBanner(){
   const box=$('#studio-brand'); if(!box||!REMOTE) return; box.innerHTML='';
