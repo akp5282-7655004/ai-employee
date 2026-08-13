@@ -378,11 +378,11 @@
       <a data-page="overview" class="on"><svg class="ico" viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0"/><path d="M12 13l4-3"/><path d="M4 13h1M19 13h1M12 3v1"/></svg> Dashboard</a>
 
       <div class="navgroup" data-group="agents">
-        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/></svg><span class="hlabel">Agents</span><svg class="ico chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/></svg><span class="hlabel">Miles</span><svg class="ico chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
         <div class="navkids">
           <a data-page="team"><svg class="ico" viewBox="0 0 24 24"><path d="M3 11l18-7-7 18-2.5-7.5L3 11z"/></svg> Campaigns</a>
-          <a data-page="agents"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/></svg> Agents &amp; Specialists</a>
-          <a data-page="schedules"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M12 3h.01M5 4L3 6M19 4l2 2"/></svg> Scheduled Agents</a>
+          <a data-page="agents"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/></svg> What Miles Does</a>
+          <a data-page="schedules"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M12 3h.01M5 4L3 6M19 4l2 2"/></svg> Scheduled Tasks</a>
           <a data-page="wireframe"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11M3 14h6"/></svg> Agent Wireframe</a>
           <a data-page="autopilot"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M12 12l4-2"/></svg> Autopilot</a>
           <a data-page="skills"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 2.2 5.6L20 9l-4.3 3.8L17 19l-5-3-5 3 1.3-6.2L4 9l5.8-.4Z"/></svg> Skills &amp; Playbooks</a>
@@ -458,14 +458,14 @@
 
     <section class="page" id="page-home">
       <div class="stats" style="grid-template-columns:repeat(3,1fr)">
-        <div class="stat"><div class="lab">Active specialists <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/></svg></div><div class="val">4 Deployments Active</div></div>
+        <div class="stat"><div class="lab">Miles's active skills <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/></svg></div><div class="val">4 Running</div></div>
         <div class="stat"><div class="lab">Connected integrations <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div><div class="val" id="stat-conn">—</div></div>
         <div class="stat"><div class="lab">Verified market CPA <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 16 0"/></svg></div><div class="val" id="stat-cpa">$110 Market Median</div></div>
       </div>
       <div class="hero">
         <div class="orb"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 1.9 4.8L19 9l-4 3.5L16 18l-4-2.4L8 18l1-5.5L5 9l5.1-1.2Z"/></svg></div>
         <h1 id="greeting">Let's make Miles useful for your business</h1>
-        <p class="sub">Press Enter or select a ready-to-run specialist task below to get started.</p>
+        <p class="sub">Press Enter or pick a ready-to-run task below to put Miles to work.</p>
         <div class="prompt">
           <textarea id="hprompt" rows="1" placeholder="Help me get started with Miles…"></textarea>
           <div class="prow">
@@ -1122,7 +1122,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'Agents & Specialists',schedules:'Scheduled Agents',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1835,7 +1835,7 @@ function renderOverview(d){
   grid2.append(up);
   const ra=el('div','mcard'); ra.innerHTML='<h3 style="margin:0 0 10px">🤖 Recent agent activity</h3>';
   if((d.recentRuns||[]).length) for(const run of d.recentRuns){ const r=el('div'); r.style.cssText='display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px'; r.innerHTML='<span>'+esc((run.title||'').slice(0,40))+'</span><span class="appsub">'+fmtWhen(run.ts)+'</span>'; ra.append(r); }
-  else ra.append(ovNudge('No agent runs yet. Deploy an agent in Agents & Specialists.'));
+  else ra.append(ovNudge('Nothing yet. Put Miles to work from “What Miles Does”.'));
   grid2.append(ra);
   box.append(grid2);
 }
