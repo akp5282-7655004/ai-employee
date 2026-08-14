@@ -424,6 +424,94 @@ export class PipedreamConnector implements Connector {
     return out;
   }
 
+  /**
+   * Run one Google Ads write component, mapping our semantic values onto whatever
+   * prop names the component exposes (schema-adaptive, like the read path), then
+   * extract the created resource name. Returns a structured, honest result.
+   */
+  private async writeComponent(externalUserId: string, componentKey: string, authId: string, values: Record<string, string[]>, direct: Record<string, unknown> = {}): Promise<{ ok: boolean; resource?: string; error?: string }> {
+    try {
+      const pd = await this.backend();
+      const rows = await this.listComponents('google_ads');
+      const comp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === componentKey);
+      if (!comp) return { ok: false, error: `component ${componentKey} not found on this account` };
+      const key = comp.key ?? comp.id ?? comp.componentKey;
+      const props = await this.componentProps(comp, key);
+      const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+      const configured: Record<string, unknown> = { [appName]: { authProvisionId: authId }, ...direct };
+      const used = new Set<string>(Object.keys(configured));
+      // Map each semantic value onto the first matching, unused prop.
+      for (const [, keywords] of Object.entries(values)) {
+        const val = keywords[0];
+        const kws = keywords.slice(1);
+        const hit = props.find((p: any) => p && p.type !== 'app' && p.name && !used.has(p.name) && kws.some((kw) => `${p.label ?? ''} ${p.name}`.toLowerCase().includes(kw)));
+        if (hit) { configured[hit.name] = val; used.add(hit.name); }
+      }
+      const res = await pd.actions.run({ externalUserId, id: key, configuredProps: configured });
+      const raw = res?.ret ?? res?.exports ?? res ?? null;
+      return { ok: true, resource: extractResourceName(raw) };
+    } catch (e) {
+      return { ok: false, error: String((e as Error).message) };
+    }
+  }
+
+  async launchCampaign(externalUserId: string, spec: import('../agents/campaign.js').CampaignSpec): Promise<import('./types.js').CampaignLaunchResult> {
+    const steps: import('./types.js').CampaignLaunchStep[] = [];
+    const accts = await this.listAccounts(externalUserId, 'google_ads');
+    const account = accts.find((a) => a.healthy) ?? accts[0];
+    if (!account) return { ok: false, live: true, steps: [{ step: 'Google Ads account', ok: false, error: 'No connected Google Ads account.' }], note: 'Connect Google Ads first.' };
+    const rows = await this.listComponents('google_ads');
+    const ids = await this.googleAdsCustomerIds(externalUserId, account.id, rows);
+    const customerId = ids[0]; // the client account that runs ads
+    const cust = customerId ? [customerId, 'account', 'customer'] : undefined;
+
+    // 1) Budget — Google Ads amounts are in micros ($1 = 1_000_000).
+    const micros = String(Math.round(spec.dailyBudget * 1_000_000));
+    const budget = await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign-budget', account.id, {
+      ...(cust ? { customer: cust } : {}),
+      name: [`${spec.name} Budget`, 'name'],
+      amount: [micros, 'amount', 'micros', 'budget'],
+    });
+    steps.push({ step: `Create daily budget ($${spec.dailyBudget})`, ok: budget.ok, resource: budget.resource, error: budget.error });
+
+    // 2) Campaign — attach budget, set status (PAUSED unless owner chose ENABLED).
+    const campaign = await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign', account.id, {
+      ...(cust ? { customer: cust } : {}),
+      name: [spec.name, 'campaign name', 'name'],
+      status: [spec.status, 'status'],
+      ...(budget.resource ? { budget: [budget.resource, 'budget', 'campaign budget'] } : {}),
+    });
+    steps.push({ step: `Create campaign "${spec.name}" (${spec.status})`, ok: campaign.ok, resource: campaign.resource, error: campaign.error });
+
+    // 3) Ad groups + keywords + RSA — only if the campaign resource resolved.
+    if (campaign.resource) {
+      for (const g of spec.adGroups) {
+        const ag = await this.writeComponent(externalUserId, 'google_ads-create-or-update-ad-group', account.id, {
+          ...(cust ? { customer: cust } : {}),
+          name: [g.name, 'ad group name', 'name'],
+          campaign: [campaign.resource, 'campaign'],
+        });
+        steps.push({ step: `Create ad group "${g.name}"`, ok: ag.ok, resource: ag.resource, error: ag.error });
+        if (!ag.resource) continue;
+        const kw = await this.writeComponent(externalUserId, 'google_ads-create-or-update-keywords', account.id, {
+          ...(cust ? { customer: cust } : {}),
+          adGroup: [ag.resource, 'ad group', 'adgroup'],
+        }, { keywords: g.keywords.map((k) => ({ text: k.text, matchType: k.match.toUpperCase() })) });
+        steps.push({ step: `Add ${g.keywords.length} keywords to "${g.name}"`, ok: kw.ok, error: kw.error });
+        const rsa = await this.writeComponent(externalUserId, 'google_ads-create-responsive-search-ad', account.id, {
+          ...(cust ? { customer: cust } : {}),
+          adGroup: [ag.resource, 'ad group', 'adgroup'],
+          url: [spec.finalUrl, 'final url', 'url', 'landing'],
+        }, { headlines: g.rsa.headlines, descriptions: g.rsa.descriptions });
+        steps.push({ step: `Create responsive search ad in "${g.name}"`, ok: rsa.ok, error: rsa.error });
+      }
+    }
+
+    const ok = steps.every((s) => s.ok);
+    const link = campaign.resource && customerId ? `https://ads.google.com/aw/campaigns?ocid=&campaignId=${(campaign.resource.match(/campaigns\/(\d+)/) || [])[1] ?? ''}` : undefined;
+    return { ok, live: true, campaignResource: campaign.resource, link, steps, note: ok ? `Campaign created ${spec.status}. Review it in Google Ads before enabling.` : 'Some steps failed — see the per-step errors. Nothing partial charges until the campaign is enabled.' };
+  }
+
   async getSocialMetrics(externalUserId: string): Promise<import('./types.js').SocialMetrics | null> {
     for (const app of ['facebook', 'instagram', 'linkedin']) {
       try {
@@ -596,6 +684,21 @@ export class PipedreamConnector implements Connector {
 }
 
 const lower = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+
+/** Deep-scan a create-response for the Google Ads resource name it returned. */
+function extractResourceName(v: unknown, depth = 0): string | undefined {
+  if (v == null || depth > 6) return undefined;
+  if (typeof v === 'string') return /customers\/\d+\/\w+\/[\w~]+/.test(v) ? v : undefined;
+  if (Array.isArray(v)) { for (const x of v) { const r = extractResourceName(x, depth + 1); if (r) return r; } return undefined; }
+  if (typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    for (const k of ['resourceName', 'resource_name', 'results', 'result', 'data']) {
+      if (k in o) { const r = extractResourceName(o[k], depth + 1); if (r) return r; }
+    }
+    for (const x of Object.values(o)) { const r = extractResourceName(x, depth + 1); if (r) return r; }
+  }
+  return undefined;
+}
 
 /** A candidate metric/field naming format for the Google Ads report component. */
 type GadsShape = { tag: string; fields: string[]; metrics: string[] };

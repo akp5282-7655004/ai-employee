@@ -114,6 +114,25 @@ export interface AppInfo {
   categories?: string[];
 }
 
+/** One write in the campaign-launch chain (budget, campaign, ad group, …). */
+export interface CampaignLaunchStep {
+  step: string;
+  ok: boolean;
+  /** The created resource name/id (e.g. customers/123/campaigns/456), when known. */
+  resource?: string;
+  error?: string;
+}
+export interface CampaignLaunchResult {
+  ok: boolean;
+  /** True when the writes actually hit Google Ads (vs. a simulated/demo run). */
+  live: boolean;
+  campaignResource?: string;
+  /** A Google Ads UI link to the created campaign, when resolvable. */
+  link?: string;
+  steps: CampaignLaunchStep[];
+  note?: string;
+}
+
 export interface Connector {
   readonly name: string;
   /** Mint a short-lived token so an end-user can connect an app account. */
@@ -130,6 +149,10 @@ export interface Connector {
   /** Ad spend by campaign from connected ad platforms — for revenue attribution.
    *  `range` is a Google-Ads-style preset (e.g. LAST_30_DAYS); defaults to 30d. */
   getAdSpend?(externalUserId: string, range?: string): Promise<CampaignSpend[]>;
+  /** Create a full Google Ads Search campaign (budget → campaign → ad groups →
+   *  keywords → RSAs) on the user's behalf. The owner has already approved every
+   *  setting; this performs the live write-chain and reports each step. */
+  launchCampaign?(externalUserId: string, spec: import('../agents/campaign.js').CampaignSpec): Promise<CampaignLaunchResult>;
   /** Deals from connected CRMs — for revenue attribution. */
   getDeals?(externalUserId: string): Promise<Deal[]>;
   /** Recent inbox messages — the raw material for the morning task-list agent. */

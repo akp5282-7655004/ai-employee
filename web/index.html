@@ -406,6 +406,7 @@
           <a data-page="editor"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> Editor</a>
           <a data-page="studio"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4 3.6L17 19l-5-3-5 3 1-6.4L4 9l5.8-.7Z"/></svg> Creative Studio</a>
           <a data-page="adstudio"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
+          <a data-page="launch"><svg class="ico" viewBox="0 0 24 24"><path d="M5 13a8 8 0 0 1 16 0"/><path d="M12 3v2M4 13H2M22 13h-2M12 13l4-4"/><circle cx="12" cy="13" r="1.6"/></svg> Launch a Campaign</a>
           <a data-page="calendar"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg> Content Calendar</a>
           <a data-page="brand"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7l1.3 3 3.2.2-2.4 2.1.8 3.1L12 13.9 9.1 15.5l.8-3.1L7.5 10.2 10.7 10Z"/></svg> Brand Guidelines</a>
           <a data-page="assets"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Assets</a>
@@ -559,6 +560,11 @@
         <div id="w-note" class="appsub" style="margin-top:8px">Live conditions from the US National Weather Service.</div>
         <div id="w-results" style="margin-top:20px"></div>
       </div>
+    </section>
+
+    <!-- LAUNCH A CAMPAIGN (build → review every setting → approve & go live) -->
+    <section class="page" id="page-launch">
+      <div id="launch-body" style="max-width:900px"></div>
     </section>
 
     <!-- AD STUDIO -->
@@ -1145,7 +1151,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',launch:'Launch a Campaign',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1165,6 +1171,7 @@ function setPage(id){
   $('#page-research').classList.toggle('on',id==='research');
   $('#page-weather').classList.toggle('on',id==='weather');
   $('#page-adstudio').classList.toggle('on',id==='adstudio');
+  $('#page-launch').classList.toggle('on',id==='launch');
   $('#page-studio').classList.toggle('on',id==='studio');
   $('#page-team').classList.toggle('on',id==='team');
   $('#page-editor').classList.toggle('on',id==='editor');
@@ -1193,6 +1200,7 @@ function setPage(id){
   if(id==='analytics') renderAnalytics();
   if(id==='weather') openWeather();
   if(id==='adstudio') openAdStudio();
+  if(id==='launch') openLaunch();
   if(id==='studio') openStudio();
   if(id==='team') openTeam();
   if(id==='editor') openEditorPage();
@@ -2036,6 +2044,80 @@ let adTier='flux-schnell';
 function renderAdTiers(){ const box=$('#ad-tier'); if(!box)return; box.innerHTML=''; for(const t of AD_TIERS){ const b=el('button',t.id===adTier?'on':'',t.label+' · '+t.cr+' cr'); b.onclick=()=>{ adTier=t.id; renderAdTiers(); }; box.append(b); } const cur=AD_TIERS.find(t=>t.id===adTier); const h=$('#ad-tier-hint'); if(h) h.textContent=cur?cur.hint:''; }
 function renderAdVpick(){ const vp=$('#ad-vpick'); if(!vp)return; vp.innerHTML=''; for(const p of PACKMETA){ const b=el('button',p.id===adVert?'on':'',p.label); b.onclick=()=>{ adVert=p.id; renderAdVpick(); fillAdCats(); }; vp.append(b); } }
 function openAdStudio(){ if(!PACKMETA.length){ loadPacks().then(()=>{ renderAdVpick(); fillAdCats(); renderAdTiers(); }); return; } renderAdVpick(); fillAdCats(); renderAdTiers(); }
+
+// ── Launch a Campaign — build → review every setting → approve & go live ──
+let LAUNCH={spec:null,connected:false};
+function lchField(label,ph,val,type){ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.placeholder=ph||''; if(val!=null)i.value=val; if(type)i.type=type; i.style.width='100%'; w.append(i); return {w,i}; }
+function openLaunch(){
+  const box=$('#launch-body'); if(!box) return; box.innerHTML='';
+  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">🚀 Launch a Campaign</h3><p class="mdesc" style="margin:6px 0 0;max-width:640px">Miles builds a complete Google Ads Search campaign — budget, bidding, ad groups, keywords and ads — from your goal. You review every setting, then approve. <b>It’s created paused; nothing spends until you turn it on.</b></p>';
+  box.append(h);
+  const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','STEP 1 — TELL MILES THE GOAL'));
+  const goal=lchField('What do you want the campaign to do?','e.g. Get more calls for emergency repairs');
+  const budget=lchField('Daily budget (USD)','20','20','number');
+  const url=lchField('Landing page URL','https://yourbusiness.com/service');
+  const loc=lchField('Locations (comma-separated — blank = your service area)','e.g. Philadelphia, PA');
+  f.append(goal.w,budget.w,url.w,loc.w);
+  const btn=el('button','go','Build my campaign →');
+  btn.onclick=async()=>{ btn.disabled=true; btn.textContent='Building…';
+    try{ const r=await(await fetch('/api/campaign/draft',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({goal:goal.i.value,dailyBudget:Number(budget.i.value)||20,finalUrl:url.i.value,locations:loc.i.value.split(',').map(s=>s.trim()).filter(Boolean)})})).json();
+      LAUNCH={spec:r.spec,connected:r.gadsConnected}; renderLaunchReview();
+    }catch(e){ toast('Could not build — try again.'); btn.disabled=false; btn.textContent='Build my campaign →'; }
+  };
+  f.append(btn); box.append(f);
+}
+function renderLaunchReview(){
+  const box=$('#launch-body'); if(!box||!LAUNCH.spec) return; box.innerHTML=''; const s=LAUNCH.spec;
+  const back=el('button',null,'← Start over'); back.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-bottom:8px'; back.onclick=openLaunch; box.append(back);
+  if(!LAUNCH.connected) box.append(ovNudge('⚠️ Google Ads isn’t connected yet — connect it in Integrations before this can go live. You can still review the campaign below.'));
+  const row=(label,node)=>{ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); w.append(node); return w; };
+  const inp=(val,type)=>{ const i=el('input','f'); i.value=val; if(type)i.type=type; i.style.width='100%'; return i; };
+  const c=el('div','mcard'); c.append(el('div','sect-label','STEP 2 — REVIEW EVERY SETTING'));
+  const nameI=inp(s.name), budgetI=inp(s.dailyBudget,'number'), urlI=inp(s.finalUrl), locI=inp((s.locations||[]).join(', '));
+  const statusSel=el('select','f'); statusSel.style.width='100%'; [['PAUSED','Paused — safe, you turn it on later'],['ENABLED','Enabled — starts spending immediately']].forEach(([v,lab])=>{const o=el('option',null,lab);o.value=v;if(v===s.status)o.selected=true;statusSel.append(o);});
+  c.append(row('Campaign name',nameI),row('Daily budget (USD)',budgetI),row('Landing page URL',urlI),row('Locations',locI),row('Status when created',statusSel));
+  c.append(el('div','appsub','Bidding: Maximize clicks · Networks: '+(s.networks||[]).join(', ')+' · Language: '+s.language));
+  box.append(c);
+  const agInputs=[];
+  (s.adGroups||[]).forEach((g,i)=>{
+    const gc=el('div','mcard'); gc.style.marginTop='12px'; gc.append(el('div','sect-label','AD GROUP '+(i+1)+' — '+g.name.toUpperCase()));
+    const kw=el('textarea','f'); kw.rows=Math.min(8,g.keywords.length+1); kw.style.width='100%'; kw.value=g.keywords.map(k=>k.text+'  ['+k.match+']').join('\n');
+    const hl=el('textarea','f'); hl.rows=Math.min(11,g.rsa.headlines.length+1); hl.style.width='100%'; hl.value=g.rsa.headlines.join('\n');
+    const de=el('textarea','f'); de.rows=Math.min(5,g.rsa.descriptions.length+1); de.style.width='100%'; de.value=g.rsa.descriptions.join('\n');
+    gc.append(row('Keywords (one per line · [match type])',kw),row('Ad headlines (≤30 chars each)',hl),row('Ad descriptions (≤90 chars each)',de));
+    agInputs.push({g,kw,hl,de}); box.append(gc);
+  });
+  const foot=el('div','mcard'); foot.style.marginTop='12px'; foot.append(el('div','appsub','Negative keywords: '+(s.negatives||[]).join(', ')));
+  const go=el('button','go','🚀 Approve & Go Live'); go.style.marginTop='12px';
+  go.onclick=()=>confirmLaunch(()=>{
+    s.name=nameI.value.trim(); s.dailyBudget=Number(budgetI.value)||s.dailyBudget; s.finalUrl=urlI.value.trim();
+    s.locations=locI.value.split(',').map(x=>x.trim()).filter(Boolean); s.status=statusSel.value;
+    s.adGroups=agInputs.map(a=>({ name:a.g.name,
+      keywords:a.kw.value.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{ const m=l.match(/\[(broad|phrase|exact)\]\s*$/i); const text=l.replace(/\[(broad|phrase|exact)\]\s*$/i,'').trim(); const orig=a.g.keywords.find(k=>k.text===text); return {text,match:(m?m[1].toLowerCase():(orig?orig.match:'phrase'))}; }),
+      rsa:{headlines:a.hl.value.split('\n').map(x=>x.trim()).filter(Boolean),descriptions:a.de.value.split('\n').map(x=>x.trim()).filter(Boolean)} }));
+    doLaunch();
+  });
+  foot.append(go); box.append(foot);
+}
+function confirmLaunch(onOk){
+  showModal('<h3 style="margin:0 0 8px">Launch to Google Ads?</h3><p class="mdesc" style="margin:0 0 12px">This creates the campaign in your live Google Ads account. Set to <b>Enabled</b>, it begins spending your daily budget immediately. Set to <b>Paused</b> (recommended), nothing spends until you switch it on in Google Ads.</p><div style="display:flex;gap:8px"><button class="go" id="cl-go" style="flex:1">Yes, launch it</button><button id="cl-no" style="flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;cursor:pointer">Cancel</button></div>');
+  $('#cl-go').onclick=()=>{ closeModal(); onOk(); };
+  $('#cl-no').onclick=closeModal;
+}
+async function doLaunch(){
+  const box=$('#launch-body'); box.innerHTML='<p class="appsub">Launching your campaign…</p>';
+  let r; try{ r=await(await fetch('/api/campaign/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:LAUNCH.spec,confirm:true})})).json(); }catch(e){ box.innerHTML=''; box.append(ovNudge('Launch failed — try again in a moment.')); return; }
+  box.innerHTML='';
+  if(r.error){ box.append(ovNudge('⚠️ '+r.error+(r.problems?': '+r.problems.join('; '):''))); const b=el('button','go','← Back to review'); b.style.marginTop='10px'; b.onclick=renderLaunchReview; box.append(b); return; }
+  const c=el('div','mcard'); c.append(el('h3',null,r.ok?(r.live?'✅ Campaign launched':'✅ Campaign built (demo connector)'):'⚠️ Launch hit an issue'));
+  if(r.note) c.append(el('div','appsub',r.note));
+  const ul=el('div'); ul.style.marginTop='10px';
+  (r.steps||[]).forEach(st=>{ const rr=el('div'); rr.style.cssText='padding:6px 0;border-bottom:1px solid var(--line-soft);font-size:13px'; rr.innerHTML=(st.ok?'✓ ':'✗ ')+esc(st.step)+(st.error?' <span style="color:#c0392b">— '+esc(st.error)+'</span>':''); ul.append(rr); });
+  c.append(ul);
+  if(r.link){ const a=el('a',null,'View in Google Ads ↗'); a.href=r.link; a.target='_blank'; a.style.cssText='display:inline-block;margin-top:12px;color:var(--accent)'; c.append(a); }
+  const again=el('button',null,'Build another →'); again.style.cssText='display:block;margin-top:14px;background:none;border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer'; again.onclick=openLaunch; c.append(again);
+  box.append(c);
+}
 
 // ═══ creative studio (every marketing asset from one place) ═══
 const STUDIO_FALLBACK=[

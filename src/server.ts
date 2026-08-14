@@ -17,6 +17,7 @@ import { buildRecommendations, type Recommendation } from './agents/recommend.js
 import { adLibraryReady, searchCompetitorAds } from './research/adlibrary.js';
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
+import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { catalogForClient, findPlay } from './skills/catalog.js';
 import {
@@ -971,6 +972,50 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (item) item.status = 'dismissed';
     await authStore.setUserData(u.id, data);
     return { ok: true };
+  });
+
+  // ── Launch a Campaign — build a complete Google Ads Search campaign, review
+  // every setting, then (only on explicit approve) run the live write-chain. ──
+  app.post<{ Body: { goal?: string; dailyBudget?: number; finalUrl?: string; locations?: string[] } }>('/api/campaign/draft', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const ctx = { business: p.businessName, trade: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), services: p.services, offers: p.currentOffers };
+    const spec = buildCampaignSpec({ goal: req.body?.goal, dailyBudget: req.body?.dailyBudget, finalUrl: req.body?.finalUrl || p.website, locations: req.body?.locations }, ctx);
+    let gadsConnected = false;
+    try { gadsConnected = (await connector.listAccounts(u.id)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
+    return { ok: true, spec, summary: campaignSummary(spec), gadsConnected };
+  });
+
+  app.post<{ Body: { spec?: CampaignSpec; confirm?: boolean } }>('/api/campaign/launch', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const spec = req.body?.spec;
+    if (!spec || typeof spec !== 'object') return reply.code(400).send({ error: 'spec is required' });
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Explicit confirm required — nothing goes live without it.' });
+    const problems = validateCampaignSpec(spec);
+    if (problems.length) return reply.code(400).send({ error: 'Campaign not ready to launch', problems });
+    if (!connector.launchCampaign) return reply.code(400).send({ error: 'This connector cannot launch campaigns.' });
+    const result = await connector.launchCampaign(u.id, spec);
+    // Record the launch attempt in the deploy/change log with the full spec attached.
+    const data = await authStore.getUserData(u.id);
+    const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
+    deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
+    deploy.queue.unshift({
+      id: newToken().slice(0, 10),
+      label: `Google Ads campaign — ${spec.name} (${spec.status})`,
+      type: 'ads',
+      status: result.ok ? (result.live ? 'live' : 'pending') : 'reverted',
+      ts: new Date().toISOString(),
+      link: result.link,
+      detail: campaignSummary(spec) + '\n\n' + result.steps.map((s) => `${s.ok ? '✓' : '✗'} ${s.step}${s.error ? ' — ' + s.error : ''}`).join('\n'),
+    });
+    deploy.queue = deploy.queue.slice(0, 300);
+    data.deploy = deploy;
+    await authStore.setUserData(u.id, data);
+    if (result.live && result.ok) await meterUser(u.id, 'agent_run');
+    return result;
   });
 
   // ── Competitor Ad Watch (Meta Ad Library) ────────────────────────────────

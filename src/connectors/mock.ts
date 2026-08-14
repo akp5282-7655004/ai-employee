@@ -109,6 +109,22 @@ export class MockConnector implements Connector {
     return { apps: rows.slice(0, limit) };
   }
 
+  async launchCampaign(externalUserId: string, spec: import('../agents/campaign.js').CampaignSpec): Promise<import('./types.js').CampaignLaunchResult> {
+    const connected = this.acc(externalUserId).some((a) => a.app === 'google_ads');
+    if (!connected) {
+      return { ok: false, live: false, steps: [{ step: 'Google Ads account', ok: false, error: 'Connect Google Ads in Integrations first.' }], note: 'No Google Ads account connected.' };
+    }
+    const steps: import('./types.js').CampaignLaunchStep[] = [];
+    steps.push({ step: 'Create daily budget ($' + spec.dailyBudget + ')', ok: true, resource: 'customers/DEMO/campaignBudgets/1' });
+    steps.push({ step: `Create campaign "${spec.name}" (${spec.status})`, ok: true, resource: 'customers/DEMO/campaigns/2' });
+    spec.adGroups.forEach((g, i) => {
+      steps.push({ step: `Create ad group "${g.name}"`, ok: true, resource: `customers/DEMO/adGroups/${10 + i}` });
+      steps.push({ step: `Add ${g.keywords.length} keywords to "${g.name}"`, ok: true });
+      steps.push({ step: `Create responsive search ad in "${g.name}"`, ok: true });
+    });
+    return { ok: true, live: false, campaignResource: 'customers/DEMO/campaigns/2', steps, note: 'Demo connector — no real campaign was created. On Render with Google Ads connected + Pipedream in production, this runs the real write-chain.' };
+  }
+
   async getAdSpend(externalUserId: string, range = 'LAST_30_DAYS') {
     const apps = new Set((this.acc(externalUserId)).map((a) => a.app));
     // Scale demo figures to the selected window so the range selector visibly works.
