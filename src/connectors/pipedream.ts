@@ -331,18 +331,62 @@ export class PipedreamConnector implements Connector {
   }
 
   // Diagnostic — run the raw read for an app and report exactly what came back,
-  // so the live field mapping can be verified/fixed against a real account.
-  async probe(externalUserId: string, app: string, query?: string): Promise<{ connected: boolean; count: number; sample: unknown; error?: string }> {
+  // stage by stage, so we can see WHERE a live pull fails: no account, no
+  // component matched, required props (e.g. Google Ads customerId) left unset,
+  // the raw response, or a run error. Read-only; never mutates anything.
+  async probe(externalUserId: string, app: string, query?: string): Promise<{ connected: boolean; count: number; sample: unknown; error?: string; trace?: Record<string, unknown> }> {
+    const trace: Record<string, unknown> = { app };
     try {
+      const pd = await this.backend();
       const accts = await this.listAccounts(externalUserId, app);
-      if (!accts.length) return { connected: false, count: 0, sample: null };
+      trace.accounts = accts.map((a) => ({ id: a.id, app: a.app, name: a.name, healthy: a.healthy }));
+      if (!accts.length) return { connected: false, count: 0, sample: null, trace };
+      const account = accts.find((a) => a.healthy) ?? accts[0];
+
       const gaql = app === 'google_ads' ? 'SELECT campaign.name, metrics.cost_micros, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date DURING LAST_30_DAYS' : undefined;
       const q = query || (app === 'google_ads' ? 'search report query campaign' : app.includes('facebook') || app.includes('instagram') || app.includes('linkedin') ? 'insights metrics' : app === 'google_my_business' ? 'list reviews' : 'list contacts');
-      const raw = await this.runRead(app, q, externalUserId, gaql ? { query: gaql } : {});
-      const rows = asRows(raw);
-      return { connected: true, count: rows.length, sample: rows[0] ?? raw ?? null };
+      trace.query = q;
+      if (gaql) trace.gaql = gaql;
+
+      // Stage: component discovery — show every candidate and which one we pick.
+      const list = await pd.actions.list({ app, q, limit: 12 });
+      const rows: any[] = list?.data ?? (Array.isArray(list) ? list : list?.items ?? []);
+      trace.candidateComponents = rows.map((c) => c.key ?? c.id ?? c.componentKey ?? c.name);
+      const comp = pickComponent(rows, q);
+      if (!comp) return { connected: true, count: 0, sample: null, trace, error: 'no component matched the query' };
+      const key: string = comp.key ?? comp.id ?? comp.componentKey;
+      trace.pickedComponent = key;
+
+      // Stage: prop schema — reveal which props exist (so we can see if the
+      // component wants a customerId / loginCustomerId / query prop we never set).
+      let props: any[] = comp.configurableProps ?? comp.configurable_props ?? [];
+      if (!props.length) {
+        try {
+          const full = await pd.actions.retrieve(key);
+          const d = full?.data ?? full;
+          props = d?.configurableProps ?? d?.configurable_props ?? [];
+        } catch {
+          /* some components inline their props */
+        }
+      }
+      trace.componentProps = (props ?? []).map((p: any) => ({ name: p?.name, label: p?.label, type: p?.type, optional: p?.optional }));
+
+      // Stage: what we actually send — this is where a missing customerId shows up.
+      const configuredProps = buildConfiguredProps(props, account?.id ?? '', gaql ? { query: gaql } : {});
+      trace.configuredPropsSent = Object.keys(configuredProps);
+      const requiredUnset = (props ?? [])
+        .filter((p: any) => p && p.type !== 'app' && p.optional === false && !(p.name in configuredProps))
+        .map((p: any) => p.name);
+      trace.requiredPropsLeftUnset = requiredUnset;
+
+      // Stage: run + raw response.
+      const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
+      const raw = res?.ret ?? res?.exports ?? res ?? null;
+      const rows2 = asRows(raw);
+      trace.rawResponseKeys = raw && typeof raw === 'object' && !Array.isArray(raw) ? Object.keys(raw as Record<string, unknown>) : Array.isArray(raw) ? `array(${raw.length})` : typeof raw;
+      return { connected: true, count: rows2.length, sample: rows2[0] ?? raw ?? null, trace };
     } catch (e) {
-      return { connected: true, count: 0, sample: null, error: String((e as Error).message) };
+      return { connected: true, count: 0, sample: null, error: String((e as Error).message), trace };
     }
   }
 

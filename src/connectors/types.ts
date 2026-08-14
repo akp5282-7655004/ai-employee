@@ -144,7 +144,7 @@ export interface Connector {
    * whether the account is connected, how many rows, a sample row (unmapped), and
    * any error. Used to verify/lock the live field mapping against a real account.
    */
-  probe?(externalUserId: string, app: string, query?: string): Promise<{ connected: boolean; count: number; sample: unknown; error?: string }>;
+  probe?(externalUserId: string, app: string, query?: string): Promise<{ connected: boolean; count: number; sample: unknown; error?: string; trace?: Record<string, unknown> }>;
   /**
    * Mark an app connected for a user. Present on the mock (a demo shortcut); on
    * live Pipedream the real connection happens through the connect-token flow, so
