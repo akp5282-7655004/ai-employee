@@ -249,13 +249,36 @@ export class PipedreamConnector implements Connector {
   // behalf, and maps common output shapes to our types. Best-effort: any failure
   // (app not connected, differing output shape) returns empty so the dashboard
   // degrades honestly. Field mapping should be verified against a real account.
+  /**
+   * List an app's action components broadly (no narrow text filter) and return
+   * the raw rows. A long/specific `q` (e.g. "search report query campaign") makes
+   * Pipedream's server-side search return zero matches even when the app has the
+   * action — so we list wide and rank locally with pickComponent instead.
+   */
+  private async listComponents(app: string): Promise<any[]> {
+    const pd = await this.backend();
+    const out: any[] = [];
+    let after: string | undefined;
+    for (let page = 0; page < 3; page++) {
+      const list = await pd.actions.list({ app, limit: 100, after });
+      const rows: any[] = list?.data ?? (Array.isArray(list) ? list : list?.items ?? []);
+      out.push(...rows);
+      try {
+        after = list?.hasNextPage?.() ? (list?.response?.pageInfo?.endCursor ?? list?.response?.page_info?.end_cursor) : undefined;
+      } catch {
+        after = undefined;
+      }
+      if (!after) break;
+    }
+    return out;
+  }
+
   private async runRead(app: string, query: string, externalUserId: string, params: Record<string, string> = {}): Promise<unknown> {
     const pd = await this.backend();
     const accts = await this.listAccounts(externalUserId, app);
     const account = accts.find((a) => a.healthy) ?? accts[0];
     if (!account) return null;
-    const list = await pd.actions.list({ app, q: query, limit: 12 });
-    const rows: any[] = list?.data ?? (Array.isArray(list) ? list : list?.items ?? []);
+    const rows = await this.listComponents(app);
     const comp = pickComponent(rows, query);
     if (!comp) return null;
     const key: string = comp.key ?? comp.id ?? comp.componentKey;
@@ -348,12 +371,14 @@ export class PipedreamConnector implements Connector {
       trace.query = q;
       if (gaql) trace.gaql = gaql;
 
-      // Stage: component discovery — show every candidate and which one we pick.
-      const list = await pd.actions.list({ app, q, limit: 12 });
-      const rows: any[] = list?.data ?? (Array.isArray(list) ? list : list?.items ?? []);
-      trace.candidateComponents = rows.map((c) => c.key ?? c.id ?? c.componentKey ?? c.name);
+      // Stage: component discovery — list the app's actions broadly (no narrow
+      // filter) and show the full menu + which one we pick. This reveals whether
+      // the app even exposes a readable/report action on Pipedream.
+      const rows = await this.listComponents(app);
+      trace.availableComponents = rows.map((c) => c.key ?? c.id ?? c.componentKey ?? c.name);
+      trace.availableComponentCount = rows.length;
       const comp = pickComponent(rows, q);
-      if (!comp) return { connected: true, count: 0, sample: null, trace, error: 'no component matched the query' };
+      if (!comp) return { connected: true, count: 0, sample: null, trace, error: rows.length ? 'none of the app’s actions matched the query' : 'this app exposes no action components on Pipedream (reads may need a custom API-request action or a trigger)' };
       const key: string = comp.key ?? comp.id ?? comp.componentKey;
       trace.pickedComponent = key;
 
