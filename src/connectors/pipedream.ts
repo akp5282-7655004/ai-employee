@@ -45,6 +45,11 @@ const PARAM_KEYWORDS: Record<string, string[]> = {
 export class PipedreamConnector implements Connector {
   readonly name = 'pipedream';
   private client: unknown | null = null;
+  // Per-customer Google Ads discovery cache (report component + client account
+  // IDs). Discovery is stable, so we resolve it once and reuse for TTL_MS —
+  // every dashboard load then costs just the report run, not a full re-discovery.
+  private gadsCache = new Map<string, { key: string; appName: string; ids: string[]; ts: number }>();
+  private static readonly DISCOVERY_TTL_MS = 10 * 60 * 1000;
 
   constructor(private readonly cfg: Config) {}
 
@@ -348,13 +353,23 @@ export class PipedreamConnector implements Connector {
     const accts = await this.listAccounts(externalUserId, 'google_ads');
     const account = accts.find((a) => a.healthy) ?? accts[0];
     if (!account) return out;
-    const rows = await this.listComponents('google_ads');
-    const comp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-campaign-report') ?? pickComponent(rows, 'create campaign report');
-    if (!comp) return out;
-    const key: string = comp.key ?? comp.id ?? comp.componentKey;
-    const props = await this.componentProps(comp, key);
-    const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
-    const ids = await this.googleAdsCustomerIds(externalUserId, account.id, rows);
+
+    // Reuse cached discovery (component + client account IDs) when fresh; only
+    // the report run below happens on every load.
+    let key: string, appName: string, ids: string[];
+    const cached = this.gadsCache.get(externalUserId);
+    if (cached && Date.now() - cached.ts < PipedreamConnector.DISCOVERY_TTL_MS) {
+      ({ key, appName, ids } = cached);
+    } else {
+      const rows = await this.listComponents('google_ads');
+      const comp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-campaign-report') ?? pickComponent(rows, 'create campaign report');
+      if (!comp) return out;
+      key = comp.key ?? comp.id ?? comp.componentKey;
+      const props = await this.componentProps(comp, key);
+      appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+      ids = await this.googleAdsCustomerIds(externalUserId, account.id, rows);
+      this.gadsCache.set(externalUserId, { key, appName, ids, ts: Date.now() });
+    }
     // If we couldn't enumerate clients, still try once with no explicit account
     // (a single-account login may default correctly).
     const targets: (string | undefined)[] = ids.length ? ids : [undefined];

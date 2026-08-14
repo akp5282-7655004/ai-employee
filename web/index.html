@@ -3852,8 +3852,34 @@ async function connectApp(slug){
     const t = await r.json().catch(()=>({}));
     if(!r.ok || !t.connectUrl){ setPage('chat'); chat.innerHTML=''; say('emp','⚠️ Couldn’t start the connection right now. Please try again in a moment.'); return; }
     const w = window.open(t.connectUrl,'_blank','noopener');
-    if(!w){ setPage('chat'); chat.innerHTML=''; say('emp','I opened your secure connect link, but your browser blocked the pop-up. Allow pop-ups for this site, or open it manually: '+t.connectUrl); }
+    if(!w){ setPage('chat'); chat.innerHTML=''; say('emp','I opened your secure connect link, but your browser blocked the pop-up. Allow pop-ups for this site, or open it manually: '+t.connectUrl); return; }
+    awaitConnection(slug, w);
   }catch(e){ setPage('chat'); chat.innerHTML=''; say('emp','⚠️ Connection error: '+e.message); }
+}
+// After the OAuth pop-up opens, watch for the account to appear and then
+// auto-refresh the integrations grid + dashboard — so connecting is truly
+// one-click: the customer never has to reload or hunt for a refresh button.
+function awaitConnection(slug, w){
+  const before=(CONN.connectedApps||[]).slice(); const started=Date.now(); let busy=false;
+  toast('Opening your secure connect window…');
+  const timer=setInterval(async()=>{
+    if(busy) return; busy=true;
+    try{
+      await fetchConnections();
+      const nowConnected=(CONN.connectedApps||[]).includes(slug) && !before.includes(slug);
+      const popupClosed=!!(w&&w.closed); const timedOut=Date.now()-started>180000;
+      if(nowConnected){
+        clearInterval(timer);
+        toast('✓ '+slug.replace(/_/g,' ')+' connected — pulling your data now');
+        await loadIntegrations();
+        try{ await openOverview(); }catch(e){}
+      } else if((popupClosed && Date.now()-started>2500) || timedOut){
+        clearInterval(timer);
+        await loadIntegrations(); // popup closed — refresh in case detection lagged
+      }
+    }catch(e){}
+    busy=false;
+  },3000);
 }
 function appLogo(a){ const l=el('div','applogo'); if(a.img){ const im=el('img'); im.src=a.img; im.alt=''; im.onerror=()=>{l.textContent=(a.name||'?')[0];im.remove();}; l.append(im);} else { l.textContent=(a.name||'?')[0]; } return l; }
 function appCard(a, connected){
