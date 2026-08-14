@@ -1838,17 +1838,30 @@ let aTab='overview';
 async function openOverview(){ const box=$('#overview-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading your dashboard…</p>'; let d={}; if(REMOTE){ try{ d=await(await fetch('/api/dashboard')).json(); }catch(e){} } renderOverview(d); }
 function ovNudge(t){ return el('div','verdict tight',t); }
 function ovSync(t){ return el('div','verdict ok',t); }
-// Diagnostic: confirm a connected app actually returns live data, with a clear result.
-async function diagProbe(app,btn){ btn.disabled=true; const old=btn.textContent; btn.textContent='Testing…';
-  try{ const d=await(await fetch('/api/diag/probe?app='+encodeURIComponent(app))).json(); const pr=d.probe||{};
-    let msg;
-    if(d.connector!=='pipedream') msg='This preview uses the demo connector — connect live via Render to pull real data.';
-    else if(!pr.connected) msg='Not connected yet — link '+app.replace('_',' ')+' in Integrations.';
-    else if(pr.error) msg='Connected, but the read errored: '+pr.error;
-    else if(pr.count>0) msg='✓ Live — Miles can read '+pr.count+' record(s). Numbers show on the next refresh.';
-    else msg='Connected, but no data came back yet — the report may still be syncing, or the field mapping needs a tweak. Send me a screenshot of /api/diag/probe?app='+app+' and I’ll lock it in.';
-    toast(msg);
-  }catch(e){ toast('Test failed — try again in a moment.'); }
+// Diagnostic: run the live read and show a plain-English report + a Copy button,
+// so a non-technical owner can hand the raw trace back in one click.
+async function diagProbe(app,btn){ btn.disabled=true; const old=btn.textContent; btn.textContent='Checking…';
+  let d={}; try{ d=await(await fetch('/api/diag/probe?app='+encodeURIComponent(app))).json(); }catch(e){ toast('Check failed — try again in a moment.'); btn.disabled=false; btn.textContent=old; return; }
+  const pr=d.probe||{}, tr=pr.trace||{}; const nice=app.replace(/_/g,' ');
+  // Plain-English verdict.
+  let head, detail;
+  if(d.connector!=='pipedream'){ head='ℹ️ This is the demo version'; detail='You’re on the preview connector, which shows sample data, not your live '+nice+' account. This report only means something on your live Miles site.'; }
+  else if(!pr.connected){ head='⚠️ '+nice+' isn’t connected yet'; detail='Go to Integrations and link '+nice+', then run this again.'; }
+  else if(pr.error){ head='❌ Connected, but the read failed'; detail='The account is linked, but the request came back with an error:\n\n“'+pr.error+'”\n\nCopy the full report below and send it to me — this error tells me exactly what to fix.'; }
+  else if(pr.count>0){ head='✅ Working — Miles can read your '+nice; detail='Miles just pulled '+pr.count+' record(s) live. Your numbers will show on the dashboard. If the panel still looks empty, hit “Refresh now”.'; }
+  else { const unset=Array.isArray(tr.requiredPropsLeftUnset)?tr.requiredPropsLeftUnset:[];
+    const idMissing=unset.some(n=>/customer|account/i.test(String(n)));
+    head='🟡 Connected, but nothing came back';
+    detail=idMissing
+      ? 'The account is linked, but Miles isn’t sending your '+nice+' account ID with the request — so it has nothing to look up. That’s a fix on our side. Copy the report below and send it to me.'
+      : 'The account is linked and the request ran, but no rows came back. That’s usually either (a) no ad spend in the last 30 days on this account, or (b) a field-mapping tweak I need to make. Copy the report below and send it to me — I’ll tell you which.';
+  }
+  const report=JSON.stringify(d,null,2);
+  showModal('<h3 style="margin:0 0 8px">'+esc(head)+'</h3>'
+    +'<p class="mdesc" style="margin:0 0 12px;white-space:pre-wrap">'+esc(detail)+'</p>'
+    +'<div style="font:12px var(--mono,monospace);background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px;max-height:220px;overflow:auto;white-space:pre-wrap">'+esc(report)+'</div>'
+    +'<button class="go" id="dg-copy" style="width:100%;margin-top:12px">📋 Copy full report</button>');
+  $('#dg-copy').onclick=()=>{ try{navigator.clipboard.writeText(report);}catch(e){} toast('Copied — now paste it to Miles'); };
   btn.disabled=false; btn.textContent=old;
 }
 function renderOverview(d){
