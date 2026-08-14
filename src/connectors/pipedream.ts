@@ -297,18 +297,98 @@ export class PipedreamConnector implements Connector {
     return res?.ret ?? res?.exports ?? res ?? null;
   }
 
-  async getAdSpend(externalUserId: string): Promise<import('../revenue/attribution.js').CampaignSpend[]> {
+  /** Fetch a component's configurable props (inline or via retrieve). */
+  private async componentProps(comp: any, key: string): Promise<any[]> {
+    let props: any[] = comp?.configurableProps ?? comp?.configurable_props ?? [];
+    if (!props.length) {
+      try {
+        const full = await (await this.backend()).actions.retrieve(key);
+        const d = full?.data ?? full;
+        props = d?.configurableProps ?? d?.configurable_props ?? [];
+      } catch {
+        /* some components inline their props */
+      }
+    }
+    return props ?? [];
+  }
+
+  /**
+   * Discover the client (managed) Google Ads customer IDs reachable through the
+   * connected login. Runs the account-listing components and pattern-extracts
+   * 10-digit customer IDs from whatever shape comes back — so it works across a
+   * plain account or an MCC (manager → clients) without hard-coding anything.
+   */
+  private async googleAdsCustomerIds(externalUserId: string, authId: string, rows: any[]): Promise<string[]> {
+    const pd = await this.backend();
+    const ids = new Set<string>();
+    for (const key of ['google_ads-list-customer-clients', 'google_ads-list-account-id-options']) {
+      const comp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === key);
+      if (!comp) continue;
+      try {
+        const props = await this.componentProps(comp, key);
+        const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+        const res = await pd.actions.run({ externalUserId, id: key, configuredProps: { [appName]: { authProvisionId: authId } } });
+        collectCustomerIds(res?.ret ?? res?.exports ?? res, ids);
+      } catch {
+        /* try the next lister */
+      }
+    }
+    return [...ids];
+  }
+
+  /**
+   * Google Ads spend via the structured `create-campaign-report` component.
+   * The connected login is often an MCC manager, which can't report metrics
+   * itself — so we resolve the client customer IDs and pull the report from each
+   * account that actually runs ads. Field/metric names are GAQL-standard.
+   */
+  private async googleAdsSpend(externalUserId: string): Promise<import('../revenue/attribution.js').CampaignSpend[]> {
     const out: import('../revenue/attribution.js').CampaignSpend[] = [];
-    try {
-      const gaql = 'SELECT campaign.name, metrics.cost_micros, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date DURING LAST_30_DAYS';
-      const g = await this.runRead('google_ads', 'search report query campaign', externalUserId, { query: gaql });
-      for (const r of asRows(g)) {
+    const pd = await this.backend();
+    const accts = await this.listAccounts(externalUserId, 'google_ads');
+    const account = accts.find((a) => a.healthy) ?? accts[0];
+    if (!account) return out;
+    const rows = await this.listComponents('google_ads');
+    const comp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-campaign-report') ?? pickComponent(rows, 'create campaign report');
+    if (!comp) return out;
+    const key: string = comp.key ?? comp.id ?? comp.componentKey;
+    const props = await this.componentProps(comp, key);
+    const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+    const ids = await this.googleAdsCustomerIds(externalUserId, account.id, rows);
+    // If we couldn't enumerate clients, still try once with no explicit account
+    // (a single-account login may default correctly).
+    const targets: (string | undefined)[] = ids.length ? ids : [undefined];
+    for (const id of targets.slice(0, 8)) {
+      const configuredProps: Record<string, unknown> = {
+        [appName]: { authProvisionId: account.id },
+        dateRange: 'LAST_30_DAYS',
+        fields: ['campaign.name'],
+        metrics: ['metrics.cost_micros', 'metrics.clicks', 'metrics.conversions'],
+      };
+      if (id) configuredProps.accountId = id;
+      let raw: unknown;
+      try {
+        const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
+        raw = res?.ret ?? res?.exports ?? res ?? null;
+      } catch {
+        continue; // manager-level or unreachable account — try the next
+      }
+      for (const r of asRows(raw)) {
         const name = r?.campaign?.name ?? r.campaignName ?? r.name ?? 'Google campaign';
         const spend = num(r?.metrics?.costMicros ?? r?.metrics?.cost_micros) / 1e6 || num(r.cost ?? r.spend);
         const clicks = num(r?.metrics?.clicks ?? r.clicks);
         const conv = num(r?.metrics?.conversions ?? r.conversions);
         if (spend || clicks || conv) out.push({ platform: 'google_ads', campaign: name, utm: '', spend: Math.round(spend), clicks, conversions: Math.round(conv) });
       }
+      if (out.length) break; // got real data — stop probing further accounts
+    }
+    return out;
+  }
+
+  async getAdSpend(externalUserId: string): Promise<import('../revenue/attribution.js').CampaignSpend[]> {
+    const out: import('../revenue/attribution.js').CampaignSpend[] = [];
+    try {
+      out.push(...(await this.googleAdsSpend(externalUserId)));
     } catch {
       /* Google Ads not connected or shape differs */
     }
@@ -465,6 +545,33 @@ export class PipedreamConnector implements Connector {
 }
 
 const lower = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+/**
+ * Deep-walk an arbitrary Pipedream response and collect Google Ads customer IDs
+ * — 10-digit numbers, however they're shaped: a bare "4347015374", a dashed
+ * "434-701-5374", a { value } option, or a "customers/4347015374" resource name.
+ */
+function collectCustomerIds(v: unknown, into: Set<string>, depth = 0): void {
+  if (v == null || depth > 6) return;
+  if (typeof v === 'number') {
+    const s = String(v);
+    if (/^\d{10}$/.test(s)) into.add(s);
+    return;
+  }
+  if (typeof v === 'string') {
+    const m = v.match(/customers\/(\d{10})/);
+    if (m?.[1]) into.add(m[1]);
+    const digits = v.replace(/[^\d]/g, '');
+    if (/^\d{10}$/.test(digits)) into.add(digits);
+    return;
+  }
+  if (Array.isArray(v)) {
+    for (const x of v) collectCustomerIds(x, into, depth + 1);
+    return;
+  }
+  if (typeof v === 'object') {
+    for (const x of Object.values(v as Record<string, unknown>)) collectCustomerIds(x, into, depth + 1);
+  }
+}
 const asRows = (out: unknown): any[] => {
   if (!out) return [];
   if (Array.isArray(out)) return out;
