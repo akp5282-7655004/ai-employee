@@ -1018,6 +1018,37 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return result;
   });
 
+  // Saved campaign drafts — build one, save it, come back to it in the builder.
+  // Purely local; nothing here touches Google Ads.
+  app.get('/api/campaign/drafts', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    let gadsConnected = false;
+    try { gadsConnected = (await connector.listAccounts(u.id)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
+    return { drafts: (data.campaignDrafts as any[]) ?? [], gadsConnected };
+  });
+  app.post<{ Body: { spec?: CampaignSpec } }>('/api/campaign/drafts', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const spec = req.body?.spec;
+    if (!spec || typeof spec !== 'object') return reply.code(400).send({ error: 'spec is required' });
+    const data = await authStore.getUserData(u.id);
+    const drafts = ((data.campaignDrafts as any[]) ?? []).filter((d) => d && d.id);
+    const draft = { id: newToken().slice(0, 10), spec, summary: campaignSummary(spec), savedAt: new Date().toISOString() };
+    data.campaignDrafts = [draft, ...drafts].slice(0, 30);
+    await authStore.setUserData(u.id, data);
+    return { ok: true, id: draft.id };
+  });
+  app.post<{ Body: { id?: string } }>('/api/campaign/drafts/delete', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    data.campaignDrafts = ((data.campaignDrafts as any[]) ?? []).filter((d) => d.id !== req.body?.id);
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+
   // ── Competitor Ad Watch (Meta Ad Library) ────────────────────────────────
   // Shows the ads a shop's local competitors are running, so the owner can make
   // their own version of what's already converting. Gated by META_AD_LIBRARY_TOKEN.
