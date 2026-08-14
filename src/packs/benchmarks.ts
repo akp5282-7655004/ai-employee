@@ -114,10 +114,10 @@ export function buildBenchmarkHub(): HubChannel[] {
       entries: [
         { trade: 'All Trades', metric: 'CPL', value: 104, unit: 'usd', source: SL + 'what-is-a-good-cost-per-lead-for-hvac-google-ads/', note: 'Blended · non-branded $149 · branded $34 · PMax $72' },
         { trade: 'HVAC', metric: 'CPL', value: 149, unit: 'usd', source: SL + 'what-is-a-good-cost-per-lead-for-hvac-google-ads/', note: 'Non-branded · HVAC-general $198 · heating-repair $144' },
-        { trade: 'Plumbing', metric: 'CPL', value: 183, unit: 'usd', source: SL + 'plumbing-google-ads-cost-per-lead/', note: 'Non-branded · PMax $82 · median acct $168' },
+        { trade: 'Plumbing', metric: 'CPL', value: 183, unit: 'usd', source: SL + 'plumbing-google-ads-cost-per-lead/', note: 'Non-branded · PMax $82 · median acct $168 · HVAC&plumbing benchmark (Jan 2026, 404 accts) reads $167, 41.5% book, $2,208 ticket, 2.72x' },
         { trade: 'Roofing', metric: 'CPL', value: 124, unit: 'usd', source: SL + 'roofing-google-ads-cost-per-lead/', note: 'Non-branded · branded $44 · PMax $64' },
         { trade: 'Garage Door', metric: 'CPL', value: 173, unit: 'usd', source: SL + 'garage-door-google-ads-cost-per-lead/', note: 'Non-branded · blended $145 · branded $66' },
-        { trade: 'Electrical', metric: 'CPL', value: 128, unit: 'usd', source: SL + 'plumbing-google-ads-cost-per-lead/', note: 'Non-branded (Q1 2026)' },
+        { trade: 'Electrical', metric: 'CPL', value: 163, unit: 'usd', source: SL + 'what-is-a-good-cost-per-lead-for-hvac-google-ads/', note: 'Non-branded · book rate 41.2% · avg ticket $2,491 · ROAS 2.92x (HVAC & plumbing benchmark, Jan 2026, 173 accts)' },
         { trade: 'HVAC', metric: 'ROAS', value: 4.37, unit: 'x', source: SL + 'what-is-a-good-roas-for-hvac-google-ads', note: 'Median blended · top quartile 10.24x · non-branded 2.95x' },
         { trade: 'Garage Door', metric: 'ROAS', value: 3.51, unit: 'x', source: SL + 'what-is-a-good-roas-for-garage-door-google-ads/', note: 'Blended · median 2.90x · top quartile 11.37x' },
       ],
