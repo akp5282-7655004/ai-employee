@@ -132,13 +132,14 @@ export class MockConnector implements Connector {
     const CRMS = ['gohighlevel', 'servicetitan', 'jobber', 'hubspot', 'salesforce_rest_api', 'housecall_pro', 'service_fusion'];
     const apps = new Set((this.acc(externalUserId)).map((a) => a.app));
     if (!CRMS.some((c) => apps.has(c))) return [];
+    const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
     return [
-      { id: 'd1', value: 4200, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing' },
-      { id: 'd2', value: 1850, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing' },
-      { id: 'd3', value: 2100, won: true, utmSource: 'google_ads', utmCampaign: 'gads_ac' },
-      { id: 'd4', value: 890, won: false, utmSource: 'facebook', utmCampaign: 'meta_ac' },
-      { id: 'd5', value: 2480, won: true, utmSource: 'facebook', utmCampaign: 'meta_ac' },
-      { id: 'd6', value: 1714, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing' },
+      { id: 'd1', value: 4200, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing', createdAt: ago(2) },
+      { id: 'd2', value: 1850, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing', createdAt: ago(9) },
+      { id: 'd3', value: 2100, won: true, utmSource: 'google_ads', utmCampaign: 'gads_ac', createdAt: ago(20) },
+      { id: 'd4', value: 890, won: false, utmSource: 'facebook', utmCampaign: 'meta_ac', createdAt: ago(25) },
+      { id: 'd5', value: 2480, won: true, utmSource: 'facebook', utmCampaign: 'meta_ac', createdAt: ago(40) },
+      { id: 'd6', value: 1714, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing', createdAt: ago(55) },
     ];
   }
 
@@ -172,9 +173,13 @@ export class MockConnector implements Connector {
     const CRMS = ['gohighlevel', 'servicetitan', 'jobber', 'hubspot', 'salesforce_rest_api', 'housecall_pro'];
     const apps = new Set((this.acc(externalUserId)).map((a) => a.app));
     if (!CRMS.some((c) => apps.has(c))) return [];
+    const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
     return [
-      { name: 'Sarah Kim', service: 'Kitchen repaint', source: 'Google Ads', contacted: false },
-      { name: 'Tom B.', service: 'Exterior painting quote', source: 'Website form', contacted: false },
+      { name: 'Sarah Kim', service: 'Kitchen repaint', source: 'Google Ads', contacted: false, createdAt: ago(1) },
+      { name: 'Tom B.', service: 'Exterior painting quote', source: 'Website form', contacted: false, createdAt: ago(4) },
+      { name: 'Rosa L.', service: 'Cabinet refinishing', source: 'Google Ads', contacted: true, createdAt: ago(11) },
+      { name: 'Dan P.', service: 'Deck staining', source: 'Referral', contacted: true, createdAt: ago(26) },
+      { name: 'Aisha N.', service: 'Whole-home interior', source: 'Website form', contacted: true, createdAt: ago(48) },
     ];
   }
   async probe(externalUserId: string, app: string): Promise<{ connected: boolean; count: number; sample: unknown; error?: string }> {

@@ -697,7 +697,17 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const runs = (d.agentRuns as AgentRun[]) ?? [];
     const posts = (d.scheduledPosts as ScheduledPost[]) ?? [];
     const agents = (d.schedules as ScheduledAgent[]) ?? [];
-    const within7 = (ts?: string) => { const t = Date.parse(ts || ''); return Number.isFinite(t) && Date.now() - t < 7 * 86_400_000; };
+    // Resolve the selected preset to a concrete [start,end] window so every
+    // date-based metric on the dashboard moves together. Items without a parseable
+    // timestamp are kept (we can't place them), never silently dropped.
+    const nowMs = Date.now();
+    const win = (() => {
+      if (range === 'THIS_MONTH') { const dt = new Date(); return { start: new Date(dt.getFullYear(), dt.getMonth(), 1).getTime(), end: nowMs }; }
+      if (range === 'LAST_MONTH') { const dt = new Date(); return { start: new Date(dt.getFullYear(), dt.getMonth() - 1, 1).getTime(), end: new Date(dt.getFullYear(), dt.getMonth(), 1).getTime() }; }
+      const days = range === 'LAST_7_DAYS' ? 7 : range === 'LAST_14_DAYS' ? 14 : 30;
+      return { start: nowMs - days * 86_400_000, end: nowMs };
+    })();
+    const inWin = (ts?: string) => { const t = Date.parse(ts || ''); return !Number.isFinite(t) || (t >= win.start && t <= win.end); };
     const safe = async <T,>(fn: (() => Promise<T>) | undefined, empty: T): Promise<T> => { try { return fn ? await fn() : empty; } catch { return empty; } };
     const spend = await safe(connector.getAdSpend ? () => connector.getAdSpend!(u.id, range) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
     const deals = await safe(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
@@ -706,7 +716,8 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const social = await safe(connector.getSocialMetrics ? () => connector.getSocialMetrics!(u.id) : undefined, null as import('./connectors/types.js').SocialMetrics | null);
     const totalSpend = spend.reduce((s, x) => s + (x.spend || 0), 0);
     const totalConv = spend.reduce((s, x) => s + (x.conversions || 0), 0);
-    const revenue = deals.filter((x) => x.won).reduce((s, x) => s + (x.value || 0), 0);
+    const leadsWin = leads.filter((l) => inWin(l.createdAt));
+    const revenue = deals.filter((x) => x.won && inWin(x.createdAt)).reduce((s, x) => s + (x.value || 0), 0);
     // Which apps are actually LINKED (OAuth done) — separate from whether data has
     // synced yet, so a connected-but-empty card says "connected, syncing", not "connect".
     let linked = new Set<string>();
@@ -722,18 +733,19 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const socialLinked = has('facebook', 'instagram', 'linkedin');
     return {
       business: p.businessName || '',
+      range,
       kpis: {
         pendingApprovals: q.filter((c) => c.status === 'pending').length,
         liveChanges: q.filter((c) => c.status === 'live').length,
         agentsDeployed: agents.length,
-        agentRuns7d: runs.filter((r) => within7(r.ts)).length,
+        agentRuns: runs.filter((r) => inWin(r.ts)).length,
         scheduledPosts: posts.filter((x) => x.status === 'scheduled').length,
         publishedPosts: posts.filter((x) => x.status === 'published').length,
         creditsUsed: summarizeUsage(d.usage as Usage | undefined, new Date()).credits,
         weatherTriggers: ((d.weatherRules as Array<{ enabled?: boolean }>) ?? []).filter((r) => r.enabled).length,
       },
       marketing: { connected: adsLinked || spend.length > 0, hasData: spend.length > 0, range, spend: Math.round(totalSpend), conversions: totalConv, cpa: totalConv ? Math.round((totalSpend / totalConv) * 100) / 100 : null, revenue: Math.round(revenue), targetCpa: Number(p.targetCpa) || null },
-      leads: { connected: crmLinked || leads.length > 0, hasData: leads.length > 0, count: leads.length, uncontacted: leads.filter((l) => !l.contacted).length },
+      leads: { connected: crmLinked || leads.length > 0, hasData: leadsWin.length > 0, count: leadsWin.length, uncontacted: leadsWin.filter((l) => !l.contacted).length },
       speedToLead: responderStats(d.speedToLead as SpeedToLeadState | undefined, new Date().toISOString()),
       reviews: { connected: gmbLinked || reviews.length > 0, hasData: reviews.length > 0, count: reviews.length, avg: reviews.length ? Math.round((reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length) * 10) / 10 : null },
       social: social ? { connected: true, hasData: true, ...social } : (socialLinked ? { connected: true, hasData: false, impressions: 0, clicks: 0, likes: 0, followers: 0 } : null),

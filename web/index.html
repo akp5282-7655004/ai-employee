@@ -1875,26 +1875,28 @@ async function diagProbe(app,btn){ btn.disabled=true; const old=btn.textContent;
 }
 function renderOverview(d){
   const box=$('#overview-body'); if(!box) return; box.innerHTML=''; const k=d.kpis||{};
-  const head=el('div'); head.innerHTML='<h3 style="margin:0">'+(d.business?esc(d.business):'Your workspace')+' — Dashboard</h3><p class="mdesc" style="margin:4px 0 0;max-width:680px">Everything at a glance. Numbers pull from your live data; anything that needs a connected tool says so instead of showing a fake figure.</p>';
+  if(d.range) MKT_RANGE=d.range;
+  // Header row: title + ONE global date-window selector that sweeps every
+  // date-based number on the dashboard at once.
+  const head=el('div'); head.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap';
+  const htxt=el('div'); htxt.innerHTML='<h3 style="margin:0">'+(d.business?esc(d.business):'Your workspace')+' — Dashboard</h3><p class="mdesc" style="margin:4px 0 0;max-width:680px">Everything at a glance. Numbers pull from your live data; anything that needs a connected tool says so instead of showing a fake figure.</p>';
+  const ctrl=el('div'); ctrl.style.cssText='display:flex;align-items:center;gap:8px;flex:none';
+  ctrl.append(el('span','appsub','📅 Showing'));
+  const gsel=el('select','f'); gsel.style.cssText='width:auto;padding:5px 10px;font-size:13px;border-radius:8px';
+  for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===MKT_RANGE)o.selected=true; gsel.append(o); }
+  gsel.title='Time window for the whole dashboard'; gsel.onchange=async()=>{ MKT_RANGE=gsel.value; await openOverview(); };
+  ctrl.append(gsel); head.append(htxt,ctrl);
   box.append(head);
   // Finished drafts Miles built and left for your OK — front and center.
   const reviewWrap=el('div'); reviewWrap.style.cssText='margin:18px 0'; box.append(reviewWrap); fillDashReview(reviewWrap);
   // Recommendations, front and center — approve right here, no digging through tabs.
   const recWrap=el('div'); recWrap.style.cssText='margin:18px 0'; box.append(recWrap); fillDashRecs(recWrap);
   const g=el('div','stats'); g.style.cssText='margin:16px 0;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
-  g.append(statCard('Pending approvals',k.pendingApprovals||0), statCard('Changes live',k.liveChanges||0), statCard('Agents deployed',k.agentsDeployed||0), statCard('Agent runs (7d)',k.agentRuns7d||0), statCard('Scheduled posts',k.scheduledPosts||0), statCard('Credits used',(k.creditsUsed||0).toLocaleString()), statCard('Weather triggers',k.weatherTriggers||0));
+  g.append(statCard('Pending approvals',k.pendingApprovals||0), statCard('Changes live',k.liveChanges||0), statCard('Agents deployed',k.agentsDeployed||0), statCard('Agent runs · '+mktRangeLabel(d.range),k.agentRuns||0), statCard('Scheduled posts',k.scheduledPosts||0), statCard('Credits used',(k.creditsUsed||0).toLocaleString()), statCard('Weather triggers',k.weatherTriggers||0));
   box.append(g);
   box.append(stlCard(d.speedToLead||{}));
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px';
-  const mk=d.marketing||{}; const mc=el('div','mcard');
-  if(mk.range) MKT_RANGE=mk.range;
-  // Header row: title + a Google-Ads-style date-window selector.
-  const mhead=el('div'); mhead.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px;flex-wrap:wrap';
-  const mh3=el('h3',null,'📈 Marketing performance'); mh3.style.margin='0'; mhead.append(mh3);
-  const sel=el('select','f'); sel.style.cssText='width:auto;padding:4px 8px;font-size:12.5px;border-radius:8px';
-  for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===MKT_RANGE)o.selected=true; sel.append(o); }
-  sel.title='Time window for the numbers below'; sel.onchange=async()=>{ MKT_RANGE=sel.value; await openOverview(); };
-  mhead.append(sel); mc.append(mhead);
+  const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<h3 style="margin:0 0 10px">📈 Marketing performance</h3>';
   if(mk.hasData){ const ss=el('div','stats'); ss.append(statCard('Ad spend','$'+(mk.spend||0).toLocaleString()), statCard('Cost / job', mk.cpa!=null?('$'+mk.cpa):'—'), statCard('Revenue','$'+(mk.revenue||0).toLocaleString())); mc.append(ss); mc.append(el('div','appsub','Showing '+mktRangeLabel(mk.range)+(mk.targetCpa&&mk.cpa!=null?' · target $'+mk.targetCpa+'/job · '+(mk.cpa<=mk.targetCpa?'✅ under target':'⚠︎ over target'):''))); }
   else if(mk.connected){ mc.append(ovSync('✓ Google Ads / Meta connected — Miles reads it live, on demand (no daily sync wait). Nothing showing yet means there’s no spend in '+mktRangeLabel(mk.range)+' on the account, not a delay.')); const row=el('div'); row.style.cssText='display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap'; const rb=el('button',null,'↻ Refresh now'); rb.style.cssText='background:none;border:1px solid var(--line);border-radius:8px;color:var(--accent);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:5px 10px'; rb.onclick=async()=>{ rb.disabled=true; const o=rb.textContent; rb.textContent='Pulling live…'; await openOverview(); }; const tb=el('button',null,'Diagnose connection →'); tb.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:0'; tb.onclick=()=>diagProbe('google_ads',tb); row.append(rb,tb); mc.append(row); }
   else mc.append(ovNudge('Connect Google Ads / Meta in Integrations to see real spend, cost-per-job & revenue.'));
