@@ -1203,9 +1203,14 @@ function setPage(id){
 }
 function updateConnStat(){
   const configured = !!(CONN.hub && CONN.hub.ready);
+  const prod = configured && (CONN.hub.env==='production');
   const n = (CONN.connectedApps||[]).length;
-  $('#stat-conn').textContent = configured ? (n===0 ? 'Ready · link your apps' : n+' apps connected') : 'Demo mode · not live';
+  $('#stat-conn').textContent = !configured ? 'Demo mode · not live'
+    : !prod ? 'Dev mode · only you can connect'
+    : (n===0 ? 'Live · link your apps' : n+' apps connected');
 }
+// True when live AND in production (customers can connect their own accounts).
+function connLiveForCustomers(){ return !!(CONN.hub && CONN.hub.ready && CONN.hub.env==='production'); }
 document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>setPage(a.dataset.page));
 // Collapsible nav groups: expand the group holding the active page; a header click
 // toggles its group open (accordion — opening one collapses the others).
@@ -3932,10 +3937,13 @@ function renderInts(){
   $('#int-stack').style.display=q?'none':'';
   if(!q) renderStack(connected);
   const banner=$('#int-banner'); banner.innerHTML='';
-  const b=el('div','verdict '+(configured?'ok':'tight')); b.style.marginBottom='16px';
-  b.textContent = configured
-    ? '✅ Connected. Your linked apps sit up top with a ✓. Add more from your recommended stack, or search 3,000+ apps below.'
-    : '⚠️ Connections aren’t live yet — this is a preview of the app catalogue.';
+  const prod = configured && (CONN.hub.env==='production');
+  const b=el('div','verdict '+(configured?(prod?'ok':'tight'):'tight')); b.style.marginBottom='16px';
+  b.textContent = !configured
+    ? '⚠️ Connections aren’t live yet — this is a preview of the app catalogue.'
+    : !prod
+      ? '🟡 Dev mode — only your own Pipedream login can connect accounts here. To let customers connect their own, set PIPEDREAM_ENVIRONMENT=production on the server.'
+      : '✅ Live for customers. Anyone who signs up can connect their own accounts in one click — linked apps sit up top with a ✓. Add more from your stack, or search 3,000+ apps below.';
   banner.append(b);
 
   // Connected section — always pinned to the top, each with a ✓.

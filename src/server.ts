@@ -1179,7 +1179,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
         /* leave empty on any error */
       }
     }
-    return { connector: connector.name, hub: { ready: pdReady }, connectedApps };
+    return { connector: connector.name, hub: { ready: pdReady, env: cfg.pipedream.environment }, connectedApps };
   });
 
   // Closed-loop revenue attribution — ad spend correlated to CRM deals by UTM.
