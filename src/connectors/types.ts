@@ -127,8 +127,9 @@ export interface Connector {
   runAppTask?(req: AppTaskRequest): Promise<AppTaskResult>;
   /** Browse/search the connector's app catalog (Pipedream's registry), paginated. */
   listApps?(query?: string, limit?: number, after?: string): Promise<{ apps: AppInfo[]; after?: string }>;
-  /** Ad spend by campaign from connected ad platforms — for revenue attribution. */
-  getAdSpend?(externalUserId: string): Promise<CampaignSpend[]>;
+  /** Ad spend by campaign from connected ad platforms — for revenue attribution.
+   *  `range` is a Google-Ads-style preset (e.g. LAST_30_DAYS); defaults to 30d. */
+  getAdSpend?(externalUserId: string, range?: string): Promise<CampaignSpend[]>;
   /** Deals from connected CRMs — for revenue attribution. */
   getDeals?(externalUserId: string): Promise<Deal[]>;
   /** Recent inbox messages — the raw material for the morning task-list agent. */

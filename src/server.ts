@@ -685,9 +685,12 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
 
   // Overview dashboard — everything at a glance, from real workspace data. Numbers
   // that need a connected tool say "connect" rather than showing a fake figure.
-  app.get('/api/dashboard', async (req, reply) => {
+  app.get<{ Querystring: { range?: string } }>('/api/dashboard', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
+    // Marketing date window. Only accept known Google-Ads-style presets.
+    const RANGES = new Set(['LAST_7_DAYS', 'LAST_14_DAYS', 'LAST_30_DAYS', 'THIS_MONTH', 'LAST_MONTH']);
+    const range = RANGES.has(String(req.query?.range)) ? String(req.query?.range) : 'LAST_30_DAYS';
     const d = await authStore.getUserData(u.id);
     const p = (d.profile ?? {}) as Record<string, string>;
     const q = ((d.deploy as { queue?: Array<{ status?: string; ts?: string; label?: string; type?: string }> })?.queue) ?? [];
@@ -696,7 +699,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const agents = (d.schedules as ScheduledAgent[]) ?? [];
     const within7 = (ts?: string) => { const t = Date.parse(ts || ''); return Number.isFinite(t) && Date.now() - t < 7 * 86_400_000; };
     const safe = async <T,>(fn: (() => Promise<T>) | undefined, empty: T): Promise<T> => { try { return fn ? await fn() : empty; } catch { return empty; } };
-    const spend = await safe(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
+    const spend = await safe(connector.getAdSpend ? () => connector.getAdSpend!(u.id, range) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
     const deals = await safe(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
     const leads = await safe(connector.getLeads ? () => connector.getLeads!(u.id) : undefined, [] as import('./connectors/types.js').Lead[]);
     const reviews = await safe(connector.getReviews ? () => connector.getReviews!(u.id) : undefined, [] as import('./connectors/types.js').Review[]);
@@ -729,7 +732,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
         creditsUsed: summarizeUsage(d.usage as Usage | undefined, new Date()).credits,
         weatherTriggers: ((d.weatherRules as Array<{ enabled?: boolean }>) ?? []).filter((r) => r.enabled).length,
       },
-      marketing: { connected: adsLinked || spend.length > 0, hasData: spend.length > 0, spend: Math.round(totalSpend), conversions: totalConv, cpa: totalConv ? Math.round((totalSpend / totalConv) * 100) / 100 : null, revenue: Math.round(revenue), targetCpa: Number(p.targetCpa) || null },
+      marketing: { connected: adsLinked || spend.length > 0, hasData: spend.length > 0, range, spend: Math.round(totalSpend), conversions: totalConv, cpa: totalConv ? Math.round((totalSpend / totalConv) * 100) / 100 : null, revenue: Math.round(revenue), targetCpa: Number(p.targetCpa) || null },
       leads: { connected: crmLinked || leads.length > 0, hasData: leads.length > 0, count: leads.length, uncontacted: leads.filter((l) => !l.contacted).length },
       speedToLead: responderStats(d.speedToLead as SpeedToLeadState | undefined, new Date().toISOString()),
       reviews: { connected: gmbLinked || reviews.length > 0, hasData: reviews.length > 0, count: reviews.length, avg: reviews.length ? Math.round((reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length) * 10) / 10 : null },

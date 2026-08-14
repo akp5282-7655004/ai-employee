@@ -1840,7 +1840,11 @@ const A_TABS=[['overview','Overview'],['ads','Ad Campaigns'],['web','Web'],['soc
 const A_RENDER={overview:dashOverview,ads:dashAds,web:dashWeb,social:dashSocial,email:dashEmail,roi:dashRoi,crm:dashCrm};
 let aTab='overview';
 // ═══ Overview dashboard — everything at a glance ═══
-async function openOverview(){ const box=$('#overview-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading your dashboard…</p>'; let d={}; if(REMOTE){ try{ d=await(await fetch('/api/dashboard')).json(); }catch(e){} } renderOverview(d); }
+// Marketing date window — a Google-Ads-style preset that drives the spend numbers.
+let MKT_RANGE='LAST_30_DAYS';
+const MKT_RANGES=[['LAST_7_DAYS','Last 7 days'],['LAST_14_DAYS','Last 14 days'],['LAST_30_DAYS','Last 30 days'],['THIS_MONTH','This month'],['LAST_MONTH','Last month']];
+const mktRangeLabel=(r)=>{ const f=MKT_RANGES.find(x=>x[0]===(r||MKT_RANGE)); return f?f[1].toLowerCase():'the last 30 days'; };
+async function openOverview(){ const box=$('#overview-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading your dashboard…</p>'; let d={}; if(REMOTE){ try{ d=await(await fetch('/api/dashboard?range='+encodeURIComponent(MKT_RANGE))).json(); }catch(e){} } renderOverview(d); }
 function ovNudge(t){ return el('div','verdict tight',t); }
 function ovSync(t){ return el('div','verdict ok',t); }
 // Diagnostic: run the live read and show a plain-English report + a Copy button,
@@ -1882,9 +1886,17 @@ function renderOverview(d){
   box.append(g);
   box.append(stlCard(d.speedToLead||{}));
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px';
-  const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<h3 style="margin:0 0 10px">📈 Marketing performance</h3>';
-  if(mk.hasData){ const ss=el('div','stats'); ss.append(statCard('Ad spend','$'+(mk.spend||0).toLocaleString()), statCard('Cost / job', mk.cpa!=null?('$'+mk.cpa):'—'), statCard('Revenue','$'+(mk.revenue||0).toLocaleString())); mc.append(ss); if(mk.targetCpa&&mk.cpa!=null) mc.append(el('div','appsub','Target $'+mk.targetCpa+'/job · '+(mk.cpa<=mk.targetCpa?'✅ under target':'⚠︎ over target'))); }
-  else if(mk.connected){ mc.append(ovSync('✓ Google Ads / Meta connected — Miles reads it live, on demand (no daily sync wait). Nothing showing yet means there’s no spend in the last 30 days on the account, not a delay.')); const row=el('div'); row.style.cssText='display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap'; const rb=el('button',null,'↻ Refresh now'); rb.style.cssText='background:none;border:1px solid var(--line);border-radius:8px;color:var(--accent);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:5px 10px'; rb.onclick=async()=>{ rb.disabled=true; const o=rb.textContent; rb.textContent='Pulling live…'; await openOverview(); }; const tb=el('button',null,'Diagnose connection →'); tb.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:0'; tb.onclick=()=>diagProbe('google_ads',tb); row.append(rb,tb); mc.append(row); }
+  const mk=d.marketing||{}; const mc=el('div','mcard');
+  if(mk.range) MKT_RANGE=mk.range;
+  // Header row: title + a Google-Ads-style date-window selector.
+  const mhead=el('div'); mhead.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px;flex-wrap:wrap';
+  const mh3=el('h3',null,'📈 Marketing performance'); mh3.style.margin='0'; mhead.append(mh3);
+  const sel=el('select','f'); sel.style.cssText='width:auto;padding:4px 8px;font-size:12.5px;border-radius:8px';
+  for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===MKT_RANGE)o.selected=true; sel.append(o); }
+  sel.title='Time window for the numbers below'; sel.onchange=async()=>{ MKT_RANGE=sel.value; await openOverview(); };
+  mhead.append(sel); mc.append(mhead);
+  if(mk.hasData){ const ss=el('div','stats'); ss.append(statCard('Ad spend','$'+(mk.spend||0).toLocaleString()), statCard('Cost / job', mk.cpa!=null?('$'+mk.cpa):'—'), statCard('Revenue','$'+(mk.revenue||0).toLocaleString())); mc.append(ss); mc.append(el('div','appsub','Showing '+mktRangeLabel(mk.range)+(mk.targetCpa&&mk.cpa!=null?' · target $'+mk.targetCpa+'/job · '+(mk.cpa<=mk.targetCpa?'✅ under target':'⚠︎ over target'):''))); }
+  else if(mk.connected){ mc.append(ovSync('✓ Google Ads / Meta connected — Miles reads it live, on demand (no daily sync wait). Nothing showing yet means there’s no spend in '+mktRangeLabel(mk.range)+' on the account, not a delay.')); const row=el('div'); row.style.cssText='display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap'; const rb=el('button',null,'↻ Refresh now'); rb.style.cssText='background:none;border:1px solid var(--line);border-radius:8px;color:var(--accent);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:5px 10px'; rb.onclick=async()=>{ rb.disabled=true; const o=rb.textContent; rb.textContent='Pulling live…'; await openOverview(); }; const tb=el('button',null,'Diagnose connection →'); tb.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:0'; tb.onclick=()=>diagProbe('google_ads',tb); row.append(rb,tb); mc.append(row); }
   else mc.append(ovNudge('Connect Google Ads / Meta in Integrations to see real spend, cost-per-job & revenue.'));
   grid.append(mc);
   const lk=d.leads||{}, rk=d.reviews||{}; const lc=el('div','mcard'); lc.innerHTML='<h3 style="margin:0 0 10px">📞 Leads & reputation</h3>';

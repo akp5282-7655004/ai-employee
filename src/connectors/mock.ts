@@ -109,17 +109,21 @@ export class MockConnector implements Connector {
     return { apps: rows.slice(0, limit) };
   }
 
-  async getAdSpend(externalUserId: string) {
+  async getAdSpend(externalUserId: string, range = 'LAST_30_DAYS') {
     const apps = new Set((this.acc(externalUserId)).map((a) => a.app));
+    // Scale demo figures to the selected window so the range selector visibly works.
+    const factor: Record<string, number> = { LAST_7_DAYS: 0.25, LAST_14_DAYS: 0.5, LAST_30_DAYS: 1, THIS_MONTH: 0.7, LAST_MONTH: 1.05 };
+    const f = factor[range] ?? 1;
+    const sc = (r: import('../revenue/attribution.js').CampaignSpend): import('../revenue/attribution.js').CampaignSpend => ({ ...r, spend: Math.round((r.spend || 0) * f), clicks: Math.round((r.clicks || 0) * f), conversions: Math.round((r.conversions || 0) * f) });
     const rows: import('../revenue/attribution.js').CampaignSpend[] = [];
     if (apps.has('google_ads')) {
       rows.push(
-        { platform: 'google_ads', campaign: 'Emergency Plumbing', utm: 'gads_plumbing', spend: 1240, clicks: 410, conversions: 38 },
-        { platform: 'google_ads', campaign: 'AC Repair Search', utm: 'gads_ac', spend: 980, clicks: 300, conversions: 26 },
+        sc({ platform: 'google_ads', campaign: 'Emergency Plumbing', utm: 'gads_plumbing', spend: 1240, clicks: 410, conversions: 38 }),
+        sc({ platform: 'google_ads', campaign: 'AC Repair Search', utm: 'gads_ac', spend: 980, clicks: 300, conversions: 26 }),
       );
     }
     if (apps.has('facebook')) {
-      rows.push({ platform: 'facebook', campaign: 'AC Tune-up Promo', utm: 'meta_ac', spend: 620, clicks: 520, conversions: 19 });
+      rows.push(sc({ platform: 'facebook', campaign: 'AC Tune-up Promo', utm: 'meta_ac', spend: 620, clicks: 520, conversions: 19 }));
     }
     return rows;
   }

@@ -347,7 +347,7 @@ export class PipedreamConnector implements Connector {
    * itself — so we resolve the client customer IDs and pull the report from each
    * account that actually runs ads. Field/metric names are GAQL-standard.
    */
-  private async googleAdsSpend(externalUserId: string): Promise<import('../revenue/attribution.js').CampaignSpend[]> {
+  private async googleAdsSpend(externalUserId: string, range = 'LAST_30_DAYS'): Promise<import('../revenue/attribution.js').CampaignSpend[]> {
     const out: import('../revenue/attribution.js').CampaignSpend[] = [];
     const pd = await this.backend();
     const accts = await this.listAccounts(externalUserId, 'google_ads');
@@ -376,7 +376,7 @@ export class PipedreamConnector implements Connector {
     for (const id of targets.slice(0, 8)) {
       const configuredProps: Record<string, unknown> = {
         [appName]: { authProvisionId: account.id },
-        dateRange: 'LAST_30_DAYS',
+        dateRange: range,
         fields: ['campaign.name'],
         metrics: ['metrics.cost_micros', 'metrics.clicks', 'metrics.conversions'],
       };
@@ -400,10 +400,10 @@ export class PipedreamConnector implements Connector {
     return out;
   }
 
-  async getAdSpend(externalUserId: string): Promise<import('../revenue/attribution.js').CampaignSpend[]> {
+  async getAdSpend(externalUserId: string, range = 'LAST_30_DAYS'): Promise<import('../revenue/attribution.js').CampaignSpend[]> {
     const out: import('../revenue/attribution.js').CampaignSpend[] = [];
     try {
-      out.push(...(await this.googleAdsSpend(externalUserId)));
+      out.push(...(await this.googleAdsSpend(externalUserId, range)));
     } catch {
       /* Google Ads not connected or shape differs */
     }
