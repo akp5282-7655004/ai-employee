@@ -377,6 +377,29 @@ export class PipedreamConnector implements Connector {
       const rows = await this.listComponents(app);
       trace.availableComponents = rows.map((c) => c.key ?? c.id ?? c.componentKey ?? c.name);
       trace.availableComponentCount = rows.length;
+
+      // Google Ads deep-dive: dump the exact prop schemas (with option values) of
+      // the report components and actually run the account-id lister, so we can
+      // wire the real read against real shapes instead of guessing enum strings.
+      if (app === 'google_ads') {
+        const detail = async (k: string) => {
+          const c = rows.find((r) => (r.key ?? r.id ?? r.componentKey) === k);
+          let p: any[] = c?.configurableProps ?? c?.configurable_props ?? [];
+          if (!p.length) { try { const f = await pd.actions.retrieve(k); p = (f?.data ?? f)?.configurableProps ?? (f?.data ?? f)?.configurable_props ?? []; } catch { /* inline */ } }
+          return (p ?? []).map((x: any) => ({ name: x?.name, label: x?.label, type: x?.type, optional: x?.optional, options: Array.isArray(x?.options) ? x.options.slice(0, 12) : undefined }));
+        };
+        const deep: Record<string, unknown> = {};
+        try { deep.createReportProps = await detail('google_ads-create-report'); } catch (e) { deep.createReportPropsError = String((e as Error).message); }
+        try { deep.createCampaignReportProps = await detail('google_ads-create-campaign-report'); } catch (e) { deep.createCampaignReportPropsError = String((e as Error).message); }
+        try {
+          const optProps = await detail('google_ads-list-account-id-options');
+          const cp = buildConfiguredProps((optProps as any[]).map((x) => ({ name: x.name, type: x.type })), account?.id ?? '', {});
+          const r = await pd.actions.run({ externalUserId, id: 'google_ads-list-account-id-options', configuredProps: cp });
+          deep.accountIdOptions = r?.ret ?? r?.exports ?? r ?? null;
+        } catch (e) { deep.accountIdOptionsError = String((e as Error).message); }
+        trace.googleAdsDeepDive = deep;
+      }
+
       const comp = pickComponent(rows, q);
       if (!comp) return { connected: true, count: 0, sample: null, trace, error: rows.length ? 'none of the app’s actions matched the query' : 'this app exposes no action components on Pipedream (reads may need a custom API-request action or a trigger)' };
       const key: string = comp.key ?? comp.id ?? comp.componentKey;
