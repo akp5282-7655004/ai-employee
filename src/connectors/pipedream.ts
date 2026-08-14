@@ -48,7 +48,7 @@ export class PipedreamConnector implements Connector {
   // Per-customer Google Ads discovery cache (report component + client account
   // IDs). Discovery is stable, so we resolve it once and reuse for TTL_MS —
   // every dashboard load then costs just the report run, not a full re-discovery.
-  private gadsCache = new Map<string, { key: string; appName: string; ids: string[]; ts: number }>();
+  private gadsCache = new Map<string, { key: string; appName: string; ids: string[]; shape?: GadsShape; ts: number }>();
   private static readonly DISCOVERY_TTL_MS = 10 * 60 * 1000;
 
   constructor(private readonly cfg: Config) {}
@@ -354,12 +354,12 @@ export class PipedreamConnector implements Connector {
     const account = accts.find((a) => a.healthy) ?? accts[0];
     if (!account) return out;
 
-    // Reuse cached discovery (component + client account IDs) when fresh; only
-    // the report run below happens on every load.
-    let key: string, appName: string, ids: string[];
+    // Reuse cached discovery (component, client IDs, and the metric/field format
+    // that Pipedream accepted) when fresh; only the report run happens per load.
+    let key: string, appName: string, ids: string[], cachedShape: GadsShape | undefined;
     const cached = this.gadsCache.get(externalUserId);
     if (cached && Date.now() - cached.ts < PipedreamConnector.DISCOVERY_TTL_MS) {
-      ({ key, appName, ids } = cached);
+      ({ key, appName, ids, shape: cachedShape } = cached);
     } else {
       const rows = await this.listComponents('google_ads');
       const comp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-campaign-report') ?? pickComponent(rows, 'create campaign report');
@@ -370,32 +370,37 @@ export class PipedreamConnector implements Connector {
       ids = await this.googleAdsCustomerIds(externalUserId, account.id, rows);
       this.gadsCache.set(externalUserId, { key, appName, ids, ts: Date.now() });
     }
-    // If we couldn't enumerate clients, still try once with no explicit account
-    // (a single-account login may default correctly).
+    // If we couldn't enumerate clients, still try once with no explicit account.
     const targets: (string | undefined)[] = ids.length ? ids : [undefined];
+    // Self-healing: try the known metric/field formats until one returns rows,
+    // then remember it so later loads use just that one. If a format is already
+    // cached, try it alone first.
+    const shapes = cachedShape ? [cachedShape, ...GADS_SHAPES.filter((s) => s.tag !== cachedShape.tag)] : GADS_SHAPES;
     for (const id of targets.slice(0, 8)) {
-      const configuredProps: Record<string, unknown> = {
-        [appName]: { authProvisionId: account.id },
-        dateRange: range,
-        fields: ['campaign.name'],
-        metrics: ['metrics.cost_micros', 'metrics.clicks', 'metrics.conversions'],
-      };
-      if (id) configuredProps.accountId = id;
-      let raw: unknown;
-      try {
-        const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
-        raw = res?.ret ?? res?.exports ?? res ?? null;
-      } catch {
-        continue; // manager-level or unreachable account — try the next
+      for (const shape of shapes) {
+        const configuredProps: Record<string, unknown> = { [appName]: { authProvisionId: account.id }, dateRange: range, fields: shape.fields, metrics: shape.metrics };
+        if (id) configuredProps.accountId = id;
+        let raw: unknown;
+        try {
+          const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
+          raw = res?.ret ?? res?.exports ?? res ?? null;
+        } catch {
+          continue; // bad account/format — try the next
+        }
+        const before = out.length;
+        for (const r of asRows(raw)) {
+          const name = r?.campaign?.name ?? r.campaignName ?? r.name ?? 'Google campaign';
+          const spend = num(r?.metrics?.costMicros ?? r?.metrics?.cost_micros) / 1e6 || num(r.cost ?? r.spend);
+          const clicks = num(r?.metrics?.clicks ?? r.clicks);
+          const conv = num(r?.metrics?.conversions ?? r.conversions);
+          if (spend || clicks || conv) out.push({ platform: 'google_ads', campaign: name, utm: '', spend: Math.round(spend), clicks, conversions: Math.round(conv) });
+        }
+        if (out.length > before) {
+          const prev = this.gadsCache.get(externalUserId);
+          if (prev) this.gadsCache.set(externalUserId, { ...prev, shape });
+          return out; // found real data with this format — done
+        }
       }
-      for (const r of asRows(raw)) {
-        const name = r?.campaign?.name ?? r.campaignName ?? r.name ?? 'Google campaign';
-        const spend = num(r?.metrics?.costMicros ?? r?.metrics?.cost_micros) / 1e6 || num(r.cost ?? r.spend);
-        const clicks = num(r?.metrics?.clicks ?? r.clicks);
-        const conv = num(r?.metrics?.conversions ?? r.conversions);
-        if (spend || clicks || conv) out.push({ platform: 'google_ads', campaign: name, utm: '', spend: Math.round(spend), clicks, conversions: Math.round(conv) });
-      }
-      if (out.length) break; // got real data — stop probing further accounts
     }
     return out;
   }
@@ -492,6 +497,37 @@ export class PipedreamConnector implements Connector {
           const r = await pd.actions.run({ externalUserId, id: 'google_ads-list-account-id-options', configuredProps: cp });
           deep.accountIdOptions = r?.ret ?? r?.exports ?? r ?? null;
         } catch (e) { deep.accountIdOptionsError = String((e as Error).message); }
+
+        // Actively RUN the report against each resolved account with each metric/
+        // field format, and record exactly what each returns or errors with — this
+        // is the one signal getAdSpend swallows, and it tells us which format works.
+        try {
+          const rc = rows.find((r) => (r.key ?? r.id ?? r.componentKey) === 'google_ads-create-campaign-report');
+          const rkey = rc ? (rc.key ?? rc.id ?? rc.componentKey) : 'google_ads-create-campaign-report';
+          const rprops = await this.componentProps(rc ?? {}, rkey);
+          const appName = rprops.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+          const ids = await this.googleAdsCustomerIds(externalUserId, account?.id ?? '', rows);
+          deep.resolvedCustomerIds = ids;
+          const trials: any[] = [];
+          let runs = 0;
+          outer: for (const id of (ids.length ? ids : [undefined]).slice(0, 3)) {
+            for (const shape of GADS_SHAPES) {
+              if (runs++ >= 9) break outer;
+              const cp: Record<string, unknown> = { [appName]: { authProvisionId: account?.id }, dateRange: 'LAST_30_DAYS', fields: shape.fields, metrics: shape.metrics };
+              if (id) cp.accountId = id;
+              try {
+                const r = await pd.actions.run({ externalUserId, id: rkey, configuredProps: cp });
+                const raw = r?.ret ?? r?.exports ?? r ?? null;
+                const arr = asRows(raw);
+                trials.push({ accountId: id, format: shape.tag, count: arr.length, sample: arr[0] ?? (raw && typeof raw === 'object' && !Array.isArray(raw) ? Object.keys(raw as any) : raw) });
+                if (arr.length) break outer; // found a working combo — stop
+              } catch (e) {
+                trials.push({ accountId: id, format: shape.tag, error: String((e as Error).message) });
+              }
+            }
+          }
+          deep.reportTrials = trials;
+        } catch (e) { deep.reportTrialsError = String((e as Error).message); }
         trace.googleAdsDeepDive = deep;
       }
 
@@ -560,6 +596,18 @@ export class PipedreamConnector implements Connector {
 }
 
 const lower = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+
+/** A candidate metric/field naming format for the Google Ads report component. */
+type GadsShape = { tag: string; fields: string[]; metrics: string[] };
+/** Formats Pipedream's create-campaign-report might expect, most-likely first.
+ *  googleAdsSpend tries these until one returns rows, then caches the winner. */
+const GADS_SHAPES: GadsShape[] = [
+  { tag: 'qualified', fields: ['campaign.name'], metrics: ['metrics.cost_micros', 'metrics.clicks', 'metrics.conversions'] },
+  { tag: 'short', fields: ['campaign.name'], metrics: ['cost_micros', 'clicks', 'conversions'] },
+  { tag: 'bare', fields: ['name'], metrics: ['cost', 'clicks', 'conversions'] },
+  { tag: 'cost', fields: ['campaign.name'], metrics: ['metrics.cost', 'metrics.clicks', 'metrics.conversions'] },
+];
+
 /**
  * Deep-walk an arbitrary Pipedream response and collect Google Ads customer IDs
  * — 10-digit numbers, however they're shaped: a bare "4347015374", a dashed
