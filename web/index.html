@@ -2040,6 +2040,25 @@ function renderOverview(d){
   grid2.append(ra);
   box.append(grid2);
 }
+// Instant-trigger setup: the per-user webhook URLs GHL fires the moment a lead
+// comes in or a call is missed, so the text-back sends in seconds (not on a poll).
+async function openStlTriggers(){
+  let d={}; if(REMOTE){ try{ d=await(await fetch('/api/speed-to-lead')).json(); }catch(e){} }
+  const wh=d.webhook||{newLead:'(connect on the live app)',missedCall:'(connect on the live app)'};
+  const qOn=!!(d.quietHours&&d.quietHours.enabled);
+  const urlRow=(label,url)=>'<div style="margin-top:10px"><div class="appsub" style="margin-bottom:4px">'+label+'</div><div style="display:flex;gap:6px"><input class="f" style="margin:0;flex:1;font-family:ui-monospace,monospace;font-size:12px" readonly value="'+esc(url)+'" onclick="this.select()"><button class="go" data-cp="'+esc(url)+'" style="flex:none">Copy</button></div></div>';
+  showModal('<h3 style="margin:0 0 6px">⚡ Make it instant</h3>'
+    +'<p class="mdesc" style="margin:0 0 12px;max-width:560px">Add a one-step workflow in GoHighLevel: <b>Trigger</b> (new lead / missed call) → <b>Webhook</b> action → paste the matching URL below. The moment it fires, Miles sends the text-back in seconds.</p>'
+    +(d.canSend?'':'<div class="verdict tight" style="margin-bottom:10px">Connect GoHighLevel in Integrations so the text-back actually sends. Until then Miles drafts it.</div>')
+    +(d.enabled?'':'<div class="verdict tight" style="margin-bottom:10px">Speed-to-Lead is off — turn it on for these to send.</div>')
+    +urlRow('New lead (Form / FB Lead) →',wh.newLead)
+    +urlRow('Missed call →',wh.missedCall)
+    +'<label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px"><input type="checkbox" id="stl-quiet" '+(qOn?'checked':'')+'> Quiet hours — hold texts outside 8 AM–8 PM</label>'
+    +'<button class="go" id="stl-done" style="width:100%;margin-top:14px">Done</button>');
+  document.querySelectorAll('[data-cp]').forEach(b=>b.onclick=()=>{ try{navigator.clipboard.writeText(b.getAttribute('data-cp'));}catch(e){} toast('Webhook URL copied'); });
+  const q=$('#stl-quiet'); if(q) q.onchange=async()=>{ try{ await fetch('/api/speed-to-lead',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({quietHours:{enabled:q.checked,tzOffsetMinutes:-new Date().getTimezoneOffset()}})}); toast(q.checked?'Quiet hours on':'Quiet hours off'); }catch(e){} };
+  const done=$('#stl-done'); if(done) done.onclick=closeModal;
+}
 // Speed-to-Lead — the keystone card: answer every new lead within the 5-minute window.
 function stlCard(st){
   const on=!!st.enabled;
@@ -2048,9 +2067,12 @@ function stlCard(st){
   const left=el('div');
   left.innerHTML='<h3 style="margin:0">⚡ Speed-to-Lead <span class="appsub" style="font-weight:700;color:'+(on?'var(--brand)':'var(--faint)')+'">· '+(on?'On':'Off')+'</span></h3>'
     +'<p class="mdesc" style="margin:4px 0 0;max-width:640px">78% of homeowners hire whoever answers first. When on, Miles texts &amp; emails every new lead within a minute — then hands off to nurture.</p>';
+  const acts=el('div'); acts.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+  const trig=el('button','ghost','⚡ Instant triggers'); trig.onclick=openStlTriggers;
   const toggle=el('button','go',on?'Turn off':'Turn on');
   toggle.onclick=async()=>{ toggle.disabled=true; try{ await fetch('/api/speed-to-lead',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({enabled:!on})}); }catch(e){} openOverview(); };
-  topb.append(left,toggle); card.append(topb);
+  acts.append(trig,toggle);
+  topb.append(left,acts); card.append(topb);
   if(on){
     const ss=el('div','stats'); ss.style.marginTop='12px';
     ss.append(statCard('Answered today',st.today||0), statCard('Avg response', st.avgResponse||'—'), statCard('Total answered',st.total||0));

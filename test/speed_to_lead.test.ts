@@ -9,6 +9,7 @@ import {
   responseSeconds,
   recordContact,
   responderStats,
+  missedCallText,
   type SpeedToLeadState,
 } from '../src/agents/speed_to_lead.js';
 import type { Lead } from '../src/connectors/types.js';
@@ -52,6 +53,18 @@ describe('instantReplyAgent', () => {
     expect(user).toContain('Dana');
     expect(user).toContain('water heater');
     expect(user).toContain('no hot water');
+  });
+});
+
+describe('missedCallText', () => {
+  it('personalizes with the first name and business, and says we missed the call', () => {
+    const t = missedCallText({ business: 'Philly Roofing Co' }, 'Dana Smith');
+    expect(t).toContain('Philly Roofing Co');
+    expect(t).toContain('Dana,');
+    expect(t.toLowerCase()).toContain('missed your call');
+  });
+  it('works with no caller name', () => {
+    expect(missedCallText({ business: 'Acme' })).toContain('Acme');
   });
 });
 

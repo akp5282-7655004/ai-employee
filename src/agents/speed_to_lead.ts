@@ -40,6 +40,10 @@ export interface SpeedToLeadState {
   contacted: string[];
   /** Recent instant responses, newest first (capped). */
   log: ResponderLog[];
+  /** Secret in the per-user inbound webhook URL (GHL posts lead/missed-call events). */
+  webhookSecret?: string;
+  /** Quiet-hours guard: hold SMS outside 8 AM–8 PM local (playbook global rule #2). */
+  quietHours?: { enabled: boolean; tzOffsetMinutes: number };
 }
 
 export function emptyState(): SpeedToLeadState {
@@ -89,6 +93,13 @@ export function instantReplyAgent(lead: Lead, c: AgentCtx): { system: string; us
       `New lead: ${lead.name || 'a homeowner'} — asked about ${lead.service || 'your services'} (via ${lead.source || 'your website'}).` +
       (lead.message ? ` Their message: "${lead.message}"` : ''),
   };
+}
+
+/** The 30-second missed-call text-back (recipe #2) — the highest-ROI local play. */
+export function missedCallText(c: AgentCtx, callerName?: string): string {
+  const biz = c.business || 'our team';
+  const name = callerName && callerName.trim() ? callerName.trim().split(' ')[0] + ', ' : '';
+  return `Sorry we missed your call! ${name}this is ${biz}. How can we help — reply here or we'll call you right back.`;
 }
 
 /** Demo-safe first touch when no LLM key is set. */

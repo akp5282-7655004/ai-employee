@@ -75,6 +75,8 @@ import {
   responseSeconds,
   recordContact,
   responderStats,
+  missedCallText,
+  leadKey,
   type SpeedToLeadState,
 } from './agents/speed_to_lead.js';
 import { aggregateNetwork, type WorkspaceSignal } from './usage/network.js';
@@ -2301,23 +2303,90 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
+    if (!st.webhookSecret) { st.webhookSecret = newToken().slice(0, 24); data.speedToLead = st; await authStore.setUserData(u.id, data); }
     let canSend = false;
     try {
       canSend = new Set((await connector.listAccounts(u.id)).map((a) => a.app)).has('gohighlevel');
     } catch {
       /* none */
     }
-    return { enabled: !!st.enabled, canSend, stats: responderStats(st, new Date().toISOString()), recent: st.log.slice(0, 10) };
+    const base = baseUrl(req);
+    const hook = `${base}/api/hooks/lead/${u.id}.${st.webhookSecret}`;
+    return {
+      enabled: !!st.enabled,
+      canSend,
+      stats: responderStats(st, new Date().toISOString()),
+      recent: st.log.slice(0, 10),
+      quietHours: st.quietHours ?? { enabled: true, tzOffsetMinutes: 0 },
+      webhook: { newLead: `${hook}?event=new_lead`, missedCall: `${hook}?event=missed_call` },
+    };
   });
-  app.post<{ Body: { enabled?: boolean } }>('/api/speed-to-lead', async (req, reply) => {
+  app.post<{ Body: { enabled?: boolean; quietHours?: { enabled?: boolean; tzOffsetMinutes?: number } } }>('/api/speed-to-lead', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
-    st.enabled = !!req.body?.enabled;
+    if (typeof req.body?.enabled === 'boolean') st.enabled = req.body.enabled;
+    if (req.body?.quietHours) st.quietHours = { enabled: !!req.body.quietHours.enabled, tzOffsetMinutes: Number(req.body.quietHours.tzOffsetMinutes) || 0 };
     data.speedToLead = st;
     await authStore.setUserData(u.id, data);
-    return { ok: true, enabled: st.enabled };
+    return { ok: true, enabled: st.enabled, quietHours: st.quietHours ?? { enabled: true, tzOffsetMinutes: 0 } };
+  });
+
+  // ── Inbound instant-response webhook — the event trigger the CRM fires ────────
+  // GHL (or Zapier/Make) posts here the moment a lead comes in or a call is missed;
+  // Miles sends the text-back in seconds. Token-authed per user; respects the on/off
+  // switch, quiet hours, and the dedup ledger. This is what makes it truly instant.
+  const inQuietHours = (st: SpeedToLeadState, nowMs: number): boolean => {
+    const q = st.quietHours; if (!q || !q.enabled) return false;
+    const local = new Date(nowMs + (q.tzOffsetMinutes || 0) * 60_000);
+    const h = local.getUTCHours();
+    return h < 8 || h >= 20;
+  };
+  app.post<{ Params: { token?: string }; Querystring: { event?: string }; Body: Record<string, unknown> }>('/api/hooks/lead/:token', async (req, reply) => {
+    const raw = req.params?.token ?? '';
+    const dot = raw.indexOf('.');
+    if (dot < 1) return reply.code(400).send({ error: 'bad token' });
+    const uid = raw.slice(0, dot);
+    const secret = raw.slice(dot + 1);
+    const user = await authStore.getUserById(uid);
+    if (!user) return reply.code(404).send({ error: 'not found' });
+    const data = await authStore.getUserData(uid);
+    const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
+    if (!st.webhookSecret || st.webhookSecret !== secret) return reply.code(401).send({ error: 'bad token' });
+    if (!st.enabled) return { ok: true, sent: false, reason: 'Speed-to-Lead is off — turn it on to send.' };
+    // Normalize the payload — accept GHL's field names and common aliases.
+    const b = (req.body ?? {}) as Record<string, any>;
+    const event = (req.query?.event || b.event || 'new_lead') === 'missed_call' ? 'missed_call' : 'new_lead';
+    const name = String(b.name || b.full_name || b.first_name || b.contact_name || '').trim();
+    const phone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
+    const lead = { id: b.id ? String(b.id) : `${event}:${phone || name}`, name, phone, service: String(b.service || b.message_type || '').trim() || undefined, source: String(b.source || 'crm-webhook').trim(), message: b.message ? String(b.message) : undefined, createdAt: new Date().toISOString(), contacted: false } as import('./connectors/types.js').Lead;
+    const key = leadKey(lead);
+    if (st.contacted.includes(key)) return { ok: true, sent: false, reason: 'Already handled this lead.' };
+    const nowMs = Date.now();
+    if (inQuietHours(st, nowMs)) {
+      data.speedToLead = recordContact(st, lead, new Date(nowMs).toISOString(), [], true);
+      await authStore.setUserData(uid, data);
+      return { ok: true, sent: false, reason: 'Held for quiet hours (8 AM–8 PM local).' };
+    }
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const ctx = { business: p.businessName, trade: p.industry || 'local-service', city: (p.serviceAreas || '').split(',')[0]?.trim() || p.city, services: p.services, offers: p.currentOffers };
+    let sms: string;
+    if (event === 'missed_call') sms = missedCallText(ctx, name);
+    else { const { system, user } = instantReplyAgent(lead, ctx); sms = smsFromReply((await generateText({ system, user, maxTokens: 400 })) ?? fallbackInstantReply(lead, ctx)); }
+    let sent = false;
+    let canSend = false;
+    try { canSend = new Set((await connector.listAccounts(uid)).map((a) => a.app)).has('gohighlevel') && !!connector.runAppTask; } catch { /* none */ }
+    if (canSend && phone) {
+      try { const r = await connector.runAppTask!({ externalUserId: uid, app: 'gohighlevel', query: event === 'missed_call' ? 'Send missed-call text-back SMS' : 'Send SMS to new lead', params: { message: sms, name, phone } }); sent = !!r?.ok; } catch { /* held */ }
+    }
+    const nowISO = new Date(nowMs).toISOString();
+    data.speedToLead = recordContact(st, lead, nowISO, sent ? ['sms'] : [], !sent, responseSeconds(lead, nowISO));
+    bumpMeter(data, 'agent_run');
+    const agent: ScheduledAgent = { id: 'speed-to-lead', name: 'Speed-to-Lead', task: 'speed_to_lead', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' };
+    appendRun(data, agent, { title: `Speed-to-Lead: ${event === 'missed_call' ? 'missed-call text-back' : 'answered new lead'}${name ? ' — ' + name : ''}`, body: (sent ? 'Sent via GoHighLevel:\n' : 'Drafted (connect GoHighLevel to auto-send):\n') + sms });
+    await authStore.setUserData(uid, data);
+    return { ok: true, sent, event, held: !sent, message: sms };
   });
   app.post('/api/speed-to-lead/run', async (req, reply) => {
     const u = await requireUser(req, reply);
