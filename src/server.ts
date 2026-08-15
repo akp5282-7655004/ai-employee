@@ -21,6 +21,7 @@ import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type Campaign
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
 import { emptyReviewState, reviewAskText, parseRating, routeRating, promoterText, detractorText, recoveryTask, type ReviewRequestState } from './agents/reviewrequest.js';
+import { emptyAutomationsState, noShowText, onboardingText, type AutomationsState } from './agents/automations.js';
 import { buildGrowthPlan } from './agents/growth.js';
 import { buildPlaybook } from './agents/playbook.js';
 import { generateText, textLlmReady } from './llm/text.js';
@@ -2490,6 +2491,116 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     await authStore.setUserData(uid, data);
     return { ok: true, sent, event, rating, route };
   });
+
+  // ── No-Show Recovery (#7) + New Customer Onboarding (#23) — config + status ──
+  app.get('/api/automations', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const au = (data.automations as AutomationsState) ?? emptyAutomationsState();
+    const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
+    if (!stl.webhookSecret) { stl.webhookSecret = newToken().slice(0, 24); data.speedToLead = stl; await authStore.setUserData(u.id, data); }
+    let canSend = false;
+    try { canSend = new Set((await connector.listAccounts(u.id)).map((a) => a.app)).has('gohighlevel'); } catch { /* none */ }
+    const base = `${baseUrl(req)}/api/hooks`;
+    const tok = `${u.id}.${stl.webhookSecret}`;
+    return {
+      canSend,
+      noShow: { enabled: !!au.noShow.enabled, calendarUrl: au.noShow.calendarUrl ?? '', recent: au.noShow.log.slice(0, 10), webhook: `${base}/appointment/${tok}?event=no_show` },
+      onboarding: { enabled: !!au.onboarding.enabled, recent: au.onboarding.log.slice(0, 10), webhook: `${base}/deal/${tok}?event=closed_won` },
+    };
+  });
+  app.post<{ Body: { noShow?: { enabled?: boolean; calendarUrl?: string }; onboarding?: { enabled?: boolean } } }>('/api/automations', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const au = (data.automations as AutomationsState) ?? emptyAutomationsState();
+    if (req.body?.noShow) {
+      if (typeof req.body.noShow.enabled === 'boolean') au.noShow.enabled = req.body.noShow.enabled;
+      if (typeof req.body.noShow.calendarUrl === 'string') au.noShow.calendarUrl = req.body.noShow.calendarUrl.trim();
+    }
+    if (req.body?.onboarding && typeof req.body.onboarding.enabled === 'boolean') au.onboarding.enabled = req.body.onboarding.enabled;
+    data.automations = au;
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+
+  // Shared helpers for the token-authed inbound hooks below.
+  const authHook = async (raw: string): Promise<{ uid: string; data: Record<string, unknown> } | null> => {
+    const dot = raw.indexOf('.');
+    if (dot < 1) return null;
+    const uid = raw.slice(0, dot);
+    const secret = raw.slice(dot + 1);
+    const user = await authStore.getUserById(uid);
+    if (!user) return null;
+    const data = await authStore.getUserData(uid);
+    const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
+    if (!stl.webhookSecret || stl.webhookSecret !== secret) return null;
+    return { uid, data };
+  };
+  const hookField = (b: Record<string, any>, ...keys: string[]): string => {
+    for (const k of keys) if (b[k]) return String(b[k]).trim();
+    return '';
+  };
+  const sendGhl = async (uid: string, phone: string, name: string, message: string, verb: string): Promise<boolean> => {
+    if (!phone) return false;
+    let canSend = false;
+    try { canSend = new Set((await connector.listAccounts(uid)).map((a) => a.app)).has('gohighlevel') && !!connector.runAppTask; } catch { /* none */ }
+    if (!canSend) return false;
+    try { const r = await connector.runAppTask!({ externalUserId: uid, app: 'gohighlevel', query: verb, params: { message, name, phone } }); return !!r?.ok; } catch { return false; }
+  };
+
+  // Appointment no-show → warm rebook text with the calendar link (#7).
+  app.post<{ Params: { token?: string }; Body: Record<string, unknown> }>('/api/hooks/appointment/:token', async (req, reply) => {
+    const auth = await authHook(req.params?.token ?? '');
+    if (!auth) return reply.code(401).send({ error: 'bad token' });
+    const { uid, data } = auth;
+    const au = (data.automations as AutomationsState) ?? emptyAutomationsState();
+    if (!au.noShow.enabled) return { ok: true, sent: false, reason: 'No-show recovery is off.' };
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const ctx = { business: p.businessName, trade: p.industry };
+    const b = (req.body ?? {}) as Record<string, any>;
+    const name = hookField(b, 'name', 'full_name', 'contact_name', 'first_name');
+    const phone = hookField(b, 'phone', 'phone_number', 'contact_phone');
+    const msg = noShowText(ctx, name, au.noShow.calendarUrl);
+    const sent = await sendGhl(uid, phone, name, msg, 'Send no-show rebook SMS');
+    const nowISO = new Date().toISOString();
+    au.noShow.log = [{ name: name || 'Customer', phone, at: nowISO }, ...au.noShow.log].slice(0, 200);
+    data.automations = au;
+    bumpMeter(data, 'agent_run');
+    appendRun(data, { id: 'no-show', name: 'No-Show Recovery', task: 'lead_followup', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `No-show rebook${name ? ' — ' + name : ''}`, body: (sent ? 'Sent via GoHighLevel:\n' : 'Drafted (connect GoHighLevel to auto-send):\n') + msg });
+    await authStore.setUserData(uid, data);
+    return { ok: true, sent, message: msg };
+  });
+
+  // Deal Closed Won → welcome text + stop prospect nurtures (#23).
+  app.post<{ Params: { token?: string }; Body: Record<string, unknown> }>('/api/hooks/deal/:token', async (req, reply) => {
+    const auth = await authHook(req.params?.token ?? '');
+    if (!auth) return reply.code(401).send({ error: 'bad token' });
+    const { uid, data } = auth;
+    const au = (data.automations as AutomationsState) ?? emptyAutomationsState();
+    if (!au.onboarding.enabled) return { ok: true, sent: false, reason: 'Onboarding is off.' };
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const ctx = { business: p.businessName, trade: p.industry };
+    const b = (req.body ?? {}) as Record<string, any>;
+    const name = hookField(b, 'name', 'full_name', 'contact_name', 'first_name');
+    const phone = hookField(b, 'phone', 'phone_number', 'contact_phone');
+    const msg = onboardingText(ctx, name);
+    const sent = await sendGhl(uid, phone, name, msg, 'Send onboarding welcome SMS');
+    // Critical: stop prospect nurtures for this now-paying customer. We add their
+    // key to the Speed-to-Lead ledger so the responder never re-touches them.
+    const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
+    const key = `id:${(b.id ? String(b.id) : phone || name).trim()}`;
+    if (key && !stl.contacted.includes(key)) { stl.contacted = [...stl.contacted, key].slice(-1000); data.speedToLead = stl; }
+    const nowISO = new Date().toISOString();
+    au.onboarding.log = [{ name: name || 'Customer', phone, at: nowISO }, ...au.onboarding.log].slice(0, 200);
+    data.automations = au;
+    bumpMeter(data, 'agent_run');
+    appendRun(data, { id: 'onboarding', name: 'New Customer Onboarding', task: 'lead_followup', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `Welcomed new customer${name ? ' — ' + name : ''}`, body: (sent ? 'Sent via GoHighLevel + stopped prospect nurtures:\n' : 'Drafted + stopped prospect nurtures (connect GoHighLevel to auto-send):\n') + msg });
+    await authStore.setUserData(uid, data);
+    return { ok: true, sent, message: msg, nurturesStopped: true };
+  });
+
   app.post('/api/speed-to-lead/run', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;

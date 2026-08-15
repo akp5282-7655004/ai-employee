@@ -2013,6 +2013,7 @@ function renderOverview(d){
   box.append(g);
   box.append(stlCard(d.speedToLead||{}));
   box.append(reviewCard());
+  box.append(autoCard());
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px';
   const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<h3 style="margin:0 0 10px">📈 Marketing performance</h3>';
   if(mk.hasData){ const ss=el('div','stats'); ss.append(statCard('Ad spend','$'+(mk.spend||0).toLocaleString()), statCard('Cost / job', mk.cpa!=null?('$'+mk.cpa):'—'), statCard('Revenue','$'+(mk.revenue||0).toLocaleString())); mc.append(ss); mc.append(el('div','appsub','Showing '+mktRangeLabel(mk.range)+(mk.targetCpa&&mk.cpa!=null?' · target $'+mk.targetCpa+'/job · '+(mk.cpa<=mk.targetCpa?'✅ under target':'⚠︎ over target'):''))); }
@@ -2040,6 +2041,40 @@ function renderOverview(d){
   else ra.append(ovNudge('Nothing yet. Put Miles to work from “What Miles Does”.'));
   grid2.append(ra);
   box.append(grid2);
+}
+// More instant automations — no-show recovery (#7) + new-customer onboarding (#23).
+function autoCard(){
+  const card=el('div','mcard'); card.style.cssText='margin:16px 0'; card.innerHTML='<p class="appsub">Loading…</p>';
+  (async()=>{
+    let d={}; if(REMOTE){ try{ d=await(await fetch('/api/automations')).json(); }catch(e){} }
+    const ns=d.noShow||{}, ob=d.onboarding||{}; const anyOn=ns.enabled||ob.enabled;
+    card.innerHTML=''; card.style.border='1px solid '+(anyOn?'var(--brand)':'var(--line)');
+    const topb=el('div'); topb.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
+    const left=el('div'); left.innerHTML='<h3 style="margin:0">🔁 More Instant Automations</h3><p class="mdesc" style="margin:4px 0 0;max-width:640px">Two more plays Miles runs the moment they fire in GoHighLevel.</p>';
+    const trig=el('button','ghost','🔁 Instant triggers'); trig.onclick=openAutoTriggers;
+    topb.append(left,trig); card.append(topb);
+    const rows=el('div'); rows.style.cssText='display:flex;flex-direction:column;gap:0;margin-top:10px';
+    const row=(icon,title,desc,on,onToggle)=>{ const r=el('div'); r.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--line,#e5e7eb);padding:12px 0'; const l=el('div'); l.innerHTML='<b>'+icon+' '+title+'</b><div class="appsub" style="margin-top:2px;max-width:520px">'+desc+'</div>'; const t=el('button','go',on?'On':'Turn on'); if(on){ t.classList.remove('go'); t.classList.add('ghost'); } t.onclick=onToggle; r.append(l,t); return r; };
+    rows.append(row('🗓️','No-Show Recovery','Appointment marked no-show → a warm rebook text with your booking link. 30–50% rebook if contacted within the hour.',ns.enabled,async()=>{ try{ await fetch('/api/automations',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({noShow:{enabled:!ns.enabled}})}); }catch(e){} openOverview(); }));
+    rows.append(row('🎉','New Customer Onboarding','Deal marked Closed Won → a welcome text AND Miles stops all prospect nurtures (no "still thinking?" texts after they’ve paid).',ob.enabled,async()=>{ try{ await fetch('/api/automations',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({onboarding:{enabled:!ob.enabled}})}); }catch(e){} openOverview(); }));
+    card.append(rows);
+    if(ns.enabled && !ns.calendarUrl) card.append(ovNudge('Add your booking-calendar link in 🔁 Instant triggers so no-show texts can rebook in one tap.'));
+  })();
+  return card;
+}
+async function openAutoTriggers(){
+  let d={}; if(REMOTE){ try{ d=await(await fetch('/api/automations')).json(); }catch(e){} }
+  const ns=d.noShow||{}, ob=d.onboarding||{};
+  const urlRow=(label,url)=>'<div style="margin-top:10px"><div class="appsub" style="margin-bottom:4px">'+label+'</div><div style="display:flex;gap:6px"><input class="f" style="margin:0;flex:1;font-family:ui-monospace,monospace;font-size:12px" readonly value="'+esc(url||'')+'" onclick="this.select()"><button class="go" data-cp="'+esc(url||'')+'" style="flex:none">Copy</button></div></div>';
+  showModal('<h3 style="margin:0 0 6px">🔁 Instant automations</h3>'
+    +'<p class="mdesc" style="margin:0 0 12px;max-width:560px">In GoHighLevel, add a <b>Webhook</b> action to the matching trigger. Miles sends the moment it fires.</p>'
+    +(d.canSend?'':'<div class="verdict tight" style="margin-bottom:10px">Connect GoHighLevel in Integrations so these actually send.</div>')
+    +'<div class="appsub" style="margin-bottom:4px">Your booking-calendar link (for no-show rebooks)</div><input class="f" id="au-cal" style="width:100%;margin:0" placeholder="https://your-calendar-link" value="'+esc(ns.calendarUrl||'')+'">'
+    +urlRow('Appointment No-Show →',ns.webhook)
+    +urlRow('Deal Closed Won →',ob.webhook)
+    +'<button class="go" id="au-done" style="width:100%;margin-top:14px">Save &amp; close</button>');
+  document.querySelectorAll('[data-cp]').forEach(b=>b.onclick=()=>{ try{navigator.clipboard.writeText(b.getAttribute('data-cp'));}catch(e){} toast('Webhook URL copied'); });
+  const done=$('#au-done'); if(done) done.onclick=async()=>{ const cal=($('#au-cal').value||'').trim(); try{ await fetch('/api/automations',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({noShow:{calendarUrl:cal}})}); }catch(e){} closeModal(); toast('Saved'); openOverview(); };
 }
 // Post-Job Review Request card — fires the 1–10 ask on job completion; 9–10 → Google,
 // 1–8 → private service recovery (never a public link).
