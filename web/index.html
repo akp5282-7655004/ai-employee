@@ -2170,6 +2170,7 @@ function renderAffluence(){
   const box=$('#affluence-body'); if(!box) return; const old=$('#affl-results'); if(old) old.remove();
   const wrap=el('div'); wrap.id='affl-results'; wrap.style.marginTop='14px';
   if(!AFFL.live) wrap.append(ovNudge('⚠️ Showing DEMO figures — add a free CENSUS_API_KEY on Render to pull real US Census income data for your ZIPs.'));
+  else if(AFFL.diag) wrap.append(ovNudge('⚠️ Connected to Census, but no data came back: '+AFFL.diag+' — copy this and send it to Miles.'));
   const premium=AFFL.zips.filter(z=>z.tier==='premium');
   if(premium.length){ const rec=el('div','mcard'); rec.style.cssText='margin-bottom:12px;border-left:3px solid var(--good)';
     rec.innerHTML='<b>💰 Premium-offer targets:</b> '+premium.map(z=>z.zip).join(', ')+'<div class="mdesc" style="margin:4px 0 0">Highest ability to spend — send your high-ticket / premium offers here.</div>';

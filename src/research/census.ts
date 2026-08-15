@@ -258,29 +258,43 @@ function affDemo(zip: string): ZipAffluence {
   return affAssemble(zip, medianIncome, Math.round(medianIncome * 0.42), pctHigh, homeValue, true);
 }
 
-async function affFetch(zip: string, key: string): Promise<ZipAffluence> {
-  const url = `https://api.census.gov/data/2023/acs/acs5?get=${AFF_VARS.join(',')}&for=zip%20code%20tabulation%20area:${zip}&key=${encodeURIComponent(key)}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Census ${res.status}`);
-  const rows = (await res.json()) as string[][];
-  const header = rows[0]; const data = rows[1];
-  if (!header || !data) return affAssemble(zip, null, null, null, null);
-  const v = (name: string) => { const i = header.indexOf(name); const n = Number(data[i]); return Number.isFinite(n) && n > -1_000_000 ? n : null; };
-  const total = v('B19001_001E'); const h150 = v('B19001_016E'); const h200 = v('B19001_017E');
-  const pctHigh = total && total > 0 && h150 != null && h200 != null ? Math.round(((h150 + h200) / total) * 1000) / 10 : null;
-  return affAssemble(zip, v('B19013_001E'), v('B19301_001E'), pctHigh, v('B25077_001E'));
+/** Fetch one ZCTA, trying the newest ACS 5-year that responds. Returns the row
+ *  plus a diagnostic string so a live-but-empty result explains itself. */
+async function affFetch(zip: string, key: string): Promise<{ row: ZipAffluence; err?: string }> {
+  let lastErr = '';
+  for (const year of ['2023', '2022']) {
+    try {
+      const url = `https://api.census.gov/data/${year}/acs/acs5?get=NAME,${AFF_VARS.join(',')}&for=zip%20code%20tabulation%20area:${zip}&key=${encodeURIComponent(key)}`;
+      const res = await fetch(url);
+      if (!res.ok) { lastErr = `ACS${year}: HTTP ${res.status} ${(await res.text().catch(() => '')).slice(0, 140)}`; continue; }
+      const rows = (await res.json()) as string[][];
+      const header = rows[0]; const data = rows[1];
+      if (!header || !data) { lastErr = `ACS${year}: no ZCTA row for ${zip}`; continue; }
+      const v = (name: string) => { const i = header.indexOf(name); const n = Number(data[i]); return Number.isFinite(n) && n > -1_000_000 ? n : null; };
+      const total = v('B19001_001E'); const h150 = v('B19001_016E'); const h200 = v('B19001_017E');
+      const pctHigh = total && total > 0 && h150 != null && h200 != null ? Math.round(((h150 + h200) / total) * 1000) / 10 : null;
+      return { row: affAssemble(zip, v('B19013_001E'), v('B19301_001E'), pctHigh, v('B25077_001E')) };
+    } catch (e) {
+      lastErr = `ACS${year}: ${(e as Error).message}`;
+    }
+  }
+  return { row: affAssemble(zip, null, null, null, null), err: lastErr };
 }
 
 /** Rank a set of ZIPs by affluence. Live via Census when CENSUS_API_KEY is set,
  *  otherwise clearly-labeled demo figures so the feature is usable offline. */
-export async function zipAffluence(zips: string[]): Promise<{ live: boolean; zips: ZipAffluence[] }> {
+export async function zipAffluence(zips: string[]): Promise<{ live: boolean; zips: ZipAffluence[]; diag?: string }> {
   const clean = [...new Set(zips.map((z) => (z || '').replace(/\D/g, '').slice(0, 5)).filter((z) => z.length === 5))].slice(0, 40);
   const byScore = (a: ZipAffluence, b: ZipAffluence) => b.affluenceScore - a.affluenceScore;
   if (!process.env.CENSUS_API_KEY) return { live: false, zips: clean.map(affDemo).sort(byScore) };
   const key = process.env.CENSUS_API_KEY;
   const out: ZipAffluence[] = [];
+  let diag = '';
   for (const zip of clean) {
-    try { out.push(await affFetch(zip, key)); } catch { out.push(affAssemble(zip, null, null, null, null)); }
+    const r = await affFetch(zip, key);
+    if (r.err && !diag) diag = r.err;
+    out.push(r.row);
   }
-  return { live: true, zips: out.sort(byScore) };
+  const anyData = out.some((z) => z.medianIncome != null);
+  return { live: true, zips: out.sort(byScore), diag: anyData ? undefined : diag || 'Census returned no data for these ZIPs. Check the key is valid/activated and the ZIPs are US ZCTAs.' };
 }
