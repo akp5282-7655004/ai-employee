@@ -525,12 +525,16 @@ export class PipedreamConnector implements Connector {
     steps.push({ step: `Create daily budget ($${spec.dailyBudget})`, ok: budget.ok && !!budget.resource, resource: budget.resource, error: budget.error || (!budget.resource ? `no budget resource returned — Google said: ${budget.detail ?? '(empty)'}` : undefined) });
 
     // 2) Campaign — REQUIRES advertisingChannelType (SEARCH); attach budget + bidding.
+    // Google's biddingStrategyType is a strict enum: "Maximize Clicks" is
+    // TARGET_SPEND, NOT "MAXIMIZE_CLICKS" (which is not a valid enum and makes
+    // the mutate silently no-op → {}). Map our friendly name to the real enum.
+    const biddingEnum = spec.biddingStrategy === 'MAXIMIZE_CLICKS' ? 'TARGET_SPEND' : spec.biddingStrategy;
     const campaign = await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign', account.id, {
       ...acctVals,
       operationType: op,
       name: [spec.name, 'campaign name', 'name'],
       channelType: ['SEARCH', 'advertisingchanneltype', 'channel type', 'channel'],
-      biddingType: [spec.biddingStrategy, 'biddingstrategytype', 'bidding strategy type', 'bidding strategy'],
+      biddingType: [biddingEnum, 'biddingstrategytype', 'bidding strategy type'],
       status: [spec.status, 'status'],
       ...(budget.resource ? { campaignBudget: [budget.resource, 'campaignbudget', 'campaign budget'] } : {}),
     });
