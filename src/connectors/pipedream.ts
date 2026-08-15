@@ -551,31 +551,36 @@ export class PipedreamConnector implements Connector {
     if (target?.client) acctVals.managedAccount = [target.client, 'managed account', 'customer client', 'customerclient'];
 
     const op = ['CREATE', 'operationtype', 'operation type', 'operation'];
-    // 1) Budget — Google Ads amounts are in micros ($1 = 1_000_000).
+    // 1) Budget — Google Ads amounts are in micros ($1 = 1_000_000). Budget
+    // names must be UNIQUE across the account (Google rejects a re-launch with
+    // DUPLICATE_NAME), so stamp each launch's budget with the launch time.
     const micros = String(Math.round(spec.dailyBudget * 1_000_000));
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
     const budget = await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign-budget', account.id, {
       ...acctVals,
       operationType: op,
-      name: [`${spec.name} Budget`, 'name'],
+      name: [`${spec.name} Budget ${stamp}`, 'name'],
       amount: [micros, 'amountmicros', 'amount micros', 'micros', 'amount'], // NOT "budget" — that grabs campaignBudgetId
       delivery: ['STANDARD', 'deliverymethod', 'delivery method'],
     });
     steps.push({ step: `Create daily budget ($${spec.dailyBudget})`, ok: budget.ok && !!budget.resource, resource: budget.resource, error: budget.error || (!budget.resource ? `no budget resource returned — Google said: ${budget.detail ?? '(empty)'}` : undefined) });
 
-    // 2) Campaign — REQUIRES advertisingChannelType (SEARCH); attach budget + bidding.
-    // Google's biddingStrategyType is a strict enum: "Maximize Clicks" is
-    // TARGET_SPEND, NOT "MAXIMIZE_CLICKS" (which is not a valid enum and makes
-    // the mutate silently no-op → {}). Map our friendly name to the real enum.
+    // 2) Campaign — REQUIRES advertisingChannelType (SEARCH) and an attached
+    // budget (Google errors with REQUIRED without one), so don't even attempt
+    // the create when the budget step failed. Google's biddingStrategyType is
+    // a strict enum: "Maximize Clicks" is TARGET_SPEND, NOT "MAXIMIZE_CLICKS".
     const biddingEnum = spec.biddingStrategy === 'MAXIMIZE_CLICKS' ? 'TARGET_SPEND' : spec.biddingStrategy;
-    const campaign = await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign', account.id, {
-      ...acctVals,
-      operationType: op,
-      name: [spec.name, 'campaign name', 'name'],
-      channelType: ['SEARCH', 'advertisingchanneltype', 'channel type', 'channel'],
-      biddingType: [biddingEnum, 'biddingstrategytype', 'bidding strategy type'],
-      status: [spec.status, 'status'],
-      ...(budget.resource ? { campaignBudget: [budget.resource, 'campaignbudget', 'campaign budget'] } : {}),
-    });
+    const campaign = budget.resource
+      ? await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign', account.id, {
+          ...acctVals,
+          operationType: op,
+          name: [spec.name, 'campaign name', 'name'],
+          channelType: ['SEARCH', 'advertisingchanneltype', 'channel type', 'channel'],
+          biddingType: [biddingEnum, 'biddingstrategytype', 'bidding strategy type'],
+          status: [spec.status, 'status'],
+          campaignBudget: [budget.resource, 'campaignbudget', 'campaign budget'],
+        })
+      : { ok: false as const, resource: undefined, error: 'Skipped — Google requires a budget on every campaign and the budget step failed above.', detail: undefined };
     steps.push({ step: `Create campaign "${spec.name}" (${spec.status})`, ok: campaign.ok && !!campaign.resource, resource: campaign.resource, error: campaign.error || (!campaign.resource ? `no campaign resource returned — Google said: ${campaign.detail ?? '(empty)'}` : undefined) });
 
     // 3) Ad groups + keywords + RSA — only if the campaign resource resolved.
