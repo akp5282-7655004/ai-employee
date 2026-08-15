@@ -488,14 +488,19 @@ export class PipedreamConnector implements Connector {
     const account = accts.find((a) => a.healthy) ?? accts[0];
     if (!account) return { ok: false, live: true, steps: [{ step: 'Google Ads account', ok: false, error: 'No connected Google Ads account.' }], note: 'Connect Google Ads first.' };
     const rows = await this.listComponents('google_ads');
-    const ids = await this.googleAdsCustomerIds(externalUserId, account.id, rows);
-    const customerId = ids[0]; // the client account that runs ads
-    const cust = customerId ? [customerId, 'account', 'customer'] : undefined;
+    // MCC-aware: write "as" the login/manager (accountId) but INTO the client
+    // account that runs ads (customerClientId) — same split the report needs.
+    const targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
+    const target = targets[0];
+    const customerId = target?.client ?? target?.login;
+    const acctVals: Record<string, string[]> = {};
+    if (target?.login) acctVals.loginAccount = [target.login, 'use google ads as', 'use google ads', 'accountid'];
+    if (target?.client) acctVals.managedAccount = [target.client, 'managed account', 'customer client', 'customerclient'];
 
     // 1) Budget — Google Ads amounts are in micros ($1 = 1_000_000).
     const micros = String(Math.round(spec.dailyBudget * 1_000_000));
     const budget = await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign-budget', account.id, {
-      ...(cust ? { customer: cust } : {}),
+      ...acctVals,
       name: [`${spec.name} Budget`, 'name'],
       amount: [micros, 'amount', 'micros', 'budget'],
     });
@@ -503,7 +508,7 @@ export class PipedreamConnector implements Connector {
 
     // 2) Campaign — attach budget, set status (PAUSED unless owner chose ENABLED).
     const campaign = await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign', account.id, {
-      ...(cust ? { customer: cust } : {}),
+      ...acctVals,
       name: [spec.name, 'campaign name', 'name'],
       status: [spec.status, 'status'],
       ...(budget.resource ? { budget: [budget.resource, 'budget', 'campaign budget'] } : {}),
@@ -514,19 +519,19 @@ export class PipedreamConnector implements Connector {
     if (campaign.resource) {
       for (const g of spec.adGroups) {
         const ag = await this.writeComponent(externalUserId, 'google_ads-create-or-update-ad-group', account.id, {
-          ...(cust ? { customer: cust } : {}),
+          ...acctVals,
           name: [g.name, 'ad group name', 'name'],
           campaign: [campaign.resource, 'campaign'],
         });
         steps.push({ step: `Create ad group "${g.name}"`, ok: ag.ok, resource: ag.resource, error: ag.error });
         if (!ag.resource) continue;
         const kw = await this.writeComponent(externalUserId, 'google_ads-create-or-update-keywords', account.id, {
-          ...(cust ? { customer: cust } : {}),
+          ...acctVals,
           adGroup: [ag.resource, 'ad group', 'adgroup'],
         }, { keywords: g.keywords.map((k) => ({ text: k.text, matchType: k.match.toUpperCase() })) });
         steps.push({ step: `Add ${g.keywords.length} keywords to "${g.name}"`, ok: kw.ok, error: kw.error });
         const rsa = await this.writeComponent(externalUserId, 'google_ads-create-responsive-search-ad', account.id, {
-          ...(cust ? { customer: cust } : {}),
+          ...acctVals,
           adGroup: [ag.resource, 'ad group', 'adgroup'],
           url: [spec.finalUrl, 'final url', 'url', 'landing'],
         }, { headlines: g.rsa.headlines, descriptions: g.rsa.descriptions });
@@ -790,13 +795,15 @@ export class PipedreamConnector implements Connector {
     const account = accts.find((a) => a.healthy) ?? accts[0];
     if (!account) return { ok: false, live: true, uploaded: 0, failed: items.length, steps: items.map((i) => ({ dealId: i.dealId, ok: false, error: 'No connected Google Ads account.' })), note: 'Connect Google Ads first.' };
     const rows = await this.listComponents('google_ads');
-    const ids = await this.googleAdsCustomerIds(externalUserId, account.id, rows);
-    const cust = ids[0] ? [ids[0], 'account', 'customer'] : undefined;
+    const target = (await this.resolveGadsTargets(externalUserId, account.id, rows))[0];
+    const acctVals: Record<string, string[]> = {};
+    if (target?.login) acctVals.loginAccount = [target.login, 'use google ads as', 'use google ads', 'accountid'];
+    if (target?.client) acctVals.managedAccount = [target.client, 'managed account', 'customer client', 'customerclient'];
     const steps: { dealId: string; ok: boolean; error?: string }[] = [];
     let uploaded = 0;
     for (const it of items.slice(0, 200)) {
       const values: Record<string, string[]> = {
-        ...(cust ? { customer: cust } : {}),
+        ...acctVals,
         ...(it.gclid ? { gclid: [it.gclid, 'gclid', 'click id'] } : {}),
         ...(it.email ? { email: [it.email, 'email'] } : {}),
         ...(it.phone ? { phone: [it.phone, 'phone'] } : {}),
