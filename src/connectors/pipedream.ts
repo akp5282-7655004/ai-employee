@@ -557,6 +557,12 @@ export class PipedreamConnector implements Connector {
     if (target?.login) acct.accountId = target.login;
     if (target?.client) acct.customerClientId = target.client;
 
+    // Say up front WHICH account everything lands in — an MCC can have many
+    // clients, and "verified" means nothing if the owner is looking at the
+    // wrong one in the Google Ads account switcher.
+    const fmtCid = (id?: string) => id && /^\d{10}$/.test(id) ? `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` : id ?? '';
+    if (customerId) steps.push({ step: `Target account: ${fmtCid(customerId)}${target?.client && target.login !== target.client ? ` (client under manager ${fmtCid(target.login)})` : ''}`, ok: true });
+
     // 1) Budget — micros ($1 = 1_000_000). Budget names must be UNIQUE across
     // the account (Google rejects a re-launch with DUPLICATE_NAME), so stamp
     // each launch's budget with the launch time.
@@ -674,7 +680,7 @@ export class PipedreamConnector implements Connector {
         ? 'Miles could not find this campaign in your Google Ads account afterward — treat it as NOT launched. See the per-step errors.'
         : !structureOk
           ? 'A campaign shell was created but the ad groups/ads did not — it would not serve. See the per-step errors.'
-          : `Verified: campaign created ${spec.status} in your Google Ads account${verifyAttempted ? '' : ' (structure confirmed; independent verification unavailable)'}. Review it before enabling.`;
+          : `Verified: campaign created ${spec.status} in Google Ads account ${customerId ? `${customerId.slice(0, 3)}-${customerId.slice(3, 6)}-${customerId.slice(6)}` : ''}${verifyAttempted ? '' : ' (structure confirmed; independent verification unavailable)'}. Switch to that account in Google Ads to see it. Review it before enabling.`;
     return { ok, live: true, campaignResource: campaign.resource, link, steps, note };
   }
 
