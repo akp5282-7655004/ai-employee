@@ -185,6 +185,12 @@ export interface Connector {
    *  keywords → RSAs) on the user's behalf. The owner has already approved every
    *  setting; this performs the live write-chain and reports each step. */
   launchCampaign?(externalUserId: string, spec: import('../agents/campaign.js').CampaignSpec): Promise<CampaignLaunchResult>;
+  /** Create a full Meta (Facebook/Instagram) campaign — campaign → ad set → ad
+   *  creative → ad — as a PAUSED draft in the owner's Ads Manager. Money-safe:
+   *  nothing spends until the owner flips it live. Returns each step. */
+  launchMetaCampaign?(externalUserId: string, spec: import('../agents/metacampaign.js').MetaCampaignSpec): Promise<CampaignLaunchResult>;
+  /** Whether a Meta ad account is connected and ready to receive a campaign. */
+  metaLaunchReady?(): { ready: boolean; account?: string; note: string };
   /** Upload won jobs back to Google Ads as offline conversions, so Smart Bidding
    *  optimizes toward leads that become paying customers — not just clicks. */
   uploadOfflineConversions?(externalUserId: string, items: ConversionItem[]): Promise<ConversionUploadResult>;

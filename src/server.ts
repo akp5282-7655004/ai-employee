@@ -18,6 +18,7 @@ import { competitorAdReport } from './research/adlibrary.js';
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
+import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { buildGrowthPlan } from './agents/growth.js';
 import { buildPlaybook } from './agents/playbook.js';
 import { generateText, textLlmReady } from './llm/text.js';
@@ -1144,6 +1145,58 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       ts: new Date().toISOString(),
       link: result.link,
       detail: campaignSummary(spec) + '\n\n' + result.steps.map((s) => `${s.ok ? '✓' : '✗'} ${s.step}${s.error ? ' — ' + s.error : ''}`).join('\n'),
+    });
+    deploy.queue = deploy.queue.slice(0, 300);
+    data.deploy = deploy;
+    await authStore.setUserData(u.id, data);
+    if (result.live && result.ok) await meterUser(u.id, 'agent_run');
+    return result;
+  });
+
+  // ── Launch on Facebook (Meta) — build a paused draft from business + offer ──
+  // Whether a Meta ad account is connected (three Render env vars).
+  app.get('/api/meta/status', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const status = connector.metaLaunchReady ? connector.metaLaunchReady() : { ready: false, note: 'This connector cannot launch Meta campaigns.' };
+    return status;
+  });
+
+  // Build (but do not launch) the Meta campaign spec from profile + offer, so the
+  // owner reviews every setting before anything is created.
+  app.post<{ Body: { offer?: string; website?: string; dailyBudget?: number; ticket?: number; financing?: boolean } }>('/api/meta/build', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const spec = buildMetaCampaignSpec(
+      { offer: req.body?.offer || p.currentOffers, website: req.body?.website || p.website, dailyBudget: Number(req.body?.dailyBudget) || undefined, ticket: Number(req.body?.ticket) || undefined, financing: !!req.body?.financing },
+      { business: p.businessName, industry: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), serviceAreas: p.serviceAreas, services: p.services },
+    );
+    const status = connector.metaLaunchReady ? connector.metaLaunchReady() : { ready: false, note: 'This connector cannot launch Meta campaigns.' };
+    return { ok: true, spec, issues: validateMetaCampaignSpec(spec), status };
+  });
+
+  // Launch — writes the PAUSED draft into the owner's Meta Ads Manager.
+  app.post<{ Body: { spec?: MetaCampaignSpec; confirm?: boolean } }>('/api/meta/launch', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const spec = req.body?.spec;
+    if (!spec || typeof spec !== 'object') return reply.code(400).send({ error: 'spec is required' });
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Explicit confirm required — nothing is created without it.' });
+    if (!connector.launchMetaCampaign) return reply.code(400).send({ error: 'This connector cannot launch Meta campaigns.' });
+    const result = await connector.launchMetaCampaign(u.id, spec);
+    const data = await authStore.getUserData(u.id);
+    const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
+    deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
+    deploy.queue.unshift({
+      id: newToken().slice(0, 10),
+      label: `Facebook campaign — ${spec.name} (PAUSED draft)`,
+      type: 'ads',
+      status: result.ok ? (result.live ? 'live' : 'pending') : 'reverted',
+      ts: new Date().toISOString(),
+      link: result.link,
+      detail: result.steps.map((s) => `${s.ok ? '✓' : '✗'} ${s.step}${s.error ? ' — ' + s.error : ''}`).join('\n'),
     });
     deploy.queue = deploy.queue.slice(0, 300);
     data.deploy = deploy;

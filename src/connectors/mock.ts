@@ -125,6 +125,30 @@ export class MockConnector implements Connector {
     return { ok: true, live: false, campaignResource: 'customers/DEMO/campaigns/2', steps, note: 'Demo connector — no real campaign was created. On Render with Google Ads connected + Pipedream in production, this runs the real write-chain.' };
   }
 
+  metaLaunchReady(): { ready: boolean; account?: string; note: string } {
+    const token = process.env.META_ADS_ACCESS_TOKEN;
+    const acct = process.env.META_AD_ACCOUNT_ID;
+    const page = process.env.META_PAGE_ID;
+    if (token && acct && page) return { ready: true, account: 'act_' + acct.replace(/[^0-9]/g, ''), note: 'Connected to Meta ad account.' };
+    return { ready: false, note: 'Not connected — add META_ADS_ACCESS_TOKEN, META_AD_ACCOUNT_ID, META_PAGE_ID on Render (from your Meta ad account).' };
+  }
+
+  async launchMetaCampaign(_externalUserId: string, spec: import('../agents/metacampaign.js').MetaCampaignSpec): Promise<import('./types.js').CampaignLaunchResult> {
+    const steps: import('./types.js').CampaignLaunchStep[] = [];
+    steps.push({ step: `Create campaign "${spec.name}" (PAUSED)`, ok: true, resource: 'DEMO_CAMPAIGN_1' });
+    steps.push({ step: `Create ad set ($${spec.dailyBudget}/day, ${spec.geo.zips.length ? spec.geo.zips.length + ' ZIPs' : 'US'})`, ok: true, resource: 'DEMO_ADSET_1' });
+    steps.push({ step: 'Create ad creative (offer copy + website link)', ok: true, resource: 'DEMO_CREATIVE_1' });
+    steps.push({ step: 'Create ad (PAUSED)', ok: true, resource: 'DEMO_AD_1' });
+    return {
+      ok: true,
+      live: false,
+      campaignResource: 'DEMO_CAMPAIGN_1',
+      link: 'https://adsmanager.facebook.com/adsmanager/manage/campaigns',
+      steps,
+      note: 'Demo connector — no real campaign was created. On Render with your Meta ad account connected (META_ADS_ACCESS_TOKEN, META_AD_ACCOUNT_ID, META_PAGE_ID), this builds it as a PAUSED draft in your Ads Manager.',
+    };
+  }
+
   async uploadOfflineConversions(externalUserId: string, items: import('./types.js').ConversionItem[]): Promise<import('./types.js').ConversionUploadResult> {
     const connected = this.acc(externalUserId).some((a) => a.app === 'google_ads');
     if (!connected) return { ok: false, live: false, uploaded: 0, failed: items.length, steps: items.map((i) => ({ dealId: i.dealId, ok: false, error: 'Connect Google Ads first.' })), note: 'No Google Ads account connected.' };

@@ -408,6 +408,7 @@
           <a data-page="adstudio"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
           <a data-page="playbook"><svg class="ico" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg> Campaign Playbook</a>
           <a data-page="launch"><svg class="ico" viewBox="0 0 24 24"><path d="M5 13a8 8 0 0 1 16 0"/><path d="M12 3v2M4 13H2M22 13h-2M12 13l4-4"/><circle cx="12" cy="13" r="1.6"/></svg> Launch a Campaign</a>
+          <a data-page="fblaunch"><svg class="ico" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3Z"/></svg> Launch on Facebook</a>
           <a data-page="adsmgr"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16"/></svg> Ads Manager</a>
           <a data-page="growth"><svg class="ico" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7h-5M21 7v5"/></svg> Growth Autopilot</a>
           <a data-page="calendar"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg> Content Calendar</a>
@@ -589,6 +590,11 @@
     <!-- LAUNCH A CAMPAIGN (build → review every setting → approve & go live) -->
     <section class="page" id="page-launch">
       <div id="launch-body" style="max-width:900px"></div>
+    </section>
+
+    <!-- LAUNCH ON FACEBOOK (business + offer → build → review → push paused draft to Meta) -->
+    <section class="page" id="page-fblaunch">
+      <div id="fblaunch-body" style="max-width:900px"></div>
     </section>
 
     <!-- AD STUDIO -->
@@ -1175,7 +1181,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',fblaunch:'Launch on Facebook',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1196,6 +1202,7 @@ function setPage(id){
   $('#page-weather').classList.toggle('on',id==='weather');
   $('#page-adstudio').classList.toggle('on',id==='adstudio');
   $('#page-launch').classList.toggle('on',id==='launch');
+  $('#page-fblaunch').classList.toggle('on',id==='fblaunch');
   $('#page-playbook').classList.toggle('on',id==='playbook');
   $('#page-affluence').classList.toggle('on',id==='affluence');
   $('#page-adsmgr').classList.toggle('on',id==='adsmgr');
@@ -1229,6 +1236,7 @@ function setPage(id){
   if(id==='weather') openWeather();
   if(id==='adstudio') openAdStudio();
   if(id==='launch') openLaunch();
+  if(id==='fblaunch') openFbLaunch();
   if(id==='playbook') openPlaybook();
   if(id==='affluence') openAffluence();
   if(id==='adsmgr') openAdsManager();
@@ -2232,6 +2240,87 @@ async function doLaunch(){
 }
 
 // ── Campaign Playbook — expert paid-social strategic build ──
+// ── Launch on Facebook: business + offer → build → review → paused draft in Meta ──
+function fbConnBanner(status){
+  const c=el('div','mcard');
+  if(status&&status.ready){ c.style.borderLeft='3px solid var(--good,#16a34a)'; c.append(el('div','verdict tight','✅ Connected to your Meta ad account ('+esc(status.account||'')+'). Campaigns build as a PAUSED draft you review before spending.')); }
+  else { c.style.borderLeft='3px solid #f59e0b';
+    const d=el('div'); d.innerHTML='<b>Connect your Meta ad account to launch.</b> Add these on Render (Environment), then reload — from your Meta ad account:<br><span class="appsub">• <code>META_ADS_ACCESS_TOKEN</code> — a token with ads_management<br>• <code>META_AD_ACCOUNT_ID</code> — your numeric ad-account id (no “act_”)<br>• <code>META_PAGE_ID</code> — the Facebook Page the ads run under</span><br><span class="appsub" style="margin-top:6px;display:block">Until then you can still build & review the full campaign below — the launch button just stays disabled.</span>';
+    c.append(d);
+  }
+  return c;
+}
+async function openFbLaunch(){
+  const box=$('#fblaunch-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading…</p>';
+  let status={ready:false,note:''};
+  if(REMOTE){ try{ status=await(await fetch('/api/meta/status')).json(); }catch(e){} }
+  box.innerHTML='';
+  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">📘 Launch on Facebook</h3><p class="mdesc" style="margin:6px 0 0;max-width:640px">Tell Miles your offer. Miles builds a complete Facebook &amp; Instagram campaign — budget, local targeting, and the ad copy — from your Campaign Playbook, then pushes it into your Meta Ads Manager as a <b>paused draft</b>. You review every setting and flip it live. Nothing spends until you do.</p>';
+  box.append(h);
+  box.append(fbConnBanner(status));
+  const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','TELL MILES THE BASICS'));
+  const mk=(label,ph,val,type)=>{ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.placeholder=ph||''; if(val!=null)i.value=val; if(type)i.type=type; i.style.width='100%'; w.append(i); return i; };
+  const offer=mk('Your offer','e.g. $500 off a new roof');
+  const website=mk('Your website (the ad’s destination)','e.g. phillyroofingco.com');
+  const budget=mk('Daily budget (USD, optional — Miles picks a smart default)','','','number');
+  const finW=el('div'); finW.style.cssText='display:flex;align-items:center;gap:8px;margin:12px 0'; const fin=el('input'); fin.type='checkbox'; finW.append(fin, el('label','appsub','We offer financing (put the monthly-payment reframe in the ad)'));
+  f.append(offer.parentNode? offer.parentNode:offer); f.append(website.parentNode?website.parentNode:website); f.append(budget.parentNode?budget.parentNode:budget); f.append(finW);
+  const btn=el('button','go','Build my Facebook campaign →');
+  btn.onclick=async()=>{ btn.disabled=true; btn.textContent='Building…'; try{ const r=await(await fetch('/api/meta/build',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({offer:offer.value,website:website.value,dailyBudget:Number(budget.value)||undefined,financing:fin.checked})})).json(); renderFbReview(r.spec,r.issues||[],r.status||status); }catch(e){ toast('Could not build — try again.'); btn.disabled=false; btn.textContent='Build my Facebook campaign →'; } };
+  f.append(btn); box.append(f);
+}
+function renderFbReview(spec,issues,status){
+  const box=$('#fblaunch-body'); if(!box||!spec) return; box.innerHTML='';
+  const back=el('button',null,'← Edit'); back.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-bottom:8px'; back.onclick=openFbLaunch; box.append(back);
+  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">Review before it goes to Meta</h3><p class="mdesc" style="margin:6px 0 0">Everything below is created <b>PAUSED</b> as a draft in your Ads Manager. Check it, then push — nothing spends until you flip it live in Meta.</p>'; box.append(h);
+  box.append(fbConnBanner(status));
+  // Settings summary
+  const geo=(spec.geo&&spec.geo.zips&&spec.geo.zips.length)?(spec.geo.zips.join(', ')):'United States (add service-area ZIPs for local targeting)';
+  const s=el('div','mcard'); s.style.marginTop='14px'; s.append(el('div','sect-label','CAMPAIGN SETTINGS'));
+  const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:8px';
+  const cell=(k,v)=>{ const c=el('div'); c.style.cssText='border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:10px'; c.append(el('div','appsub',k)); const b=el('div',null,v); b.style.fontWeight='600'; c.append(b); return c; };
+  grid.append(
+    cell('Objective','Traffic → your website'),
+    cell('Daily budget','$'+Number(spec.dailyBudget).toLocaleString()+'/day'),
+    cell('Placements','Facebook + Instagram'),
+    cell('Audience','Age '+spec.ageMin+'–'+spec.ageMax),
+    cell('Location',geo),
+    cell('Status','PAUSED (draft)')
+  );
+  s.append(grid); box.append(s);
+  // Ad preview — a Facebook-style card
+  const ap=el('div','mcard'); ap.style.marginTop='14px'; ap.append(el('div','sect-label','THE AD'));
+  const card=el('div'); card.style.cssText='border:1px solid var(--line,#e5e7eb);border-radius:12px;overflow:hidden;max-width:400px;margin-top:8px';
+  const ph=el('div'); ph.style.cssText='display:flex;align-items:center;gap:8px;padding:10px 12px';
+  const av=el('div',null,(esc((spec.name||'A')[0]||'A')).toUpperCase()); av.style.cssText='width:32px;height:32px;border-radius:50%;background:#1877f2;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700'; ph.append(av); const pn=el('div'); pn.append(el('div',null,'Your Page')); const sp=el('div','appsub','Sponsored'); pn.append(sp); ph.append(pn); card.append(ph);
+  const msg=el('div',null,spec.ad.primaryText); msg.style.cssText='padding:0 12px 10px;white-space:pre-line;font-size:14px'; card.append(msg);
+  const img=el('div'); img.style.cssText='height:150px;background:linear-gradient(135deg,#0e7490,#155e75);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px'; img.textContent=spec.ad.headline; card.append(img);
+  const foot=el('div'); foot.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;background:var(--panel2,#f8fafc)'; const ft=el('div'); ft.append(el('div','appsub',(spec.website||'your website').replace(/^https?:\/\//,''))); const fh=el('div',null,spec.ad.headline); fh.style.fontWeight='600'; ft.append(fh); const fd=el('div','appsub',spec.ad.description); ft.append(fd); foot.append(ft); const cta=el('button','ghost',(spec.ad.cta||'LEARN_MORE').replace(/_/g,' ')); cta.style.pointerEvents='none'; foot.append(cta); card.append(foot);
+  ap.append(card); box.append(ap);
+  // Issues
+  if(issues&&issues.length){ const iw=el('div','mcard'); iw.style.marginTop='14px'; iw.style.borderLeft='3px solid #f59e0b'; iw.append(el('div','sect-label','BEFORE YOU LAUNCH')); const ul=el('ul'); ul.style.cssText='margin:8px 0 0;padding-left:18px'; issues.forEach(i=>ul.append(el('li','appsub',i))); iw.append(ul); box.append(iw); }
+  // Launch bar
+  const bar=el('div','mcard'); bar.style.marginTop='14px'; bar.style.display='flex'; bar.style.gap='10px'; bar.style.flexWrap='wrap';
+  const go=el('button','go', status&&status.ready?'🚀 Push to Meta as a paused draft':'🔒 Connect Meta to push');
+  if(!status||!status.ready){ go.disabled=true; go.style.opacity='0.55'; go.title='Add the three Meta env vars on Render first.'; }
+  go.onclick=()=>doFbLaunch(spec);
+  bar.append(go);
+  box.append(bar);
+}
+async function doFbLaunch(spec){
+  const box=$('#fblaunch-body'); if(!box) return;
+  const bar=box.lastChild; const go=bar&&bar.querySelector('button'); if(go){ go.disabled=true; go.textContent='Pushing to Meta…'; }
+  let r={ok:false,steps:[],note:'No response.'};
+  try{ r=await(await fetch('/api/meta/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec,confirm:true})})).json(); }catch(e){ r={ok:false,steps:[],note:'Request failed — check your connection.'}; }
+  const res=el('div','mcard'); res.style.marginTop='14px'; res.style.borderLeft='3px solid '+(r.ok?'var(--good,#16a34a)':'#dc2626');
+  res.append(el('div','sect-label', r.ok?'✅ BUILT AS A PAUSED DRAFT':'⚠️ SOME STEPS FAILED'));
+  if(r.note) res.append(el('p','appsub',r.note));
+  const ul=el('div'); ul.style.cssText='display:flex;flex-direction:column;gap:5px;margin-top:8px'; (r.steps||[]).forEach(st=>{ const row=el('div','appsub',(st.ok?'✓ ':'✗ ')+st.step+(st.error?(' — '+st.error):'')); if(!st.ok) row.style.color='#dc2626'; ul.append(row); }); res.append(ul);
+  if(r.link){ const a=el('a','go','Open it in Meta Ads Manager ↗'); a.href=r.link; a.target='_blank'; a.rel='noopener'; a.style.cssText='display:inline-block;margin-top:12px;text-decoration:none'; res.append(a); }
+  if(go){ if(r.ok){ go.textContent='✓ Pushed to Meta'; go.style.opacity='0.6'; } else { go.disabled=false; go.textContent='🚀 Try again'; } }
+  box.append(res);
+  if(r.ok) toast('Paused draft created in Meta. Review and flip it live.');
+}
 function openPlaybook(){
   const box=$('#playbook-body'); if(!box) return; box.innerHTML='';
   const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">📋 Campaign Playbook</h3><p class="mdesc" style="margin:6px 0 0;max-width:640px">Miles builds a complete, expert paid-social plan the way a veteran media buyer would — unit economics first, an <b>engineered</b> offer (not a naked discount), segmented ad sets, a creative battery, the instant form, and a weekly scorecard. Tuned to your trade.</p>';
