@@ -2300,10 +2300,26 @@ async function renderSavedDrafts(box){
   });
   box.append(c);
 }
+// Google requires ≥3 headlines and ≥2 descriptions per responsive search ad.
+// Top up any under-filled ad group (e.g. an old saved draft) with valid fillers
+// so a campaign is always launch-ready — the added lines are shown for editing.
+const RSA_FILL_HL=['Free Quote Today','Licensed & Insured','Fast, Reliable Service','Book Online in Minutes','Same-Day Availability','Trusted Local Pros'];
+const RSA_FILL_DE=['Get your free quote today and see why locals choose us.','Licensed, insured, and reliable — call or book online now.','Trusted by your neighbors. Honest pricing, on-time service.'];
+function padRsa(g){
+  g.rsa=g.rsa||{headlines:[],descriptions:[]};
+  const h=(g.rsa.headlines||[]).map(x=>(x||'').trim()).filter(x=>x&&x.length<=30);
+  for(const f of RSA_FILL_HL){ if(h.length>=3) break; if(!h.includes(f)) h.push(f); }
+  const d=(g.rsa.descriptions||[]).map(x=>(x||'').trim()).filter(x=>x&&x.length<=90);
+  for(const f of RSA_FILL_DE){ if(d.length>=2) break; if(!d.includes(f)) d.push(f); }
+  const changed=(h.length!==(g.rsa.headlines||[]).length)||(d.length!==(g.rsa.descriptions||[]).length);
+  g.rsa.headlines=h; g.rsa.descriptions=d; return changed;
+}
 function renderLaunchReview(){
   const box=$('#launch-body'); if(!box||!LAUNCH.spec) return; box.innerHTML=''; const s=LAUNCH.spec;
   const back=el('button',null,'← Start over'); back.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-bottom:8px'; back.onclick=openLaunch; box.append(back);
   if(!LAUNCH.connected) box.append(ovNudge('⚠️ Google Ads isn’t connected yet — connect it in Integrations before this can go live. You can still review the campaign below.'));
+  let padded=false; (s.adGroups||[]).forEach(g=>{ if(padRsa(g)) padded=true; });
+  if(padded) box.append(ovNudge('✚ Added a few standard headlines/descriptions so this meets Google’s minimum (3 headlines, 2 descriptions). Edit or replace them below before launching.'));
   const row=(label,node)=>{ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); w.append(node); return w; };
   const inp=(val,type)=>{ const i=el('input','f'); i.value=val; if(type)i.type=type; i.style.width='100%'; return i; };
   const c=el('div','mcard'); c.append(el('div','sect-label','STEP 2 — REVIEW EVERY SETTING'));
