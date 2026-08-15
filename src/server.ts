@@ -201,6 +201,46 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { inviteOnly: !!s.inviteOnly, allowed: Array.isArray(s.allowed) ? s.allowed : [] };
   };
 
+  // ── invite links: the owner mints a shareable sign-up URL ──
+  type Invite = { token: string; email?: string; note?: string; maxUses: number; uses: number; exp?: number; revoked?: boolean; createdAt: string };
+  const getInvites = async (): Promise<Invite[]> => {
+    const id = await adminUserId();
+    if (!id) return [];
+    const data = await authStore.getUserData(id);
+    return Array.isArray(data.invites) ? (data.invites as Invite[]) : [];
+  };
+  const saveInvites = async (list: Invite[]): Promise<void> => {
+    const id = await adminUserId();
+    if (!id) return;
+    const data = await authStore.getUserData(id);
+    data.invites = list.slice(0, 500);
+    await authStore.setUserData(id, data);
+  };
+  // Validate an invite token without consuming it. Empty token → not valid.
+  const checkInvite = async (token: string, email: string): Promise<{ ok: boolean; reason?: string }> => {
+    if (!token) return { ok: false };
+    const inv = (await getInvites()).find((i) => i.token === token);
+    if (!inv) return { ok: false, reason: 'That invite link is not valid.' };
+    if (inv.revoked) return { ok: false, reason: 'That invite link has been revoked.' };
+    if (inv.exp && inv.exp < Date.now()) return { ok: false, reason: 'That invite link has expired.' };
+    if (inv.email && inv.email.toLowerCase() !== email.toLowerCase()) return { ok: false, reason: 'This invite is for a different email address.' };
+    if (inv.maxUses > 0 && inv.uses >= inv.maxUses) return { ok: false, reason: 'That invite link has already been used up.' };
+    return { ok: true };
+  };
+  // Record one use of an invite (called after the account is actually created).
+  const markInviteUsed = async (token: string): Promise<void> => {
+    if (!token) return;
+    const list = await getInvites();
+    const inv = list.find((i) => i.token === token);
+    if (!inv) return;
+    inv.uses = (inv.uses || 0) + 1;
+    await saveInvites(list);
+  };
+  const inviteStatus = (i: Invite): 'active' | 'revoked' | 'expired' | 'used-up' =>
+    i.revoked ? 'revoked' : i.exp && i.exp < Date.now() ? 'expired' : i.maxUses > 0 && i.uses >= i.maxUses ? 'used-up' : 'active';
+  const baseUrl = (req: { headers: Record<string, unknown> }) => (process.env.APP_URL || `https://${req.headers.host}`).replace(/\/$/, '');
+  const inviteLink = (req: { headers: Record<string, unknown> }, i: Invite) => `${baseUrl(req)}/login?invite=${encodeURIComponent(i.token)}`;
+
   // ── pages (gated: no account → login) ──
   app.get('/', async (req, reply) => {
     const u = await getUser(req);
@@ -282,30 +322,34 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
 
   // ── auth ──
   app.post('/auth/signup', async (req, reply) => {
-    const b = (req.body ?? {}) as { email?: string; password?: string; name?: string };
+    const b = (req.body ?? {}) as { email?: string; password?: string; name?: string; invite?: string };
     if (!b.email || !b.password || b.password.length < 6)
       return reply.code(400).send({ error: 'Enter an email and a password of at least 6 characters.' });
     if (await authStore.getUserByEmail(b.email))
       return reply.code(409).send({ error: 'An account with that email already exists — try logging in.' });
+    const email = b.email.toLowerCase();
+    const invite = (b.invite ?? '').trim();
+    // A valid invite link admits the holder even under the invite-only gate.
+    const inviteCheck = invite ? await checkInvite(invite, email) : { ok: false as boolean, reason: undefined as string | undefined };
     // Invite-only gate (the very first account is always allowed — it becomes the owner).
     const existing = await authStore.listUsers();
     if (existing.length > 0) {
       const settings = await getAdminSettings();
       if (settings.inviteOnly) {
-        const email = b.email.toLowerCase();
-        const ok = email === adminEmail() || settings.allowed.map((e) => e.toLowerCase()).includes(email);
-        if (!ok)
-          return reply.code(403).send({ error: 'Sign-ups are invite-only right now. Ask the owner to add your email to the invite list.' });
+        const onList = email === adminEmail() || settings.allowed.map((e) => e.toLowerCase()).includes(email);
+        if (!onList && !inviteCheck.ok)
+          return reply.code(403).send({ error: inviteCheck.reason || 'Sign-ups are invite-only right now. Ask the owner for an invite link.' });
       }
     }
     const user: User = {
       id: newUserId(),
-      email: b.email.toLowerCase(),
+      email,
       name: b.name,
       passwordHash: hashPassword(b.password),
       createdAt: new Date().toISOString(),
     };
     await authStore.createUser(user);
+    if (invite && inviteCheck.ok) await markInviteUsed(invite);
     await startSession(reply, user.id);
     return { ok: true, user: { id: user.id, email: user.email, name: user.name } };
   });
@@ -366,7 +410,45 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const u = await requireUser(req, reply);
     if (!u) return;
     if (!(await isAdmin(u))) return { isAdmin: false };
-    return { isAdmin: true, adminId: await adminUserId(), users: await authStore.listUsers(), settings: await getAdminSettings() };
+    const invites = (await getInvites()).map((i) => ({ token: i.token, email: i.email, note: i.note, maxUses: i.maxUses, uses: i.uses, exp: i.exp, createdAt: i.createdAt, status: inviteStatus(i), link: inviteLink(req, i) }));
+    return { isAdmin: true, adminId: await adminUserId(), users: await authStore.listUsers(), settings: await getAdminSettings(), invites };
+  });
+
+  // Owner-only: mint a shareable sign-up invite link. Optionally lock it to one
+  // email, cap its uses, or set an expiry (days). Works whether or not sign-ups
+  // are invite-only — a valid link always admits the holder.
+  app.post<{ Body: { email?: string; note?: string; maxUses?: number; days?: number } }>('/api/admin/invite', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (!(await isAdmin(u))) return reply.code(403).send({ error: 'owner only' });
+    const list = await getInvites();
+    const days = Number(req.body?.days);
+    const maxUses = Math.max(0, Math.floor(Number(req.body?.maxUses) || 0)); // 0 = unlimited
+    const invite: Invite = {
+      token: newToken(),
+      email: req.body?.email ? String(req.body.email).trim().toLowerCase() : undefined,
+      note: req.body?.note ? String(req.body.note).slice(0, 120) : undefined,
+      maxUses,
+      uses: 0,
+      exp: days && days > 0 ? Date.now() + days * 86_400_000 : undefined,
+      createdAt: new Date().toISOString(),
+    };
+    list.unshift(invite);
+    await saveInvites(list);
+    return { ok: true, invite: { ...invite, status: inviteStatus(invite), link: inviteLink(req, invite) } };
+  });
+
+  // Owner-only: revoke an invite link so it stops working.
+  app.post<{ Body: { token?: string } }>('/api/admin/invite/revoke', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (!(await isAdmin(u))) return reply.code(403).send({ error: 'owner only' });
+    const list = await getInvites();
+    const inv = list.find((i) => i.token === req.body?.token);
+    if (!inv) return reply.code(404).send({ error: 'invite not found' });
+    inv.revoked = true;
+    await saveInvites(list);
+    return { ok: true };
   });
   app.post<{ Body: { id?: string } }>('/api/admin/remove', async (req, reply) => {
     const u = await requireUser(req, reply);
