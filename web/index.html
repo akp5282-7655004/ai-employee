@@ -422,6 +422,7 @@
           <a data-page="analytics"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Analytics</a>
           <a data-page="meters"><svg class="ico" viewBox="0 0 24 24"><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 12 15 9M4 12a8 8 0 0 1 16 0"/></svg> Meters</a>
           <a data-page="research"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg> Research</a>
+          <a data-page="affluence"><svg class="ico" viewBox="0 0 24 24"><path d="M3 21h18M6 21V9l6-4 6 4v12M9 21v-4h6v4M12 3v2"/></svg> Market Map</a>
           <a data-page="cads"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3M7 9l3 2-3 2V9zM14 9h4M14 13h3"/></svg> Competitor Ads</a>
           <a data-page="weather"><svg class="ico" viewBox="0 0 24 24"><path d="M17 14a4 4 0 0 0-1-7.87A6 6 0 0 0 4 8a4 4 0 0 0 .5 8H17Z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/></svg> Weather Triggers</a>
         </div>
@@ -560,6 +561,11 @@
         <div id="w-note" class="appsub" style="margin-top:8px">Live conditions from the US National Weather Service.</div>
         <div id="w-results" style="margin-top:20px"></div>
       </div>
+    </section>
+
+    <!-- MARKET MAP — rank service-area ZIPs by affluence / ability-to-spend -->
+    <section class="page" id="page-affluence">
+      <div id="affluence-body" style="max-width:1000px"></div>
     </section>
 
     <!-- LAUNCH A CAMPAIGN (build → review every setting → approve & go live) -->
@@ -1151,7 +1157,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',launch:'Launch a Campaign',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',launch:'Launch a Campaign',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1172,6 +1178,7 @@ function setPage(id){
   $('#page-weather').classList.toggle('on',id==='weather');
   $('#page-adstudio').classList.toggle('on',id==='adstudio');
   $('#page-launch').classList.toggle('on',id==='launch');
+  $('#page-affluence').classList.toggle('on',id==='affluence');
   $('#page-studio').classList.toggle('on',id==='studio');
   $('#page-team').classList.toggle('on',id==='team');
   $('#page-editor').classList.toggle('on',id==='editor');
@@ -1201,6 +1208,7 @@ function setPage(id){
   if(id==='weather') openWeather();
   if(id==='adstudio') openAdStudio();
   if(id==='launch') openLaunch();
+  if(id==='affluence') openAffluence();
   if(id==='studio') openStudio();
   if(id==='team') openTeam();
   if(id==='editor') openEditorPage();
@@ -2058,6 +2066,7 @@ function openLaunch(){
   const budget=lchField('Daily budget (USD)','20','20','number');
   const url=lchField('Landing page URL','https://yourbusiness.com/service');
   const loc=lchField('Locations (comma-separated — blank = your service area)','e.g. Philadelphia, PA');
+  if(window.__prefillLocations){ loc.i.value=window.__prefillLocations; window.__prefillLocations=null; }
   f.append(goal.w,budget.w,url.w,loc.w);
   const btn=el('button','go','Build my campaign →');
   btn.onclick=async()=>{ btn.disabled=true; btn.textContent='Building…';
@@ -2140,6 +2149,40 @@ async function doLaunch(){
   if(r.link){ const a=el('a',null,'View in Google Ads ↗'); a.href=r.link; a.target='_blank'; a.style.cssText='display:inline-block;margin-top:12px;color:var(--accent)'; c.append(a); }
   const again=el('button',null,'Build another →'); again.style.cssText='display:block;margin-top:14px;background:none;border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer'; again.onclick=openLaunch; c.append(again);
   box.append(c);
+}
+
+// ── Market Map — rank service-area ZIPs by affluence / ability-to-spend ──
+let AFFL={live:false,zips:[]};
+function openAffluence(){
+  const box=$('#affluence-body'); if(!box) return; box.innerHTML='';
+  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">🗺 Market Map — where the money is</h3><p class="mdesc" style="margin:6px 0 0;max-width:660px">Enter the ZIPs in your service area. Miles ranks them by income, high-earner share and home value (US Census) so you send <b>premium offers where people can spend</b> — and value offers everywhere else.</p>';
+  box.append(h);
+  const f=el('div','mcard'); f.style.marginTop='14px';
+  const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px'; w.append(el('div','appsub','Service-area ZIPs (comma or space separated)'));
+  const ta=el('textarea','f'); ta.rows=2; ta.style.width='100%'; ta.placeholder='e.g. 19103, 19104, 19146, 08054, 08033';
+  f.append(w); w.append(ta);
+  const btn=el('button','go','Rank my ZIPs →'); btn.style.marginTop='10px';
+  btn.onclick=async()=>{ btn.disabled=true; btn.textContent='Analyzing…'; try{ const r=await(await fetch('/api/market/affluence',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:ta.value})})).json(); if(r.error){ toast(r.error); } else { AFFL=r; renderAffluence(); } }catch(e){ toast('Could not analyze — try again.'); } btn.disabled=false; btn.textContent='Rank my ZIPs →'; };
+  f.append(btn); box.append(f);
+  if(AFFL.zips.length) renderAffluence();
+}
+function renderAffluence(){
+  const box=$('#affluence-body'); if(!box) return; const old=$('#affl-results'); if(old) old.remove();
+  const wrap=el('div'); wrap.id='affl-results'; wrap.style.marginTop='14px';
+  if(!AFFL.live) wrap.append(ovNudge('⚠️ Showing DEMO figures — add a free CENSUS_API_KEY on Render to pull real US Census income data for your ZIPs.'));
+  const premium=AFFL.zips.filter(z=>z.tier==='premium');
+  if(premium.length){ const rec=el('div','mcard'); rec.style.cssText='margin-bottom:12px;border-left:3px solid var(--good)';
+    rec.innerHTML='<b>💰 Premium-offer targets:</b> '+premium.map(z=>z.zip).join(', ')+'<div class="mdesc" style="margin:4px 0 0">Highest ability to spend — send your high-ticket / premium offers here.</div>';
+    const b=el('button','go','Launch a campaign for these ZIPs →'); b.style.marginTop='10px'; b.onclick=()=>{ window.__prefillLocations=premium.map(z=>z.zip).join(', '); setPage('launch'); }; rec.append(b); wrap.append(rec);
+  }
+  const money=(n)=> n==null?'—':'$'+Number(n).toLocaleString();
+  const tierBadge=(t)=> t==='premium'?'<span class="apill active">💰 Premium</span>':t==='mid'?'<span class="apill paused">Mid</span>':'<span class="apill">🎯 Value</span>';
+  const rows=AFFL.zips.map((z,i)=>`<tr><td style="text-align:left;font-weight:600">#${i+1} · ${z.zip}${z.demo?' <span style="color:var(--faint);font-weight:400">(demo)</span>':''}</td><td>${tierBadge(z.tier)}</td><td>${money(z.medianIncome)}</td><td>${z.pctHighEarner!=null?z.pctHighEarner+'%':'—'}</td><td>${money(z.medianHomeValue)}</td><td><div style="display:flex;align-items:center;gap:6px;min-width:90px"><div style="flex:1;height:6px;background:var(--line);border-radius:4px;overflow:hidden"><div style="height:100%;width:${z.affluenceScore}%;background:var(--good)"></div></div><b>${z.affluenceScore}</b></div></td><td>${money(z.discretionaryEst)}</td></tr>`).join('');
+  const c=el('div','mcard');
+  c.innerHTML=`<div class="ah">ZIPs ranked by affluence</div>
+    <div style="overflow-x:auto"><table class="btable"><thead><tr><th style="text-align:left">ZIP</th><th>Tier</th><th>Median income</th><th>$150k+ HH</th><th>Home value</th><th>Affluence</th><th>Discretionary*</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="appsub" style="margin-top:12px">Source: US Census ACS 5-yr (2023) — median household income, $150k+ household share, median home value. <b>*Discretionary is a modeled estimate</b> (after-tax income minus baseline &amp; housing-cost necessities), not a measured figure.${AFFL.live?'':' Demo data until CENSUS_API_KEY is set on the server.'}</div>`;
+  wrap.append(c); box.append(wrap);
 }
 
 // ═══ creative studio (every marketing asset from one place) ═══

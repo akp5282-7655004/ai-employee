@@ -206,3 +206,81 @@ function insightFor(income: number, homeValue: number, ownership: number): strin
   }
   return 'Value-sensitive market — lead with strong front-door offers and volume; keep budgets efficient and cost-per-lead tight.';
 }
+
+// ── Affluence targeting — rank a service area's ZIPs by ability-to-spend ──
+// So Miles sends premium offers where the money is, value offers everywhere.
+
+export interface ZipAffluence {
+  zip: string;
+  medianIncome: number | null;
+  perCapita: number | null;
+  /** Share of households earning $150k+ (%) — the cleanest capacity-to-spend signal. */
+  pctHighEarner: number | null;
+  medianHomeValue: number | null;
+  /** 0–100 blended affluence score. */
+  affluenceScore: number;
+  /** Modeled annual discretionary income ($) — an estimate, NOT a measured figure. */
+  discretionaryEst: number | null;
+  tier: 'premium' | 'mid' | 'value';
+  demo?: boolean;
+}
+
+const AFF_VARS = ['B19013_001E', 'B19301_001E', 'B25077_001E', 'B19001_001E', 'B19001_016E', 'B19001_017E'];
+const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+
+function affScore(medianIncome: number | null, pctHigh: number | null, homeValue: number | null): number {
+  const inc = medianIncome != null ? clamp01((medianIncome - 40000) / 160000) : 0;
+  const high = pctHigh != null ? clamp01(pctHigh / 30) : 0;
+  const home = homeValue != null ? clamp01((homeValue - 150000) / 850000) : 0;
+  return Math.round((0.5 * inc + 0.3 * high + 0.2 * home) * 100);
+}
+/** Modeled discretionary income: after-tax income minus baseline + housing-cost necessities. */
+function discretionaryOf(medianIncome: number | null, homeValue: number | null): number | null {
+  if (medianIncome == null) return null;
+  const necessities = 25000 + (homeValue != null ? homeValue * 0.04 : medianIncome * 0.25);
+  return Math.max(0, Math.round(medianIncome * 0.78 - necessities));
+}
+const affTier = (s: number): ZipAffluence['tier'] => (s >= 66 ? 'premium' : s >= 33 ? 'mid' : 'value');
+
+function affAssemble(zip: string, medianIncome: number | null, perCapita: number | null, pctHigh: number | null, homeValue: number | null, demo = false): ZipAffluence {
+  const affluenceScore = affScore(medianIncome, pctHigh, homeValue);
+  return { zip, medianIncome, perCapita, pctHighEarner: pctHigh, medianHomeValue: homeValue, affluenceScore, discretionaryEst: discretionaryOf(medianIncome, homeValue), tier: affTier(affluenceScore), demo };
+}
+
+/** Deterministic demo figures from the ZIP digits, so the UI is populated offline.
+ *  Spread across value→premium (income ~$38k–$250k) so the ranking is illustrative. */
+function affDemo(zip: string): ZipAffluence {
+  let h = 0; for (const c of zip) h = (h * 131 + c.charCodeAt(0)) % 1_000_000;
+  const pct = (h % 1000) / 1000; // 0..1
+  const medianIncome = Math.round(38000 + Math.pow(pct, 0.85) * 212000);
+  const pctHigh = Math.round(clamp01((medianIncome - 40000) / 180000) * 42 * 10) / 10;
+  const homeValue = Math.round(medianIncome * (2.0 + (h % 40) / 10));
+  return affAssemble(zip, medianIncome, Math.round(medianIncome * 0.42), pctHigh, homeValue, true);
+}
+
+async function affFetch(zip: string, key: string): Promise<ZipAffluence> {
+  const url = `https://api.census.gov/data/2023/acs/acs5?get=${AFF_VARS.join(',')}&for=zip%20code%20tabulation%20area:${zip}&key=${encodeURIComponent(key)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Census ${res.status}`);
+  const rows = (await res.json()) as string[][];
+  const header = rows[0]; const data = rows[1];
+  if (!header || !data) return affAssemble(zip, null, null, null, null);
+  const v = (name: string) => { const i = header.indexOf(name); const n = Number(data[i]); return Number.isFinite(n) && n > -1_000_000 ? n : null; };
+  const total = v('B19001_001E'); const h150 = v('B19001_016E'); const h200 = v('B19001_017E');
+  const pctHigh = total && total > 0 && h150 != null && h200 != null ? Math.round(((h150 + h200) / total) * 1000) / 10 : null;
+  return affAssemble(zip, v('B19013_001E'), v('B19301_001E'), pctHigh, v('B25077_001E'));
+}
+
+/** Rank a set of ZIPs by affluence. Live via Census when CENSUS_API_KEY is set,
+ *  otherwise clearly-labeled demo figures so the feature is usable offline. */
+export async function zipAffluence(zips: string[]): Promise<{ live: boolean; zips: ZipAffluence[] }> {
+  const clean = [...new Set(zips.map((z) => (z || '').replace(/\D/g, '').slice(0, 5)).filter((z) => z.length === 5))].slice(0, 40);
+  const byScore = (a: ZipAffluence, b: ZipAffluence) => b.affluenceScore - a.affluenceScore;
+  if (!process.env.CENSUS_API_KEY) return { live: false, zips: clean.map(affDemo).sort(byScore) };
+  const key = process.env.CENSUS_API_KEY;
+  const out: ZipAffluence[] = [];
+  for (const zip of clean) {
+    try { out.push(await affFetch(zip, key)); } catch { out.push(affAssemble(zip, null, null, null, null)); }
+  }
+  return { live: true, zips: out.sort(byScore) };
+}

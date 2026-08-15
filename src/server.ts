@@ -51,7 +51,7 @@ import {
   type AgentRun,
   type TaskType,
 } from './agents/scheduled.js';
-import { fetchDemographics } from './research/census.js';
+import { fetchDemographics, zipAffluence } from './research/census.js';
 import { fetchWeather, evaluateWeatherTriggers } from './research/weather.js';
 import { importSite } from './research/site.js';
 import { auditSite, buildAuditPrompt, fallbackAuditSummary } from './research/audit.js';
@@ -1351,6 +1351,23 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const d = await fetchDemographics(zip);
       if (!d) return reply.code(404).send({ error: 'No Census data for that ZIP — try a 5-digit US ZIP.' });
       return d;
+    } catch (err) {
+      return reply.code(502).send({ error: String((err as Error).message) });
+    }
+  });
+
+  // Affluence targeting — rank a service area's ZIPs by ability-to-spend, so
+  // premium offers go where the money is and value offers go everywhere.
+  app.post<{ Body: { zips?: string[]; text?: string } }>('/api/market/affluence', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const raw = Array.isArray(req.body?.zips) ? req.body!.zips!.join(' ') : '';
+    const text = `${raw} ${req.body?.text ?? ''}`;
+    const zips = (text.match(/\b\d{5}\b/g) ?? []);
+    if (!zips.length) return reply.code(400).send({ error: 'Enter at least one 5-digit ZIP in your service area.' });
+    try {
+      const r = await zipAffluence(zips);
+      return r;
     } catch (err) {
       return reply.code(502).send({ error: String((err as Error).message) });
     }
