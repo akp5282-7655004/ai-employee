@@ -3026,6 +3026,60 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { text: text ?? "I can't reach my language model right now — add an OPENROUTER_API_KEY on Render and I'll answer live.", live: !!text, mode };
   });
 
+  // ── Send an email — Miles drafts it, then sends through the connected Gmail ──
+  const normalizeEmail = (s: string): string => {
+    let e = (s || '').trim().toLowerCase();
+    e = e.replace(/\s+at\s+/g, '@').replace(/\s+dot\s+/g, '.').replace(/\s+/g, '');
+    return e;
+  };
+  const isEmail = (s: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s);
+
+  // Draft subject + body from a plain-English request (LLM). Never sends.
+  app.post<{ Body: { request?: string; to?: string } }>('/api/email/compose', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const to = normalizeEmail(req.body?.to ?? '');
+    const request = (req.body?.request ?? '').trim();
+    const sys = 'You write professional emails. Return ONLY strict JSON: {"subject":"...","body":"..."} — no prose, no code fences. Keep the body concise and friendly; sign off as the business. Do not invent facts.';
+    const usr = `Business: ${p.businessName || 'a local business'}${p.industry ? ` (${p.industry})` : ''}. Write an email${to ? ` to ${to}` : ''} for this request: "${request || 'a short friendly hello'}".`;
+    let subject = '', body = '';
+    if (textLlmReady()) {
+      try {
+        const raw = await generateText({ system: sys, user: usr, maxTokens: 700 });
+        if (raw) { const j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)); subject = String(j.subject ?? '').slice(0, 200); body = String(j.body ?? '').slice(0, 4000); }
+      } catch { /* fall through to template */ }
+    }
+    if (!subject || !body) {
+      subject = subject || `A quick note from ${p.businessName || 'us'}`;
+      body = body || `Hi,\n\n${request || 'Just reaching out — let me know if I can help.'}\n\nBest,\n${p.businessName || 'The team'}`;
+    }
+    return { ok: true, to, subject, body, gmailConnected: (await (async () => { try { return new Set((await connector.listAccounts(u.id)).map((a) => a.app)).has('gmail'); } catch { return false; } })()) };
+  });
+
+  // Actually send the email via the owner's connected Gmail. Confirm-gated.
+  app.post<{ Body: { to?: string; subject?: string; body?: string; confirm?: boolean } }>('/api/email/send', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const to = normalizeEmail(req.body?.to ?? '');
+    const subject = (req.body?.subject ?? '').trim();
+    const body = (req.body?.body ?? '').trim();
+    if (!isEmail(to)) return reply.code(400).send({ error: `That doesn't look like a valid email address: "${to}"` });
+    if (!subject || !body) return reply.code(400).send({ error: 'Add a subject and a message.' });
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Explicit confirm required before sending.' });
+    let gmail = false;
+    try { gmail = new Set((await connector.listAccounts(u.id)).map((a) => a.app)).has('gmail'); } catch { /* none */ }
+    if (gmail && connector.runAppTask) {
+      const r = await connector.runAppTask({ externalUserId: u.id, app: 'gmail', query: 'Send email', params: { to, subject, body, message: body } });
+      if (r?.ok) { await meterUser(u.id, 'agent_run'); return { ok: true, via: 'gmail', note: `Sent to ${to} from your Gmail.` }; }
+      return reply.code(400).send({ error: r?.note || 'Gmail rejected the send — reconnect Gmail in Integrations and try again.' });
+    }
+    // Fallback: the app's own email provider, when configured.
+    if (deliveryStatus().email) { await sendEmail(to, subject, body); await meterUser(u.id, 'agent_run'); return { ok: true, via: 'provider', note: `Sent to ${to}.` }; }
+    return reply.code(400).send({ error: 'Connect Gmail in Integrations so Miles can send email as you (or configure an email provider on Render).' });
+  });
+
   // Start a fresh conversation (clears the stored intake/pending for this user).
   app.post<{ Body: { sessionId?: string } }>('/api/reset', async (req, reply) => {
     const u = await getUser(req);

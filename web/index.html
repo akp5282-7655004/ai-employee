@@ -4931,6 +4931,7 @@ async function send(text,silent){
   logChat('user',msg);
   cinput.value=''; cinput.style.height='auto';
   if(!REMOTE){ const b=addRow('emp'); b.textContent='Chat runs on the live app.'; return; }
+  if(isEmailRequest(msg)) return milesEmailFlow(msg);
   if(isBuildRequest(msg)) return milesDoTask(msg);
   const b=addRow('emp'); const typ=el('div','typing'); typ.innerHTML='<span></span><span></span><span></span>'; b.append(typ);
   try{
@@ -4956,6 +4957,32 @@ async function milesDoTask(text){
     const goto=el('button','go','Go to my review →'); goto.style.marginTop='8px'; goto.onclick=()=>setPage('overview'); b.append(goto);
   } else { b.textContent='I couldn’t build that just now — try rephrasing what you want.'; }
   chat.scrollTop=chat.scrollHeight;
+}
+// Miles can actually SEND email (through your connected Gmail) — detect the ask,
+// draft it, show an editable compose card, and send on confirm.
+function isEmailRequest(msg){ return /\bsend\b[^]*\bemail\b/i.test(msg) && /@|\bat\b/i.test(msg); }
+function extractEmail(msg){
+  const m=msg.match(/\bto\s+(.+)$/i); let cand=(m?m[1]:msg);
+  cand=cand.replace(/\s+at\s+/gi,'@').replace(/\s+dot\s+/gi,'.');
+  const em=cand.replace(/\s+/g,'').match(/[^@\s]+@[^@\s]+\.[a-z]{2,}/i);
+  return em?em[0].toLowerCase():'';
+}
+async function milesEmailFlow(msg){
+  const to=extractEmail(msg);
+  const b=addRow('emp'); b.className='bubble md'; b.innerHTML='<div class="appsub">Drafting your email…</div>';
+  let d; try{ d=await(await fetch('/api/email/compose',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({request:msg,to})})).json(); }catch(e){ b.textContent='Could not draft — try again.'; return; }
+  b.innerHTML='';
+  const card=el('div'); card.style.cssText='border:1px solid var(--line,#e5e7eb);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px';
+  card.append(el('b',null,'✉️ Ready to send — review & edit, then Send'));
+  const fld=(label,val,ta)=>{ const w=el('div'); w.append(el('div','appsub',label)); const i=ta?el('textarea','f'):el('input','f'); i.value=val||''; i.style.width='100%'; if(ta)i.rows=7; w.append(i); card.append(w); return i; };
+  const toI=fld('To',d.to); const subI=fld('Subject',d.subject); const bodyI=fld('Message',d.body,true);
+  if(!d.gmailConnected) card.append(el('div','verdict tight','Connect Gmail in Integrations so I can send this from your inbox.'));
+  const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:4px';
+  const sendBtn=el('button','go','📤 Send email');
+  sendBtn.onclick=async()=>{ sendBtn.disabled=true; sendBtn.textContent='Sending…'; let r; try{ r=await(await fetch('/api/email/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({to:toI.value,subject:subI.value,body:bodyI.value,confirm:true})})).json(); }catch(e){ r={error:'Network error'}; } if(r&&r.ok){ card.innerHTML='<b>✅ '+esc(r.note||'Email sent.')+'</b>'; logChat('emp','Sent email to '+toI.value); toast('Email sent'); } else { toast((r&&r.error)||'Could not send'); sendBtn.disabled=false; sendBtn.textContent='📤 Send email'; } };
+  const cancel=el('button','ghost','Cancel'); cancel.onclick=()=>{ card.innerHTML='<span class="appsub">Cancelled — not sent.</span>'; };
+  bar.append(sendBtn,cancel); card.append(bar);
+  b.append(card); logChat('emp','Drafted an email to '+(d.to||'')); chat.scrollTop=chat.scrollHeight;
 }
 async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId})}); }catch(e){} } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER); } }
 let CHAT_LOG=[], CHAT_LOADED=false, chatSaveT;
