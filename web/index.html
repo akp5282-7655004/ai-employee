@@ -411,6 +411,7 @@
           <a data-page="fblaunch"><svg class="ico" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3Z"/></svg> Launch on Facebook</a>
           <a data-page="adsmgr"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16"/></svg> Ads Manager</a>
           <a data-page="growth"><svg class="ico" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7h-5M21 7v5"/></svg> Growth Autopilot</a>
+          <a data-page="ghl"><svg class="ico" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6.5l7 4.5M8.5 17.5l7-4.5"/></svg> GHL Automations</a>
           <a data-page="calendar"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg> Content Calendar</a>
           <a data-page="brand"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7l1.3 3 3.2.2-2.4 2.1.8 3.1L12 13.9 9.1 15.5l.8-3.1L7.5 10.2 10.7 10Z"/></svg> Brand Guidelines</a>
           <a data-page="assets"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Assets</a>
@@ -595,6 +596,11 @@
     <!-- LAUNCH ON FACEBOOK (business + offer → build → review → push paused draft to Meta) -->
     <section class="page" id="page-fblaunch">
       <div id="fblaunch-body" style="max-width:900px"></div>
+    </section>
+
+    <!-- GHL AUTOMATIONS (32-recipe workflow library tailored to the trade) -->
+    <section class="page" id="page-ghl">
+      <div id="ghl-body" style="max-width:940px"></div>
     </section>
 
     <!-- AD STUDIO -->
@@ -1181,7 +1187,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',fblaunch:'Launch on Facebook',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',fblaunch:'Launch on Facebook',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1203,6 +1209,7 @@ function setPage(id){
   $('#page-adstudio').classList.toggle('on',id==='adstudio');
   $('#page-launch').classList.toggle('on',id==='launch');
   $('#page-fblaunch').classList.toggle('on',id==='fblaunch');
+  $('#page-ghl').classList.toggle('on',id==='ghl');
   $('#page-playbook').classList.toggle('on',id==='playbook');
   $('#page-affluence').classList.toggle('on',id==='affluence');
   $('#page-adsmgr').classList.toggle('on',id==='adsmgr');
@@ -1237,6 +1244,7 @@ function setPage(id){
   if(id==='adstudio') openAdStudio();
   if(id==='launch') openLaunch();
   if(id==='fblaunch') openFbLaunch();
+  if(id==='ghl') openGhl();
   if(id==='playbook') openPlaybook();
   if(id==='affluence') openAffluence();
   if(id==='adsmgr') openAdsManager();
@@ -2240,6 +2248,61 @@ async function doLaunch(){
 }
 
 // ── Campaign Playbook — expert paid-social strategic build ──
+// ── GHL Automations: the 32-recipe library, tailored + ROI-ordered ──
+async function openGhl(){
+  const box=$('#ghl-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading…</p>';
+  let d={ok:false,playbook:null,ghlConnected:false};
+  if(REMOTE){ try{ d=await(await fetch('/api/ghl-playbook')).json(); }catch(e){} }
+  box.innerHTML='';
+  const pb=d.playbook; if(!pb){ box.append(el('div','verdict tight','Could not load the automation library — try again.')); return; }
+  // Header
+  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">⚡ GoHighLevel Automations</h3><p class="mdesc" style="margin:6px 0 0;max-width:660px">A veteran operator’s 32-workflow library, tailored to '+esc(pb.business)+' ('+esc(pb.trade)+') and ordered by ROI. Each recipe is ready to build in GHL — trigger, steps, and timing. The ones Miles can run for you through your connected tools are flagged <b>Miles runs this</b>.</p>';
+  box.append(h);
+  // Honest scope note
+  const note=el('div','mcard'); note.style.borderLeft='3px solid #6366f1'; note.append(el('div','verdict tight','Heads up: GoHighLevel’s workflow builder isn’t fully open to automation, so Miles can’t silently create these 32 workflows inside your GHL account. What it does: hand you each recipe tailored & ready to paste, run the flagged ones natively, and order the build by what recovers revenue fastest.')); box.append(note);
+  // Stats
+  const stats=el('div'); stats.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0';
+  const sc=(k,v)=>{ const c=el('div','mcard'); c.style.padding='14px'; c.append(el('div','appsub',k)); const b=el('div',null,v); b.style.cssText='font-size:24px;font-weight:800;margin-top:2px'; c.append(b); return c; };
+  stats.append(sc('Total recipes','32'), sc('Miles runs natively',String(pb.milesRunsCount)), sc('Peak season',pb.season.peak));
+  box.append(stats);
+  // Build order
+  const bo=el('div','mcard'); bo.append(el('div','sect-label','BUILD ORDER — START HERE'));
+  bo.append(el('p','appsub',pb.season.note));
+  const bog=el('div'); bog.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:8px';
+  for(const w of pb.buildOrder){ const c=el('div'); c.style.cssText='border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:10px'; c.append(el('b',null,w.week)); c.append(el('div','appsub',w.focus)); const chips=el('div'); chips.style.cssText='display:flex;gap:5px;flex-wrap:wrap;margin-top:6px'; w.recipes.forEach(n=>{ const ch=el('span',null,'#'+n); ch.style.cssText='font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--panel2,#eef2ff);color:#3730a3'; chips.append(ch); }); c.append(chips); bog.append(c); }
+  bo.append(bog); box.append(bo);
+  // Recipes by section (expandable)
+  for(const section of pb.sections){
+    const sc2=el('div','mcard'); sc2.append(el('div','sect-label',section.toUpperCase()));
+    const items=pb.recipes.filter(r=>r.section===section);
+    for(const r of items){ sc2.append(ghlRecipeRow(r)); }
+    box.append(sc2);
+  }
+  // Global rules
+  const gr=el('div','mcard'); gr.append(el('div','sect-label','GLOBAL RULES (APPLY TO EVERY WORKFLOW)'));
+  const ul=el('ul'); ul.style.cssText='margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:7px'; pb.globalRules.forEach(g=>ul.append(el('li','appsub',g))); gr.append(ul); box.append(gr);
+}
+function ghlRecipeRow(r){
+  const row=el('div'); row.style.cssText='border-top:1px solid var(--line,#e5e7eb);padding:10px 0';
+  const head=el('div'); head.style.cssText='display:flex;align-items:center;gap:8px;cursor:pointer';
+  const nb=el('span',null,'#'+r.n); nb.style.cssText='font-size:12px;font-weight:700;color:var(--muted);min-width:26px';
+  const t=el('b',null,r.title); t.style.flex='1';
+  head.append(nb,t);
+  if(r.milesRuns){ const badge=el('span',null,'✓ Miles runs this'); badge.style.cssText='font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;color:#166534;background:#dcfce7'; head.append(badge); }
+  const chev=el('span',null,'▸'); chev.style.cssText='color:var(--muted);transition:transform .15s'; head.append(chev);
+  row.append(head);
+  const body=el('div'); body.style.cssText='display:none;margin:8px 0 4px 26px';
+  const trg=el('div','appsub'); trg.innerHTML='<b>Trigger:</b> '+esc(r.trigger); body.append(trg);
+  const ol=el('ol'); ol.style.cssText='margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px'; r.steps.forEach(s=>{ const li=el('li',null,''); li.style.fontSize='13.5px'; li.textContent=s; ol.append(li); }); body.append(ol);
+  if(r.timing){ const tm=el('div','appsub',''); tm.style.marginTop='6px'; tm.innerHTML='⏱ <b>'+esc(r.timing)+'</b>'; body.append(tm); }
+  if(r.notes){ const nt=el('div','appsub',r.notes); nt.style.cssText='margin-top:6px;font-style:italic'; body.append(nt); }
+  const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:10px';
+  const cp=el('button','ghost','📋 Copy build steps'); cp.onclick=(e)=>{ e.stopPropagation(); const text=r.title+'\nTrigger: '+r.trigger+'\n'+r.steps.map((s,i)=>(i+1)+'. '+s).join('\n')+(r.timing?('\nTiming: '+r.timing):'')+(r.notes?('\nNote: '+r.notes):''); try{navigator.clipboard.writeText(text);}catch(e){} toast('Recipe copied — paste into GHL as you build.'); }; bar.append(cp);
+  body.append(bar);
+  row.append(body);
+  head.onclick=()=>{ const open=body.style.display!=='none'; body.style.display=open?'none':'block'; chev.style.transform=open?'':'rotate(90deg)'; };
+  return row;
+}
 // ── Launch on Facebook: business + offer → build → review → paused draft in Meta ──
 function fbConnBanner(status){
   const c=el('div','mcard');

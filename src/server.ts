@@ -19,6 +19,7 @@ import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, a
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
+import { buildGhlPlaybook } from './agents/ghlplaybook.js';
 import { buildGrowthPlan } from './agents/growth.js';
 import { buildPlaybook } from './agents/playbook.js';
 import { generateText, textLlmReady } from './llm/text.js';
@@ -946,6 +947,18 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const zips = Array.isArray(req.body?.zips) ? req.body!.zips! : ((req.body?.zips as unknown as string) || (p.serviceAreas || '')).toString().match(/\b\d{5}\b/g) || [];
     const playbook = buildPlaybook({ offer: req.body?.offer || p.currentOffers, ticket: Number(req.body?.ticket) || undefined, financing: !!req.body?.financing, zips, channel: req.body?.channel }, ctx);
     return { ok: true, playbook };
+  });
+
+  // GoHighLevel Automation Playbook — the 32-recipe workflow library, tailored to
+  // the trade, ordered by ROI, with the recipes Miles runs natively flagged.
+  app.get('/api/ghl-playbook', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    let ghlConnected = false;
+    try { ghlConnected = (await connector.listAccounts(u.id)).some((a) => a.app === 'gohighlevel'); } catch { /* none */ }
+    return { ok: true, playbook: buildGhlPlaybook({ business: p.businessName, trade: p.industry }), ghlConnected };
   });
 
   // ── Growth Autopilot — analyze campaigns (ROI/ROAS vs target) and propose
