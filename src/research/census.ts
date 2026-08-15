@@ -75,7 +75,7 @@ export async function fetchDemographics(zipInput: string): Promise<Demographics 
   const zip = (zipInput || '').replace(/\D/g, '').slice(0, 5);
   if (zip.length !== 5) return null;
 
-  const key = process.env.CENSUS_API_KEY ? `&key=${process.env.CENSUS_API_KEY.trim()}` : '';
+  const key = process.env.CENSUS_API_KEY ? `&key=${process.env.CENSUS_API_KEY.replace(/[^a-zA-Z0-9]/g, '')}` : '';
   const url =
     `https://api.census.gov/data/2022/acs/acs5?get=NAME,${VARS.join(',')}` +
     `&for=zip%20code%20tabulation%20area:${zip}${key}`;
@@ -295,7 +295,9 @@ export async function zipAffluence(zips: string[]): Promise<{ live: boolean; zip
   const clean = [...new Set(zips.map((z) => (z || '').replace(/\D/g, '').slice(0, 5)).filter((z) => z.length === 5))].slice(0, 40);
   const byScore = (a: ZipAffluence, b: ZipAffluence) => b.affluenceScore - a.affluenceScore;
   if (!process.env.CENSUS_API_KEY) return { live: false, zips: clean.map(affDemo).sort(byScore) };
-  const key = process.env.CENSUS_API_KEY.trim();
+  // Census keys are pure alphanumeric hex — strip any stray punctuation/space a
+  // paste may have added (e.g. a trailing period copied from the email sentence).
+  const key = process.env.CENSUS_API_KEY.replace(/[^a-zA-Z0-9]/g, '');
   const out: ZipAffluence[] = [];
   let diag = '';
   for (const zip of clean) {
