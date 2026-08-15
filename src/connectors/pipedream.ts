@@ -539,9 +539,51 @@ export class PipedreamConnector implements Connector {
       }
     }
 
-    const ok = steps.every((s) => s.ok);
+    // Honest success: a campaign with no ads can't serve, so require the campaign
+    // itself AND at least one ad group + responsive search ad to have been created.
+    const campaignCreated = !!campaign.resource;
+    const adGroupCreated = steps.some((s) => /Create ad group/i.test(s.step) && s.ok);
+    const rsaCreated = steps.some((s) => /responsive search ad/i.test(s.step) && s.ok);
+
+    // Verify the campaign actually exists in the account — never trust "no error".
+    let verifyAttempted = false;
+    let verified = false;
+    if (campaignCreated) {
+      try {
+        const pd = await this.backend();
+        const listComp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-list-campaigns');
+        if (listComp) {
+          verifyAttempted = true;
+          const lkey = listComp.key ?? listComp.id ?? listComp.componentKey;
+          const lprops = await this.componentProps(listComp, lkey);
+          const lapp = lprops.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+          const cp: Record<string, unknown> = { [lapp]: { authProvisionId: account.id } };
+          for (const vals of Object.values(acctVals)) {
+            const id = vals[0]; const kws = vals.slice(1);
+            const prop = lprops.find((p: any) => p?.name && kws.some((kw) => `${p.label ?? ''} ${p.name}`.toLowerCase().includes(kw)));
+            if (prop && id) cp[prop.name] = id;
+          }
+          const res = await pd.actions.run({ externalUserId, id: lkey, configuredProps: cp });
+          const blob = JSON.stringify(res?.ret ?? res?.exports ?? res ?? '');
+          verified = blob.includes(spec.name) || (!!campaign.resource && blob.includes(campaign.resource.split('/').pop() ?? ' '));
+        }
+      } catch {
+        /* verification unavailable — reported below */
+      }
+      steps.push({ step: 'Verify campaign in Google Ads', ok: verifyAttempted ? verified : true, error: verifyAttempted && !verified ? 'Not found in your account — treat as NOT launched.' : verifyAttempted ? undefined : 'Could not independently verify (verification unavailable).' });
+    }
+
+    const structureOk = campaignCreated && adGroupCreated && rsaCreated;
+    const ok = structureOk && (verifyAttempted ? verified : true);
     const link = campaign.resource && customerId ? `https://ads.google.com/aw/campaigns?ocid=&campaignId=${(campaign.resource.match(/campaigns\/(\d+)/) || [])[1] ?? ''}` : undefined;
-    return { ok, live: true, campaignResource: campaign.resource, link, steps, note: ok ? `Campaign created ${spec.status}. Review it in Google Ads before enabling.` : 'Some steps failed — see the per-step errors. Nothing partial charges until the campaign is enabled.' };
+    const note = !campaignCreated
+      ? 'The campaign was NOT created in Google Ads — see the per-step errors. Nothing was charged.'
+      : verifyAttempted && !verified
+        ? 'Miles could not find this campaign in your Google Ads account afterward — treat it as NOT launched. See the per-step errors.'
+        : !structureOk
+          ? 'A campaign shell was created but the ad groups/ads did not — it would not serve. See the per-step errors.'
+          : `Verified: campaign created ${spec.status} in your Google Ads account${verifyAttempted ? '' : ' (structure confirmed; independent verification unavailable)'}. Review it before enabling.`;
+    return { ok, live: true, campaignResource: campaign.resource, link, steps, note };
   }
 
   // ── Meta (Facebook/Instagram) campaign launch — direct Graph API ────────────
