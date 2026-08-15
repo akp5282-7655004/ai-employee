@@ -478,8 +478,12 @@ export class PipedreamConnector implements Connector {
       const raw = res?.ret ?? res?.exports ?? res ?? null;
       const resource = extractResourceName(raw);
       // Keep ok:true (some writes, e.g. keywords, don't return a single resource),
-      // but when no resource comes back, capture the raw response so we can see why.
-      const detail = resource ? undefined : JSON.stringify(raw ?? null).slice(0, 400);
+      // but when no resource comes back, capture WHAT we sent + WHAT props the
+      // component exposes, so an empty {} response is diagnosable at a glance.
+      const sent = Object.keys(configured).filter((k) => k !== appName);
+      const detail = resource
+        ? undefined
+        : `sent[${sent.join(', ') || 'nothing but auth'}] · fields[${(props as any[]).map((p) => p?.name).filter(Boolean).join(', ')}] · resp ${JSON.stringify(raw ?? null).slice(0, 120)}`;
       return { ok: true, resource, detail };
     } catch (e) {
       return { ok: false, error: String((e as Error).message) };
