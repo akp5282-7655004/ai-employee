@@ -19,6 +19,7 @@ import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, a
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
 import { buildGrowthPlan } from './agents/growth.js';
+import { buildPlaybook } from './agents/playbook.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { catalogForClient, findPlay } from './skills/catalog.js';
 import {
@@ -849,6 +850,19 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     return { hub: data.hub ?? { campaigns: [] } };
+  });
+
+  // Campaign Playbook — an expert paid-social build (unit economics → engineered
+  // offer → segmented architecture → creative battery → instant form → cadence).
+  app.post<{ Body: { offer?: string; ticket?: number; financing?: boolean; zips?: string[]; channel?: 'meta' | 'google' } }>('/api/playbook', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const ctx = { business: p.businessName, trade: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), services: p.services, targetCpa: Number(p.targetCpa) || null };
+    const zips = Array.isArray(req.body?.zips) ? req.body!.zips! : ((req.body?.zips as unknown as string) || (p.serviceAreas || '')).toString().match(/\b\d{5}\b/g) || [];
+    const playbook = buildPlaybook({ offer: req.body?.offer || p.currentOffers, ticket: Number(req.body?.ticket) || undefined, financing: !!req.body?.financing, zips, channel: req.body?.channel }, ctx);
+    return { ok: true, playbook };
   });
 
   // ── Growth Autopilot — analyze campaigns (ROI/ROAS vs target) and propose

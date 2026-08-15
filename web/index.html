@@ -406,6 +406,7 @@
           <a data-page="editor"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> Editor</a>
           <a data-page="studio"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4 3.6L17 19l-5-3-5 3 1-6.4L4 9l5.8-.7Z"/></svg> Creative Studio</a>
           <a data-page="adstudio"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
+          <a data-page="playbook"><svg class="ico" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg> Campaign Playbook</a>
           <a data-page="launch"><svg class="ico" viewBox="0 0 24 24"><path d="M5 13a8 8 0 0 1 16 0"/><path d="M12 3v2M4 13H2M22 13h-2M12 13l4-4"/><circle cx="12" cy="13" r="1.6"/></svg> Launch a Campaign</a>
           <a data-page="adsmgr"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16"/></svg> Ads Manager</a>
           <a data-page="growth"><svg class="ico" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7h-5M21 7v5"/></svg> Growth Autopilot</a>
@@ -578,6 +579,11 @@
     <!-- MARKET MAP — rank service-area ZIPs by affluence / ability-to-spend -->
     <section class="page" id="page-affluence">
       <div id="affluence-body" style="max-width:1000px"></div>
+    </section>
+
+    <!-- CAMPAIGN PLAYBOOK — expert paid-social strategic build -->
+    <section class="page" id="page-playbook">
+      <div id="playbook-body" style="max-width:900px"></div>
     </section>
 
     <!-- LAUNCH A CAMPAIGN (build → review every setting → approve & go live) -->
@@ -1169,7 +1175,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',launch:'Launch a Campaign',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1190,6 +1196,7 @@ function setPage(id){
   $('#page-weather').classList.toggle('on',id==='weather');
   $('#page-adstudio').classList.toggle('on',id==='adstudio');
   $('#page-launch').classList.toggle('on',id==='launch');
+  $('#page-playbook').classList.toggle('on',id==='playbook');
   $('#page-affluence').classList.toggle('on',id==='affluence');
   $('#page-adsmgr').classList.toggle('on',id==='adsmgr');
   $('#page-growth').classList.toggle('on',id==='growth');
@@ -1222,6 +1229,7 @@ function setPage(id){
   if(id==='weather') openWeather();
   if(id==='adstudio') openAdStudio();
   if(id==='launch') openLaunch();
+  if(id==='playbook') openPlaybook();
   if(id==='affluence') openAffluence();
   if(id==='adsmgr') openAdsManager();
   if(id==='growth') openGrowth();
@@ -2165,6 +2173,55 @@ async function doLaunch(){
   if(r.link){ const a=el('a',null,'View in Google Ads ↗'); a.href=r.link; a.target='_blank'; a.style.cssText='display:inline-block;margin-top:12px;color:var(--accent)'; c.append(a); }
   const again=el('button',null,'Build another →'); again.style.cssText='display:block;margin-top:14px;background:none;border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer'; again.onclick=openLaunch; c.append(again);
   box.append(c);
+}
+
+// ── Campaign Playbook — expert paid-social strategic build ──
+function openPlaybook(){
+  const box=$('#playbook-body'); if(!box) return; box.innerHTML='';
+  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">📋 Campaign Playbook</h3><p class="mdesc" style="margin:6px 0 0;max-width:640px">Miles builds a complete, expert paid-social plan the way a veteran media buyer would — unit economics first, an <b>engineered</b> offer (not a naked discount), segmented ad sets, a creative battery, the instant form, and a weekly scorecard. Tuned to your trade.</p>';
+  box.append(h);
+  const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','TELL MILES THE BASICS'));
+  const mk=(label,ph,val,type)=>{ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.placeholder=ph||''; if(val!=null)i.value=val; if(type)i.type=type; i.style.width='100%'; w.append(i); return {w,i}; };
+  const offer=mk('Your offer','e.g. $500 off a new roof');
+  const ticket=mk('Average job value (USD)','e.g. 14000','','number');
+  const chanW=el('div'); chanW.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; chanW.append(el('div','appsub','Channel')); const chan=el('select','f'); chan.style.width='100%'; [['meta','Meta (Facebook / Instagram)'],['google','Google Ads']].forEach(([v,l])=>{const o=el('option',null,l);o.value=v;chan.append(o);}); chanW.append(chan);
+  const finW=el('div'); finW.style.cssText='display:flex;align-items:center;gap:8px;margin:12px 0'; const fin=el('input'); fin.type='checkbox'; fin.id='pb-fin'; finW.append(fin, el('label','appsub','We offer financing (Service Finance / GreenSky / Hearth)'));
+  f.append(offer.w,ticket.w,chanW,finW);
+  const btn=el('button','go','Build my playbook →');
+  btn.onclick=async()=>{ btn.disabled=true; btn.textContent='Building…'; try{ const r=await(await fetch('/api/playbook',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({offer:offer.i.value,ticket:Number(ticket.i.value)||undefined,financing:fin.checked,channel:chan.value})})).json(); renderPlaybook(r.playbook); }catch(e){ toast('Could not build — try again.'); btn.disabled=false; btn.textContent='Build my playbook →'; } };
+  f.append(btn); box.append(f);
+}
+function renderPlaybook(pb){
+  const box=$('#playbook-body'); if(!box||!pb) return; box.innerHTML='';
+  const back=el('button',null,'← Start over'); back.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-bottom:8px'; back.onclick=openPlaybook; box.append(back);
+  const money=(n)=>'$'+Number(n||0).toLocaleString();
+  const sect=(title)=>{ const c=el('div','mcard'); c.style.marginTop='14px'; c.append(el('div','sect-label',title)); return c; };
+  box.append((()=>{ const c=el('div','mcard'); c.innerHTML='<h3 style="margin:0">'+esc(pb.headline)+'</h3><p class="mdesc" style="margin:4px 0 0">Channel: '+(pb.channel==='meta'?'Meta':'Google Ads')+' · trade: '+esc(pb.trade)+'. Everything below is ready to run — I can pre-fill the campaign builder from it.</p>'; return c; })());
+  // Economics
+  const e=pb.economics; const ec=sect('THE MATH THAT SETS YOUR BUDGET');
+  const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin:6px 0';
+  g.append(statCard('Avg ticket',money(e.ticket)), statCard('Gross profit/job',money(e.grossProfit)), statCard('Max CAC',money(e.allowableCac)), statCard('Leads / sold job',e.funnel.leadsPerSold), statCard('Target CPL',money(e.targetCplLow)+'–'+money(e.targetCplHigh)));
+  ec.append(g);
+  ec.append(el('div','appsub','Funnel (with speed-to-lead): '+e.funnel.contactRatePct+'% contacted → '+e.funnel.apptRatePct+'% booked → '+e.funnel.showRatePct+'% sat → '+e.funnel.closeRatePct+'% closed. Test budget '+money(e.testBudgetDaily)+'/day (~'+money(e.monthlyTest)+'/mo), scale to '+money(e.scaleBudgetDaily)+'/day once CPL is stable.'));
+  box.append(ec);
+  // Offer
+  const o=pb.offer; const oc=sect('THE ENGINEERED OFFER'); const off=el('div');
+  off.innerHTML='<b>'+esc(o.engineered)+'</b><div class="mdesc" style="margin:4px 0 8px"><b>Reason-why:</b> '+esc(o.reasonWhy)+'</div><div class="mdesc" style="margin:0 0 4px"><b>Stack:</b> '+o.stack.map(esc).join(' ')+'</div>'+(o.financing?'<div class="mdesc" style="margin:0 0 4px"><b>Financing:</b> '+esc(o.financing)+'</div>':'')+'<div class="mdesc"><b>Risk reversal:</b> '+o.riskReversal.map(esc).join(' · ')+'</div>';
+  oc.append(off); box.append(oc);
+  // Architecture
+  const ac=sect('CAMPAIGN ARCHITECTURE'); const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;margin-top:6px';
+  const adCard=(a,tag)=>{ const c=el('div','mcard'); c.style.cssText='padding:14px'; c.innerHTML='<div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:13.5px">'+esc(a.name)+'</b><span class="apill">'+tag+'</span></div><div class="mdesc" style="margin:4px 0 0">'+esc(a.who)+'</div><div class="appsub" style="margin:6px 0 0">📍 '+esc(a.geo)+'</div><div style="font-size:15px;font-weight:800;margin:8px 0 2px">'+money(a.dailyBudget)+'<span class="appsub" style="font-weight:400">/day</span></div><div class="mdesc" style="margin:6px 0 0"><b>Creative:</b><br>'+a.creative.map(x=>'• '+esc(x)).join('<br>')+'</div>'; return c; };
+  pb.architecture.prospecting.forEach(a=>grid.append(adCard(a,'PROSPECT'))); grid.append(adCard(pb.architecture.retargeting,'RETARGET'));
+  ac.append(grid); box.append(ac);
+  // Instant form
+  const fc=sect('THE INSTANT FORM (where lead quality is won)'); const fm=el('div'); fm.innerHTML='<div class="mdesc" style="margin:0 0 8px"><b>Intro:</b> '+esc(pb.instantForm.intro)+'</div><div class="mdesc"><b>Qualifying questions:</b><br>'+pb.instantForm.questions.map((q,i)=>(i+1)+'. '+esc(q)).join('<br>')+'</div><div class="mdesc" style="margin:8px 0 0"><b>Completion:</b> '+esc(pb.instantForm.completion)+'</div>'; fc.append(fm); box.append(fc);
+  // Cadence
+  const cc=sect('LAUNCH & OPTIMIZATION'); const cad=el('div');
+  cad.innerHTML='<div class="mdesc" style="margin:0 0 8px"><b>Launch checklist:</b><br>'+pb.cadence.launchChecklist.map(x=>'☐ '+esc(x)).join('<br>')+'</div><div class="mdesc" style="margin:0 0 8px"><b>Optimization:</b><br>'+pb.cadence.optimizeTriggers.map(x=>'• '+esc(x)).join('<br>')+'</div><div class="mdesc"><b>Weekly scorecard:</b> '+pb.cadence.scorecard.map(esc).join(' · ')+'</div><div class="mdesc" style="margin:6px 0 0"><b>Targets:</b> '+pb.cadence.targets.map(esc).join(' · ')+'</div>'; cc.append(cad); box.append(cc);
+  // Surround + notes
+  const sc=sect('AROUND THE CAMPAIGN'); sc.append(el('div','mdesc',pb.surround.map(x=>'• '+x).join('\n'))); const notesEl=el('div','mdesc'); notesEl.style.marginTop='8px'; notesEl.innerHTML='<b>What actually decides it:</b><br>'+pb.notes.map(x=>'• '+esc(x)).join('<br>'); sc.append(notesEl); box.append(sc);
+  // Launch handoff
+  const foot=el('div'); foot.style.marginTop='14px'; const lb=el('button','go','Launch a campaign from this →'); lb.onclick=()=>{ setPage('launch'); }; foot.append(lb); box.append(foot);
 }
 
 // ── Market Map — rank service-area ZIPs by affluence / ability-to-spend ──
