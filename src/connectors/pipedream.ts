@@ -467,11 +467,18 @@ export class PipedreamConnector implements Connector {
       const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
       const configured: Record<string, unknown> = { [appName]: { authProvisionId: authId }, ...direct };
       const used = new Set<string>(Object.keys(configured));
-      // Map each semantic value onto the first matching, unused prop.
+      // Map each semantic value onto a prop by trying its keywords in PRIORITY
+      // order — the first (most specific) keyword that matches any unused prop
+      // wins. (Matching "any keyword" let a loose word like "budget" grab
+      // campaignBudgetId instead of amountMicros.)
       for (const [, keywords] of Object.entries(values)) {
         const val = keywords[0];
         const kws = keywords.slice(1);
-        const hit = props.find((p: any) => p && p.type !== 'app' && p.name && !used.has(p.name) && kws.some((kw) => `${p.label ?? ''} ${p.name}`.toLowerCase().includes(kw)));
+        let hit: any;
+        for (const kw of kws) {
+          hit = props.find((p: any) => p && p.type !== 'app' && p.name && !used.has(p.name) && `${p.label ?? ''} ${p.name}`.toLowerCase().includes(kw));
+          if (hit) break;
+        }
         if (hit) { configured[hit.name] = val; used.add(hit.name); }
       }
       const res = await pd.actions.run({ externalUserId, id: key, configuredProps: configured });
@@ -505,21 +512,27 @@ export class PipedreamConnector implements Connector {
     if (target?.login) acctVals.loginAccount = [target.login, 'use google ads as', 'use google ads', 'accountid'];
     if (target?.client) acctVals.managedAccount = [target.client, 'managed account', 'customer client', 'customerclient'];
 
+    const op = ['CREATE', 'operationtype', 'operation type', 'operation'];
     // 1) Budget — Google Ads amounts are in micros ($1 = 1_000_000).
     const micros = String(Math.round(spec.dailyBudget * 1_000_000));
     const budget = await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign-budget', account.id, {
       ...acctVals,
+      operationType: op,
       name: [`${spec.name} Budget`, 'name'],
-      amount: [micros, 'amount', 'micros', 'budget'],
+      amount: [micros, 'amountmicros', 'amount micros', 'micros', 'amount'], // NOT "budget" — that grabs campaignBudgetId
+      delivery: ['STANDARD', 'deliverymethod', 'delivery method'],
     });
     steps.push({ step: `Create daily budget ($${spec.dailyBudget})`, ok: budget.ok && !!budget.resource, resource: budget.resource, error: budget.error || (!budget.resource ? `no budget resource returned — Google said: ${budget.detail ?? '(empty)'}` : undefined) });
 
-    // 2) Campaign — attach budget, set status (PAUSED unless owner chose ENABLED).
+    // 2) Campaign — REQUIRES advertisingChannelType (SEARCH); attach budget + bidding.
     const campaign = await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign', account.id, {
       ...acctVals,
+      operationType: op,
       name: [spec.name, 'campaign name', 'name'],
+      channelType: ['SEARCH', 'advertisingchanneltype', 'channel type', 'channel'],
+      biddingType: [spec.biddingStrategy, 'biddingstrategytype', 'bidding strategy type', 'bidding strategy'],
       status: [spec.status, 'status'],
-      ...(budget.resource ? { budget: [budget.resource, 'budget', 'campaign budget'] } : {}),
+      ...(budget.resource ? { campaignBudget: [budget.resource, 'campaignbudget', 'campaign budget'] } : {}),
     });
     steps.push({ step: `Create campaign "${spec.name}" (${spec.status})`, ok: campaign.ok && !!campaign.resource, resource: campaign.resource, error: campaign.error || (!campaign.resource ? `no campaign resource returned — Google said: ${campaign.detail ?? '(empty)'}` : undefined) });
 
@@ -528,18 +541,21 @@ export class PipedreamConnector implements Connector {
       for (const g of spec.adGroups) {
         const ag = await this.writeComponent(externalUserId, 'google_ads-create-or-update-ad-group', account.id, {
           ...acctVals,
+          operationType: op,
           name: [g.name, 'ad group name', 'name'],
           campaign: [campaign.resource, 'campaign'],
         });
-        steps.push({ step: `Create ad group "${g.name}"`, ok: ag.ok, resource: ag.resource, error: ag.error });
+        steps.push({ step: `Create ad group "${g.name}"`, ok: ag.ok && !!ag.resource, resource: ag.resource, error: ag.error || (!ag.resource ? `no ad group resource — Google said: ${ag.detail ?? '(empty)'}` : undefined) });
         if (!ag.resource) continue;
         const kw = await this.writeComponent(externalUserId, 'google_ads-create-or-update-keywords', account.id, {
           ...acctVals,
+          operationType: op,
           adGroup: [ag.resource, 'ad group', 'adgroup'],
         }, { keywords: g.keywords.map((k) => ({ text: k.text, matchType: k.match.toUpperCase() })) });
         steps.push({ step: `Add ${g.keywords.length} keywords to "${g.name}"`, ok: kw.ok, error: kw.error });
         const rsa = await this.writeComponent(externalUserId, 'google_ads-create-responsive-search-ad', account.id, {
           ...acctVals,
+          operationType: op,
           adGroup: [ag.resource, 'ad group', 'adgroup'],
           url: [spec.finalUrl, 'final url', 'url', 'landing'],
         }, { headlines: g.rsa.headlines, descriptions: g.rsa.descriptions });
