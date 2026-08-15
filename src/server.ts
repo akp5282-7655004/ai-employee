@@ -20,6 +20,7 @@ import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt,
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
+import { emptyReviewState, reviewAskText, parseRating, routeRating, promoterText, detractorText, recoveryTask, type ReviewRequestState } from './agents/reviewrequest.js';
 import { buildGrowthPlan } from './agents/growth.js';
 import { buildPlaybook } from './agents/playbook.js';
 import { generateText, textLlmReady } from './llm/text.js';
@@ -2387,6 +2388,107 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     appendRun(data, agent, { title: `Speed-to-Lead: ${event === 'missed_call' ? 'missed-call text-back' : 'answered new lead'}${name ? ' — ' + name : ''}`, body: (sent ? 'Sent via GoHighLevel:\n' : 'Drafted (connect GoHighLevel to auto-send):\n') + sms });
     await authStore.setUserData(uid, data);
     return { ok: true, sent, event, held: !sent, message: sms };
+  });
+
+  // ── Post-Job Review Request (recipe #14) — config + status ───────────────────
+  app.get('/api/review-request', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const rs = (data.reviewRequest as ReviewRequestState) ?? emptyReviewState();
+    // Reuse the workspace's inbound webhook secret (shared with Speed-to-Lead).
+    const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
+    if (!stl.webhookSecret) { stl.webhookSecret = newToken().slice(0, 24); data.speedToLead = stl; await authStore.setUserData(u.id, data); }
+    let canSend = false;
+    try { canSend = new Set((await connector.listAccounts(u.id)).map((a) => a.app)).has('gohighlevel'); } catch { /* none */ }
+    const hook = `${baseUrl(req)}/api/hooks/job/${u.id}.${stl.webhookSecret}`;
+    return {
+      enabled: !!rs.enabled,
+      googleReviewUrl: rs.googleReviewUrl ?? '',
+      canSend,
+      recent: rs.log.slice(0, 10),
+      pending: rs.pending.length,
+      webhook: { jobComplete: `${hook}?event=job_complete`, reply: `${hook}?event=reply` },
+    };
+  });
+  app.post<{ Body: { enabled?: boolean; googleReviewUrl?: string } }>('/api/review-request', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const rs = (data.reviewRequest as ReviewRequestState) ?? emptyReviewState();
+    if (typeof req.body?.enabled === 'boolean') rs.enabled = req.body.enabled;
+    if (typeof req.body?.googleReviewUrl === 'string') rs.googleReviewUrl = req.body.googleReviewUrl.trim();
+    data.reviewRequest = rs;
+    await authStore.setUserData(u.id, data);
+    return { ok: true, enabled: rs.enabled, googleReviewUrl: rs.googleReviewUrl ?? '' };
+  });
+
+  // Inbound job-complete / reply webhook — the review-request event trigger.
+  // job_complete → send the 1–10 ask. reply → parse the score and route: 9–10 to
+  // the Google link, 1–8 to a private service-recovery task (never a public link).
+  app.post<{ Params: { token?: string }; Querystring: { event?: string }; Body: Record<string, unknown> }>('/api/hooks/job/:token', async (req, reply) => {
+    const raw = req.params?.token ?? '';
+    const dot = raw.indexOf('.');
+    if (dot < 1) return reply.code(400).send({ error: 'bad token' });
+    const uid = raw.slice(0, dot);
+    const secret = raw.slice(dot + 1);
+    const user = await authStore.getUserById(uid);
+    if (!user) return reply.code(404).send({ error: 'not found' });
+    const data = await authStore.getUserData(uid);
+    const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
+    if (!stl.webhookSecret || stl.webhookSecret !== secret) return reply.code(401).send({ error: 'bad token' });
+    const rs = (data.reviewRequest as ReviewRequestState) ?? emptyReviewState();
+    if (!rs.enabled) return { ok: true, sent: false, reason: 'Review requests are off — turn them on to send.' };
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const ctx = { business: p.businessName, trade: p.industry };
+    const b = (req.body ?? {}) as Record<string, any>;
+    const event = (req.query?.event || b.event || 'job_complete') === 'reply' ? 'reply' : 'job_complete';
+    const name = String(b.name || b.full_name || b.contact_name || b.first_name || '').trim();
+    const phone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
+    const nowISO = new Date().toISOString();
+    let canSend = false;
+    try { canSend = new Set((await connector.listAccounts(uid)).map((a) => a.app)).has('gohighlevel') && !!connector.runAppTask; } catch { /* none */ }
+    const send = async (message: string, verb: string): Promise<boolean> => {
+      if (!canSend || !phone) return false;
+      try { const r = await connector.runAppTask!({ externalUserId: uid, app: 'gohighlevel', query: verb, params: { message, name, phone } }); return !!r?.ok; } catch { return false; }
+    };
+
+    if (event === 'job_complete') {
+      const msg = reviewAskText(ctx);
+      const sent = await send(msg, 'Send review request SMS');
+      rs.pending = [{ phone, name, at: nowISO }, ...rs.pending.filter((x) => x.phone !== phone)].slice(0, 500);
+      rs.log = [{ name: name || 'Customer', phone, outcome: 'asked' as const, at: nowISO }, ...rs.log].slice(0, 200);
+      data.reviewRequest = rs;
+      bumpMeter(data, 'agent_run');
+      appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `Review request sent${name ? ' — ' + name : ''}`, body: (sent ? 'Sent via GoHighLevel:\n' : 'Drafted (connect GoHighLevel to auto-send):\n') + msg });
+      await authStore.setUserData(uid, data);
+      return { ok: true, sent, event, message: msg };
+    }
+
+    // event === 'reply' — grade the score and route.
+    const rating = parseRating(String(b.message || b.text || b.body || ''));
+    if (rating == null) return { ok: true, sent: false, reason: 'No 1–10 rating found in the reply.' };
+    const route = routeRating(rating);
+    const pend = rs.pending.find((x) => x.phone === phone);
+    rs.pending = rs.pending.filter((x) => x.phone !== phone);
+    let sent = false;
+    if (route === 'promoter') {
+      const msg = promoterText(ctx, rs.googleReviewUrl);
+      sent = await send(msg, 'Send Google review link SMS');
+      rs.log = [{ name: pend?.name || name || 'Customer', phone, rating, outcome: 'promoter' as const, at: nowISO }, ...rs.log].slice(0, 200);
+      appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `⭐ Promoter (${rating}/10) — sent Google link${name ? ' — ' + name : ''}`, body: msg });
+    } else {
+      const msg = detractorText(ctx);
+      sent = await send(msg, 'Send service-recovery SMS');
+      // Private recovery task for the team — never the public review link.
+      if (canSend) { try { await connector.runAppTask!({ externalUserId: uid, app: 'gohighlevel', query: 'Create task', params: { title: recoveryTask(pend?.name || name, rating), name, phone } }); } catch { /* best effort */ } }
+      rs.log = [{ name: pend?.name || name || 'Customer', phone, rating, outcome: 'detractor' as const, at: nowISO }, ...rs.log].slice(0, 200);
+      appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `⚠︎ Detractor (${rating}/10) — routed to recovery, no public link${name ? ' — ' + name : ''}`, body: msg });
+    }
+    bumpMeter(data, 'agent_run');
+    data.reviewRequest = rs;
+    await authStore.setUserData(uid, data);
+    return { ok: true, sent, event, rating, route };
   });
   app.post('/api/speed-to-lead/run', async (req, reply) => {
     const u = await requireUser(req, reply);

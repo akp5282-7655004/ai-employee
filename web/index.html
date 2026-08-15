@@ -2012,6 +2012,7 @@ function renderOverview(d){
   g.append(statCard('Pending approvals',k.pendingApprovals||0), statCard('Changes live',k.liveChanges||0), statCard('Agents deployed',k.agentsDeployed||0), statCard('Agent runs · '+mktRangeLabel(d.range),k.agentRuns||0), statCard('Scheduled posts',k.scheduledPosts||0), statCard('Credits used',(k.creditsUsed||0).toLocaleString()), statCard('Weather triggers',k.weatherTriggers||0));
   box.append(g);
   box.append(stlCard(d.speedToLead||{}));
+  box.append(reviewCard());
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px';
   const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<h3 style="margin:0 0 10px">📈 Marketing performance</h3>';
   if(mk.hasData){ const ss=el('div','stats'); ss.append(statCard('Ad spend','$'+(mk.spend||0).toLocaleString()), statCard('Cost / job', mk.cpa!=null?('$'+mk.cpa):'—'), statCard('Revenue','$'+(mk.revenue||0).toLocaleString())); mc.append(ss); mc.append(el('div','appsub','Showing '+mktRangeLabel(mk.range)+(mk.targetCpa&&mk.cpa!=null?' · target $'+mk.targetCpa+'/job · '+(mk.cpa<=mk.targetCpa?'✅ under target':'⚠︎ over target'):''))); }
@@ -2039,6 +2040,43 @@ function renderOverview(d){
   else ra.append(ovNudge('Nothing yet. Put Miles to work from “What Miles Does”.'));
   grid2.append(ra);
   box.append(grid2);
+}
+// Post-Job Review Request card — fires the 1–10 ask on job completion; 9–10 → Google,
+// 1–8 → private service recovery (never a public link).
+function reviewCard(){
+  const card=el('div','mcard'); card.style.cssText='margin:16px 0'; card.innerHTML='<p class="appsub">Loading…</p>';
+  (async()=>{
+    let d={}; if(REMOTE){ try{ d=await(await fetch('/api/review-request')).json(); }catch(e){} }
+    const on=!!d.enabled; card.innerHTML=''; card.style.border='1px solid '+(on?'var(--brand)':'var(--line)');
+    const topb=el('div'); topb.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
+    const left=el('div'); left.innerHTML='<h3 style="margin:0">⭐ Review Requests <span class="appsub" style="font-weight:700;color:'+(on?'var(--brand)':'var(--faint)')+'">· '+(on?'On':'Off')+'</span></h3><p class="mdesc" style="margin:4px 0 0;max-width:640px">When a job is marked complete, Miles texts a 1-10 ask. <b>9-10</b> get your Google review link; <b>1-8</b> route to a private service-recovery call — never the public link.</p>';
+    const acts=el('div'); acts.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+    const trig=el('button','ghost','⭐ Instant triggers'); trig.onclick=openReviewTriggers;
+    const toggle=el('button','go',on?'Turn off':'Turn on'); toggle.onclick=async()=>{ toggle.disabled=true; try{ await fetch('/api/review-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({enabled:!on})}); }catch(e){} openOverview(); };
+    acts.append(trig,toggle); topb.append(left,acts); card.append(topb);
+    if(on){
+      const recent=d.recent||[]; const proms=recent.filter(r=>r.outcome==='promoter').length; const dets=recent.filter(r=>r.outcome==='detractor').length;
+      const ss=el('div','stats'); ss.style.marginTop='12px'; ss.append(statCard('Asked',recent.filter(r=>r.outcome==='asked').length), statCard('Promoters (9-10)',proms), statCard('Recovered (1-8)',dets)); card.append(ss);
+      if(!d.googleReviewUrl) card.append(ovNudge('Add your Google review link in ⭐ Instant triggers so promoters can leave a review in one tap.'));
+    } else {
+      card.append(ovNudge('Turn it on and every completed job becomes a shot at a 5-star review — with unhappy customers caught privately first.'));
+    }
+  })();
+  return card;
+}
+async function openReviewTriggers(){
+  let d={}; if(REMOTE){ try{ d=await(await fetch('/api/review-request')).json(); }catch(e){} }
+  const wh=d.webhook||{jobComplete:'(connect on the live app)',reply:'(connect on the live app)'};
+  const urlRow=(label,url)=>'<div style="margin-top:10px"><div class="appsub" style="margin-bottom:4px">'+label+'</div><div style="display:flex;gap:6px"><input class="f" style="margin:0;flex:1;font-family:ui-monospace,monospace;font-size:12px" readonly value="'+esc(url)+'" onclick="this.select()"><button class="go" data-cp="'+esc(url)+'" style="flex:none">Copy</button></div></div>';
+  showModal('<h3 style="margin:0 0 6px">⭐ Review requests, on autopilot</h3>'
+    +'<p class="mdesc" style="margin:0 0 12px;max-width:560px">In GoHighLevel: when a job is marked complete (or invoice paid) → <b>Webhook</b> to the first URL. Then add a "Customer replied" trigger → <b>Webhook</b> to the second URL so Miles can grade the score.</p>'
+    +(d.canSend?'':'<div class="verdict tight" style="margin-bottom:10px">Connect GoHighLevel in Integrations so the texts actually send.</div>')
+    +'<div class="appsub" style="margin-bottom:4px">Your Google review link</div><input class="f" id="rr-url" style="width:100%;margin:0" placeholder="https://g.page/r/…/review" value="'+esc(d.googleReviewUrl||'')+'">'
+    +urlRow('Job complete →',wh.jobComplete)
+    +urlRow('Customer replied →',wh.reply)
+    +'<button class="go" id="rr-done" style="width:100%;margin-top:14px">Save &amp; close</button>');
+  document.querySelectorAll('[data-cp]').forEach(b=>b.onclick=()=>{ try{navigator.clipboard.writeText(b.getAttribute('data-cp'));}catch(e){} toast('Webhook URL copied'); });
+  const done=$('#rr-done'); if(done) done.onclick=async()=>{ const url=($('#rr-url').value||'').trim(); try{ await fetch('/api/review-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({googleReviewUrl:url})}); }catch(e){} closeModal(); toast('Saved'); openOverview(); };
 }
 // Instant-trigger setup: the per-user webhook URLs GHL fires the moment a lead
 // comes in or a call is missed, so the text-back sends in seconds (not on a poll).
