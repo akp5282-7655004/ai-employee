@@ -207,6 +207,8 @@ export interface Connector {
    *  IDs, Google customer IDs, Meta ad-account + Page name/logo) so the owner can
    *  see exactly what's wired up — not just that "something" is connected. */
   describeConnections?(externalUserId: string): Promise<ConnectionDetail[]>;
+  /** Disconnect (delete) one connected account by its id. */
+  disconnectAccount?(externalUserId: string, accountId: string): Promise<{ ok: boolean; note?: string }>;
   /** Upload won jobs back to Google Ads as offline conversions, so Smart Bidding
    *  optimizes toward leads that become paying customers — not just clicks. */
   uploadOfflineConversions?(externalUserId: string, items: ConversionItem[]): Promise<ConversionUploadResult>;

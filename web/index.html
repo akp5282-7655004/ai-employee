@@ -4687,7 +4687,17 @@ function connDetailCard(d){
     if(d.rows&&d.rows.length){ const t=el('div'); t.style.cssText='margin-top:8px;display:flex;flex-direction:column;gap:4px'; for(const r of d.rows){ const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;gap:10px;font-size:13px'; row.append(el('span','appsub',r.k)); const v=el('span',null,r.v); v.style.cssText='font-weight:600;text-align:right;font-family:ui-monospace,monospace'; row.append(v); t.append(row); } c.append(t); }
   }
   if(d.note){ const n=el('div','appsub',d.note); n.style.marginTop='8px'; c.append(n); }
+  // Disconnect — only for real Pipedream-connected accounts (Meta is env-based).
+  if(d.connected && d.accountId && d.app!=='meta_ads' && String(d.accountId).indexOf('act_')!==0){
+    const dc=el('button','idel','Disconnect'); dc.style.marginTop='10px'; dc.onclick=()=>confirmDisconnect(d);
+    c.append(dc);
+  }
   return c;
+}
+function confirmDisconnect(d){
+  showModal('<h3 style="margin:0 0 10px">Disconnect '+esc(d.label)+'?</h3><p class="mdesc" style="margin:0 0 14px">Miles will stop reading from and sending through <b>'+esc(d.accountName||d.label)+'</b>. Any automations that use it will hold until you reconnect. You can reconnect anytime from Integrations.</p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="adsave" id="dc-cancel">Cancel</button><button class="go" id="dc-go" style="flex:none">Disconnect</button></div>');
+  $('#dc-cancel').onclick=closeModal;
+  $('#dc-go').onclick=async()=>{ const b=$('#dc-go'); b.disabled=true; b.textContent='Disconnecting…'; try{ const r=await(await fetch('/api/connections/disconnect',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({accountId:d.accountId})})).json(); if(r.ok){ toast(d.label+' disconnected'); closeModal(); loadIntegrations(); } else { toast(r.error||'Could not disconnect'); b.disabled=false; b.textContent='Disconnect'; } }catch(e){ toast('Could not disconnect'); b.disabled=false; b.textContent='Disconnect'; } };
 }
 function renderInts(){
   const configured = !!(CONN.hub && CONN.hub.ready);

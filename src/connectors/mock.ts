@@ -84,6 +84,17 @@ export class MockConnector implements Connector {
     return account;
   }
 
+  async disconnectAccount(externalUserId: string, accountId: string): Promise<{ ok: boolean; note?: string }> {
+    for (const key of [externalUserId, '*']) {
+      const list = this.accounts.get(key);
+      if (list && list.some((a) => a.id === accountId)) {
+        this.accounts.set(key, list.filter((a) => a.id !== accountId));
+        return { ok: true };
+      }
+    }
+    return { ok: false, note: 'Account not found.' };
+  }
+
   async createConnectToken(externalUserId: string): Promise<ConnectTokenResult> {
     const token = `mocktok_${externalUserId}_${++this.seq}`;
     return {
@@ -134,14 +145,15 @@ export class MockConnector implements Connector {
   }
 
   async describeConnections(externalUserId: string): Promise<import('./types.js').ConnectionDetail[]> {
-    const LABEL: Record<string, string> = { google_ads: 'Google Ads', google_my_business: 'Google Business Profile', gohighlevel: 'GoHighLevel', facebook_pages: 'Facebook Page' };
-    const apps = [...new Set(this.acc(externalUserId).map((a) => a.app))];
-    const details: import('./types.js').ConnectionDetail[] = apps.map((app) => ({
+    const LABEL: Record<string, string> = { google_ads: 'Google Ads', google_my_business: 'Google Business Profile', gohighlevel: 'GoHighLevel', highlevel_oauth: 'GoHighLevel', highlevel: 'GoHighLevel', leadconnector: 'GoHighLevel', facebook_pages: 'Facebook Page', google_analytics: 'Google Analytics' };
+    const seen = new Map<string, string>();
+    for (const a of this.acc(externalUserId)) if (!seen.has(a.app)) seen.set(a.app, a.id);
+    const details: import('./types.js').ConnectionDetail[] = [...seen.entries()].map(([app, id]) => ({
       app,
       label: LABEL[app] ?? app,
       connected: true,
       accountName: app === 'google_ads' ? 'demo@yourbusiness.com' : 'Demo account',
-      accountId: app === 'google_ads' ? '123-456-7890' : 'demo',
+      accountId: id,
       rows: app === 'google_ads' ? [{ k: 'Ad account (customer) ID', v: '123-456-7890' }] : [],
       note: 'Demo connector — on Render with real accounts connected, this shows your actual account names & IDs.',
     }));

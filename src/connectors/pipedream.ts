@@ -671,8 +671,30 @@ export class PipedreamConnector implements Connector {
     return out;
   }
 
+  async disconnectAccount(externalUserId: string, accountId: string): Promise<{ ok: boolean; note?: string }> {
+    if (!accountId) return { ok: false, note: 'No account id.' };
+    let pd: any;
+    try { pd = await this.backend(); } catch (err) { return { ok: false, note: String((err as Error).message) }; }
+    // Only delete an account that actually belongs to this user.
+    try {
+      const mine = (await this.listAccounts(externalUserId)).some((a) => a.id === accountId);
+      if (!mine) return { ok: false, note: 'That account is not connected to your workspace.' };
+    } catch { /* fall through and attempt */ }
+    // The v3 SDK exposes accounts.delete; tolerate a couple of shapes.
+    try {
+      if (typeof pd?.accounts?.delete === 'function') await pd.accounts.delete(accountId);
+      else if (typeof pd?.accounts?.delete === 'function') await pd.accounts.delete({ id: accountId });
+      else if (typeof pd?.deleteAccount === 'function') await pd.deleteAccount({ id: accountId });
+      else return { ok: false, note: 'This connector build cannot delete accounts.' };
+      this.gadsCache.delete(externalUserId);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, note: `Pipedream rejected the disconnect: ${String((err as Error).message)}` };
+    }
+  }
+
   async describeConnections(externalUserId: string): Promise<import('./types.js').ConnectionDetail[]> {
-    const LABEL: Record<string, string> = { google_ads: 'Google Ads', google_my_business: 'Google Business Profile', gohighlevel: 'GoHighLevel', facebook_pages: 'Facebook Page', facebook: 'Facebook', instagram: 'Instagram', google_lsa: 'Google Local Services' };
+    const LABEL: Record<string, string> = { google_ads: 'Google Ads', google_my_business: 'Google Business Profile', gohighlevel: 'GoHighLevel', highlevel_oauth: 'GoHighLevel', highlevel: 'GoHighLevel', leadconnector: 'GoHighLevel', facebook_pages: 'Facebook Page', facebook: 'Facebook', instagram: 'Instagram', google_analytics: 'Google Analytics', google_lsa: 'Google Local Services' };
     const details: import('./types.js').ConnectionDetail[] = [];
     let accts: import('./types.js').ConnectedAccount[] = [];
     try {

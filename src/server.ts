@@ -153,6 +153,25 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
 
   const authStore = deps.authStore ?? new MemoryStore();
 
+  // GoHighLevel ships under several Pipedream app slugs (gohighlevel, the OAuth
+  // variant highlevel_oauth, the LeadConnector white-label). Treat them as one CRM
+  // so a connection under any slug drives the automations. `ghlAppFor` returns the
+  // slug the user actually connected; `sendGhl` runs an action on it.
+  const GHL_SLUGS = ['gohighlevel', 'highlevel_oauth', 'highlevel', 'leadconnector', 'gohighlevel_lead_connector'];
+  const ghlSlugOf = (apps: Iterable<string>): string | undefined => {
+    const s = new Set(apps);
+    return GHL_SLUGS.find((x) => s.has(x));
+  };
+  const ghlAppFor = async (uid: string): Promise<string | undefined> => {
+    try { return ghlSlugOf((await connector.listAccounts(uid)).map((a) => a.app)); } catch { return undefined; }
+  };
+  const sendGhl = async (uid: string, phone: string, name: string, message: string, verb: string, extra?: Record<string, string>): Promise<boolean> => {
+    if (!phone || !connector.runAppTask) return false;
+    const app = await ghlAppFor(uid);
+    if (!app) return false;
+    try { const r = await connector.runAppTask({ externalUserId: uid, app, query: verb, params: { message, name, phone, ...(extra ?? {}) } }); return !!r?.ok; } catch { return false; }
+  };
+
   const readWeb = (name: string, fallback: string) => {
     try {
       const html = readFileSync(join(WEB_DIR, name), 'utf8');
@@ -960,8 +979,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const p = (data.profile ?? {}) as Record<string, string>;
-    let ghlConnected = false;
-    try { ghlConnected = (await connector.listAccounts(u.id)).some((a) => a.app === 'gohighlevel'); } catch { /* none */ }
+    const ghlConnected = !!(await ghlAppFor(u.id));
     return { ok: true, playbook: buildGhlPlaybook({ business: p.businessName, trade: p.industry }), ghlConnected };
   });
 
@@ -1570,6 +1588,18 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const cfg = loadConfig();
     const details = connector.describeConnections ? await connector.describeConnections(u.id) : [];
     return { connector: connector.name, hub: { ready: pipedreamReady(cfg), env: cfg.pipedream.environment }, details };
+  });
+
+  // Disconnect a connected account by id.
+  app.post<{ Body: { accountId?: string } }>('/api/connections/disconnect', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const accountId = (req.body?.accountId ?? '').trim();
+    if (!accountId) return reply.code(400).send({ error: 'accountId is required' });
+    if (!connector.disconnectAccount) return reply.code(400).send({ error: 'This connector cannot disconnect accounts.' });
+    const r = await connector.disconnectAccount(u.id, accountId);
+    if (!r.ok) return reply.code(400).send({ error: r.note || 'Could not disconnect.' });
+    return { ok: true };
   });
 
   // Closed-loop revenue attribution — ad spend correlated to CRM deals by UTM.
@@ -2273,7 +2303,8 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     } catch {
       /* nothing connected */
     }
-    const canSend = connectedApps.has('gohighlevel') && !!connector.runAppTask;
+    const ghlApp = ghlSlugOf(connectedApps);
+    const canSend = !!ghlApp && !!connector.runAppTask;
     const nowISO = new Date().toISOString();
     let state = st;
     const blocks: string[] = [];
@@ -2281,9 +2312,9 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const { system, user } = instantReplyAgent(lead, ctx);
       const reply = (await generateText({ system, user, maxTokens: 400 })) ?? fallbackInstantReply(lead, ctx);
       const channels: string[] = [];
-      if (canSend) {
+      if (canSend && lead.phone) {
         try {
-          const r = await connector.runAppTask!({ externalUserId: userId, app: 'gohighlevel', query: 'Send SMS to new lead', params: { message: smsFromReply(reply), name: lead.name ?? '', phone: lead.phone ?? '' } });
+          const r = await connector.runAppTask!({ externalUserId: userId, app: ghlApp!, query: 'Send SMS to new lead', params: { message: smsFromReply(reply), name: lead.name ?? '', phone: lead.phone ?? '' } });
           if (r?.ok) channels.push('sms');
         } catch {
           /* held — draft stays ready */
@@ -2306,12 +2337,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const data = await authStore.getUserData(u.id);
     const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     if (!st.webhookSecret) { st.webhookSecret = newToken().slice(0, 24); data.speedToLead = st; await authStore.setUserData(u.id, data); }
-    let canSend = false;
-    try {
-      canSend = new Set((await connector.listAccounts(u.id)).map((a) => a.app)).has('gohighlevel');
-    } catch {
-      /* none */
-    }
+    const canSend = !!(await ghlAppFor(u.id));
     const base = baseUrl(req);
     const hook = `${base}/api/hooks/lead/${u.id}.${st.webhookSecret}`;
     return {
@@ -2376,12 +2402,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     let sms: string;
     if (event === 'missed_call') sms = missedCallText(ctx, name);
     else { const { system, user } = instantReplyAgent(lead, ctx); sms = smsFromReply((await generateText({ system, user, maxTokens: 400 })) ?? fallbackInstantReply(lead, ctx)); }
-    let sent = false;
-    let canSend = false;
-    try { canSend = new Set((await connector.listAccounts(uid)).map((a) => a.app)).has('gohighlevel') && !!connector.runAppTask; } catch { /* none */ }
-    if (canSend && phone) {
-      try { const r = await connector.runAppTask!({ externalUserId: uid, app: 'gohighlevel', query: event === 'missed_call' ? 'Send missed-call text-back SMS' : 'Send SMS to new lead', params: { message: sms, name, phone } }); sent = !!r?.ok; } catch { /* held */ }
-    }
+    const sent = await sendGhl(uid, phone, name, sms, event === 'missed_call' ? 'Send missed-call text-back SMS' : 'Send SMS to new lead');
     const nowISO = new Date(nowMs).toISOString();
     data.speedToLead = recordContact(st, lead, nowISO, sent ? ['sms'] : [], !sent, responseSeconds(lead, nowISO));
     bumpMeter(data, 'agent_run');
@@ -2400,8 +2421,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     // Reuse the workspace's inbound webhook secret (shared with Speed-to-Lead).
     const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     if (!stl.webhookSecret) { stl.webhookSecret = newToken().slice(0, 24); data.speedToLead = stl; await authStore.setUserData(u.id, data); }
-    let canSend = false;
-    try { canSend = new Set((await connector.listAccounts(u.id)).map((a) => a.app)).has('gohighlevel'); } catch { /* none */ }
+    const canSend = !!(await ghlAppFor(u.id));
     const hook = `${baseUrl(req)}/api/hooks/job/${u.id}.${stl.webhookSecret}`;
     return {
       enabled: !!rs.enabled,
@@ -2447,12 +2467,9 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const name = String(b.name || b.full_name || b.contact_name || b.first_name || '').trim();
     const phone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
     const nowISO = new Date().toISOString();
-    let canSend = false;
-    try { canSend = new Set((await connector.listAccounts(uid)).map((a) => a.app)).has('gohighlevel') && !!connector.runAppTask; } catch { /* none */ }
-    const send = async (message: string, verb: string): Promise<boolean> => {
-      if (!canSend || !phone) return false;
-      try { const r = await connector.runAppTask!({ externalUserId: uid, app: 'gohighlevel', query: verb, params: { message, name, phone } }); return !!r?.ok; } catch { return false; }
-    };
+    const ghlApp = await ghlAppFor(uid);
+    const canSend = !!ghlApp && !!connector.runAppTask;
+    const send = (message: string, verb: string): Promise<boolean> => sendGhl(uid, phone, name, message, verb);
 
     if (event === 'job_complete') {
       const msg = reviewAskText(ctx);
@@ -2482,7 +2499,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const msg = detractorText(ctx);
       sent = await send(msg, 'Send service-recovery SMS');
       // Private recovery task for the team — never the public review link.
-      if (canSend) { try { await connector.runAppTask!({ externalUserId: uid, app: 'gohighlevel', query: 'Create task', params: { title: recoveryTask(pend?.name || name, rating), name, phone } }); } catch { /* best effort */ } }
+      if (canSend && ghlApp) { try { await connector.runAppTask!({ externalUserId: uid, app: ghlApp, query: 'Create task', params: { title: recoveryTask(pend?.name || name, rating), message: recoveryTask(pend?.name || name, rating), name, phone } }); } catch { /* best effort */ } }
       rs.log = [{ name: pend?.name || name || 'Customer', phone, rating, outcome: 'detractor' as const, at: nowISO }, ...rs.log].slice(0, 200);
       appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `⚠︎ Detractor (${rating}/10) — routed to recovery, no public link${name ? ' — ' + name : ''}`, body: msg });
     }
@@ -2500,8 +2517,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const au = (data.automations as AutomationsState) ?? emptyAutomationsState();
     const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     if (!stl.webhookSecret) { stl.webhookSecret = newToken().slice(0, 24); data.speedToLead = stl; await authStore.setUserData(u.id, data); }
-    let canSend = false;
-    try { canSend = new Set((await connector.listAccounts(u.id)).map((a) => a.app)).has('gohighlevel'); } catch { /* none */ }
+    const canSend = !!(await ghlAppFor(u.id));
     const base = `${baseUrl(req)}/api/hooks`;
     const tok = `${u.id}.${stl.webhookSecret}`;
     return {
@@ -2541,13 +2557,6 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   const hookField = (b: Record<string, any>, ...keys: string[]): string => {
     for (const k of keys) if (b[k]) return String(b[k]).trim();
     return '';
-  };
-  const sendGhl = async (uid: string, phone: string, name: string, message: string, verb: string): Promise<boolean> => {
-    if (!phone) return false;
-    let canSend = false;
-    try { canSend = new Set((await connector.listAccounts(uid)).map((a) => a.app)).has('gohighlevel') && !!connector.runAppTask; } catch { /* none */ }
-    if (!canSend) return false;
-    try { const r = await connector.runAppTask!({ externalUserId: uid, app: 'gohighlevel', query: verb, params: { message, name, phone } }); return !!r?.ok; } catch { return false; }
   };
 
   // Appointment no-show → warm rebook text with the calendar link (#7).
