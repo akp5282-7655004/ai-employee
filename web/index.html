@@ -1471,42 +1471,98 @@ async function openTeam(){
   };
   go.onclick=runCampaign; inp.addEventListener('keydown',(e)=>{ if(e.key==='Enter') runCampaign(); });
 }
-// ── Competitor Ad Watch: the ads local competitors are running, from Meta's Ad Library ──
+// ── Competitor Ad Research: read the Meta Ad Library the way a veteran media buyer does ──
+function angleChip(sig){ const m={'scaling-bet':['🔥 Scaling bet','#b91c1c','#fee2e2'],'testing':['🧪 Testing','#92400e','#fef3c7'],'single':['· one-off','#475569','#e2e8f0']}; const [t,fg,bg]=m[sig]||m.single; const s=el('span',null,t); s.style.cssText='font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;color:'+fg+';background:'+bg; return s; }
+function daysBadge(n){ if(n==null) return null; const s=el('span',null,n+'d running'); s.style.cssText='font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:#eef2ff;color:#3730a3'; return s; }
 async function openCompetitorAds(){
   const box=$('#cads-body'); if(!box) return; box.innerHTML='';
   const head=el('div','mcard');
-  head.append(el('h3',null,'Competitor Ads'));
-  head.append(el('p','mdesc','See the actual Facebook &amp; Instagram ads your local competitors are running right now — pulled from Meta’s public Ad Library. Spot the angles that work, then make your own version in one click.'));
+  head.append(el('h3',null,'Competitor Ad Research'));
+  head.append(el('p','mdesc','See the Facebook & Instagram ads your local competitors are running — and, more importantly, read the signals that tell you what’s actually working. Then turn a winning angle into your own ad or campaign in one click.'));
   const ctrls=el('div'); ctrls.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px';
-  const inp=el('input','f'); inp.style.cssText='margin:0;flex:1;min-width:220px'; inp.placeholder='e.g. painters philadelphia · plumber near me';
-  const btn=el('button','go','Search'); btn.style.flex='none';
+  const inp=el('input','f'); inp.style.cssText='margin:0;flex:1;min-width:220px'; inp.placeholder='e.g. roofing philadelphia · plumber near me · "$500 off"';
+  const btn=el('button','go','Research'); btn.style.flex='none';
   ctrls.append(inp,btn); head.append(ctrls); box.append(head);
   const results=el('div'); results.style.marginTop='16px'; box.append(results);
   const run=async(q)=>{
-    results.innerHTML='<p class="appsub">Searching the Ad Library…</p>';
-    let d={ready:false,ads:[],query:''};
+    results.innerHTML='<p class="appsub">Reading the Ad Library…</p>';
+    let d={ready:false,apiCovers:false,ads:[],angles:[],advertisers:[],deepLinks:[],checklist:[],note:'',query:''};
     if(REMOTE){ try{ d=await(await fetch('/api/competitor-ads'+(q?('?q='+encodeURIComponent(q)):''))).json(); }catch(e){} }
     if(!inp.value && d.query) inp.value=d.query;
     results.innerHTML='';
-    if(!d.ready){ const c=el('div','mcard'); c.append(el('div','verdict tight','🔌 Connect the Meta Ad Library to see competitor ads: add a META_AD_LIBRARY_TOKEN on Render (from a Meta app with Ad Library API access). Coverage of non-political ads via the API depends on Meta’s rules for your region.')); results.append(c); return; }
-    const ads=d.ads||[];
-    if(!ads.length){ results.append(el('div','verdict tight','No competitor ads found for “'+esc(d.query||q||'')+'”. Try a broader search — just your trade, or a nearby city.')); return; }
-    const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px';
-    for(const a of ads){
-      const card=el('div','mcard'); card.style.padding='14px';
-      const top=el('div'); top.style.cssText='display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin-bottom:6px';
-      top.append(el('b',null,a.page||'Advertiser'), el('span','appsub', a.started?('since '+String(a.started).slice(0,10)):''));
-      card.append(top);
-      if(a.title){ const t=el('div',null,a.title); t.style.cssText='font-weight:600;margin-bottom:4px'; card.append(t); }
-      const body=el('p','appsub', (a.body||'').slice(0,280)); body.style.whiteSpace='pre-line'; card.append(body);
-      if(a.platforms&&a.platforms.length){ const pl=el('div','appsub'); pl.style.marginTop='4px'; pl.textContent='📣 '+a.platforms.join(' · '); card.append(pl); }
-      const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:10px;flex-wrap:wrap';
-      if(a.snapshotUrl){ const v=el('a','adsave','View original ↗'); v.href=a.snapshotUrl; v.target='_blank'; v.rel='noopener'; v.style.textDecoration='none'; bar.append(v); }
-      const mk=el('button','go','🎨 Make my version'); mk.onclick=()=>{ setPage('studio'); const pr=$('#studio-prompt'); if(pr){ pr.value='Make an on-brand ad inspired by this competitor angle (don’t copy it): '+(a.title?(a.title+' — '):'')+(a.body||'').slice(0,240); pr.focus(); } toast('Angle sent to Creative Studio — tweak & generate.'); };
-      bar.append(mk); card.append(bar);
-      grid.append(card);
+
+    // 1) Honest framing + the working path: pre-built links into the real web UI.
+    if(d.note){ const n=el('div','mcard'); n.style.borderLeft='3px solid #6366f1'; n.append(el('div','verdict tight',d.note)); results.append(n); }
+    if((d.deepLinks||[]).length){
+      const lc=el('div','mcard');
+      lc.append(el('div','sect-label','OPEN IN THE AD LIBRARY (FULL US COVERAGE)'));
+      const lg=el('div'); lg.style.cssText='display:flex;flex-direction:column;gap:8px;margin-top:8px';
+      for(const l of d.deepLinks){
+        const row=el('a','adsave'); row.href=l.url; row.target='_blank'; row.rel='noopener'; row.style.cssText='text-decoration:none;display:flex;justify-content:space-between;gap:10px;align-items:center;padding:9px 12px';
+        const left=el('div'); left.append(el('b',null,l.label)); if(l.note){ const sn=el('div','appsub',l.note); sn.style.marginTop='2px'; left.append(sn); }
+        row.append(left, el('span',null,'↗')); lg.append(row);
+      }
+      lc.append(lg); results.append(lc);
     }
-    results.append(grid);
+
+    // 2) Winning angles — replication is the real "this is working" signal.
+    const angles=d.angles||[];
+    if(angles.length){
+      const ac=el('div','mcard');
+      ac.append(el('div','sect-label','WINNING ANGLES (WHAT THEY’RE BETTING ON)'));
+      ac.append(el('p','appsub','Ranked by replication — the same angle rebuilt as many near-identical variants is a stronger signal than how long any one ad has run.'));
+      const ag=el('div'); ag.style.cssText='display:flex;flex-direction:column;gap:10px;margin-top:8px';
+      for(const a of angles.slice(0,8)){
+        const r=el('div'); r.style.cssText='border:1px solid var(--line,#e5e7eb);border-radius:12px;padding:12px';
+        const t=el('div'); t.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:5px';
+        t.append(el('b',null,a.page||'Advertiser'), angleChip(a.signal), el('span','appsub',a.variants+' variant'+(a.variants===1?'':'s'))); const db=daysBadge(a.maxDaysRunning); if(db) t.append(db);
+        r.append(t);
+        const g=el('p','appsub',(a.gist||'').slice(0,200)); g.style.whiteSpace='pre-line'; r.append(g);
+        const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:8px;flex-wrap:wrap';
+        const pb=el('button','go','📋 Build a playbook from this'); pb.onclick=()=>{ setPage('playbook'); setTimeout(()=>{ const i=document.querySelectorAll('#playbook-body input'); if(i[0]) i[0].value=(a.gist||'').slice(0,80); toast('Angle sent to Campaign Playbook — set your ticket & build.'); },250); };
+        const mk=el('button','ghost','🎨 Make my version'); mk.onclick=()=>{ setPage('studio'); const pr=$('#studio-prompt'); if(pr){ pr.value='Make an on-brand ad inspired by this competitor angle (adapt, don’t copy): '+(a.gist||'').slice(0,240); pr.focus(); } toast('Angle sent to Creative Studio.'); };
+        bar.append(pb,mk); r.append(bar); ag.append(r);
+      }
+      ac.append(ag); results.append(ac);
+    }
+
+    // 3) Advertiser posture — active-ad count read as maintenance / testing / scaling.
+    const advs=d.advertisers||[];
+    if(advs.length){
+      const pc=el('div','mcard'); pc.append(el('div','sect-label','ADVERTISER POSTURE'));
+      const pg=el('div'); pg.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:8px';
+      for(const a of advs.slice(0,10)){ const chip=el('div'); chip.style.cssText='border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:8px 11px'; chip.append(el('b',null,a.page)); chip.append(el('div','appsub',a.activeAds+' active · '+a.mode)); pg.append(chip); }
+      pc.append(pg); results.append(pc);
+    }
+
+    // 4) Raw pulled ads (EU/political when available), enriched with run-time.
+    const ads=d.ads||[];
+    if(ads.length){
+      const rc=el('div','mcard'); rc.append(el('div','sect-label','ADS PULLED VIA API ('+(d.apiCovers?'COMMERCIAL':'EU / POLITICAL')+')'));
+      const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:8px';
+      for(const a of ads){
+        const card=el('div'); card.style.cssText='border:1px solid var(--line,#e5e7eb);border-radius:12px;padding:14px';
+        const top=el('div'); top.style.cssText='display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px';
+        top.append(el('b',null,a.page||'Advertiser')); const db=daysBadge(a.daysRunning); if(db) top.append(db); card.append(top);
+        if(a.title){ const t=el('div',null,a.title); t.style.cssText='font-weight:600;margin-bottom:4px'; card.append(t); }
+        const body=el('p','appsub',(a.body||'').slice(0,280)); body.style.whiteSpace='pre-line'; card.append(body);
+        const meta=[]; if(a.platforms&&a.platforms.length) meta.push('📣 '+a.platforms.join(' · ')); if(a.impressionsText) meta.push('👁 '+a.impressionsText+' impressions');
+        if(meta.length){ const m=el('div','appsub',meta.join('   ')); m.style.marginTop='4px'; card.append(m); }
+        const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:10px;flex-wrap:wrap';
+        if(a.snapshotUrl){ const v=el('a','adsave','View original ↗'); v.href=a.snapshotUrl; v.target='_blank'; v.rel='noopener'; v.style.textDecoration='none'; bar.append(v); }
+        const mk=el('button','ghost','🎨 Make my version'); mk.onclick=()=>{ setPage('studio'); const pr=$('#studio-prompt'); if(pr){ pr.value='Make an on-brand ad inspired by this competitor angle (adapt, don’t copy): '+(a.title?(a.title+' — '):'')+(a.body||'').slice(0,240); pr.focus(); } toast('Angle sent to Creative Studio.'); };
+        bar.append(mk); card.append(bar); grid.append(card);
+      }
+      rc.append(grid); results.append(rc);
+    }
+
+    // 5) The read-the-signals checklist — the method, so the owner isn't just scrolling.
+    if((d.checklist||[]).length){
+      const cc=el('div','mcard'); cc.append(el('div','sect-label','HOW TO READ IT LIKE A PRO'));
+      const ul=el('ul'); ul.style.cssText='margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:7px';
+      for(const c of d.checklist){ const li=el('li','appsub',c); ul.append(li); }
+      cc.append(ul); results.append(cc);
+    }
   };
   btn.onclick=()=>run(inp.value.trim());
   inp.addEventListener('keydown',(e)=>{ if(e.key==='Enter') run(inp.value.trim()); });

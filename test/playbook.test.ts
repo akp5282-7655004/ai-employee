@@ -41,7 +41,7 @@ describe('buildPlaybook', () => {
   });
 
   it('always produces a full, runnable plan (form, cadence, scorecard)', () => {
-    const pb = buildPlaybook({}, { trade: 'solar', channel: 'meta' });
+    const pb = buildPlaybook({ channel: 'meta' }, { trade: 'solar' });
     expect(pb.instantForm.questions.length).toBeGreaterThanOrEqual(4);
     expect(pb.cadence.launchChecklist.length).toBeGreaterThan(0);
     expect(pb.cadence.scorecard).toContain('ROAS');

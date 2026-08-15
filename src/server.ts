@@ -14,7 +14,7 @@ import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText,
 import { resolveKit, kitHasGuidance, type BrandKit } from './brand/kit.js';
 import { templatedReady, templatedListTemplates, templatedRender, type RenderLayer } from './creative/templated.js';
 import { buildRecommendations, type Recommendation } from './agents/recommend.js';
-import { adLibraryReady, searchCompetitorAds } from './research/adlibrary.js';
+import { competitorAdReport } from './research/adlibrary.js';
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
@@ -1189,7 +1189,6 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   app.get<{ Querystring: { q?: string } }>('/api/competitor-ads', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    if (!adLibraryReady()) return { ready: false, ads: [] as unknown[], query: '' };
     const data = await authStore.getUserData(u.id);
     const p = (data.profile ?? {}) as Record<string, string>;
     const q =
@@ -1197,8 +1196,11 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       [p.industry, (p.serviceAreas || '').split(',')[0]?.trim()].filter(Boolean).join(' ') ||
       p.industry ||
       'home services';
-    const ads = await searchCompetitorAds({ terms: q, countries: ['US'], limit: 24 });
-    return { ready: true, ads, query: q };
+    const competitors = (p.competitors || '')
+      .split(/[,\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return competitorAdReport(q, 'US', competitors);
   });
 
   // ── Miles as CMO — one AI employee who runs the whole marketing function ───
