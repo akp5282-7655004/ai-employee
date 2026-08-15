@@ -1287,7 +1287,20 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { ok: true, spec, summary: campaignSummary(spec), gadsConnected, aiUsed, llmReady: textLlmReady() };
   });
 
-  app.post<{ Body: { spec?: CampaignSpec; confirm?: boolean } }>('/api/campaign/launch', async (req, reply) => {
+  // The Google Ads accounts a launch can write into — an MCC login manages
+  // several, and the owner picks which client account gets the campaign.
+  app.get('/api/gads/targets', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (!connector.listAdTargets) return { targets: [] };
+    try {
+      return { targets: await connector.listAdTargets(u.id) };
+    } catch {
+      return { targets: [] };
+    }
+  });
+
+  app.post<{ Body: { spec?: CampaignSpec; confirm?: boolean; target?: string } }>('/api/campaign/launch', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
     const spec = req.body?.spec;
@@ -1296,7 +1309,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const problems = validateCampaignSpec(spec);
     if (problems.length) return reply.code(400).send({ error: 'Campaign not ready to launch', problems });
     if (!connector.launchCampaign) return reply.code(400).send({ error: 'This connector cannot launch campaigns.' });
-    const result = await connector.launchCampaign(u.id, spec);
+    const result = await connector.launchCampaign(u.id, spec, typeof req.body?.target === 'string' ? req.body.target : undefined);
     // Record the launch attempt in the deploy/change log with the full spec attached.
     const data = await authStore.getUserData(u.id);
     const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };

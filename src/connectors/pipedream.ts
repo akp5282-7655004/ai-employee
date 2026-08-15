@@ -49,6 +49,8 @@ export class PipedreamConnector implements Connector {
   // IDs). Discovery is stable, so we resolve it once and reuse for TTL_MS —
   // every dashboard load then costs just the report run, not a full re-discovery.
   private gadsCache = new Map<string, { key: string; appName: string; ids: string[]; targets?: { login: string; client?: string }[]; shape?: GadsShape; ts: number }>();
+  /** customerId → descriptive name, harvested from list-customer-clients responses. */
+  private gadsNames = new Map<string, string>();
   private static readonly DISCOVERY_TTL_MS = 10 * 60 * 1000;
 
   constructor(private readonly cfg: Config) {}
@@ -343,6 +345,7 @@ export class PipedreamConnector implements Connector {
         for (const [k, v] of Object.entries(extra)) if (props.some((p: any) => p?.name === k)) cp[k] = v;
         const res = await pd.actions.run({ externalUserId, id: key, configuredProps: cp });
         collectCustomerIds(res?.ret ?? res?.exports ?? res, found);
+        collectCustomerNames(res?.ret ?? res?.exports ?? res, this.gadsNames);
       } catch {
         /* skip */
       }
@@ -360,6 +363,28 @@ export class PipedreamConnector implements Connector {
       else targets.push({ login });
     }
     return targets;
+  }
+
+  /**
+   * The Google Ads accounts a launch can write into, with names when Google
+   * provides them — an MCC owner picks WHICH client account gets the campaign.
+   */
+  async listAdTargets(externalUserId: string): Promise<{ id: string; login: string; name?: string; label: string }[]> {
+    const accts = await this.listAccounts(externalUserId, 'google_ads');
+    const account = accts.find((a) => a.healthy) ?? accts[0];
+    if (!account) return [];
+    const cached = this.gadsCache.get(externalUserId);
+    let targets = cached?.targets && Date.now() - cached.ts < 10 * 60_000 ? cached.targets : undefined;
+    if (!targets) {
+      const rows = await this.listComponents('google_ads');
+      targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
+    }
+    const fmt = (id: string) => /^\d{10}$/.test(id) ? `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` : id;
+    return targets.map((t) => {
+      const id = t.client ?? t.login;
+      const name = this.gadsNames.get(id);
+      return { id, login: t.login, name, label: name ? `${name} — ${fmt(id)}` : fmt(id) };
+    });
   }
 
   /** Leaf client customer IDs (the accounts that actually run ads). */
@@ -535,7 +560,7 @@ export class PipedreamConnector implements Connector {
     }
   }
 
-  async launchCampaign(externalUserId: string, spec: import('../agents/campaign.js').CampaignSpec): Promise<import('./types.js').CampaignLaunchResult> {
+  async launchCampaign(externalUserId: string, spec: import('../agents/campaign.js').CampaignSpec, targetCustomerId?: string): Promise<import('./types.js').CampaignLaunchResult> {
     const steps: import('./types.js').CampaignLaunchStep[] = [];
     const accts = await this.listAccounts(externalUserId, 'google_ads');
     const account = accts.find((a) => a.healthy) ?? accts[0];
@@ -544,7 +569,13 @@ export class PipedreamConnector implements Connector {
     // MCC-aware: write "as" the login/manager (accountId) but INTO the client
     // account that runs ads (customerClientId) — same split the report needs.
     const targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
-    const target = targets[0];
+    // An MCC can hold many client accounts — never guess which one gets the
+    // campaign. Honor an explicit pick; refuse a pick that doesn't resolve.
+    const wanted = (targetCustomerId ?? '').replace(/[^\d]/g, '');
+    const target = wanted ? targets.find((t) => (t.client ?? t.login) === wanted) : targets[0];
+    if (wanted && !target) {
+      return { ok: false, live: true, steps: [{ step: `Target account ${targetCustomerId}`, ok: false, error: 'That Google Ads account is not reachable from your connected login.' }], note: 'Pick one of the accounts Miles lists for your connection.' };
+    }
     const customerId = target?.client ?? target?.login;
     const acctVals: Record<string, string[]> = {};
     if (target?.login) acctVals.loginAccount = [target.login, 'use google ads as', 'use google ads', 'accountid'];
@@ -1204,6 +1235,33 @@ function collectCustomerIds(v: unknown, into: Set<string>, depth = 0): void {
     for (const x of Object.values(v as Record<string, unknown>)) collectCustomerIds(x, into, depth + 1);
   }
 }
+/**
+ * Harvest {customerId → descriptive name} pairs from a list-customer-clients
+ * style response: any object carrying both a 10-digit customer id and a
+ * human name field (descriptiveName etc.) contributes a pair.
+ */
+function collectCustomerNames(v: unknown, into: Map<string, string>, depth = 0): void {
+  if (v == null || depth > 6 || typeof v !== 'object') return;
+  if (Array.isArray(v)) {
+    for (const x of v) collectCustomerNames(x, into, depth + 1);
+    return;
+  }
+  const o = v as Record<string, unknown>;
+  let id: string | undefined;
+  let name: string | undefined;
+  for (const [k, val] of Object.entries(o)) {
+    if (typeof val !== 'string' && typeof val !== 'number') continue;
+    const s = String(val);
+    const m = s.match(/customers\/(\d{10})/);
+    const digits = s.replace(/[^\d]/g, '');
+    if (m?.[1]) id ??= m[1];
+    else if (/^\d{10}$/.test(digits) && /id|customer/i.test(k)) id ??= digits;
+    if (typeof val === 'string' && /name/i.test(k) && !/resource/i.test(k) && val.trim() && !/^[\d\s-]+$/.test(val)) name ??= val.trim();
+  }
+  if (id && name) into.set(id, name);
+  for (const val of Object.values(o)) collectCustomerNames(val, into, depth + 1);
+}
+
 const asRows = (out: unknown): any[] => {
   if (!out) return [];
   if (Array.isArray(out)) return out;

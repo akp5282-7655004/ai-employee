@@ -195,8 +195,13 @@ export interface Connector {
   getAdSpend?(externalUserId: string, range?: string): Promise<CampaignSpend[]>;
   /** Create a full Google Ads Search campaign (budget → campaign → ad groups →
    *  keywords → RSAs) on the user's behalf. The owner has already approved every
-   *  setting; this performs the live write-chain and reports each step. */
-  launchCampaign?(externalUserId: string, spec: import('../agents/campaign.js').CampaignSpec): Promise<CampaignLaunchResult>;
+   *  setting; this performs the live write-chain and reports each step.
+   *  `targetCustomerId` picks WHICH Google Ads account gets the campaign when
+   *  the connected login manages several (MCC). */
+  launchCampaign?(externalUserId: string, spec: import('../agents/campaign.js').CampaignSpec, targetCustomerId?: string): Promise<CampaignLaunchResult>;
+  /** The Google Ads accounts a launch can write into (id + human label), so
+   *  an MCC owner can pick the client account instead of Miles guessing. */
+  listAdTargets?(externalUserId: string): Promise<{ id: string; login: string; name?: string; label: string }[]>;
   /** Create a full Meta (Facebook/Instagram) campaign — campaign → ad set → ad
    *  creative → ad — as a PAUSED draft in the owner's Ads Manager. Money-safe:
    *  nothing spends until the owner flips it live. Returns each step. */

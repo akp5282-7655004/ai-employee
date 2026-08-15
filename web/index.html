@@ -2340,6 +2340,23 @@ function renderLaunchReview(){
   const statusSel=el('select','f'); statusSel.style.width='100%'; [['PAUSED','Paused — safe, you turn it on later'],['ENABLED','Enabled — starts spending immediately']].forEach(([v,lab])=>{const o=el('option',null,lab);o.value=v;if(v===s.status)o.selected=true;statusSel.append(o);});
   c.append(row('Campaign name',nameI),row('Daily budget (USD)',budgetI),row('Landing page URL',urlI),row('Locations',locI),row('Status when created',statusSel));
   c.append(el('div','appsub','Bidding: Maximize clicks · Networks: '+(s.networks||[]).join(', ')+' · Language: '+s.language));
+  // Which Google Ads account gets this campaign — a manager (MCC) login can
+  // hold many client accounts, and Miles must never guess.
+  const tc=el('div','mcard'); tc.append(el('div','sect-label','GOOGLE ADS ACCOUNT — WHERE THIS CAMPAIGN IS CREATED'));
+  tc.append(el('p','appsub','Your Google login can manage several ad accounts. The campaign is created in the account you pick here — double-check it.'));
+  const acctSel=el('select','f'); acctSel.style.width='100%';
+  const o0=el('option',null,'Loading your Google Ads accounts…'); o0.value=''; acctSel.append(o0);
+  tc.append(acctSel);
+  fetch('/api/gads/targets').then(r=>r.json()).then(d=>{
+    const ts=(d&&d.targets)||[]; acctSel.innerHTML='';
+    if(!ts.length){ const o=el('option',null,LAUNCH.connected?'Could not list accounts — reconnect Google Ads in Integrations':'Google Ads not connected yet'); o.value=''; acctSel.append(o); return; }
+    const saved=LAUNCH.target||localStorage.getItem('gadsTarget')||'';
+    ts.forEach(t=>{ const o=el('option',null,t.label); o.value=t.id; if(t.id===saved)o.selected=true; acctSel.append(o); });
+    if(!ts.some(t=>t.id===saved)) acctSel.selectedIndex=0;
+    LAUNCH.target=acctSel.value; localStorage.setItem('gadsTarget',LAUNCH.target);
+  }).catch(()=>{});
+  acctSel.onchange=()=>{ LAUNCH.target=acctSel.value; localStorage.setItem('gadsTarget',acctSel.value); };
+  box.append(tc);
   box.append(c);
   const agInputs=[];
   (s.adGroups||[]).forEach((g,i)=>{
@@ -2409,7 +2426,7 @@ function confirmLaunch(onOk){
 }
 async function doLaunch(){
   const box=$('#launch-body'); box.innerHTML='<p class="appsub">Launching your campaign…</p>';
-  let r; try{ r=await(await fetch('/api/campaign/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:LAUNCH.spec,confirm:true})})).json(); }catch(e){ box.innerHTML=''; box.append(ovNudge('Launch failed — try again in a moment.')); return; }
+  let r; try{ r=await(await fetch('/api/campaign/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:LAUNCH.spec,confirm:true,target:LAUNCH.target||undefined})})).json(); }catch(e){ box.innerHTML=''; box.append(ovNudge('Launch failed — try again in a moment.')); return; }
   box.innerHTML='';
   if(r.error){ box.append(ovNudge('⚠️ '+r.error+(r.problems?': '+r.problems.join('; '):''))); const b=el('button','go','← Back to review'); b.style.marginTop='10px'; b.onclick=renderLaunchReview; box.append(b); return; }
   const c=el('div','mcard'); c.append(el('h3',null,r.ok?(r.live?'✅ Campaign launched':'✅ Campaign built (demo connector)'):'⚠️ Launch hit an issue'));
