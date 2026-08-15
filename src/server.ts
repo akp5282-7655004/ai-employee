@@ -799,6 +799,47 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     };
   });
 
+  // Offline conversion upload — report won jobs back to Google Ads so Smart
+  // Bidding optimizes toward leads that become paying customers, not just clicks.
+  const eligibleDeals = (deals: import('./revenue/attribution.js').Deal[]) =>
+    deals.filter((d) => d.won && (d.value || 0) > 0 && (d.gclid || d.email || d.phone));
+  app.get('/api/conversions/preview', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
+    let connected = false, hasCrm = false;
+    try { const apps = new Set((await connector.listAccounts(u.id)).map((a) => a.app)); connected = apps.has('google_ads'); hasCrm = ['gohighlevel', 'hubspot', 'salesforce_rest_api', 'servicetitan', 'jobber', 'housecall_pro'].some((a) => apps.has(a)); } catch { /* none */ }
+    const won = deals.filter((d) => d.won && (d.value || 0) > 0);
+    const eligible = eligibleDeals(deals);
+    const mask = (d: import('./revenue/attribution.js').Deal) => d.gclid ? 'Google Click ID' : d.email ? `${d.email[0]}•••@${d.email.split('@')[1] ?? ''}` : d.phone ? `•••${d.phone.slice(-4)}` : '—';
+    return {
+      connected, hasCrm,
+      count: eligible.length,
+      ineligible: won.length - eligible.length,
+      totalValue: Math.round(eligible.reduce((s, d) => s + (d.value || 0), 0)),
+      items: eligible.slice(0, 100).map((d) => ({ dealId: d.id, value: Math.round(d.value || 0), source: d.utmSource || '—', match: d.gclid ? 'GCLID' : d.email ? 'Email' : 'Phone', identifier: mask(d), wonAt: d.wonAt || d.createdAt })),
+    };
+  });
+  app.post<{ Body: { confirm?: boolean; dealIds?: string[] } }>('/api/conversions/upload', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Explicit confirm required.' });
+    if (!connector.uploadOfflineConversions) return reply.code(400).send({ error: 'This connector cannot upload conversions.' });
+    const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
+    let eligible = eligibleDeals(deals);
+    if (Array.isArray(req.body?.dealIds) && req.body!.dealIds!.length) { const ids = new Set(req.body!.dealIds); eligible = eligible.filter((d) => ids.has(d.id)); }
+    if (!eligible.length) return reply.code(400).send({ error: 'No eligible won jobs to upload (need a Google Click ID, email, or phone + a value).' });
+    const items = eligible.map((d) => ({ dealId: d.id, value: d.value, gclid: d.gclid, email: d.email, phone: d.phone, conversionTime: d.wonAt || d.createdAt }));
+    const result = await connector.uploadOfflineConversions(u.id, items);
+    const data = await authStore.getUserData(u.id);
+    const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
+    deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
+    deploy.queue.unshift({ id: newToken().slice(0, 10), label: `Offline conversions → Google Ads (${result.uploaded}/${items.length} jobs, $${items.reduce((s, i) => s + i.value, 0).toLocaleString()})`, type: 'conversion', status: result.ok ? (result.live ? 'live' : 'pending') : 'reverted', ts: new Date().toISOString(), detail: result.note });
+    data.deploy = deploy; await authStore.setUserData(u.id, data);
+    if (result.live && result.uploaded) await meterUser(u.id, 'agent_run');
+    return result;
+  });
+
   app.get('/api/hub', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;

@@ -512,6 +512,32 @@ export class PipedreamConnector implements Connector {
     return { ok, live: true, campaignResource: campaign.resource, link, steps, note: ok ? `Campaign created ${spec.status}. Review it in Google Ads before enabling.` : 'Some steps failed — see the per-step errors. Nothing partial charges until the campaign is enabled.' };
   }
 
+  async uploadOfflineConversions(externalUserId: string, items: import('./types.js').ConversionItem[]): Promise<import('./types.js').ConversionUploadResult> {
+    const accts = await this.listAccounts(externalUserId, 'google_ads');
+    const account = accts.find((a) => a.healthy) ?? accts[0];
+    if (!account) return { ok: false, live: true, uploaded: 0, failed: items.length, steps: items.map((i) => ({ dealId: i.dealId, ok: false, error: 'No connected Google Ads account.' })), note: 'Connect Google Ads first.' };
+    const rows = await this.listComponents('google_ads');
+    const ids = await this.googleAdsCustomerIds(externalUserId, account.id, rows);
+    const cust = ids[0] ? [ids[0], 'account', 'customer'] : undefined;
+    const steps: { dealId: string; ok: boolean; error?: string }[] = [];
+    let uploaded = 0;
+    for (const it of items.slice(0, 200)) {
+      const values: Record<string, string[]> = {
+        ...(cust ? { customer: cust } : {}),
+        ...(it.gclid ? { gclid: [it.gclid, 'gclid', 'click id'] } : {}),
+        ...(it.email ? { email: [it.email, 'email'] } : {}),
+        ...(it.phone ? { phone: [it.phone, 'phone'] } : {}),
+        value: [String(it.value), 'conversion value', 'value', 'amount'],
+        time: [it.conversionTime || new Date().toISOString(), 'conversion time', 'date time', 'datetime', 'time'],
+      };
+      const r = await this.writeComponent(externalUserId, 'google_ads-send-offline-conversion', account.id, values);
+      steps.push({ dealId: it.dealId, ok: r.ok, error: r.error });
+      if (r.ok) uploaded++;
+    }
+    const failed = items.length - uploaded;
+    return { ok: failed === 0, live: true, uploaded, failed, steps, note: failed ? 'Some uploads failed — see per-item errors. Common causes: no offline conversion action configured in Google Ads, or a missing/expired GCLID.' : 'Uploaded — Google will tie these jobs back to the clicks that produced them and bid toward more like them.' };
+  }
+
   async getSocialMetrics(externalUserId: string): Promise<import('./types.js').SocialMetrics | null> {
     for (const app of ['facebook', 'instagram', 'linkedin']) {
       try {

@@ -24,6 +24,14 @@ export interface Deal {
   utmSource?: string; // e.g. 'google_ads'
   utmCampaign?: string; // matches CampaignSpend.utm
   createdAt?: string;
+  /** Google Click ID captured when the lead came in — the strongest match key
+   *  for offline conversion upload. */
+  gclid?: string;
+  /** Fallbacks for Enhanced Conversions for Leads (hashed on upload). */
+  email?: string;
+  phone?: string;
+  /** When the job was won/closed — the conversion time reported to Google. */
+  wonAt?: string;
 }
 
 export interface AttributedRow {

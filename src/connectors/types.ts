@@ -133,6 +133,24 @@ export interface CampaignLaunchResult {
   note?: string;
 }
 
+/** A won job to report back to Google Ads as an offline conversion. */
+export interface ConversionItem {
+  dealId: string;
+  value: number;
+  gclid?: string;
+  email?: string;
+  phone?: string;
+  conversionTime?: string;
+}
+export interface ConversionUploadResult {
+  ok: boolean;
+  live: boolean;
+  uploaded: number;
+  failed: number;
+  steps: { dealId: string; ok: boolean; error?: string }[];
+  note?: string;
+}
+
 export interface Connector {
   readonly name: string;
   /** Mint a short-lived token so an end-user can connect an app account. */
@@ -153,6 +171,9 @@ export interface Connector {
    *  keywords → RSAs) on the user's behalf. The owner has already approved every
    *  setting; this performs the live write-chain and reports each step. */
   launchCampaign?(externalUserId: string, spec: import('../agents/campaign.js').CampaignSpec): Promise<CampaignLaunchResult>;
+  /** Upload won jobs back to Google Ads as offline conversions, so Smart Bidding
+   *  optimizes toward leads that become paying customers — not just clicks. */
+  uploadOfflineConversions?(externalUserId: string, items: ConversionItem[]): Promise<ConversionUploadResult>;
   /** Deals from connected CRMs — for revenue attribution. */
   getDeals?(externalUserId: string): Promise<Deal[]>;
   /** Recent inbox messages — the raw material for the morning task-list agent. */

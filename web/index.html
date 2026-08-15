@@ -2209,7 +2209,7 @@ async function openAdsManager(){
   if(!d.hasData){
     if(d.connected) box.append(ovSync('✓ Google Ads / Meta connected — no campaign data in '+mktRangeLabel(d.range)+' yet. Launch a campaign, or check back once spend runs.'));
     else box.append(ovNudge('Connect Google Ads / Meta in Integrations to see your campaigns here — then launch one from “Launch a Campaign”.'));
-    return;
+    renderConversionSync(box); return;
   }
   const t=d.totals||{}; const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-bottom:18px';
   g.append(statCard('Spend','$'+(t.spend||0).toLocaleString()), statCard('Leads',(t.leads||0).toLocaleString()), statCard('Cost / lead', t.costPerLead!=null?('$'+t.costPerLead):'—'), statCard('Clicks',(t.clicks||0).toLocaleString()), statCard('CPC', t.cpc!=null?('$'+t.cpc):'—'));
@@ -2229,6 +2229,38 @@ async function openAdsManager(){
     grid.append(card);
   });
   box.append(grid);
+  renderConversionSync(box);
+}
+// Conversion Sync — upload won jobs back to Google Ads as offline conversions.
+async function renderConversionSync(box){
+  let d; try{ d=await(await fetch('/api/conversions/preview')).json(); }catch(e){ return; }
+  const c=el('div','mcard'); c.style.marginTop='20px';
+  c.innerHTML='<h3 style="margin:0">🎯 Conversion Sync — teach Google what a real job looks like</h3><p class="mdesc" style="margin:6px 0 0;max-width:640px">Send your <b>won jobs</b> back to Google Ads as offline conversions. Its bidding AI then optimizes toward leads that become paying customers — not just clicks. The single biggest lever on cost-per-real-job.</p>';
+  if(!d.connected){ c.append(ovNudge('Connect Google Ads in Integrations to enable Conversion Sync.')); box.append(c); return; }
+  if(!d.hasCrm){ c.append(ovNudge('Connect your CRM (GoHighLevel, ServiceTitan, Jobber…) so Miles knows which leads became paying jobs.')); box.append(c); return; }
+  const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin:14px 0';
+  g.append(statCard('Eligible jobs',d.count||0), statCard('Total value','$'+(d.totalValue||0).toLocaleString()), statCard('Missing click-id',d.ineligible||0));
+  c.append(g);
+  if(d.ineligible>0) c.append(el('div','appsub','⚠︎ '+d.ineligible+' won jobs can’t be matched — missing a Google Click ID (GCLID), email, or phone. Capture the GCLID on your lead form to include them.'));
+  if(!d.count){ box.append(c); return; }
+  const rows=(d.items||[]).map(it=>'<tr><td style="text-align:left">$'+(it.value||0).toLocaleString()+'</td><td>'+esc(it.source)+'</td><td><span class="apill">'+esc(it.match)+'</span></td><td class="appsub">'+esc(it.identifier)+'</td></tr>').join('');
+  const tbl=el('div'); tbl.style.cssText='overflow-x:auto;margin-top:6px'; tbl.innerHTML='<table class="btable"><thead><tr><th style="text-align:left">Job value</th><th>Source</th><th>Match</th><th>Identifier</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  c.append(tbl);
+  const btn=el('button','go','⬆ Upload '+d.count+' jobs to Google Ads'); btn.style.marginTop='14px'; btn.onclick=()=>confirmConvUpload(d.count,d.totalValue);
+  c.append(btn); box.append(c);
+}
+function confirmConvUpload(count,value){
+  showModal('<h3 style="margin:0 0 8px">Upload '+count+' conversions to Google Ads?</h3><p class="mdesc" style="margin:0 0 12px">Sends '+count+' won jobs ($'+(value||0).toLocaleString()+' total) to Google Ads as offline conversions. It does <b>not</b> spend money — it feeds Google real outcomes so its bidding improves. Email/phone are hashed before sending.</p><div style="display:flex;gap:8px"><button class="go" id="cv-go" style="flex:1">Yes, upload</button><button id="cv-no" style="flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;cursor:pointer">Cancel</button></div>');
+  $('#cv-go').onclick=()=>{ closeModal(); doConversionUpload(); };
+  $('#cv-no').onclick=closeModal;
+}
+async function doConversionUpload(){
+  toast('Uploading conversions…');
+  let r; try{ r=await(await fetch('/api/conversions/upload',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:true})})).json(); }catch(e){ toast('Upload failed — try again.'); return; }
+  if(r.error){ toast('⚠️ '+r.error); return; }
+  if(r.ok) toast('✓ Uploaded '+r.uploaded+' conversions'+(r.live?'':' (demo)'));
+  else toast('Uploaded '+r.uploaded+', '+r.failed+' failed — see Change Log');
+  openAdsManager();
 }
 
 // ═══ creative studio (every marketing asset from one place) ═══

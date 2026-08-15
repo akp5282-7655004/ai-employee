@@ -125,6 +125,12 @@ export class MockConnector implements Connector {
     return { ok: true, live: false, campaignResource: 'customers/DEMO/campaigns/2', steps, note: 'Demo connector — no real campaign was created. On Render with Google Ads connected + Pipedream in production, this runs the real write-chain.' };
   }
 
+  async uploadOfflineConversions(externalUserId: string, items: import('./types.js').ConversionItem[]): Promise<import('./types.js').ConversionUploadResult> {
+    const connected = this.acc(externalUserId).some((a) => a.app === 'google_ads');
+    if (!connected) return { ok: false, live: false, uploaded: 0, failed: items.length, steps: items.map((i) => ({ dealId: i.dealId, ok: false, error: 'Connect Google Ads first.' })), note: 'No Google Ads account connected.' };
+    return { ok: true, live: false, uploaded: items.length, failed: 0, steps: items.map((i) => ({ dealId: i.dealId, ok: true })), note: 'Demo connector — no real upload. On Render with Google Ads connected, this sends offline conversions live so Smart Bidding learns from your real jobs.' };
+  }
+
   async getAdSpend(externalUserId: string, range = 'LAST_30_DAYS') {
     const apps = new Set((this.acc(externalUserId)).map((a) => a.app));
     // Scale demo figures to the selected window so the range selector visibly works.
@@ -150,12 +156,12 @@ export class MockConnector implements Connector {
     if (!CRMS.some((c) => apps.has(c))) return [];
     const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
     return [
-      { id: 'd1', value: 4200, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing', createdAt: ago(2) },
-      { id: 'd2', value: 1850, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing', createdAt: ago(9) },
-      { id: 'd3', value: 2100, won: true, utmSource: 'google_ads', utmCampaign: 'gads_ac', createdAt: ago(20) },
+      { id: 'd1', value: 4200, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing', createdAt: ago(2), wonAt: ago(1), gclid: 'DEMO-gclid-d1', email: 'sarah@example.com' },
+      { id: 'd2', value: 1850, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing', createdAt: ago(9), wonAt: ago(7), gclid: 'DEMO-gclid-d2' },
+      { id: 'd3', value: 2100, won: true, utmSource: 'google_ads', utmCampaign: 'gads_ac', createdAt: ago(20), wonAt: ago(18), email: 'mike@example.com', phone: '2155550142' },
       { id: 'd4', value: 890, won: false, utmSource: 'facebook', utmCampaign: 'meta_ac', createdAt: ago(25) },
-      { id: 'd5', value: 2480, won: true, utmSource: 'facebook', utmCampaign: 'meta_ac', createdAt: ago(40) },
-      { id: 'd6', value: 1714, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing', createdAt: ago(55) },
+      { id: 'd5', value: 2480, won: true, utmSource: 'facebook', utmCampaign: 'meta_ac', createdAt: ago(40), wonAt: ago(38) },
+      { id: 'd6', value: 1714, won: true, utmSource: 'google_ads', utmCampaign: 'gads_plumbing', createdAt: ago(55), wonAt: ago(52), gclid: 'DEMO-gclid-d6' },
     ];
   }
 
