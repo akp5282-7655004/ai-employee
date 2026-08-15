@@ -2266,7 +2266,7 @@ let LAUNCH={spec:null,connected:false};
 function lchField(label,ph,val,type){ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.placeholder=ph||''; if(val!=null)i.value=val; if(type)i.type=type; i.style.width='100%'; w.append(i); return {w,i}; }
 function openLaunch(){
   const box=$('#launch-body'); if(!box) return; box.innerHTML='';
-  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">🚀 Launch a Campaign</h3><p class="mdesc" style="margin:6px 0 0;max-width:640px">Miles builds a complete Google Ads Search campaign — budget, bidding, ad groups, keywords and ads — from your goal. You review every setting, then approve. <b>It’s created paused; nothing spends until you turn it on.</b></p>';
+  const h=el('div','mcard'); h.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">🚀 Launch a Campaign</h3><span style="font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;background:#e8f0fe;color:#1a56db">🟢 GOOGLE ADS</span></div><p class="mdesc" style="margin:6px 0 0;max-width:640px">Miles builds a complete <b>Google Ads Search</b> campaign — budget, bidding, ad groups, keywords and ads — from your goal. You review every setting, then approve. <b>It’s created paused; nothing spends until you turn it on.</b><br><span class="appsub">Want Facebook/Instagram instead? Use <b>Launch on Facebook</b> in the Marketing menu.</span></p>';
   box.append(h);
   const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','STEP 1 — TELL MILES THE GOAL'));
   const goal=lchField('What do you want the campaign to do?','e.g. Get more calls for emergency repairs');
@@ -2509,7 +2509,7 @@ async function openFbLaunch(){
   let status={ready:false,note:''};
   if(REMOTE){ try{ status=await(await fetch('/api/meta/status')).json(); }catch(e){} }
   box.innerHTML='';
-  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">📘 Launch on Facebook</h3><p class="mdesc" style="margin:6px 0 0;max-width:640px">Tell Miles your offer. Miles builds a complete Facebook &amp; Instagram campaign — budget, local targeting, and the ad copy — from your Campaign Playbook, then pushes it into your Meta Ads Manager as a <b>paused draft</b>. You review every setting and flip it live. Nothing spends until you do.</p>';
+  const h=el('div','mcard'); h.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">📘 Launch on Facebook</h3><span style="font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;background:#e7f0ff;color:#1877f2">🔵 META · FACEBOOK + INSTAGRAM</span></div><p class="mdesc" style="margin:6px 0 0;max-width:640px">Tell Miles your offer. Miles builds a complete Facebook &amp; Instagram campaign — budget, local targeting, and the ad copy — from your Campaign Playbook, then pushes it into your Meta Ads Manager as a <b>paused draft</b>. You review every setting and flip it live. Nothing spends until you do.</p>';
   box.append(h);
   box.append(fbConnBanner(status));
   const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','TELL MILES THE BASICS'));
