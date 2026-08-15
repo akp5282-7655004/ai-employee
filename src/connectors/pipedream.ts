@@ -48,7 +48,7 @@ export class PipedreamConnector implements Connector {
   // Per-customer Google Ads discovery cache (report component + client account
   // IDs). Discovery is stable, so we resolve it once and reuse for TTL_MS —
   // every dashboard load then costs just the report run, not a full re-discovery.
-  private gadsCache = new Map<string, { key: string; appName: string; ids: string[]; shape?: GadsShape; ts: number }>();
+  private gadsCache = new Map<string, { key: string; appName: string; ids: string[]; targets?: { login: string; client?: string }[]; shape?: GadsShape; ts: number }>();
   private static readonly DISCOVERY_TTL_MS = 10 * 60 * 1000;
 
   constructor(private readonly cfg: Config) {}
@@ -322,27 +322,50 @@ export class PipedreamConnector implements Connector {
   }
 
   /**
-   * Discover the client (managed) Google Ads customer IDs reachable through the
-   * connected login. Runs the account-listing components and pattern-extracts
-   * 10-digit customer IDs from whatever shape comes back — so it works across a
-   * plain account or an MCC (manager → clients) without hard-coding anything.
+   * Resolve Google Ads report targets as {login, client} pairs. A plain account
+   * reports on itself (login only). An MCC manager account runs no ads itself —
+   * its campaigns live in client accounts — so we descend one level: list the
+   * login accounts (the manager), then for each run list-customer-clients WITH
+   * that manager set as the account, and report as accountId=manager +
+   * customerClientId=client. This is the fix for "manager resolved, 0 rows".
    */
-  private async googleAdsCustomerIds(externalUserId: string, authId: string, rows: any[]): Promise<string[]> {
+  private async resolveGadsTargets(externalUserId: string, authId: string, rows: any[]): Promise<{ login: string; client?: string }[]> {
     const pd = await this.backend();
-    const ids = new Set<string>();
-    for (const key of ['google_ads-list-customer-clients', 'google_ads-list-account-id-options']) {
+    const runList = async (key: string, extra: Record<string, unknown> = {}): Promise<Set<string>> => {
+      const found = new Set<string>();
       const comp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === key);
-      if (!comp) continue;
+      if (!comp) return found;
       try {
         const props = await this.componentProps(comp, key);
         const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
-        const res = await pd.actions.run({ externalUserId, id: key, configuredProps: { [appName]: { authProvisionId: authId } } });
-        collectCustomerIds(res?.ret ?? res?.exports ?? res, ids);
+        const cp: Record<string, unknown> = { [appName]: { authProvisionId: authId } };
+        // Only send props the component actually exposes (e.g. accountId).
+        for (const [k, v] of Object.entries(extra)) if (props.some((p: any) => p?.name === k)) cp[k] = v;
+        const res = await pd.actions.run({ externalUserId, id: key, configuredProps: cp });
+        collectCustomerIds(res?.ret ?? res?.exports ?? res, found);
       } catch {
-        /* try the next lister */
+        /* skip */
       }
+      return found;
+    };
+    // 1) The login accounts the connected user can act as (for an MCC, the manager).
+    const logins = await runList('google_ads-list-account-id-options');
+    if (!logins.size) for (const x of await runList('google_ads-list-customer-clients')) logins.add(x);
+    // 2) For each login, list the client accounts underneath it.
+    const targets: { login: string; client?: string }[] = [];
+    for (const login of [...logins].slice(0, 5)) {
+      const clients = await runList('google_ads-list-customer-clients', { accountId: login, customerClientId: login });
+      clients.delete(login); // the manager itself runs no ads
+      if (clients.size) for (const client of clients) targets.push({ login, client });
+      else targets.push({ login });
     }
-    return [...ids];
+    return targets;
+  }
+
+  /** Leaf client customer IDs (the accounts that actually run ads). */
+  private async googleAdsCustomerIds(externalUserId: string, authId: string, rows: any[]): Promise<string[]> {
+    const targets = await this.resolveGadsTargets(externalUserId, authId, rows);
+    return [...new Set(targets.map((t) => t.client ?? t.login))];
   }
 
   /**
@@ -358,12 +381,12 @@ export class PipedreamConnector implements Connector {
     const account = accts.find((a) => a.healthy) ?? accts[0];
     if (!account) return out;
 
-    // Reuse cached discovery (component, client IDs, and the metric/field format
-    // that Pipedream accepted) when fresh; only the report run happens per load.
-    let key: string, appName: string, ids: string[], cachedShape: GadsShape | undefined;
+    // Reuse cached discovery (component, {login,client} targets, and the metric/
+    // field format Pipedream accepted) when fresh; only the report run per load.
+    let key: string, appName: string, targets: { login: string; client?: string }[], cachedShape: GadsShape | undefined;
     const cached = this.gadsCache.get(externalUserId);
-    if (cached && Date.now() - cached.ts < PipedreamConnector.DISCOVERY_TTL_MS) {
-      ({ key, appName, ids, shape: cachedShape } = cached);
+    if (cached && cached.targets && Date.now() - cached.ts < PipedreamConnector.DISCOVERY_TTL_MS) {
+      ({ key, appName, targets, shape: cachedShape } = cached as typeof cached & { targets: { login: string; client?: string }[] });
     } else {
       const rows = await this.listComponents('google_ads');
       const comp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-campaign-report') ?? pickComponent(rows, 'create campaign report');
@@ -371,19 +394,19 @@ export class PipedreamConnector implements Connector {
       key = comp.key ?? comp.id ?? comp.componentKey;
       const props = await this.componentProps(comp, key);
       appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
-      ids = await this.googleAdsCustomerIds(externalUserId, account.id, rows);
-      this.gadsCache.set(externalUserId, { key, appName, ids, ts: Date.now() });
+      targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
+      if (!targets.length) targets = [{ login: '' }];
+      this.gadsCache.set(externalUserId, { key, appName, ids: targets.map((t) => t.client ?? t.login), targets, ts: Date.now() });
     }
-    // If we couldn't enumerate clients, still try once with no explicit account.
-    const targets: (string | undefined)[] = ids.length ? ids : [undefined];
     // Self-healing: try the known metric/field formats until one returns rows,
     // then remember it so later loads use just that one. If a format is already
     // cached, try it alone first.
     const shapes = cachedShape ? [cachedShape, ...GADS_SHAPES.filter((s) => s.tag !== cachedShape.tag)] : GADS_SHAPES;
-    for (const id of targets.slice(0, 8)) {
+    for (const t of targets.slice(0, 8)) {
       for (const shape of shapes) {
         const configuredProps: Record<string, unknown> = { [appName]: { authProvisionId: account.id }, dateRange: range, fields: shape.fields, metrics: shape.metrics };
-        if (id) configuredProps.accountId = id;
+        if (t.login) configuredProps.accountId = t.login; // report "as" the login/manager
+        if (t.client) configuredProps.customerClientId = t.client; // the client that runs ads
         let raw: unknown;
         try {
           const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
@@ -888,23 +911,25 @@ export class PipedreamConnector implements Connector {
           const rkey = rc ? (rc.key ?? rc.id ?? rc.componentKey) : 'google_ads-create-campaign-report';
           const rprops = await this.componentProps(rc ?? {}, rkey);
           const appName = rprops.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
-          const ids = await this.googleAdsCustomerIds(externalUserId, account?.id ?? '', rows);
-          deep.resolvedCustomerIds = ids;
+          const gTargets = await this.resolveGadsTargets(externalUserId, account?.id ?? '', rows);
+          deep.resolvedCustomerIds = [...new Set(gTargets.map((t) => t.client ?? t.login))];
+          deep.reportTargets = gTargets; // {login, client} pairs — the MCC-aware fix
           const trials: any[] = [];
           let runs = 0;
-          outer: for (const id of (ids.length ? ids : [undefined]).slice(0, 3)) {
+          outer: for (const t of (gTargets.length ? gTargets : [{ login: '' }]).slice(0, 3)) {
             for (const shape of GADS_SHAPES) {
               if (runs++ >= 9) break outer;
               const cp: Record<string, unknown> = { [appName]: { authProvisionId: account?.id }, dateRange: 'LAST_30_DAYS', fields: shape.fields, metrics: shape.metrics };
-              if (id) cp.accountId = id;
+              if (t.login) cp.accountId = t.login;
+              if (t.client) cp.customerClientId = t.client;
               try {
                 const r = await pd.actions.run({ externalUserId, id: rkey, configuredProps: cp });
                 const raw = r?.ret ?? r?.exports ?? r ?? null;
                 const arr = asRows(raw);
-                trials.push({ accountId: id, format: shape.tag, count: arr.length, sample: arr[0] ?? (raw && typeof raw === 'object' && !Array.isArray(raw) ? Object.keys(raw as any) : raw) });
+                trials.push({ login: t.login, client: t.client, format: shape.tag, count: arr.length, sample: arr[0] ?? (raw && typeof raw === 'object' && !Array.isArray(raw) ? Object.keys(raw as any) : raw) });
                 if (arr.length) break outer; // found a working combo — stop
               } catch (e) {
-                trials.push({ accountId: id, format: shape.tag, error: String((e as Error).message) });
+                trials.push({ login: t.login, client: t.client, format: shape.tag, error: String((e as Error).message) });
               }
             }
           }
