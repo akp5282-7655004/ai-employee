@@ -2350,6 +2350,34 @@ function renderLaunchReview(){
     gc.append(row('Keywords (one per line · [match type])',kw),row('Ad headlines (≤30 chars each)',hl),row('Ad descriptions (≤90 chars each)',de));
     agInputs.push({g,kw,hl,de}); box.append(gc);
   });
+  // ── Campaign assets (business name, paths, callouts, snippet, sitelinks) ──
+  const SNIPPET_HEADERS=['Amenities','Brands','Courses','Degree programs','Destinations','Featured hotels','Insurance coverage','Models','Neighborhoods','Service catalog','Shows','Styles','Types'];
+  const ac=el('div','mcard'); ac.style.marginTop='12px'; ac.append(el('div','sect-label','AD ASSETS — SITELINKS, CALLOUTS & MORE'));
+  ac.append(el('p','appsub','These fill the gaps Google flags (business name, sitelinks, callouts, structured snippets). Built to Google’s exact limits — edit anything, then launch.'));
+  const bizI=inp(s.businessName||''); bizI.maxLength=25;
+  const p1=inp((s.displayPaths||[])[0]||''); p1.maxLength=15; p1.style.width='120px';
+  const p2=inp((s.displayPaths||[])[1]||''); p2.maxLength=15; p2.style.width='120px';
+  const pathWrap=el('div'); pathWrap.style.cssText='display:flex;gap:8px;align-items:center'; pathWrap.append(el('span','appsub','yoursite.com /'),p1,el('span','appsub','/'),p2);
+  const callo=el('textarea','f'); callo.rows=4; callo.style.width='100%'; callo.value=(s.callouts||[]).join('\n');
+  const snapHeader=el('select','f'); snapHeader.style.width='auto'; SNIPPET_HEADERS.forEach(h=>{const o=el('option',null,h);o.value=h;if(h===(s.structuredSnippet&&s.structuredSnippet.header))o.selected=true;snapHeader.append(o);});
+  const snapVals=el('textarea','f'); snapVals.rows=3; snapVals.style.width='100%'; snapVals.value=((s.structuredSnippet&&s.structuredSnippet.values)||[]).join('\n');
+  ac.append(row('Business name (≤25 — shown in your ad)',bizI));
+  ac.append(row('Display path (2 × ≤15)',pathWrap));
+  ac.append(row('Callouts (one per line · ≤25 each · 4+ recommended)',callo));
+  ac.append(row('Structured snippet header',snapHeader));
+  ac.append(row('Snippet values (one per line · ≤25 · 3+ required)',snapVals));
+  // Sitelinks — each with text, two descriptions and its own URL.
+  ac.append(el('div','sect-label','SITELINKS (4+ RECOMMENDED)'));
+  const slRefs=[];
+  (s.sitelinks||[]).forEach((sl)=>{
+    const b=el('div'); b.style.cssText='border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:10px;margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px';
+    const t=inp(sl.text||''); t.maxLength=25; t.placeholder='Link text (≤25)';
+    const u=inp(sl.url||''); u.placeholder='https://…/page';
+    const d1=inp(sl.desc1||''); d1.maxLength=35; d1.placeholder='Description 1 (≤35)';
+    const d2=inp(sl.desc2||''); d2.maxLength=35; d2.placeholder='Description 2 (≤35)';
+    b.append(t,u,d1,d2); ac.append(b); slRefs.push({t,u,d1,d2});
+  });
+  box.append(ac);
   // Read the current (edited) settings back into the spec — shared by Save & Launch.
   const collect=()=>{
     s.name=nameI.value.trim(); s.dailyBudget=Number(budgetI.value)||s.dailyBudget; s.finalUrl=urlI.value.trim();
@@ -2357,6 +2385,11 @@ function renderLaunchReview(){
     s.adGroups=agInputs.map(a=>({ name:a.g.name,
       keywords:a.kw.value.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{ const m=l.match(/\[(broad|phrase|exact)\]\s*$/i); const text=l.replace(/\[(broad|phrase|exact)\]\s*$/i,'').trim(); const orig=a.g.keywords.find(k=>k.text===text); return {text,match:(m?m[1].toLowerCase():(orig?orig.match:'phrase'))}; }),
       rsa:{headlines:a.hl.value.split('\n').map(x=>x.trim()).filter(Boolean),descriptions:a.de.value.split('\n').map(x=>x.trim()).filter(Boolean)} }));
+    s.businessName=bizI.value.trim();
+    s.displayPaths=[p1.value.trim(),p2.value.trim()].filter(Boolean);
+    s.callouts=callo.value.split('\n').map(x=>x.trim()).filter(Boolean);
+    s.structuredSnippet={header:snapHeader.value,values:snapVals.value.split('\n').map(x=>x.trim()).filter(Boolean)};
+    s.sitelinks=slRefs.map(r=>({text:r.t.value.trim(),desc1:r.d1.value.trim(),desc2:r.d2.value.trim(),url:r.u.value.trim()})).filter(x=>x.text&&x.url);
     return s;
   };
   const foot=el('div','mcard'); foot.style.marginTop='12px'; foot.append(el('div','appsub','Negative keywords: '+(s.negatives||[]).join(', ')));
