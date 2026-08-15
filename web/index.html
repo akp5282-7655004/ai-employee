@@ -408,6 +408,7 @@
           <a data-page="adstudio"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
           <a data-page="launch"><svg class="ico" viewBox="0 0 24 24"><path d="M5 13a8 8 0 0 1 16 0"/><path d="M12 3v2M4 13H2M22 13h-2M12 13l4-4"/><circle cx="12" cy="13" r="1.6"/></svg> Launch a Campaign</a>
           <a data-page="adsmgr"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16"/></svg> Ads Manager</a>
+          <a data-page="growth"><svg class="ico" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7h-5M21 7v5"/></svg> Growth Autopilot</a>
           <a data-page="calendar"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg> Content Calendar</a>
           <a data-page="brand"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7l1.3 3 3.2.2-2.4 2.1.8 3.1L12 13.9 9.1 15.5l.8-3.1L7.5 10.2 10.7 10Z"/></svg> Brand Guidelines</a>
           <a data-page="assets"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Assets</a>
@@ -567,6 +568,11 @@
     <!-- ADS MANAGER — per-campaign live view -->
     <section class="page" id="page-adsmgr">
       <div id="adsmgr-body" style="max-width:1050px"></div>
+    </section>
+
+    <!-- GROWTH AUTOPILOT — analyze ROI/ROAS, propose & apply budget moves -->
+    <section class="page" id="page-growth">
+      <div id="growth-body" style="max-width:1000px"></div>
     </section>
 
     <!-- MARKET MAP — rank service-area ZIPs by affluence / ability-to-spend -->
@@ -1163,7 +1169,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',launch:'Launch a Campaign',adsmgr:'Ads Manager',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',launch:'Launch a Campaign',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1186,6 +1192,7 @@ function setPage(id){
   $('#page-launch').classList.toggle('on',id==='launch');
   $('#page-affluence').classList.toggle('on',id==='affluence');
   $('#page-adsmgr').classList.toggle('on',id==='adsmgr');
+  $('#page-growth').classList.toggle('on',id==='growth');
   $('#page-studio').classList.toggle('on',id==='studio');
   $('#page-team').classList.toggle('on',id==='team');
   $('#page-editor').classList.toggle('on',id==='editor');
@@ -1217,6 +1224,7 @@ function setPage(id){
   if(id==='launch') openLaunch();
   if(id==='affluence') openAffluence();
   if(id==='adsmgr') openAdsManager();
+  if(id==='growth') openGrowth();
   if(id==='studio') openStudio();
   if(id==='team') openTeam();
   if(id==='editor') openEditorPage();
@@ -2211,8 +2219,8 @@ async function openAdsManager(){
     else box.append(ovNudge('Connect Google Ads / Meta in Integrations to see your campaigns here — then launch one from “Launch a Campaign”.'));
     renderConversionSync(box); return;
   }
-  const t=d.totals||{}; const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-bottom:18px';
-  g.append(statCard('Spend','$'+(t.spend||0).toLocaleString()), statCard('Leads',(t.leads||0).toLocaleString()), statCard('Cost / lead', t.costPerLead!=null?('$'+t.costPerLead):'—'), statCard('Clicks',(t.clicks||0).toLocaleString()), statCard('CPC', t.cpc!=null?('$'+t.cpc):'—'));
+  const t=d.totals||{}; const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(110px,1fr));margin-bottom:18px';
+  g.append(statCard('Spend','$'+(t.spend||0).toLocaleString()), statCard('Revenue','$'+(t.revenue||0).toLocaleString()), statCard('ROAS', t.roas!=null?(t.roas+'x'):'—'), statCard('ROI', t.roiPct!=null?(t.roiPct+'%'):'—'), statCard('Leads',(t.leads||0).toLocaleString()), statCard('Cost / lead', t.costPerLead!=null?('$'+t.costPerLead):'—'));
   box.append(g);
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px';
   (d.campaigns||[]).forEach(c=>{
@@ -2221,10 +2229,10 @@ async function openAdsManager(){
     card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><b style="font-size:14px;line-height:1.3">'+esc(c.name)+'</b><span class="apill" style="flex:none">'+esc(plat)+'</span></div>'
       +'<div style="font-size:24px;font-weight:800;letter-spacing:-.02em;margin:10px 0 2px">$'+(c.spend||0).toLocaleString()+'</div><div class="appsub">spend · '+mktRangeLabel(d.range)+'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;font-size:13px">'
+      +'<div><div class="appsub">Revenue</div><b>$'+(c.revenue||0).toLocaleString()+'</b></div>'
+      +'<div><div class="appsub">ROAS</div><b'+(c.roas!=null&&c.roas>=3?' style="color:var(--good)"':'')+'>'+(c.roas!=null?c.roas+'x':'—')+'</b></div>'
       +'<div><div class="appsub">Leads</div><b>'+(c.leads||0).toLocaleString()+'</b></div>'
       +'<div><div class="appsub">Cost / lead</div><b>'+(c.costPerLead!=null?'$'+c.costPerLead:'—')+'</b></div>'
-      +'<div><div class="appsub">Clicks</div><b>'+(c.clicks||0).toLocaleString()+'</b></div>'
-      +'<div><div class="appsub">CPC</div><b>'+(c.cpc!=null?'$'+c.cpc:'—')+'</b></div>'
       +'</div>';
     grid.append(card);
   });
@@ -2261,6 +2269,60 @@ async function doConversionUpload(){
   if(r.ok) toast('✓ Uploaded '+r.uploaded+' conversions'+(r.live?'':' (demo)'));
   else toast('Uploaded '+r.uploaded+', '+r.failed+' failed — see Change Log');
   openAdsManager();
+}
+
+// ── Growth Autopilot — analyze ROI/ROAS, propose & apply budget moves ──
+let GROWTH_RANGE='LAST_30_DAYS';
+async function openGrowth(){
+  const box=$('#growth-body'); if(!box) return; box.innerHTML='<p class="appsub">Analyzing your campaigns…</p>';
+  let d={}; try{ d=await(await fetch('/api/growth/plan?range='+encodeURIComponent(GROWTH_RANGE))).json(); }catch(e){ box.innerHTML=''; box.append(ovNudge('Could not analyze — try again.')); return; }
+  box.innerHTML='';
+  const head=el('div'); head.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px';
+  const ht=el('div'); ht.innerHTML='<h3 style="margin:0">📈 Growth Autopilot</h3><p class="mdesc" style="margin:4px 0 0;max-width:600px">Miles reads your live spend & won jobs, scores each campaign on ROAS and cost-per-job vs your target, and proposes budget moves within your guardrails. You approve — nothing spends on its own.</p>';
+  const ctrl=el('div'); ctrl.style.cssText='display:flex;align-items:center;gap:8px;flex:none';
+  const sel=el('select','f'); sel.style.cssText='width:auto;padding:5px 10px;font-size:13px;border-radius:8px'; for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===GROWTH_RANGE)o.selected=true; sel.append(o); } sel.onchange=()=>{ GROWTH_RANGE=sel.value; openGrowth(); };
+  ctrl.append(sel); head.append(ht,ctrl); box.append(head);
+  if(!d.hasData){
+    if(d.connected) box.append(ovSync('✓ Ads connected — no campaign data in '+mktRangeLabel(d.range)+' yet. Launch a campaign, then Growth Autopilot optimizes it here.'));
+    else box.append(ovNudge('Connect Google Ads / Meta so Growth Autopilot can analyze and optimize your campaigns.'));
+    return;
+  }
+  const t=d.totals||{}; const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(105px,1fr));margin-bottom:16px';
+  g.append(statCard('Spend','$'+(t.spend||0).toLocaleString()), statCard('Revenue','$'+(t.revenue||0).toLocaleString()), statCard('ROAS', t.roas!=null?(t.roas+'x'):'—'), statCard('ROI', t.roiPct!=null?(t.roiPct+'%'):'—'), statCard('Target / job', t.targetCpa!=null?('$'+t.targetCpa):'—'));
+  box.append(g);
+  const lvl={10:'Assist',20:'Guided',50:'Co-pilot',100:'Autopilot'}[d.autonomy]||('lvl '+d.autonomy);
+  box.append(el('div','appsub','⚙️ Autonomy: '+d.autonomy+'% ('+lvl+') · max budget change '+d.guardrailPct+'% per move'+(d.protectProven?' · proven funnels protected':'')+'. '+(d.autonomy>=100?'Approved moves apply immediately.':'Approved moves wait in Deploy for your OK.')));
+  const moves=(d.actions||[]).filter(a=>a.action!=='hold');
+  const card=el('div','mcard'); card.style.marginTop='12px'; card.append(el('div','sect-label','MILES RECOMMENDS'));
+  if(!moves.length){ card.append(el('div','verdict ok','✅ Everything’s in a healthy range — no budget moves needed right now. Hold steady.')); }
+  (d.actions||[]).forEach(a=>{
+    const row=el('div'); row.style.cssText='display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-soft)';
+    const icon=a.action==='scale'?'▲':a.action==='pause'?'⏸':a.action==='cut'?'▼':'—';
+    const badge=a.verdict==='winner'?'<span class="apill active">WINNER</span>':a.verdict==='loser'?'<span class="apill" style="background:rgba(164,83,89,.14);color:#a45359">LOSER</span>':a.verdict==='no-data'?'<span class="apill">NEW</span>':'<span class="apill paused">STEADY</span>';
+    row.innerHTML='<div style="flex:none;font-size:17px;width:22px;text-align:center">'+icon+'</div><div style="flex:1"><b style="font-size:13.5px">'+esc(a.campaign)+'</b> '+badge+'<div class="mdesc" style="margin:2px 0 0">'+esc(a.reason)+'</div></div>';
+    card.append(row);
+  });
+  box.append(card);
+  if(moves.length){
+    const btn=el('button','go',(d.autonomy>=100?'Apply ':'Approve & queue ')+moves.length+' move'+(moves.length===1?'':'s')); btn.style.marginTop='14px';
+    btn.onclick=()=>confirmGrowth(moves,d.autonomy);
+    box.append(btn);
+  }
+}
+function confirmGrowth(moves,autonomy){
+  const scale=moves.filter(m=>m.action==='scale').length, cut=moves.filter(m=>m.action==='cut'||m.action==='pause').length;
+  showModal('<h3 style="margin:0 0 8px">Apply '+moves.length+' budget move'+(moves.length===1?'':'s')+'?</h3><p class="mdesc" style="margin:0 0 12px">Scale '+scale+' winner'+(scale===1?'':'s')+', cut/pause '+cut+'. '+(autonomy>=100?'At 100% autonomy these apply immediately.':'These go to your Deploy queue for final approval — nothing changes your live budgets until you deploy.')+' Money-safe: the live push is held until the budget-write path is verified against your account.</p><div style="display:flex;gap:8px"><button class="go" id="gr-go" style="flex:1">Yes, apply</button><button id="gr-no" style="flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;cursor:pointer">Cancel</button></div>');
+  $('#gr-go').onclick=()=>{ closeModal(); doGrowthApply(moves); };
+  $('#gr-no').onclick=closeModal;
+}
+async function doGrowthApply(moves){
+  toast('Applying budget moves…');
+  const changes=moves.map(m=>({campaign:m.campaign,deltaPct:m.deltaPct,action:m.action}));
+  let r; try{ r=await(await fetch('/api/growth/apply',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:true,changes})})).json(); }catch(e){ toast('Apply failed — try again.'); return; }
+  if(r.error){ toast('⚠️ '+r.error); return; }
+  if(r.live && r.applied) toast('✓ Applied '+r.applied+' moves');
+  else toast('✓ '+moves.length+' moves queued to Deploy ('+(r.queuedStatus||'pending')+') — see Change Log');
+  openGrowth();
 }
 
 // ═══ creative studio (every marketing asset from one place) ═══

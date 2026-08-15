@@ -131,6 +131,13 @@ export class MockConnector implements Connector {
     return { ok: true, live: false, uploaded: items.length, failed: 0, steps: items.map((i) => ({ dealId: i.dealId, ok: true })), note: 'Demo connector — no real upload. On Render with Google Ads connected, this sends offline conversions live so Smart Bidding learns from your real jobs.' };
   }
 
+  async adjustCampaignBudgets(externalUserId: string, changes: import('./types.js').BudgetChange[]): Promise<import('./types.js').BudgetChangeResult> {
+    const connected = this.acc(externalUserId).some((a) => a.app === 'google_ads');
+    if (!connected) return { ok: false, live: false, applied: 0, steps: changes.map((c) => ({ campaign: c.campaign, ok: false, error: 'Connect Google Ads first.' })), note: 'No Google Ads account connected.' };
+    const acted = changes.filter((c) => c.action !== 'hold');
+    return { ok: true, live: false, applied: acted.length, steps: acted.map((c) => ({ campaign: c.campaign, ok: true })), note: 'Demo connector — no real budget change. On Render with Google Ads connected, this pushes the approved budget moves live.' };
+  }
+
   async getAdSpend(externalUserId: string, range = 'LAST_30_DAYS') {
     const apps = new Set((this.acc(externalUserId)).map((a) => a.app));
     // Scale demo figures to the selected window so the range selector visibly works.

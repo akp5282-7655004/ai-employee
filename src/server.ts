@@ -18,6 +18,7 @@ import { adLibraryReady, searchCompetitorAds } from './research/adlibrary.js';
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
+import { buildGrowthPlan } from './agents/growth.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { catalogForClient, findPlay } from './skills/catalog.js';
 import {
@@ -780,21 +781,24 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const RANGES = new Set(['LAST_7_DAYS', 'LAST_14_DAYS', 'LAST_30_DAYS', 'THIS_MONTH', 'LAST_MONTH']);
     const range = RANGES.has(String(req.query?.range)) ? String(req.query?.range) : 'LAST_30_DAYS';
     const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id, range) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
+    const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
     let connected = false;
     try { connected = (await connector.listAccounts(u.id)).some((a) => ['google_ads', 'facebook', 'google_lsa'].includes(a.app)); } catch { /* none */ }
     const r2 = (n: number) => Math.round(n * 100) / 100;
+    const revFor = (utm: string, name: string) => { const k = (utm || name || '').toLowerCase(); return deals.filter((d) => d.won && (d.value || 0) > 0 && String(d.utmCampaign || '').toLowerCase() === k).reduce((s, d) => s + (d.value || 0), 0); };
     const campaigns = spend
       .map((c) => {
-        const s = Math.round(c.spend || 0); const clicks = c.clicks || 0; const conv = c.conversions || 0;
-        return { platform: c.platform, name: c.campaign, spend: s, clicks, leads: conv, cpc: clicks ? r2(s / clicks) : null, costPerLead: conv ? r2(s / conv) : null };
+        const s = Math.round(c.spend || 0); const clicks = c.clicks || 0; const conv = c.conversions || 0; const revenue = Math.round(revFor(c.utm || '', c.campaign));
+        return { platform: c.platform, name: c.campaign, spend: s, clicks, leads: conv, revenue, roas: s ? r2(revenue / s) : null, cpc: clicks ? r2(s / clicks) : null, costPerLead: conv ? r2(s / conv) : null };
       })
       .sort((a, b) => b.spend - a.spend);
     const totSpend = campaigns.reduce((a, c) => a + c.spend, 0);
     const totClicks = campaigns.reduce((a, c) => a + c.clicks, 0);
     const totLeads = campaigns.reduce((a, c) => a + c.leads, 0);
+    const totRev = campaigns.reduce((a, c) => a + c.revenue, 0);
     return {
       connected, hasData: campaigns.length > 0, range,
-      totals: { spend: totSpend, clicks: totClicks, leads: totLeads, cpc: totClicks ? r2(totSpend / totClicks) : null, costPerLead: totLeads ? r2(totSpend / totLeads) : null },
+      totals: { spend: totSpend, clicks: totClicks, leads: totLeads, revenue: totRev, roas: totSpend ? r2(totRev / totSpend) : null, roiPct: totSpend ? Math.round(((totRev - totSpend) / totSpend) * 100) : null, cpc: totClicks ? r2(totSpend / totClicks) : null, costPerLead: totLeads ? r2(totSpend / totLeads) : null },
       campaigns,
     };
   });
@@ -845,6 +849,54 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     return { hub: data.hub ?? { campaigns: [] } };
+  });
+
+  // ── Growth Autopilot — analyze campaigns (ROI/ROAS vs target) and propose
+  // budget moves that respect the owner's autonomy + guardrails. Apply is gated. ──
+  app.get<{ Querystring: { range?: string } }>('/api/growth/plan', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const RANGES = new Set(['LAST_7_DAYS', 'LAST_14_DAYS', 'LAST_30_DAYS', 'THIS_MONTH', 'LAST_MONTH']);
+    const range = RANGES.has(String(req.query?.range)) ? String(req.query?.range) : 'LAST_30_DAYS';
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const ap = (data.autopilot as any) ?? {};
+    const guardrails = { maxBudgetChangePct: 10, protectProven: true, ...(ap.guardrails ?? {}) };
+    const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id, range) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
+    const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
+    let connected = false;
+    try { connected = (await connector.listAccounts(u.id)).some((a) => ['google_ads', 'facebook', 'google_lsa'].includes(a.app)); } catch { /* none */ }
+    const plan = buildGrowthPlan(spend, deals, { targetCpa: Number(p.targetCpa) || null, guardrailPct: Number(guardrails.maxBudgetChangePct) || 10, protectProven: !!guardrails.protectProven, autonomy: Number(ap.autonomy) || 50 });
+    return { connected, hasData: spend.length > 0, range, ...plan };
+  });
+
+  app.post<{ Body: { confirm?: boolean; changes?: import('./connectors/types.js').BudgetChange[] } }>('/api/growth/apply', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Explicit confirm required — no budget moves without it.' });
+    const changes = (Array.isArray(req.body?.changes) ? req.body!.changes! : []).filter((c) => c && c.campaign && c.action && c.action !== 'hold').slice(0, 50);
+    if (!changes.length) return reply.code(400).send({ error: 'No budget moves to apply.' });
+    if (!connector.adjustCampaignBudgets) return reply.code(400).send({ error: 'This connector cannot adjust budgets.' });
+    const data = await authStore.getUserData(u.id);
+    const autonomy = Number((data.autopilot as any)?.autonomy) || 50;
+    const result = await connector.adjustCampaignBudgets(u.id, changes);
+    // Log every approved move to the deploy/change log (pending unless full autonomy).
+    const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
+    deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
+    const status = result.live && result.ok ? 'live' : autonomy >= 100 && result.ok ? 'live' : 'pending';
+    deploy.queue.unshift({
+      id: newToken().slice(0, 10),
+      label: `Growth Autopilot — ${changes.length} budget move${changes.length === 1 ? '' : 's'} (${changes.filter((c) => c.action === 'scale').length} scale, ${changes.filter((c) => c.action === 'cut' || c.action === 'pause').length} cut/pause)`,
+      type: 'budget',
+      status,
+      ts: new Date().toISOString(),
+      detail: changes.map((c) => `${c.action === 'scale' ? '▲' : c.action === 'pause' ? '⏸' : '▼'} ${c.campaign}: ${c.action}${c.deltaPct ? ' ' + (c.deltaPct > 0 ? '+' : '') + c.deltaPct + '%' : ''}`).join('\n') + (result.note ? '\n\n' + result.note : ''),
+    });
+    deploy.queue = deploy.queue.slice(0, 300);
+    data.deploy = deploy;
+    await authStore.setUserData(u.id, data);
+    if (result.live && result.applied) await meterUser(u.id, 'agent_run');
+    return { ...result, queuedStatus: status };
   });
   app.put('/api/hub', async (req, reply) => {
     const u = await requireUser(req, reply);

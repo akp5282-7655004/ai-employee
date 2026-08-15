@@ -538,6 +538,24 @@ export class PipedreamConnector implements Connector {
     return { ok: failed === 0, live: true, uploaded, failed, steps, note: failed ? 'Some uploads failed — see per-item errors. Common causes: no offline conversion action configured in Google Ads, or a missing/expired GCLID.' : 'Uploaded — Google will tie these jobs back to the clicks that produced them and bid toward more like them.' };
   }
 
+  async adjustCampaignBudgets(externalUserId: string, changes: import('./types.js').BudgetChange[]): Promise<import('./types.js').BudgetChangeResult> {
+    const accts = await this.listAccounts(externalUserId, 'google_ads');
+    const account = accts.find((a) => a.healthy) ?? accts[0];
+    const acted = changes.filter((c) => c.action !== 'hold');
+    if (!account) return { ok: false, live: true, applied: 0, steps: acted.map((c) => ({ campaign: c.campaign, ok: false, error: 'No connected Google Ads account.' })), note: 'Connect Google Ads first.' };
+    // Money-safety: never fire a budget write without first resolving each
+    // campaign's current budget resource + amount (so a wrong number can't hit a
+    // live budget). That live resolution is the final wiring step; until it's
+    // verified against a real account, approved moves are logged, not pushed.
+    return {
+      ok: false,
+      live: true,
+      applied: 0,
+      steps: acted.map((c) => ({ campaign: c.campaign, ok: false, error: 'held — live budget push needs verified budget-resource resolution (money-safe)' })),
+      note: 'Approved moves are logged to your Change Log. The live push to Google Ads is held back for safety until the budget-write path is verified against your real account — so no wrong amount can ever hit your budget.',
+    };
+  }
+
   async getSocialMetrics(externalUserId: string): Promise<import('./types.js').SocialMetrics | null> {
     for (const app of ['facebook', 'instagram', 'linkedin']) {
       try {

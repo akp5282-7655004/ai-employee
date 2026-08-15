@@ -151,6 +151,20 @@ export interface ConversionUploadResult {
   note?: string;
 }
 
+/** A budget move for one campaign (percentage change the owner approved). */
+export interface BudgetChange {
+  campaign: string;
+  deltaPct: number; // signed
+  action: 'scale' | 'cut' | 'pause' | 'hold';
+}
+export interface BudgetChangeResult {
+  ok: boolean;
+  live: boolean;
+  applied: number;
+  steps: { campaign: string; ok: boolean; error?: string }[];
+  note?: string;
+}
+
 export interface Connector {
   readonly name: string;
   /** Mint a short-lived token so an end-user can connect an app account. */
@@ -174,6 +188,8 @@ export interface Connector {
   /** Upload won jobs back to Google Ads as offline conversions, so Smart Bidding
    *  optimizes toward leads that become paying customers — not just clicks. */
   uploadOfflineConversions?(externalUserId: string, items: ConversionItem[]): Promise<ConversionUploadResult>;
+  /** Apply approved budget moves to running campaigns (scale winners / cut losers). */
+  adjustCampaignBudgets?(externalUserId: string, changes: BudgetChange[]): Promise<BudgetChangeResult>;
   /** Deals from connected CRMs — for revenue attribution. */
   getDeals?(externalUserId: string): Promise<Deal[]>;
   /** Recent inbox messages — the raw material for the morning task-list agent. */
