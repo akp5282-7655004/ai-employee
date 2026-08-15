@@ -507,7 +507,7 @@
       <div class="meters">
         <div class="mcard">
           <h3>CPA / CPL Benchmark Speedometer</h3>
-          <p class="mdesc">Real-time local market cost-per-lead positioning</p>
+          <p class="mdesc">Directional industry cost-per-lead benchmarks — not real-time or local. Figures vary by period, market, channel &amp; method.</p>
           <div class="vpick" id="meter-vpick"></div>
           <div class="gauge-wrap"><div id="gauge"></div><div class="gauge-val" id="gauge-val">$110</div><div class="gauge-cap" id="gauge-cap">Market Median</div></div>
           <div class="legend" id="legend"></div>
@@ -515,7 +515,7 @@
         </div>
         <div class="mcard">
           <h3>Intake &amp; Math Validator</h3>
-          <p class="mdesc">Validate budget vs lead expectations against live benchmarks</p>
+          <p class="mdesc">Validate budget vs lead expectations against published industry benchmarks (directional planning, not a guarantee).</p>
           <div class="vpick" id="val-vpick"></div>
           <label class="f">Monthly Ad Budget ($)</label>
           <input class="f" id="v-budget" type="number" value="3500">
@@ -1503,7 +1503,7 @@ function refreshMeter(){
   const lg=$('#legend'); if(lg) lg.innerHTML=`<span><span class="d" style="background:var(--good)"></span>Optimal (≤${money(bm.low)})</span>
     <span><span class="d" style="background:var(--teal)"></span>Typical (${money(bm.low)}–${money(bm.high)})</span>
     <span><span class="d" style="background:var(--warn)"></span>High (>${money(bm.high)})</span>`;
-  const note=$('#meter-note'); if(note) note.textContent = bm.estimated ? '≈ Estimated from the general home-services benchmark — no trade-specific dataset for '+(bm.label||'this industry')+' yet.' : '';
+  const note=$('#meter-note'); if(note) note.textContent = bm.estimated ? '≈ Modeled from general home-services data — no SearchLight dataset for '+(bm.label||'this industry')+'. Trade-specific CPL often runs materially higher elsewhere (e.g. painting ~$138–$174 per LocaliQ / 99 Calls), so treat this as an optimistic planning target, not a measured median.' : '';
   runValidate();
 }
 function localValidate(bm,budget,leads){
@@ -2018,14 +2018,15 @@ function renderAnalytics(){
 
 // ═══ real LSA benchmarks (SearchLight, Feb 2026) ═══
 const LSA_TRADES=[
-  {trade:'Electrical',cpl:39,bookRate:43.4,avgTicket:1434,roas:8.52},
-  {trade:'HVAC',cpl:51,bookRate:44.0,avgTicket:2110,roas:9.55},
-  {trade:'General / All Trades',cpl:54,bookRate:43.9,avgTicket:1831,roas:7.84},
-  {trade:'Plumbing',cpl:57,bookRate:44.5,avgTicket:1714,roas:6.85},
-  {trade:'Drain / Sewer',cpl:59,bookRate:39.5,avgTicket:1521,roas:5.50},
-  {trade:'Water Heater',cpl:71,bookRate:35.0,avgTicket:2484,roas:5.13},
+  {trade:'Electrical',cpl:39,bookRate:43.4,avgTicket:1434,roas:8.52,accounts:112},
+  {trade:'HVAC',cpl:51,bookRate:44.0,avgTicket:2110,roas:9.55,accounts:409},
+  {trade:'General / All Trades',cpl:54,bookRate:43.9,avgTicket:1831,roas:7.84,accounts:464},
+  {trade:'Plumbing',cpl:57,bookRate:44.5,avgTicket:1714,roas:6.85,accounts:230},
+  {trade:'Drain / Sewer',cpl:59,bookRate:39.5,avgTicket:1521,roas:5.50,accounts:23},
+  {trade:'Water Heater',cpl:71,bookRate:35.0,avgTicket:2484,roas:5.13,accounts:2},
 ];
-const LSA_MATCH=42.8; // blended match rate
+const LSA_MATCH=42.8; // blended LSA match rate — applied to all trades (a MODELED assumption; SearchLight does not publish per-trade match rates)
+let BENCH_MARGIN=25; // user-editable EBITDA margin for the breakeven model
 function breakevenCpl(avgTicket,bookRate,marginPct){ const l2c=(bookRate/100)*(LSA_MATCH/100); return Math.round(avgTicket*(marginPct/100)*l2c); }
 // ═══ ad studio (creative engine) ═══
 let adVert='home_services';
@@ -3920,29 +3921,37 @@ async function renderBenchmarkHub(){
     </div>`;
   }).join('');
   host.innerHTML=`<div class="acard">
-    <div class="ah">Benchmark Hub — CPL, ROAS &amp; ROI by channel and trade</div>
-    <div class="mdesc" style="margin:-8px 0 6px">First-party home-services advertising benchmarks. All <b>${cov.total}</b> figures are live from SearchLight's published studies — real numbers, not estimates. Tap any metric to open its source.</div>
-    <div class="appsub" style="margin-bottom:14px">Source: SearchLight Digital home-services benchmarks (Google Ads, Local Service Ads, Facebook, Direct Mail, SEO &amp; AI) · 2026.</div>
+    <div class="ah">Benchmark Hub — CPL, ROAS &amp; revenue multiples by channel and trade</div>
+    <div class="mdesc" style="margin:-8px 0 6px"><b>${cov.total}</b> first-party benchmarks from SearchLight's published studies — currently-published <b>historical snapshots</b> (periods range Q4 2025–2026), <b>not live or local</b>. These are SearchLight's own portfolio data, not an independent market census; samples &amp; methods vary. Tap any metric for its source, period &amp; sample.</div>
+    <div class="appsub" style="margin-bottom:14px">Source: SearchLight Digital home-services benchmarks (Google Ads, Local Service Ads, Facebook, Direct Mail, SEO &amp; AI). Each figure carries its own period, sample size &amp; aggregation method — read the note before acting.</div>
     ${sections}
   </div>`;
 }
 function renderBenchmarks(){
   const host=$('#bench'); if(!host) return;
-  const margin=25;
+  const margin=BENCH_MARGIN;
   const rows=LSA_TRADES.map(t=>{ const be=breakevenCpl(t.avgTicket,t.bookRate,margin); const safe=t.cpl<=be*0.85, tight=t.cpl<=be;
     const badge=safe?'<span class="apill active">HEALTHY</span>':tight?'<span class="apill paused">TIGHT</span>':'<span class="apill" style="background:rgba(164,83,89,.14);color:#a45359">OVER</span>';
+    const small=t.accounts<25?' <span title="Small sample — directional only" style="color:var(--warn)">⚠︎</span>':'';
     return `<tr>
       <td style="text-align:left;font-weight:600">${t.trade}</td>
+      <td>${t.accounts}${small}</td>
       <td>$${t.cpl}</td><td>${t.bookRate}%</td><td>$${t.avgTicket.toLocaleString()}</td><td style="color:var(--good);font-weight:700">${t.roas}x</td>
       <td>$${be}</td><td>${badge}</td></tr>`; }).join('');
   host.innerHTML=`<div class="acard">
-    <div class="ah">LSA Benchmarks — What a Lead Really Costs <span style="font-weight:500;color:var(--faint);font-size:12px">· by trade, 2026</span></div>
-    <div class="mdesc" style="margin:-8px 0 14px">CPL alone is the wrong metric. A lead is only worth its price if enough leads become paying customers at a high enough ticket. <b>Breakeven CPL</b> = profit-per-job × book rate × match rate (at ${margin}% margin). Green means your target CPL sits safely below breakeven.</div>
+    <div class="ah">LSA Benchmarks — What a Lead Really Costs <span style="font-weight:500;color:var(--faint);font-size:12px">· by trade, Feb 2026</span></div>
+    <div class="mdesc" style="margin:-8px 0 12px">CPL alone is the wrong metric — a lead is only worth its price if enough leads become paying customers at a high enough ticket. <b>Modeled breakeven CPL</b> = avg ticket × margin × book rate × match rate. <b>Caveat:</b> a single blended <b>${LSA_MATCH}% match rate</b> is applied to every trade (SearchLight doesn't publish per-trade match rates), so these are <b>scenario estimates, not measured trade-level breakevens</b>. Sample sizes vary widely — a 2-account figure (⚠︎) is not as trustworthy as a 400-account one.</div>
+    <div style="display:flex;align-items:center;gap:10px;margin:0 0 12px;flex-wrap:wrap">
+      <span class="appsub">Your EBITDA margin:</span>
+      <input id="bench-margin" type="range" min="10" max="45" step="1" value="${margin}" style="flex:1;min-width:160px;max-width:280px">
+      <b id="bench-margin-v" style="min-width:44px">${margin}%</b>
+    </div>
     <div style="overflow-x:auto"><table class="btable">
-      <thead><tr><th style="text-align:left">Trade</th><th>CPL</th><th>Book rate</th><th>Avg ticket</th><th>ROAS</th><th>Breakeven CPL</th><th>Headroom</th></tr></thead>
+      <thead><tr><th style="text-align:left">Trade</th><th>Accts</th><th>CPL</th><th>Book rate</th><th>Avg ticket</th><th>ROAS</th><th>Breakeven CPL</th><th>Headroom</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-    <div class="appsub" style="margin-top:12px">Source: SearchLight Home Services LSA Benchmark · Feb 2026 · 888 contractors · $6.72M tracked spend · 126,650 leads.</div>
+    <div class="appsub" style="margin-top:12px">Source: SearchLight Home Services LSA Benchmark · Feb 2026 · 888 contractors · $6.72M tracked spend · 126,650 leads. Breakeven is a model, not a measured benchmark — adjust the margin above to your business.</div>
   </div>`;
+  const mi=$('#bench-margin'); if(mi) mi.oninput=()=>{ BENCH_MARGIN=Number(mi.value)||25; $('#bench-margin-v').textContent=BENCH_MARGIN+'%'; renderBenchmarks(); };
 }
 
 // ═══ integrations (honest, backend-driven) ═══
