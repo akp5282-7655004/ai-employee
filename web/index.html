@@ -411,6 +411,7 @@
           <a data-page="fblaunch"><svg class="ico" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3Z"/></svg> Launch on Facebook</a>
           <a data-page="adsmgr"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16"/></svg> Ads Manager</a>
           <a data-page="growth"><svg class="ico" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7h-5M21 7v5"/></svg> Growth Autopilot</a>
+          <a data-page="autohub"><svg class="ico" viewBox="0 0 24 24"><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/><circle cx="12" cy="12" r="3.5"/></svg> Automation Hub</a>
           <a data-page="ghl"><svg class="ico" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6.5l7 4.5M8.5 17.5l7-4.5"/></svg> GHL Automations</a>
           <a data-page="calendar"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg> Content Calendar</a>
           <a data-page="brand"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7l1.3 3 3.2.2-2.4 2.1.8 3.1L12 13.9 9.1 15.5l.8-3.1L7.5 10.2 10.7 10Z"/></svg> Brand Guidelines</a>
@@ -596,6 +597,11 @@
     <!-- LAUNCH ON FACEBOOK (business + offer → build → review → push paused draft to Meta) -->
     <section class="page" id="page-fblaunch">
       <div id="fblaunch-body" style="max-width:900px"></div>
+    </section>
+
+    <!-- AUTOMATION HUB (the five live instant plays, all in one place) -->
+    <section class="page" id="page-autohub">
+      <div id="autohub-body" style="max-width:900px"></div>
     </section>
 
     <!-- GHL AUTOMATIONS (32-recipe workflow library tailored to the trade) -->
@@ -1187,7 +1193,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',fblaunch:'Launch on Facebook',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',fblaunch:'Launch on Facebook',autohub:'Automation Hub',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1209,6 +1215,7 @@ function setPage(id){
   $('#page-adstudio').classList.toggle('on',id==='adstudio');
   $('#page-launch').classList.toggle('on',id==='launch');
   $('#page-fblaunch').classList.toggle('on',id==='fblaunch');
+  $('#page-autohub').classList.toggle('on',id==='autohub');
   $('#page-ghl').classList.toggle('on',id==='ghl');
   $('#page-playbook').classList.toggle('on',id==='playbook');
   $('#page-affluence').classList.toggle('on',id==='affluence');
@@ -1244,6 +1251,7 @@ function setPage(id){
   if(id==='adstudio') openAdStudio();
   if(id==='launch') openLaunch();
   if(id==='fblaunch') openFbLaunch();
+  if(id==='autohub') openAutoHub();
   if(id==='ghl') openGhl();
   if(id==='playbook') openPlaybook();
   if(id==='affluence') openAffluence();
@@ -2343,6 +2351,53 @@ async function doLaunch(){
 }
 
 // ── Campaign Playbook — expert paid-social strategic build ──
+// ── Automation Hub: all five live instant plays, set up from one screen ──
+function ahUrlBlock(urls){
+  const wrap=el('div'); wrap.style.cssText='display:none;flex-direction:column;gap:8px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line,#e5e7eb)';
+  for(const u of urls){ const r=el('div'); r.style.cssText='display:flex;flex-direction:column;gap:4px'; r.append(el('div','appsub',u.label)); const row=el('div'); row.style.cssText='display:flex;gap:6px'; const inp=el('input','f'); inp.readOnly=true; inp.value=u.url||''; inp.style.cssText='margin:0;flex:1;font-family:ui-monospace,monospace;font-size:12px'; inp.onclick=()=>inp.select(); const cp=el('button','go','Copy'); cp.style.flex='none'; cp.onclick=()=>{ try{navigator.clipboard.writeText(u.url||'');}catch(e){} toast('Webhook URL copied'); }; row.append(inp,cp); r.append(row); wrap.append(r); }
+  return wrap;
+}
+function ahCard(o){
+  const card=el('div','mcard'); card.style.cssText='margin-bottom:14px;border-left:3px solid '+(o.on?'var(--good,#16a34a)':'var(--line,#e5e7eb)');
+  const top=el('div'); top.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
+  const left=el('div'); left.style.flex='1'; left.innerHTML='<b style="font-size:15px">'+o.icon+' '+esc(o.title)+'</b><div class="appsub" style="margin-top:3px;max-width:520px">'+o.desc+'</div>';
+  const right=el('div'); right.style.cssText='display:flex;gap:8px;align-items:center';
+  const pill=el('span',null,o.on?'ON':'OFF'); pill.style.cssText='font-size:11px;font-weight:800;padding:3px 9px;border-radius:999px;'+(o.on?'background:#dcfce7;color:#166534':'background:var(--panel2,#eef2f6);color:var(--muted)');
+  const tog=el('button',o.on?'ghost':'go',o.on?'Turn off':'Turn on'); tog.onclick=o.onToggle;
+  right.append(pill,tog); top.append(left,right); card.append(top);
+  if(o.on){
+    if(o.stat){ const s=el('div','appsub',o.stat); s.style.marginTop='8px'; card.append(s); }
+    if(o.config){ card.append(o.config); }
+    const urls=ahUrlBlock(o.urls||[]);
+    const showBtn=el('button','ghost','🔗 Connection URLs'); showBtn.style.marginTop='10px'; showBtn.onclick=()=>{ const open=urls.style.display!=='none'; urls.style.display=open?'none':'flex'; showBtn.textContent=open?'🔗 Connection URLs':'🔗 Hide URLs'; };
+    card.append(showBtn,urls);
+  }
+  return card;
+}
+async function openAutoHub(){
+  const box=$('#autohub-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading…</p>';
+  let stl={},rev={},au={};
+  if(REMOTE){ try{ const r=await Promise.all([fetch('/api/speed-to-lead'),fetch('/api/review-request'),fetch('/api/automations')]); stl=await r[0].json(); rev=await r[1].json(); au=await r[2].json(); }catch(e){} }
+  box.innerHTML='';
+  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">⚙️ Automation Hub</h3><p class="mdesc" style="margin:6px 0 0;max-width:640px">The five instant plays Miles runs through GoHighLevel. Turn one on, open its <b>Connection URLs</b>, and paste the webhook into a one-step GHL workflow (Trigger → Webhook). Miles does the rest — instantly, gated, and logged.</p>'; box.append(h);
+  const canSend = stl.canSend||rev.canSend||au.canSend;
+  if(!canSend){ const b=el('div','mcard'); b.style.borderLeft='3px solid #f59e0b'; b.append(el('div','verdict tight','Connect GoHighLevel in Integrations so these actually send. Until then Miles drafts each message and holds it.')); box.append(b); }
+  const ns=au.noShow||{}, ob=au.onboarding||{};
+  const post=(url,body)=>fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).catch(()=>{});
+  // 1 + 2: Speed-to-Lead (new lead + missed call share the responder)
+  const stlStats = stl.stats||{};
+  const stlCfg=el('div'); stlCfg.style.cssText='margin-top:8px'; const qh=!!(stl.quietHours&&stl.quietHours.enabled);
+  const qlab=el('label'); qlab.style.cssText='display:flex;align-items:center;gap:8px;font-size:13px'; const qcb=el('input'); qcb.type='checkbox'; qcb.checked=qh; qcb.onchange=async()=>{ await post('/api/speed-to-lead',{quietHours:{enabled:qcb.checked,tzOffsetMinutes:-new Date().getTimezoneOffset()}}); toast(qcb.checked?'Quiet hours on':'Quiet hours off'); }; qlab.append(qcb,document.createTextNode('Quiet hours — hold texts outside 8 AM–8 PM')); stlCfg.append(qlab);
+  box.append(ahCard({ icon:'⚡', title:'Speed-to-Lead + Missed-Call Text-Back', desc:'New lead or missed call → an instant personalized text-back in seconds. The #1 and #2 highest-ROI local plays.', on:!!stl.enabled, onToggle:async()=>{ await post('/api/speed-to-lead',{enabled:!stl.enabled}); openAutoHub(); }, stat:'Answered today: '+(stlStats.today||0)+' · Avg response: '+(stlStats.avgResponse||'—')+' · Total: '+(stlStats.total||0), config:stlCfg, urls:[{label:'New lead (Form / FB Lead) →',url:stl.webhook&&stl.webhook.newLead},{label:'Missed call →',url:stl.webhook&&stl.webhook.missedCall}] }));
+  // 3: Review Requests
+  const rvRecent=rev.recent||[]; const revCfg=el('div'); revCfg.style.cssText='margin-top:8px'; revCfg.append(el('div','appsub','Your Google review link')); const gi=el('input','f'); gi.style.cssText='width:100%;margin:4px 0 0'; gi.placeholder='https://g.page/r/…/review'; gi.value=rev.googleReviewUrl||''; gi.onchange=async()=>{ await post('/api/review-request',{googleReviewUrl:gi.value.trim()}); toast('Saved'); }; revCfg.append(gi);
+  box.append(ahCard({ icon:'⭐', title:'Post-Job Review Request', desc:'Job complete → a 1-10 ask. 9-10 get your Google link; 1-8 route to a private recovery call (never the public link).', on:!!rev.enabled, onToggle:async()=>{ await post('/api/review-request',{enabled:!rev.enabled}); openAutoHub(); }, stat:'Promoters (9-10): '+rvRecent.filter(r=>r.outcome==='promoter').length+' · Recovered (1-8): '+rvRecent.filter(r=>r.outcome==='detractor').length, config:revCfg, urls:[{label:'Job complete →',url:rev.webhook&&rev.webhook.jobComplete},{label:'Customer replied →',url:rev.webhook&&rev.webhook.reply}] }));
+  // 4: No-Show Recovery
+  const nsCfg=el('div'); nsCfg.style.cssText='margin-top:8px'; nsCfg.append(el('div','appsub','Your booking-calendar link')); const ci=el('input','f'); ci.style.cssText='width:100%;margin:4px 0 0'; ci.placeholder='https://your-calendar-link'; ci.value=ns.calendarUrl||''; ci.onchange=async()=>{ await post('/api/automations',{noShow:{calendarUrl:ci.value.trim()}}); toast('Saved'); }; nsCfg.append(ci);
+  box.append(ahCard({ icon:'🗓️', title:'No-Show Recovery', desc:'Appointment marked no-show → a warm rebook text with your booking link. 30–50% rebook within the hour.', on:!!ns.enabled, onToggle:async()=>{ await post('/api/automations',{noShow:{enabled:!ns.enabled}}); openAutoHub(); }, stat:'Rebook texts sent: '+((ns.recent||[]).length), config:nsCfg, urls:[{label:'Appointment No-Show →',url:ns.webhook}] }));
+  // 5: Onboarding
+  box.append(ahCard({ icon:'🎉', title:'New Customer Onboarding', desc:'Deal marked Closed Won → a welcome text, and Miles stops all prospect nurtures (no "still thinking?" text after they’ve paid).', on:!!ob.enabled, onToggle:async()=>{ await post('/api/automations',{onboarding:{enabled:!ob.enabled}}); openAutoHub(); }, stat:'Customers onboarded: '+((ob.recent||[]).length), urls:[{label:'Deal Closed Won →',url:ob.webhook}] }));
+}
 // ── GHL Automations: the 32-recipe library, tailored + ROI-ordered ──
 async function openGhl(){
   const box=$('#ghl-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading…</p>';
