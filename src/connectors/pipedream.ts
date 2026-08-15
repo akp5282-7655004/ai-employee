@@ -709,17 +709,27 @@ export class PipedreamConnector implements Connector {
       const primary = list.find((a) => a.healthy) ?? list[0]!;
       const detail: import('./types.js').ConnectionDetail = { app, label: LABEL[app] ?? app, connected: true, accountName: primary.name, accountId: primary.id, rows: [] };
       if (app === 'google_ads') {
-        try {
-          const rows = await this.listComponents('google_ads');
-          const ids = await this.googleAdsCustomerIds(externalUserId, primary.id, rows);
-          if (ids.length) {
-            detail.rows!.push({ k: 'Ad account (customer) ID', v: ids[0]!.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3') });
-            if (ids.length > 1) detail.rows!.push({ k: 'Other accessible accounts', v: ids.slice(1).map((i) => i.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3')).join(', ') });
-          } else {
-            detail.note = 'Connected, but no Google Ads customer ID resolved yet — open the account once or check access.';
+        const fmt = (i: string) => i.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+        // Reuse the IDs the spend pull already resolved (cached per user) before
+        // re-running the lister components — that path is what actually works live.
+        let ids = this.gadsCache.get(externalUserId)?.ids ?? [];
+        let errMsg = '';
+        if (!ids.length) {
+          try {
+            const rows = await this.listComponents('google_ads');
+            ids = await this.googleAdsCustomerIds(externalUserId, primary.id, rows);
+            if (ids.length) { const c = this.gadsCache.get(externalUserId); this.gadsCache.set(externalUserId, { key: c?.key ?? '', appName: c?.appName ?? 'googleAds', ids, shape: c?.shape, ts: Date.now() }); }
+          } catch (e) {
+            errMsg = String((e as Error).message || '').slice(0, 120);
           }
-        } catch {
-          detail.note = 'Connected — customer ID lookup unavailable right now.';
+        }
+        if (ids.length) {
+          detail.rows!.push({ k: 'Ad account (customer) ID', v: fmt(ids[0]!) });
+          if (ids.length > 1) detail.rows!.push({ k: 'Other accessible accounts', v: ids.slice(1).map(fmt).join(', ') });
+        } else {
+          detail.note = errMsg
+            ? `Connected. Couldn’t resolve the ad-account ID yet (${errMsg}). It usually appears after you open the Dashboard once — the data pull resolves it.`
+            : 'Connected. The ad-account (customer) ID shows here after you open the Dashboard once — that load resolves it. If it never appears, check this Google login has access to the ad account.';
         }
       }
       details.push(detail);
