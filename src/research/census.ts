@@ -75,7 +75,7 @@ export async function fetchDemographics(zipInput: string): Promise<Demographics 
   const zip = (zipInput || '').replace(/\D/g, '').slice(0, 5);
   if (zip.length !== 5) return null;
 
-  const key = process.env.CENSUS_API_KEY ? `&key=${process.env.CENSUS_API_KEY}` : '';
+  const key = process.env.CENSUS_API_KEY ? `&key=${process.env.CENSUS_API_KEY.trim()}` : '';
   const url =
     `https://api.census.gov/data/2022/acs/acs5?get=NAME,${VARS.join(',')}` +
     `&for=zip%20code%20tabulation%20area:${zip}${key}`;
@@ -265,11 +265,19 @@ async function affFetch(zip: string, key: string): Promise<{ row: ZipAffluence; 
   for (const year of ['2023', '2022']) {
     try {
       const url = `https://api.census.gov/data/${year}/acs/acs5?get=NAME,${AFF_VARS.join(',')}&for=zip%20code%20tabulation%20area:${zip}&key=${encodeURIComponent(key)}`;
-      const res = await fetch(url);
-      if (!res.ok) { lastErr = `ACS${year}: HTTP ${res.status} ${(await res.text().catch(() => '')).slice(0, 140)}`; continue; }
-      const rows = (await res.json()) as string[][];
+      const res = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'miles-ai/1.0' } });
+      const text = await res.text();
+      if (!res.ok) { lastErr = `ACS${year}: HTTP ${res.status} ${text.slice(0, 140).replace(/\s+/g, ' ')}`; continue; }
+      const t = text.trimStart();
+      if (!t.startsWith('[') && !t.startsWith('{')) {
+        // Census serves an HTML/text error page for a bad request — almost always
+        // the API key is missing, invalid, not yet activated, or has a stray space.
+        lastErr = `Census returned a non-JSON page — your CENSUS_API_KEY is likely missing, invalid, not yet activated, or has a stray space/newline. Re-check it on Render.`;
+        continue;
+      }
+      const rows = JSON.parse(text) as string[][];
       const header = rows[0]; const data = rows[1];
-      if (!header || !data) { lastErr = `ACS${year}: no ZCTA row for ${zip}`; continue; }
+      if (!header || !data) { lastErr = `ACS${year}: no ZCTA row for ${zip} (may be a PO-box-only ZIP with no Census area)`; continue; }
       const v = (name: string) => { const i = header.indexOf(name); const n = Number(data[i]); return Number.isFinite(n) && n > -1_000_000 ? n : null; };
       const total = v('B19001_001E'); const h150 = v('B19001_016E'); const h200 = v('B19001_017E');
       const pctHigh = total && total > 0 && h150 != null && h200 != null ? Math.round(((h150 + h200) / total) * 1000) / 10 : null;
@@ -287,7 +295,7 @@ export async function zipAffluence(zips: string[]): Promise<{ live: boolean; zip
   const clean = [...new Set(zips.map((z) => (z || '').replace(/\D/g, '').slice(0, 5)).filter((z) => z.length === 5))].slice(0, 40);
   const byScore = (a: ZipAffluence, b: ZipAffluence) => b.affluenceScore - a.affluenceScore;
   if (!process.env.CENSUS_API_KEY) return { live: false, zips: clean.map(affDemo).sort(byScore) };
-  const key = process.env.CENSUS_API_KEY;
+  const key = process.env.CENSUS_API_KEY.trim();
   const out: ZipAffluence[] = [];
   let diag = '';
   for (const zip of clean) {
