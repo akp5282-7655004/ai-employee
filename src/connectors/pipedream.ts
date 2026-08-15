@@ -210,12 +210,16 @@ export class PipedreamConnector implements Connector {
       };
     }
 
-    // 2) Discover the action component for this app.
+    // 2) Discover the action component for this app. A long/specific query makes
+    //    Pipedream's server-side search return zero rows even when the action
+    //    exists, so fall back to a broad listing and rank locally. Also seed the
+    //    query with a canonical hint (e.g. "send sms") so scoring lands right.
     let comp: any;
     try {
       const list = await pd.actions.list({ app: req.app, q: req.query, limit: 10 });
-      const rows: any[] = list?.data ?? (Array.isArray(list) ? list : list?.items ?? []);
-      comp = pickComponent(rows, req.query);
+      let rows: any[] = list?.data ?? (Array.isArray(list) ? list : list?.items ?? []);
+      if (!rows.length) rows = await this.listComponents(req.app); // broad fallback
+      comp = pickComponent(rows, canonicalVerb(req.query));
     } catch (err) {
       return { ok: false, actionId: `${req.app}-task`, ...base, note: `Couldn't look up ${req.app} actions: ${String((err as Error).message)}` };
     }
@@ -1015,7 +1019,18 @@ const starToNum = (s: unknown): number => {
 };
 
 /** Pick the component whose name best matches the query (prefer create/add verbs). */
-function pickComponent(rows: any[], query: string): any {
+/** Map a descriptive verb to the keywords the real action is named with, so the
+ *  component ranker lands on it (e.g. "Send missed-call text-back SMS" → GHL's
+ *  "Send SMS"). Falls through to the original query for anything unmapped. */
+export function canonicalVerb(query: string): string {
+  const q = query.toLowerCase();
+  if (/\bsms\b|text-?back|\btext\b/.test(q)) return 'send sms';
+  if (/\btask\b/.test(q)) return 'create task';
+  if (/\bemail\b/.test(q)) return 'send email';
+  return query;
+}
+
+export function pickComponent(rows: any[], query: string): any {
   if (!rows?.length) return undefined;
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const score = (c: any) => {
