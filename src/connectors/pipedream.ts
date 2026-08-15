@@ -456,7 +456,7 @@ export class PipedreamConnector implements Connector {
    * prop names the component exposes (schema-adaptive, like the read path), then
    * extract the created resource name. Returns a structured, honest result.
    */
-  private async writeComponent(externalUserId: string, componentKey: string, authId: string, values: Record<string, string[]>, direct: Record<string, unknown> = {}): Promise<{ ok: boolean; resource?: string; error?: string }> {
+  private async writeComponent(externalUserId: string, componentKey: string, authId: string, values: Record<string, string[]>, direct: Record<string, unknown> = {}): Promise<{ ok: boolean; resource?: string; error?: string; detail?: string }> {
     try {
       const pd = await this.backend();
       const rows = await this.listComponents('google_ads');
@@ -476,7 +476,11 @@ export class PipedreamConnector implements Connector {
       }
       const res = await pd.actions.run({ externalUserId, id: key, configuredProps: configured });
       const raw = res?.ret ?? res?.exports ?? res ?? null;
-      return { ok: true, resource: extractResourceName(raw) };
+      const resource = extractResourceName(raw);
+      // Keep ok:true (some writes, e.g. keywords, don't return a single resource),
+      // but when no resource comes back, capture the raw response so we can see why.
+      const detail = resource ? undefined : JSON.stringify(raw ?? null).slice(0, 400);
+      return { ok: true, resource, detail };
     } catch (e) {
       return { ok: false, error: String((e as Error).message) };
     }
@@ -504,7 +508,7 @@ export class PipedreamConnector implements Connector {
       name: [`${spec.name} Budget`, 'name'],
       amount: [micros, 'amount', 'micros', 'budget'],
     });
-    steps.push({ step: `Create daily budget ($${spec.dailyBudget})`, ok: budget.ok, resource: budget.resource, error: budget.error });
+    steps.push({ step: `Create daily budget ($${spec.dailyBudget})`, ok: budget.ok && !!budget.resource, resource: budget.resource, error: budget.error || (!budget.resource ? `no budget resource returned — Google said: ${budget.detail ?? '(empty)'}` : undefined) });
 
     // 2) Campaign — attach budget, set status (PAUSED unless owner chose ENABLED).
     const campaign = await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign', account.id, {
@@ -513,7 +517,7 @@ export class PipedreamConnector implements Connector {
       status: [spec.status, 'status'],
       ...(budget.resource ? { budget: [budget.resource, 'budget', 'campaign budget'] } : {}),
     });
-    steps.push({ step: `Create campaign "${spec.name}" (${spec.status})`, ok: campaign.ok, resource: campaign.resource, error: campaign.error });
+    steps.push({ step: `Create campaign "${spec.name}" (${spec.status})`, ok: campaign.ok && !!campaign.resource, resource: campaign.resource, error: campaign.error || (!campaign.resource ? `no campaign resource returned — Google said: ${campaign.detail ?? '(empty)'}` : undefined) });
 
     // 3) Ad groups + keywords + RSA — only if the campaign resource resolved.
     if (campaign.resource) {
