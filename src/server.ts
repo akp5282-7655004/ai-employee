@@ -1602,6 +1602,68 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { ok: true };
   });
 
+  // ── System Health — one honest read of what's actually working ───────────────
+  // For every connection, automation, data source, and key: is it live, or held
+  // (and why). Turns "is this actually working?" from a guess into a glance.
+  app.get('/api/health', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    let apps = new Set<string>();
+    try { apps = new Set((await connector.listAccounts(u.id)).map((a) => a.app)); } catch { /* none */ }
+    const ghlApp = ghlSlugOf(apps);
+    const ghl = !!ghlApp;
+    const gads = apps.has('google_ads');
+    const meta = connector.metaLaunchReady ? connector.metaLaunchReady().ready : false;
+
+    const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
+    const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
+    const leads = await safeConn(connector.getLeads ? () => connector.getLeads!(u.id) : undefined, [] as import('./connectors/types.js').Lead[]);
+    const reviews = await safeConn(connector.getReviews ? () => connector.getReviews!(u.id) : undefined, [] as import('./connectors/types.js').Review[]);
+
+    const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
+    const rev = (data.reviewRequest as ReviewRequestState) ?? emptyReviewState();
+    const au = (data.automations as AutomationsState) ?? emptyAutomationsState();
+    // status: 'live' | 'hold' | 'off' | 'todo'
+    const play = (name: string, on: boolean, extraOk = true, extraReason = '') => ({
+      name,
+      status: !on ? 'off' : ghl && extraOk ? 'live' : 'hold',
+      reason: !on ? 'Turned off' : !ghl ? 'Holding — connect GoHighLevel to send' : !extraOk ? extraReason : 'Sending live through GoHighLevel',
+    });
+    const automations = [
+      play('Speed-to-Lead + Missed-Call Text-Back', !!stl.enabled),
+      play('Post-Job Review Request', !!rev.enabled, !!rev.googleReviewUrl, 'On, but add your Google review link so promoters can post'),
+      play('No-Show Recovery', !!au.noShow.enabled, !!au.noShow.calendarUrl, 'On, but add your booking-calendar link'),
+      play('New Customer Onboarding', !!au.onboarding.enabled),
+    ];
+
+    const dataSources = [
+      { name: 'Ad spend (Google Ads)', status: gads ? (spend.length ? 'live' : 'hold') : 'todo', note: gads ? (spend.length ? `${spend.length} campaign(s) pulling` : 'Connected — open Dashboard to pull') : 'Connect Google Ads' },
+      { name: 'CRM deals (revenue)', status: ghl ? (deals.length ? 'live' : 'hold') : 'todo', note: ghl ? (deals.length ? `${deals.length} deal(s)` : 'Connected — no deals yet') : 'Connect GoHighLevel' },
+      { name: 'CRM leads', status: ghl ? (leads.length ? 'live' : 'hold') : 'todo', note: ghl ? (leads.length ? `${leads.length} lead(s)` : 'Connected — no leads yet') : 'Connect GoHighLevel' },
+      { name: 'Reviews', status: reviews.length ? 'live' : 'hold', note: reviews.length ? `${reviews.length} review(s)` : 'Connect Google Business Profile' },
+    ];
+
+    const keys = [
+      { name: 'GoHighLevel (CRM + SMS)', done: ghl, note: ghl ? `Connected as ${ghlApp}` : 'Connect in Integrations — powers every automation' },
+      { name: 'Google Ads', done: gads, note: gads ? 'Connected' : 'Connect in Integrations — ad spend + ROI' },
+      { name: 'Meta ad account (Facebook launch)', done: meta, note: meta ? 'Connected' : 'Add META_ADS_ACCESS_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID on Render' },
+      { name: 'AI copywriting', done: textLlmReady(), note: textLlmReady() ? 'On (OpenRouter)' : 'Add OPENROUTER_API_KEY on Render for AI-written copy' },
+      { name: 'Image generation', done: falReady(), note: falReady() ? 'On (FAL)' : 'Add FAL_KEY on Render for generated ad images' },
+      { name: 'Census (Market Map)', done: !!process.env.CENSUS_API_KEY, note: process.env.CENSUS_API_KEY ? 'On' : 'Add CENSUS_API_KEY on Render for income targeting' },
+      { name: 'Owner tools (ADMIN_EMAIL)', done: !!process.env.ADMIN_EMAIL, note: process.env.ADMIN_EMAIL ? 'Set' : 'Set ADMIN_EMAIL on Render to unlock Users/invites' },
+    ];
+
+    const liveAuto = automations.filter((a) => a.status === 'live').length;
+    return {
+      connections: connector.describeConnections ? await connector.describeConnections(u.id) : [],
+      automations,
+      dataSources,
+      keys,
+      summary: { automationsLive: liveAuto, automationsTotal: automations.length, keysDone: keys.filter((k) => k.done).length, keysTotal: keys.length, ghl, gads },
+    };
+  });
+
   // Closed-loop revenue attribution — ad spend correlated to CRM deals by UTM.
   app.get<{ Querystring: { sessionId?: string } }>('/api/revenue', async (req) => {
     const sessionId = req.query?.sessionId;

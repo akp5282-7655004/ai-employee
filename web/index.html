@@ -438,6 +438,7 @@
         <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg><span class="hlabel">Account &amp; Setup</span><span class="navbadge" id="acct-badge" style="display:none"></span><svg class="ico chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
         <div class="navkids">
           <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
+          <a data-page="health"><svg class="ico" viewBox="0 0 24 24"><path d="M3 12h4l2 5 4-12 2 7h6"/></svg> System Health</a>
           <a data-page="profile"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
           <a data-page="deploy"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 21h14"/></svg> Deploy <span id="deploy-badge" class="navbadge" style="display:none"></span></a>
           <a data-page="logs"><svg class="ico" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l3-3 3 2 4-5"/><circle cx="7" cy="15" r="0.5"/></svg> Logs</a>
@@ -597,6 +598,11 @@
     <!-- LAUNCH ON FACEBOOK (business + offer → build → review → push paused draft to Meta) -->
     <section class="page" id="page-fblaunch">
       <div id="fblaunch-body" style="max-width:900px"></div>
+    </section>
+
+    <!-- SYSTEM HEALTH (what's actually working, at a glance) -->
+    <section class="page" id="page-health">
+      <div id="health-body" style="max-width:820px"></div>
     </section>
 
     <!-- AUTOMATION HUB (the five live instant plays, all in one place) -->
@@ -1193,7 +1199,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',fblaunch:'Launch on Facebook',autohub:'Automation Hub',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',fblaunch:'Launch on Facebook',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1216,6 +1222,7 @@ function setPage(id){
   $('#page-launch').classList.toggle('on',id==='launch');
   $('#page-fblaunch').classList.toggle('on',id==='fblaunch');
   $('#page-autohub').classList.toggle('on',id==='autohub');
+  $('#page-health').classList.toggle('on',id==='health');
   $('#page-ghl').classList.toggle('on',id==='ghl');
   $('#page-playbook').classList.toggle('on',id==='playbook');
   $('#page-affluence').classList.toggle('on',id==='affluence');
@@ -1252,6 +1259,7 @@ function setPage(id){
   if(id==='launch') openLaunch();
   if(id==='fblaunch') openFbLaunch();
   if(id==='autohub') openAutoHub();
+  if(id==='health') openHealth();
   if(id==='ghl') openGhl();
   if(id==='playbook') openPlaybook();
   if(id==='affluence') openAffluence();
@@ -2351,6 +2359,39 @@ async function doLaunch(){
 }
 
 // ── Campaign Playbook — expert paid-social strategic build ──
+// ── System Health: what's actually working, at a glance ──
+function healthDot(status){
+  const m={live:['#16a34a','Sending live'],ok:['#16a34a','Working'],hold:['#f59e0b','Holding'],off:['#94a3b8','Off'],todo:['#f59e0b','To do']};
+  const [c,lab]=m[status]||m.todo; const s=el('span',null,''); s.style.cssText='display:inline-block;width:9px;height:9px;border-radius:50%;background:'+c;s.title=lab; return s;
+}
+function healthRow(name,status,note){
+  const r=el('div'); r.style.cssText='display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line,#e5e7eb)';
+  r.append(healthDot(status)); const l=el('div'); l.style.flex='1'; l.append(el('b',null,name)); if(note){ const n=el('div','appsub',note); n.style.marginTop='1px'; l.append(n); } r.append(l);
+  const badge=el('span',null,({live:'LIVE',ok:'OK',hold:'HOLDING',off:'OFF',todo:'TO DO'})[status]||status); badge.style.cssText='font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;'+(status==='live'||status==='ok'?'background:#dcfce7;color:#166534':status==='off'?'background:var(--panel2,#eef2f6);color:var(--muted)':'background:#fef3c7;color:#92400e'); r.append(badge);
+  return r;
+}
+async function openHealth(){
+  const box=$('#health-body'); if(!box) return; box.innerHTML='<p class="appsub">Checking everything…</p>';
+  let d={}; if(REMOTE){ try{ d=await(await fetch('/api/health')).json(); }catch(e){} }
+  box.innerHTML='';
+  if(!d.summary){ box.append(el('div','verdict tight','Health check runs on the live app.')); return; }
+  const s=d.summary;
+  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">🩺 System Health</h3><p class="mdesc" style="margin:6px 0 0">Exactly what’s working and what’s waiting on you — no guessing.</p>';
+  const kpis=el('div','stats'); kpis.style.marginTop='12px';
+  kpis.append(statCard('Automations live',s.automationsLive+' / '+s.automationsTotal), statCard('Integrations set',s.keysDone+' / '+s.keysTotal), statCard('CRM (GoHighLevel)', s.ghl?'Connected':'Not connected'));
+  h.append(kpis); box.append(h);
+  const sect=(title,rows,builder)=>{ const c=el('div','mcard'); c.style.marginTop='14px'; c.append(el('div','sect-label',title)); for(const r of rows) c.append(builder(r)); box.append(c); };
+  // Automations
+  sect('AUTOMATIONS', d.automations||[], a=>healthRow(a.name,a.status,a.reason));
+  // Data sources
+  sect('DATA SOURCES', d.dataSources||[], x=>healthRow(x.name,x.status,x.note));
+  // Connections & keys
+  sect('CONNECTIONS & KEYS', d.keys||[], k=>healthRow(k.name,k.done?'ok':'todo',k.note));
+  // To-do checklist (the not-done keys + holding automations)
+  const todo=[]; (d.keys||[]).forEach(k=>{ if(!k.done) todo.push(k.note); }); (d.automations||[]).forEach(a=>{ if(a.status==='hold') todo.push(a.name+': '+a.reason); });
+  if(todo.length){ const c=el('div','mcard'); c.style.cssText='margin-top:14px;border-left:3px solid #f59e0b'; c.append(el('div','sect-label','WHAT’S LEFT TO DO')); const ul=el('ul'); ul.style.cssText='margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px'; todo.forEach(t=>ul.append(el('li','appsub',t))); c.append(ul); box.append(c); }
+  else { const c=el('div','mcard'); c.style.cssText='margin-top:14px;border-left:3px solid var(--good,#16a34a)'; c.append(el('div','verdict tight','✅ Everything’s connected and live. Nothing waiting on you.')); box.append(c); }
+}
 // ── Automation Hub: all five live instant plays, set up from one screen ──
 function ahUrlBlock(urls){
   const wrap=el('div'); wrap.style.cssText='display:none;flex-direction:column;gap:8px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line,#e5e7eb)';
