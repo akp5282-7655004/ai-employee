@@ -2275,14 +2275,27 @@ function openLaunch(){
   const loc=lchField('Locations (comma-separated — blank = your service area)','e.g. Philadelphia, PA');
   if(window.__prefillLocations){ loc.i.value=window.__prefillLocations; window.__prefillLocations=null; }
   f.append(goal.w,budget.w,url.w,loc.w);
-  const btn=el('button','go','Build my campaign →');
+  const btnRow=el('div'); btnRow.style.cssText='display:flex;gap:10px;flex-wrap:wrap;align-items:center';
+  const ai=el('button','go','✨ Auto-fill with AI'); ai.title='Miles builds and writes the whole campaign from your business profile';
+  ai.onclick=()=>autofillCampaign(ai,{dailyBudget:Number(budget.i.value)||undefined,finalUrl:url.i.value,locations:loc.i.value.split(',').map(s=>s.trim()).filter(Boolean)});
+  const btn=el('button',null,'Build from my goal →'); btn.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:11px 16px;cursor:pointer;font-weight:600;font-family:var(--sans)';
   btn.onclick=async()=>{ btn.disabled=true; btn.textContent='Building…';
     try{ const r=await(await fetch('/api/campaign/draft',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({goal:goal.i.value,dailyBudget:Number(budget.i.value)||20,finalUrl:url.i.value,locations:loc.i.value.split(',').map(s=>s.trim()).filter(Boolean)})})).json();
       LAUNCH={spec:r.spec,connected:r.gadsConnected}; renderLaunchReview();
-    }catch(e){ toast('Could not build — try again.'); btn.disabled=false; btn.textContent='Build my campaign →'; }
+    }catch(e){ toast('Could not build — try again.'); btn.disabled=false; btn.textContent='Build from my goal →'; }
   };
-  f.append(btn); box.append(f);
+  btnRow.append(ai,btn); f.append(btnRow);
+  const hint=el('div','appsub','✨ Auto-fill uses your Business Profile to write everything — no typing needed. Or set a specific goal above and build from that.'); hint.style.marginTop='8px'; f.append(hint);
+  box.append(f);
   renderSavedDrafts(box);
+}
+async function autofillCampaign(btn,opts){
+  const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='✨ Writing your campaign…'; }
+  try{
+    const r=await(await fetch('/api/campaign/autofill',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(opts||{})})).json();
+    LAUNCH={spec:r.spec,connected:r.gadsConnected}; renderLaunchReview();
+    toast(r.aiUsed?'✨ Auto-filled with AI — review & tweak below':(r.llmReady?'Built from your profile — review below':'Built from your profile (add OPENROUTER_API_KEY on Render for AI-written copy)'));
+  }catch(e){ toast('Could not auto-fill — try again.'); if(btn){ btn.disabled=false; btn.textContent=o; } }
 }
 async function renderSavedDrafts(box){
   let d; try{ d=await(await fetch('/api/campaign/drafts')).json(); }catch(e){ return; }
@@ -2348,11 +2361,13 @@ function renderLaunchReview(){
   };
   const foot=el('div','mcard'); foot.style.marginTop='12px'; foot.append(el('div','appsub','Negative keywords: '+(s.negatives||[]).join(', ')));
   const btnRow=el('div'); btnRow.style.cssText='display:flex;gap:10px;margin-top:12px;flex-wrap:wrap';
+  const refill=el('button',null,'✨ Auto-fill with AI'); refill.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:9px 16px;cursor:pointer;font-weight:600;font-family:var(--sans)';
+  refill.onclick=()=>{ collect(); autofillCampaign(refill,{dailyBudget:s.dailyBudget,finalUrl:s.finalUrl,locations:s.locations}); };
   const save=el('button',null,'💾 Save draft'); save.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:9px 16px;cursor:pointer;font-weight:600;font-family:var(--sans)';
   save.onclick=async()=>{ collect(); save.disabled=true; const o=save.textContent; save.textContent='Saving…'; try{ await fetch('/api/campaign/drafts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:s})}); toast('✓ Draft saved — reopen it anytime under Launch a Campaign'); }catch(e){ toast('Could not save.'); } save.disabled=false; save.textContent=o; };
   const go=el('button','go','🚀 Approve & Go Live'); go.style.flex='none';
   go.onclick=()=>confirmLaunch(()=>{ collect(); doLaunch(); });
-  btnRow.append(save,go); foot.append(btnRow); box.append(foot);
+  btnRow.append(refill,save,go); foot.append(btnRow); box.append(foot);
 }
 function confirmLaunch(onOk){
   showModal('<h3 style="margin:0 0 8px">Launch to Google Ads?</h3><p class="mdesc" style="margin:0 0 12px">This creates the campaign in your live Google Ads account. Set to <b>Enabled</b>, it begins spending your daily budget immediately. Set to <b>Paused</b> (recommended), nothing spends until you switch it on in Google Ads.</p><div style="display:flex;gap:8px"><button class="go" id="cl-go" style="flex:1">Yes, launch it</button><button id="cl-no" style="flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;cursor:pointer">Cancel</button></div>');

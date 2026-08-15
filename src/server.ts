@@ -1240,6 +1240,53 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { ok: true, spec, summary: campaignSummary(spec), gadsConnected };
   });
 
+  // One-click AI auto-fill: build the whole campaign from the business profile and
+  // (when an LLM key is set) rewrite the keywords + ad copy to be specific to the
+  // business, always within Google's limits (≤30-char headlines, ≤90 descriptions,
+  // ≥3 headlines, ≥2 descriptions). Falls back to the deterministic build.
+  app.post<{ Body: { dailyBudget?: number; finalUrl?: string; locations?: string[] } }>('/api/campaign/autofill', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const ctx = { business: p.businessName, trade: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), services: p.services, offers: p.currentOffers };
+    const goal = `Get more ${(p.industry || 'local service').toLowerCase()} customers${p.currentOffers ? ' with ' + p.currentOffers : ''}`;
+    const locations = req.body?.locations?.length ? req.body.locations : (p.serviceAreas || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const spec = buildCampaignSpec({ goal, dailyBudget: req.body?.dailyBudget, finalUrl: req.body?.finalUrl || p.website, locations }, ctx);
+    let aiUsed = false;
+    if (textLlmReady()) {
+      try {
+        const system = 'You are a senior Google Ads specialist. Return ONLY strict JSON (no prose, no code fences).';
+        const user =
+          `Business: ${ctx.business || 'a local business'}${ctx.trade ? ` (${ctx.trade})` : ''}${ctx.city ? ` in ${ctx.city}` : ''}.` +
+          `${ctx.services ? ` Services: ${ctx.services}.` : ''}${ctx.offers ? ` Current offer: ${ctx.offers}.` : ''} Website: ${spec.finalUrl}.\n` +
+          `Write Google Ads Responsive Search Ad copy for these ad groups: ${spec.adGroups.map((g) => g.name).join(', ')}.\n` +
+          `Return JSON exactly: {"adGroups":[{"name":"<exact ad group name>","keywords":["...up to 12"],"headlines":["...up to 12, EACH ≤30 characters"],"descriptions":["...up to 4, EACH ≤90 characters"]}]}\n` +
+          `Rules: headlines ≤30 chars, descriptions ≤90 chars, no emojis, specific to this business, include the offer and a clear call to action, keep it local when a city is given.`;
+        const raw = await generateText({ system, user, maxTokens: 1100 });
+        if (raw) {
+          const j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)) as { adGroups?: any[] };
+          const byName = new Map((j.adGroups ?? []).map((a: any) => [String(a?.name ?? ''), a]));
+          for (const g of spec.adGroups) {
+            const a = byName.get(g.name) ?? (j.adGroups ?? [])[spec.adGroups.indexOf(g)];
+            if (!a) continue;
+            const hl = (a.headlines ?? []).map((s: any) => String(s).trim()).filter((s: string) => s && s.length <= 30);
+            const de = (a.descriptions ?? []).map((s: any) => String(s).trim()).filter((s: string) => s && s.length <= 90);
+            const kw = (a.keywords ?? []).map((s: any) => String(s).trim()).filter(Boolean);
+            if (hl.length >= 3) { g.rsa.headlines = [...new Set<string>(hl)].slice(0, 15); aiUsed = true; }
+            if (de.length >= 2) g.rsa.descriptions = [...new Set<string>(de)].slice(0, 4);
+            if (kw.length >= 1) g.keywords = [...new Set<string>(kw)].slice(0, 20).map((text) => ({ text, match: 'phrase' as const }));
+          }
+        }
+      } catch {
+        /* keep the deterministic, still-valid build */
+      }
+    }
+    let gadsConnected = false;
+    try { gadsConnected = (await connector.listAccounts(u.id)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
+    return { ok: true, spec, summary: campaignSummary(spec), gadsConnected, aiUsed, llmReady: textLlmReady() };
+  });
+
   app.post<{ Body: { spec?: CampaignSpec; confirm?: boolean } }>('/api/campaign/launch', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
