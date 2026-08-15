@@ -407,6 +407,7 @@
           <a data-page="studio"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4 3.6L17 19l-5-3-5 3 1-6.4L4 9l5.8-.7Z"/></svg> Creative Studio</a>
           <a data-page="adstudio"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
           <a data-page="launch"><svg class="ico" viewBox="0 0 24 24"><path d="M5 13a8 8 0 0 1 16 0"/><path d="M12 3v2M4 13H2M22 13h-2M12 13l4-4"/><circle cx="12" cy="13" r="1.6"/></svg> Launch a Campaign</a>
+          <a data-page="adsmgr"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16"/></svg> Ads Manager</a>
           <a data-page="calendar"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg> Content Calendar</a>
           <a data-page="brand"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7l1.3 3 3.2.2-2.4 2.1.8 3.1L12 13.9 9.1 15.5l.8-3.1L7.5 10.2 10.7 10Z"/></svg> Brand Guidelines</a>
           <a data-page="assets"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Assets</a>
@@ -561,6 +562,11 @@
         <div id="w-note" class="appsub" style="margin-top:8px">Live conditions from the US National Weather Service.</div>
         <div id="w-results" style="margin-top:20px"></div>
       </div>
+    </section>
+
+    <!-- ADS MANAGER — per-campaign live view -->
+    <section class="page" id="page-adsmgr">
+      <div id="adsmgr-body" style="max-width:1050px"></div>
     </section>
 
     <!-- MARKET MAP — rank service-area ZIPs by affluence / ability-to-spend -->
@@ -1157,7 +1163,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',launch:'Launch a Campaign',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',launch:'Launch a Campaign',adsmgr:'Ads Manager',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1179,6 +1185,7 @@ function setPage(id){
   $('#page-adstudio').classList.toggle('on',id==='adstudio');
   $('#page-launch').classList.toggle('on',id==='launch');
   $('#page-affluence').classList.toggle('on',id==='affluence');
+  $('#page-adsmgr').classList.toggle('on',id==='adsmgr');
   $('#page-studio').classList.toggle('on',id==='studio');
   $('#page-team').classList.toggle('on',id==='team');
   $('#page-editor').classList.toggle('on',id==='editor');
@@ -1209,6 +1216,7 @@ function setPage(id){
   if(id==='adstudio') openAdStudio();
   if(id==='launch') openLaunch();
   if(id==='affluence') openAffluence();
+  if(id==='adsmgr') openAdsManager();
   if(id==='studio') openStudio();
   if(id==='team') openTeam();
   if(id==='editor') openEditorPage();
@@ -2184,6 +2192,43 @@ function renderAffluence(){
     <div style="overflow-x:auto"><table class="btable"><thead><tr><th style="text-align:left">ZIP</th><th>Tier</th><th>Median income</th><th>$150k+ HH</th><th>Home value</th><th>Affluence</th><th>Discretionary*</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="appsub" style="margin-top:12px">Source: US Census ACS 5-yr (2023) — median household income, $150k+ household share, median home value. <b>*Discretionary is a modeled estimate</b> (after-tax income minus baseline &amp; housing-cost necessities), not a measured figure.${AFFL.live?'':' Demo data until CENSUS_API_KEY is set on the server.'}</div>`;
   wrap.append(c); box.append(wrap);
+}
+
+// ── Ads Manager — per-campaign live view (Cherrie-style cards, trades metrics) ──
+let ADS_RANGE='LAST_30_DAYS';
+async function openAdsManager(){
+  const box=$('#adsmgr-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading your campaigns…</p>';
+  let d={}; try{ d=await(await fetch('/api/ads/campaigns?range='+encodeURIComponent(ADS_RANGE))).json(); }catch(e){ box.innerHTML=''; box.append(ovNudge('Could not load campaigns — try again.')); return; }
+  box.innerHTML='';
+  const head=el('div'); head.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px';
+  const ht=el('div'); ht.innerHTML='<h3 style="margin:0">📊 Ads Manager</h3><p class="mdesc" style="margin:4px 0 0;max-width:560px">Every live campaign, ranked by spend. Metrics tuned for the trades — leads &amp; cost-per-lead, not e-commerce purchases.</p>';
+  const ctrl=el('div'); ctrl.style.cssText='display:flex;align-items:center;gap:8px;flex:none;flex-wrap:wrap';
+  const sel=el('select','f'); sel.style.cssText='width:auto;padding:5px 10px;font-size:13px;border-radius:8px'; for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===ADS_RANGE)o.selected=true; sel.append(o); } sel.onchange=()=>{ ADS_RANGE=sel.value; openAdsManager(); };
+  const launch=el('button','go','＋ Launch a campaign'); launch.style.flex='none'; launch.onclick=()=>setPage('launch');
+  ctrl.append(sel,launch); head.append(ht,ctrl); box.append(head);
+  if(!d.hasData){
+    if(d.connected) box.append(ovSync('✓ Google Ads / Meta connected — no campaign data in '+mktRangeLabel(d.range)+' yet. Launch a campaign, or check back once spend runs.'));
+    else box.append(ovNudge('Connect Google Ads / Meta in Integrations to see your campaigns here — then launch one from “Launch a Campaign”.'));
+    return;
+  }
+  const t=d.totals||{}; const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-bottom:18px';
+  g.append(statCard('Spend','$'+(t.spend||0).toLocaleString()), statCard('Leads',(t.leads||0).toLocaleString()), statCard('Cost / lead', t.costPerLead!=null?('$'+t.costPerLead):'—'), statCard('Clicks',(t.clicks||0).toLocaleString()), statCard('CPC', t.cpc!=null?('$'+t.cpc):'—'));
+  box.append(g);
+  const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px';
+  (d.campaigns||[]).forEach(c=>{
+    const card=el('div','mcard'); card.style.cssText='padding:16px';
+    const plat= c.platform==='facebook'?'Meta': c.platform==='google_ads'?'Google Ads': c.platform;
+    card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><b style="font-size:14px;line-height:1.3">'+esc(c.name)+'</b><span class="apill" style="flex:none">'+esc(plat)+'</span></div>'
+      +'<div style="font-size:24px;font-weight:800;letter-spacing:-.02em;margin:10px 0 2px">$'+(c.spend||0).toLocaleString()+'</div><div class="appsub">spend · '+mktRangeLabel(d.range)+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;font-size:13px">'
+      +'<div><div class="appsub">Leads</div><b>'+(c.leads||0).toLocaleString()+'</b></div>'
+      +'<div><div class="appsub">Cost / lead</div><b>'+(c.costPerLead!=null?'$'+c.costPerLead:'—')+'</b></div>'
+      +'<div><div class="appsub">Clicks</div><b>'+(c.clicks||0).toLocaleString()+'</b></div>'
+      +'<div><div class="appsub">CPC</div><b>'+(c.cpc!=null?'$'+c.cpc:'—')+'</b></div>'
+      +'</div>';
+    grid.append(card);
+  });
+  box.append(grid);
 }
 
 // ═══ creative studio (every marketing asset from one place) ═══

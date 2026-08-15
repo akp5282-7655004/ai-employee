@@ -772,6 +772,33 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   });
 
   // Marketing Hub — campaigns/folders holding saved copy + images, per workspace.
+  // Ads Manager — per-campaign live view (spend, clicks, leads, CPC, cost/lead)
+  // across the selected window, tuned to home-services metrics (not e-commerce).
+  app.get<{ Querystring: { range?: string } }>('/api/ads/campaigns', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const RANGES = new Set(['LAST_7_DAYS', 'LAST_14_DAYS', 'LAST_30_DAYS', 'THIS_MONTH', 'LAST_MONTH']);
+    const range = RANGES.has(String(req.query?.range)) ? String(req.query?.range) : 'LAST_30_DAYS';
+    const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id, range) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
+    let connected = false;
+    try { connected = (await connector.listAccounts(u.id)).some((a) => ['google_ads', 'facebook', 'google_lsa'].includes(a.app)); } catch { /* none */ }
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const campaigns = spend
+      .map((c) => {
+        const s = Math.round(c.spend || 0); const clicks = c.clicks || 0; const conv = c.conversions || 0;
+        return { platform: c.platform, name: c.campaign, spend: s, clicks, leads: conv, cpc: clicks ? r2(s / clicks) : null, costPerLead: conv ? r2(s / conv) : null };
+      })
+      .sort((a, b) => b.spend - a.spend);
+    const totSpend = campaigns.reduce((a, c) => a + c.spend, 0);
+    const totClicks = campaigns.reduce((a, c) => a + c.clicks, 0);
+    const totLeads = campaigns.reduce((a, c) => a + c.leads, 0);
+    return {
+      connected, hasData: campaigns.length > 0, range,
+      totals: { spend: totSpend, clicks: totClicks, leads: totLeads, cpc: totClicks ? r2(totSpend / totClicks) : null, costPerLead: totLeads ? r2(totSpend / totLeads) : null },
+      campaigns,
+    };
+  });
+
   app.get('/api/hub', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
