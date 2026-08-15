@@ -165,6 +165,18 @@ export interface BudgetChangeResult {
   note?: string;
 }
 
+/** The resolved identity of one connected platform, for the "Connections" view. */
+export interface ConnectionDetail {
+  app: string; // slug, e.g. 'google_ads'
+  label: string; // 'Google Ads'
+  connected: boolean;
+  accountName?: string; // human name of the connected account / page
+  accountId?: string; // the primary id (customer id, act id, page id)
+  logo?: string; // logo/picture URL when the platform exposes one
+  rows?: { k: string; v: string }[]; // extra identity lines (customer IDs, status…)
+  note?: string; // honest status / how-to-connect message
+}
+
 export interface Connector {
   readonly name: string;
   /** Mint a short-lived token so an end-user can connect an app account. */
@@ -191,6 +203,10 @@ export interface Connector {
   launchMetaCampaign?(externalUserId: string, spec: import('../agents/metacampaign.js').MetaCampaignSpec): Promise<CampaignLaunchResult>;
   /** Whether a Meta ad account is connected and ready to receive a campaign. */
   metaLaunchReady?(): { ready: boolean; account?: string; note: string };
+  /** Resolve the concrete identity of every connected platform (names, account
+   *  IDs, Google customer IDs, Meta ad-account + Page name/logo) so the owner can
+   *  see exactly what's wired up — not just that "something" is connected. */
+  describeConnections?(externalUserId: string): Promise<ConnectionDetail[]>;
   /** Upload won jobs back to Google Ads as offline conversions, so Smart Bidding
    *  optimizes toward leads that become paying customers — not just clicks. */
   uploadOfflineConversions?(externalUserId: string, items: ConversionItem[]): Promise<ConversionUploadResult>;

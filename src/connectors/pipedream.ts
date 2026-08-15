@@ -634,6 +634,98 @@ export class PipedreamConnector implements Connector {
     };
   }
 
+  // Resolve the concrete identity of a Meta ad account + Page from env creds.
+  private async metaAccountDetails(): Promise<{ adAccount?: { id: string; name?: string; status?: string; currency?: string }; page?: { id: string; name?: string; logo?: string; link?: string } }> {
+    const base = process.env.META_GRAPH_BASE || 'https://graph.facebook.com/v20.0';
+    const token = process.env.META_ADS_ACCESS_TOKEN;
+    const acct = (process.env.META_AD_ACCOUNT_ID || '').replace(/[^0-9]/g, '');
+    const page = (process.env.META_PAGE_ID || '').replace(/[^0-9]/g, '');
+    if (!token) return {};
+    const get = async (path: string): Promise<any> => {
+      try {
+        const res = await fetch(`${base}/${path}${path.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`);
+        return await res.json().catch(() => ({}));
+      } catch {
+        return {};
+      }
+    };
+    const out: { adAccount?: any; page?: any } = {};
+    if (acct) {
+      const a = await get(`act_${acct}?fields=name,account_status,currency`);
+      if (a && !a.error) {
+        const st: Record<number, string> = { 1: 'Active', 2: 'Disabled', 3: 'Unsettled', 7: 'Pending review', 9: 'In grace period', 101: 'Closed' };
+        out.adAccount = { id: `act_${acct}`, name: a.name, status: st[a.account_status] ?? String(a.account_status ?? ''), currency: a.currency };
+      } else {
+        out.adAccount = { id: `act_${acct}`, name: undefined, status: a?.error?.message ? 'Token/account error' : undefined };
+      }
+    }
+    if (page) {
+      const pg = await get(`${page}?fields=name,link,picture.type(large){url}`);
+      if (pg && !pg.error) out.page = { id: page, name: pg.name, logo: pg?.picture?.data?.url, link: pg.link };
+      else out.page = { id: page };
+    }
+    return out;
+  }
+
+  async describeConnections(externalUserId: string): Promise<import('./types.js').ConnectionDetail[]> {
+    const LABEL: Record<string, string> = { google_ads: 'Google Ads', google_my_business: 'Google Business Profile', gohighlevel: 'GoHighLevel', facebook_pages: 'Facebook Page', facebook: 'Facebook', instagram: 'Instagram', google_lsa: 'Google Local Services' };
+    const details: import('./types.js').ConnectionDetail[] = [];
+    let accts: import('./types.js').ConnectedAccount[] = [];
+    try {
+      accts = await this.listAccounts(externalUserId);
+    } catch {
+      /* none */
+    }
+    const byApp = new Map<string, import('./types.js').ConnectedAccount[]>();
+    for (const a of accts) byApp.set(a.app, [...(byApp.get(a.app) ?? []), a]);
+
+    for (const [app, list] of byApp) {
+      const primary = list.find((a) => a.healthy) ?? list[0]!;
+      const detail: import('./types.js').ConnectionDetail = { app, label: LABEL[app] ?? app, connected: true, accountName: primary.name, accountId: primary.id, rows: [] };
+      if (app === 'google_ads') {
+        try {
+          const rows = await this.listComponents('google_ads');
+          const ids = await this.googleAdsCustomerIds(externalUserId, primary.id, rows);
+          if (ids.length) {
+            detail.rows!.push({ k: 'Ad account (customer) ID', v: ids[0]!.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3') });
+            if (ids.length > 1) detail.rows!.push({ k: 'Other accessible accounts', v: ids.slice(1).map((i) => i.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3')).join(', ') });
+          } else {
+            detail.note = 'Connected, but no Google Ads customer ID resolved yet — open the account once or check access.';
+          }
+        } catch {
+          detail.note = 'Connected — customer ID lookup unavailable right now.';
+        }
+      }
+      details.push(detail);
+    }
+
+    // Meta is connected via env creds (not Pipedream) — surface its identity too.
+    const metaReady = this.metaLaunchReady();
+    if (metaReady.ready) {
+      const md = await this.metaAccountDetails();
+      const rows: { k: string; v: string }[] = [];
+      if (md.adAccount) {
+        rows.push({ k: 'Ad account', v: `${md.adAccount.name ? md.adAccount.name + ' · ' : ''}${md.adAccount.id}` });
+        if (md.adAccount.status) rows.push({ k: 'Account status', v: md.adAccount.status });
+        if (md.adAccount.currency) rows.push({ k: 'Currency', v: md.adAccount.currency });
+      }
+      if (md.page) rows.push({ k: 'Facebook Page', v: `${md.page.name ? md.page.name + ' · ' : ''}${md.page.id}` });
+      details.push({
+        app: 'meta_ads',
+        label: 'Meta (Facebook / Instagram) Ads',
+        connected: true,
+        accountName: md.adAccount?.name ?? md.page?.name ?? metaReady.account,
+        accountId: md.adAccount?.id ?? metaReady.account,
+        logo: md.page?.logo,
+        rows,
+        note: md.adAccount?.name ? undefined : 'Connected via env, but Meta didn’t return the account name — double-check the token has access to this ad account.',
+      });
+    } else {
+      details.push({ app: 'meta_ads', label: 'Meta (Facebook / Instagram) Ads', connected: false, note: metaReady.note });
+    }
+    return details;
+  }
+
   async uploadOfflineConversions(externalUserId: string, items: import('./types.js').ConversionItem[]): Promise<import('./types.js').ConversionUploadResult> {
     const accts = await this.listAccounts(externalUserId, 'google_ads');
     const account = accts.find((a) => a.healthy) ?? accts[0];

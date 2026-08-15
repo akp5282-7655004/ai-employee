@@ -4447,6 +4447,22 @@ function renderStack(connected){
     host.append(g);
   }
 }
+const CONN_EMOJI={google_ads:'🟢',meta_ads:'📘',google_my_business:'📍',gohighlevel:'🎯',facebook_pages:'📘',google_lsa:'🛡️'};
+function connDetailCard(d){
+  const c=el('div','mcard'); c.style.cssText='padding:14px;'+(d.connected?'border-left:3px solid var(--good,#16a34a)':'border-left:3px solid #f59e0b');
+  const head=el('div'); head.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:8px';
+  if(d.logo){ const im=el('img'); im.src=d.logo; im.style.cssText='width:34px;height:34px;border-radius:8px;object-fit:cover'; im.onerror=()=>{im.remove();}; head.append(im); }
+  else { const av=el('div',null,CONN_EMOJI[d.app]||'🔌'); av.style.cssText='width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--panel2,#f1f5f9);font-size:18px'; head.append(av); }
+  const ht=el('div'); ht.style.flex='1'; ht.append(el('b',null,d.label)); const st=el('div',null,d.connected?'✓ Connected':'Not connected'); st.style.cssText='font-size:12px;font-weight:600;color:'+(d.connected?'var(--good,#16a34a)':'#b45309'); ht.append(st); head.append(ht);
+  c.append(head);
+  if(d.connected){
+    if(d.accountName){ const an=el('div',null,d.accountName); an.style.fontWeight='600'; c.append(an); }
+    if(d.accountId){ const id=el('div','appsub',d.accountId); id.style.fontFamily='ui-monospace,monospace'; c.append(id); }
+    if(d.rows&&d.rows.length){ const t=el('div'); t.style.cssText='margin-top:8px;display:flex;flex-direction:column;gap:4px'; for(const r of d.rows){ const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;gap:10px;font-size:13px'; row.append(el('span','appsub',r.k)); const v=el('span',null,r.v); v.style.cssText='font-weight:600;text-align:right;font-family:ui-monospace,monospace'; row.append(v); t.append(row); } c.append(t); }
+  }
+  if(d.note){ const n=el('div','appsub',d.note); n.style.marginTop='8px'; c.append(n); }
+  return c;
+}
 function renderInts(){
   const configured = !!(CONN.hub && CONN.hub.ready);
   const connected = new Set(CONN.connectedApps||[]);
@@ -4471,9 +4487,17 @@ function renderInts(){
     return {slug,name:slug};
   };
   const cwrap=$('#int-connected'); cwrap.innerHTML='';
+  // Rich identity panel — the ACTUAL account names & IDs that are wired up.
+  const details=(CONN_DETAIL.details)||[];
+  if(details.length){
+    cwrap.append(el('div','sect-label','YOUR CONNECTED ACCOUNTS'));
+    const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:18px';
+    for(const d of details){ grid.append(connDetailCard(d)); }
+    cwrap.append(grid);
+  }
   const connList=[...connected];
   if(connList.length){
-    cwrap.append(el('div','sect-label','CONNECTED · '+connList.length));
+    cwrap.append(el('div','sect-label','CONNECTED APPS · '+connList.length));
     const g=el('div','appgrid');
     for(const slug of connList){ g.append(appCard(nameFor(slug),true)); }
     cwrap.append(g);
@@ -4484,7 +4508,9 @@ function renderInts(){
   for(const a of APPS){ if(connected.has(a.slug)) continue; cat.append(appCard(a,false)); }
   if(!APPS.length) cat.append(el('div','appsub','No apps found.'));
 }
-async function loadIntegrations(){ await fetchConnections(); await fetchApps($('#app-search').value); renderInts(); updateConnStat(); }
+let CONN_DETAIL={details:[]};
+async function fetchConnDetail(){ if(REMOTE){ try{ CONN_DETAIL = await fetch('/api/connections/detail').then(r=>r.json()); }catch(e){ CONN_DETAIL={details:[]}; } } }
+async function loadIntegrations(){ await fetchConnections(); await fetchConnDetail(); await fetchApps($('#app-search').value); renderInts(); updateConnStat(); }
 let searchT; $('#app-search').addEventListener('input',()=>{ clearTimeout(searchT); searchT=setTimeout(async()=>{ await fetchApps($('#app-search').value); renderInts(); }, 250); });
 // Infinite scroll: load more apps as you reach the bottom of the Integrations catalog.
 document.querySelector('.main').addEventListener('scroll', async (e)=>{

@@ -133,6 +133,27 @@ export class MockConnector implements Connector {
     return { ready: false, note: 'Not connected — add META_ADS_ACCESS_TOKEN, META_AD_ACCOUNT_ID, META_PAGE_ID on Render (from your Meta ad account).' };
   }
 
+  async describeConnections(externalUserId: string): Promise<import('./types.js').ConnectionDetail[]> {
+    const LABEL: Record<string, string> = { google_ads: 'Google Ads', google_my_business: 'Google Business Profile', gohighlevel: 'GoHighLevel', facebook_pages: 'Facebook Page' };
+    const apps = [...new Set(this.acc(externalUserId).map((a) => a.app))];
+    const details: import('./types.js').ConnectionDetail[] = apps.map((app) => ({
+      app,
+      label: LABEL[app] ?? app,
+      connected: true,
+      accountName: app === 'google_ads' ? 'demo@yourbusiness.com' : 'Demo account',
+      accountId: app === 'google_ads' ? '123-456-7890' : 'demo',
+      rows: app === 'google_ads' ? [{ k: 'Ad account (customer) ID', v: '123-456-7890' }] : [],
+      note: 'Demo connector — on Render with real accounts connected, this shows your actual account names & IDs.',
+    }));
+    const metaReady = this.metaLaunchReady();
+    details.push(
+      metaReady.ready
+        ? { app: 'meta_ads', label: 'Meta (Facebook / Instagram) Ads', connected: true, accountName: 'Demo Ad Account', accountId: metaReady.account, rows: [{ k: 'Ad account', v: metaReady.account ?? '' }, { k: 'Facebook Page', v: 'Your Page · ' + (process.env.META_PAGE_ID || '') }], note: 'Demo connector — on Render this resolves the real ad-account & Page name/logo from Meta.' }
+        : { app: 'meta_ads', label: 'Meta (Facebook / Instagram) Ads', connected: false, note: metaReady.note },
+    );
+    return details;
+  }
+
   async launchMetaCampaign(_externalUserId: string, spec: import('../agents/metacampaign.js').MetaCampaignSpec): Promise<import('./types.js').CampaignLaunchResult> {
     const steps: import('./types.js').CampaignLaunchStep[] = [];
     steps.push({ step: `Create campaign "${spec.name}" (PAUSED)`, ok: true, resource: 'DEMO_CAMPAIGN_1' });

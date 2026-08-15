@@ -1462,6 +1462,17 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { connector: connector.name, hub: { ready: pdReady, env: cfg.pipedream.environment }, connectedApps };
   });
 
+  // The concrete identity of every connected platform — account names, Google
+  // customer IDs, Meta ad-account + Page name/logo — so the owner can see exactly
+  // what's wired up, not just that "something" is connected.
+  app.get('/api/connections/detail', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const cfg = loadConfig();
+    const details = connector.describeConnections ? await connector.describeConnections(u.id) : [];
+    return { connector: connector.name, hub: { ready: pipedreamReady(cfg), env: cfg.pipedream.environment }, details };
+  });
+
   // Closed-loop revenue attribution — ad spend correlated to CRM deals by UTM.
   app.get<{ Querystring: { sessionId?: string } }>('/api/revenue', async (req) => {
     const sessionId = req.query?.sessionId;
