@@ -470,28 +470,66 @@ export class PipedreamConnector implements Connector {
       // Map each semantic value onto a prop by trying its keywords in PRIORITY
       // order — the first (most specific) keyword that matches any unused prop
       // wins. (Matching "any keyword" let a loose word like "budget" grab
-      // campaignBudgetId instead of amountMicros.)
-      for (const [, keywords] of Object.entries(values)) {
-        const val = keywords[0];
-        const kws = keywords.slice(1);
-        let hit: any;
-        for (const kw of kws) {
-          hit = props.find((p: any) => p && p.type !== 'app' && p.name && !used.has(p.name) && `${p.label ?? ''} ${p.name}`.toLowerCase().includes(kw));
-          if (hit) break;
+      // campaignBudgetId instead of amountMicros.) Values that find no prop yet
+      // stay in `remaining` — dynamic props may expose their field later.
+      const remaining = new Map(Object.entries(values));
+      const mapOnto = (ps: any[]) => {
+        for (const [vkey, keywords] of [...remaining]) {
+          const val = keywords[0];
+          let hit: any;
+          for (const kw of keywords.slice(1)) {
+            hit = ps.find((p: any) => p && p.type !== 'app' && p.name && !used.has(p.name) && `${p.label ?? ''} ${p.name}`.toLowerCase().includes(kw));
+            if (hit) break;
+          }
+          if (hit) { configured[hit.name] = val; used.add(hit.name); remaining.delete(vkey); }
         }
-        if (hit) { configured[hit.name] = val; used.add(hit.name); }
+      };
+      mapOnto(props);
+      // Dynamic props: components flagged with reloadProps rebuild their prop
+      // list from the values configured so far. Pipedream only honors the
+      // configured fields when the run carries the dynamicPropsId from that
+      // reload — without it the action runs against the STATIC prop shape and
+      // silently ignores the rest, which surfaces as an empty {} "success".
+      let dynamicPropsId: string | undefined;
+      let curProps: any[] = props;
+      for (let i = 0; i < 3 && curProps.some((p: any) => p?.reloadProps || p?.remoteOptions); i++) {
+        try {
+          const rl: any = await (pd as any).components.reloadProps({
+            id: key,
+            externalUserId,
+            configuredProps: configured as any,
+            ...(dynamicPropsId ? { dynamicPropsId } : {}),
+          });
+          const dyn = rl?.dynamicProps ?? rl?.data?.dynamicProps;
+          dynamicPropsId = dyn?.id ?? dynamicPropsId;
+          const next: any[] = dyn?.configurableProps ?? [];
+          if (!next.length) break;
+          const before = used.size;
+          mapOnto(next);
+          curProps = next;
+          if (used.size === before || !remaining.size) break; // stable — stop reloading
+        } catch {
+          break; // component has no dynamic props endpoint — run as-is
+        }
       }
-      const res = await pd.actions.run({ externalUserId, id: key, configuredProps: configured });
+      const res = await pd.actions.run({ externalUserId, id: key, configuredProps: configured, ...(dynamicPropsId ? { dynamicPropsId } : {}) });
       const raw = res?.ret ?? res?.exports ?? res ?? null;
       const resource = extractResourceName(raw);
+      // Real failures often hide in the run's observation log, not the return
+      // value — pull any error entries out so "{}" stops masquerading as fine.
+      const osErrors = ((res as any)?.os ?? [])
+        .map((o: any) => o?.err ? `${o.err.name ?? 'Error'}: ${o.err.message ?? ''}`.trim() : /err/i.test(o?.k ?? '') ? o?.msg : undefined)
+        .filter(Boolean) as string[];
       // Keep ok:true (some writes, e.g. keywords, don't return a single resource),
-      // but when no resource comes back, capture WHAT we sent + WHAT props the
-      // component exposes, so an empty {} response is diagnosable at a glance.
+      // but when no resource comes back, capture WHAT we sent + WHAT Google/
+      // Pipedream logged, so an empty {} response is diagnosable at a glance.
       const sent = Object.keys(configured).filter((k) => k !== appName);
       const detail = resource
         ? undefined
-        : `sent[${sent.join(', ') || 'nothing but auth'}] · fields[${(props as any[]).map((p) => p?.name).filter(Boolean).join(', ')}] · resp ${JSON.stringify(raw ?? null).slice(0, 120)}`;
-      return { ok: true, resource, detail };
+        : osErrors.length
+          ? `Google rejected it: ${osErrors.join(' · ').slice(0, 400)}`
+          : `sent[${sent.join(', ') || 'nothing but auth'}] · resp ${JSON.stringify(raw ?? null).slice(0, 300)}`;
+      return { ok: !osErrors.length, resource, error: osErrors.length ? osErrors.join(' · ').slice(0, 400) : undefined, detail };
     } catch (e) {
       return { ok: false, error: String((e as Error).message) };
     }
