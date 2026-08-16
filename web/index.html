@@ -165,7 +165,7 @@
   .prow .sp{flex:1;}
   .modelchip{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:12px;color:var(--muted);}
   .modelchip .m{font-weight:700;color:var(--ink);}
-  .go{display:flex;align-items:center;gap:6px;background:var(--primary);color:var(--primary-ink);border:none;border-radius:999px;padding:10px 20px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer;}
+  .go{display:flex;align-items:center;gap:6px;white-space:nowrap;flex:none;background:var(--primary);color:var(--primary-ink);border:none;border-radius:999px;padding:10px 20px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer;}
 
   .tabs{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:22px 0;}
   .tab{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;font-size:13px;color:var(--muted);cursor:pointer;border:1px solid var(--line);background:var(--card);}
@@ -1716,6 +1716,13 @@ $('#v-budget').addEventListener('input',runValidate); $('#v-leads').addEventList
 // ═══ research (real US Census) ═══
 function statCard(lab,val){ const c=el('div','stat'); c.append(el('div','lab',lab), el('div','val',val)); return c; }
 // ON/OFF status pill used by the dashboard's block headers.
+function miniStats(pairs){
+  const w=el('div'); w.style.cssText='display:grid;grid-template-columns:repeat('+pairs.length+',minmax(0,1fr));gap:10px;margin-top:12px';
+  pairs.forEach(([lab,val])=>{ const c=el('div','well'); c.style.padding='9px 11px';
+    const l=el('div',null,lab); l.style.cssText='font-family:var(--ui);font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#AEAEB2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'; c.append(l);
+    const v=el('div',null,String(val)); v.style.cssText='font-family:var(--ui);font-size:19px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;margin-top:2px'; c.append(v);
+    w.append(c); });
+  return w; }
 function ovPill(on){ return '<span style="font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.1em;padding:2px 9px;border-radius:999px;vertical-align:1px;background:'+(on?'var(--ink);color:var(--panel)':'var(--panel-2);color:var(--muted);border:1px solid var(--line)')+'">'+(on?'ON':'OFF')+'</span>'; }
 function renderResearch(d){
   const box=$('#r-results'); box.innerHTML='';
@@ -2257,9 +2264,9 @@ function renderOverview(d){
   const g=el('div','stats'); g.style.cssText='margin:16px 0;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
   g.append(statCard('Pending approvals',k.pendingApprovals||0), statCard('Changes live',k.liveChanges||0), statCard('Agents deployed',k.agentsDeployed||0), statCard('Agent runs · '+mktRangeLabel(d.range),k.agentRuns||0), statCard('Scheduled posts',k.scheduledPosts||0), statCard('Credits used',(k.creditsUsed||0).toLocaleString()), statCard('Weather triggers',k.weatherTriggers||0));
   box.append(g);
-  box.append(stlCard(d.speedToLead||{}));
-  box.append(reviewCard());
-  box.append(autoCard());
+  const autoRow=el('div'); autoRow.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px;margin:16px 0;align-items:start';
+  autoRow.append(stlCard(d.speedToLead||{}), reviewCard(), autoCard());
+  box.append(autoRow);
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px';
   const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<div class="sect-label" style="margin:0 0 10px">MARKETING PERFORMANCE</div>';
   if(mk.hasData){ const ss=el('div','stats'); ss.append(statCard('Ad spend','$'+(mk.spend||0).toLocaleString()), statCard('Cost / job', mk.cpa!=null?('$'+mk.cpa):'—'), statCard('Revenue','$'+(mk.revenue||0).toLocaleString())); mc.append(ss); mc.append(el('div','appsub','Showing '+mktRangeLabel(mk.range)+(mk.targetCpa&&mk.cpa!=null?' · target $'+mk.targetCpa+'/job · '+(mk.cpa<=mk.targetCpa?'✅ under target':'⚠︎ over target'):''))); }
@@ -2290,19 +2297,19 @@ function renderOverview(d){
 }
 // More instant automations — no-show recovery (#7) + new-customer onboarding (#23).
 function autoCard(){
-  const card=el('div','mcard'); card.style.cssText='margin:16px 0'; card.innerHTML='<p class="appsub">Loading…</p>';
+  const card=el('div','mcard acard'); card.style.cssText='margin:0;padding:16px 18px;height:100%'; card.innerHTML='<p class="appsub">Loading…</p>';
   (async()=>{
     let d={}; if(REMOTE){ try{ d=await(await fetch('/api/automations')).json(); }catch(e){} }
     const ns=d.noShow||{}, ob=d.onboarding||{}; const anyOn=ns.enabled||ob.enabled;
-    card.innerHTML=''; card.style.border='1px solid '+(anyOn?'var(--brand)':'var(--line)');
+    card.innerHTML=''; card.style.border='1px solid '+(anyOn?'var(--ink)':'var(--line)');
     const topb=el('div'); topb.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
     const left=el('div'); left.innerHTML='<div class="sect-label" style="margin:0">MORE INSTANT AUTOMATIONS '+ovPill(anyOn)+'</div><p class="mdesc" style="margin:6px 0 0;max-width:640px">Two more plays Miles runs the moment they fire in GoHighLevel.</p>';
-    const trig=el('button','ghost','🔁 Instant triggers'); trig.onclick=openAutoTriggers;
+    const trig=el('button','ghost','Instant triggers'); trig.onclick=openAutoTriggers;
     topb.append(left,trig); card.append(topb);
     const rows=el('div'); rows.style.cssText='display:flex;flex-direction:column;gap:0;margin-top:10px';
-    const row=(icon,title,desc,on,onToggle)=>{ const r=el('div'); r.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--line,#e5e7eb);padding:12px 0'; const l=el('div'); l.innerHTML='<b>'+icon+' '+title+'</b><div class="appsub" style="margin-top:2px;max-width:520px">'+desc+'</div>'; const t=el('button','go',on?'On':'Turn on'); if(on){ t.classList.remove('go'); t.classList.add('ghost'); } t.onclick=onToggle; r.append(l,t); return r; };
-    rows.append(row('🗓️','No-Show Recovery','Appointment marked no-show → a warm rebook text with your booking link. 30–50% rebook if contacted within the hour.',ns.enabled,async()=>{ try{ await fetch('/api/automations',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({noShow:{enabled:!ns.enabled}})}); }catch(e){} openOverview(); }));
-    rows.append(row('🎉','New Customer Onboarding','Deal marked Closed Won → a welcome text AND Miles stops all prospect nurtures (no "still thinking?" texts after they’ve paid).',ob.enabled,async()=>{ try{ await fetch('/api/automations',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({onboarding:{enabled:!ob.enabled}})}); }catch(e){} openOverview(); }));
+    const row=(icon,title,desc,on,onToggle)=>{ const r=el('div'); r.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--line,#e5e7eb);padding:12px 0'; const l=el('div'); l.innerHTML='<b>'+(icon?icon+' ':'')+title+'</b><div class="appsub" style="margin-top:2px;max-width:520px">'+desc+'</div>'; const t=el('button','go',on?'On':'Turn on'); if(on){ t.classList.remove('go'); t.classList.add('ghost'); } t.onclick=onToggle; r.append(l,t); return r; };
+    rows.append(row('','No-Show Recovery','Appointment marked no-show → a warm rebook text with your booking link. 30–50% rebook if contacted within the hour.',ns.enabled,async()=>{ try{ await fetch('/api/automations',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({noShow:{enabled:!ns.enabled}})}); }catch(e){} openOverview(); }));
+    rows.append(row('','New Customer Onboarding','Deal marked Closed Won → a welcome text AND Miles stops all prospect nurtures (no "still thinking?" texts after they’ve paid).',ob.enabled,async()=>{ try{ await fetch('/api/automations',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({onboarding:{enabled:!ob.enabled}})}); }catch(e){} openOverview(); }));
     card.append(rows);
     if(ns.enabled && !ns.calendarUrl) card.append(ovNudge('Add your booking-calendar link in 🔁 Instant triggers so no-show texts can rebook in one tap.'));
   })();
@@ -2325,19 +2332,19 @@ async function openAutoTriggers(){
 // Post-Job Review Request card — fires the 1–10 ask on job completion; 9–10 → Google,
 // 1–8 → private service recovery (never a public link).
 function reviewCard(){
-  const card=el('div','mcard'); card.style.cssText='margin:16px 0'; card.innerHTML='<p class="appsub">Loading…</p>';
+  const card=el('div','mcard acard'); card.style.cssText='margin:0;padding:16px 18px;height:100%'; card.innerHTML='<p class="appsub">Loading…</p>';
   (async()=>{
     let d={}; if(REMOTE){ try{ d=await(await fetch('/api/review-request')).json(); }catch(e){} }
-    const on=!!d.enabled; card.innerHTML=''; card.style.border='1px solid '+(on?'var(--brand)':'var(--line)');
+    const on=!!d.enabled; card.innerHTML=''; card.style.border='1px solid '+(on?'var(--ink)':'var(--line)');
     const topb=el('div'); topb.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
     const left=el('div'); left.innerHTML='<div class="sect-label" style="margin:0">REVIEW REQUESTS '+ovPill(on)+'</div><p class="mdesc" style="margin:6px 0 0;max-width:640px">When a job is marked complete, Miles texts a 1-10 ask. <b>9-10</b> get your Google review link; <b>1-8</b> route to a private service-recovery call — never the public link.</p>';
     const acts=el('div'); acts.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
-    const trig=el('button','ghost','⭐ Instant triggers'); trig.onclick=openReviewTriggers;
+    const trig=el('button','ghost','Instant triggers'); trig.onclick=openReviewTriggers;
     const toggle=el('button','go',on?'Turn off':'Turn on'); toggle.onclick=async()=>{ toggle.disabled=true; try{ await fetch('/api/review-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({enabled:!on})}); }catch(e){} openOverview(); };
     acts.append(trig,toggle); topb.append(left,acts); card.append(topb);
     if(on){
       const recent=d.recent||[]; const proms=recent.filter(r=>r.outcome==='promoter').length; const dets=recent.filter(r=>r.outcome==='detractor').length;
-      const ss=el('div','stats'); ss.style.marginTop='12px'; ss.append(statCard('Asked',recent.filter(r=>r.outcome==='asked').length), statCard('Promoters (9-10)',proms), statCard('Recovered (1-8)',dets)); card.append(ss);
+      card.append(miniStats([['Asked',recent.filter(r=>r.outcome==='asked').length],['Promoters',proms],['Recovered',dets]]));
       if(!d.googleReviewUrl) card.append(ovNudge('Add your Google review link in ⭐ Instant triggers so promoters can leave a review in one tap.'));
     } else {
       card.append(ovNudge('Turn it on and every completed job becomes a shot at a 5-star review — with unhappy customers caught privately first.'));
@@ -2381,21 +2388,19 @@ async function openStlTriggers(){
 // Speed-to-Lead — the keystone card: answer every new lead within the 5-minute window.
 function stlCard(st){
   const on=!!st.enabled;
-  const card=el('div','mcard'); card.style.cssText='margin:16px 0;border:1px solid '+(on?'var(--brand)':'var(--line)');
+  const card=el('div','mcard acard'); card.style.cssText='margin:0;padding:16px 18px;height:100%;border:1px solid '+(on?'var(--ink)':'var(--line)');
   const topb=el('div'); topb.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
   const left=el('div');
   left.innerHTML='<div class="sect-label" style="margin:0">SPEED-TO-LEAD '+ovPill(on)+'</div>'
     +'<p class="mdesc" style="margin:6px 0 0;max-width:640px">78% of homeowners hire whoever answers first. When on, Miles texts &amp; emails every new lead within a minute — then hands off to nurture.</p>';
   const acts=el('div'); acts.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
-  const trig=el('button','ghost','⚡ Instant triggers'); trig.onclick=openStlTriggers;
+  const trig=el('button','ghost','Instant triggers'); trig.onclick=openStlTriggers;
   const toggle=el('button','go',on?'Turn off':'Turn on');
   toggle.onclick=async()=>{ toggle.disabled=true; try{ await fetch('/api/speed-to-lead',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({enabled:!on})}); }catch(e){} openOverview(); };
   acts.append(trig,toggle);
   topb.append(left,acts); card.append(topb);
   if(on){
-    const ss=el('div','stats'); ss.style.marginTop='12px';
-    ss.append(statCard('Answered today',st.today||0), statCard('Avg response', st.avgResponse||'—'), statCard('Total answered',st.total||0));
-    card.append(ss);
+    card.append(miniStats([['Answered today',st.today||0],['Avg response',st.avgResponse||'—'],['Total answered',st.total||0]]));
     if(st.held) card.append(ovNudge('⚠︎ '+st.held+' draft'+(st.held===1?'':'s')+' ready but not sent — connect your CRM (GoHighLevel) in Integrations so replies send automatically.'));
     const run=el('button',null,'Run now'); run.style.cssText='margin-top:12px;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans)';
     run.onclick=async()=>{ run.disabled=true; run.textContent='Answering new leads…'; try{ const r=await(await fetch('/api/speed-to-lead/run',{method:'POST'})).json(); toast(r.ran?('Answered '+((r.stats&&r.stats.today)||0)+' today'):'No new leads right now'); }catch(e){} openOverview(); };
