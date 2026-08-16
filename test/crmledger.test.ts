@@ -70,3 +70,26 @@ describe('CRM event ledger', () => {
     expect(other!.source).toBe('sample');
   });
 });
+
+describe('deals read → live values (GHL opportunities)', () => {
+  const deals = [
+    { value: 4200, won: true, wonAt: new Date(Date.now() - 5 * 86_400_000).toISOString() },
+    { value: 1800, won: true, wonAt: new Date(Date.now() - 60 * 86_400_000).toISOString() }, // outside 30d
+    { value: 2500, won: false, createdAt: new Date().toISOString() }, // open pipeline
+    { value: 900, won: true }, // undated win — counts rather than silently dropped
+  ];
+
+  it('computes won/revenue/pipeline from the pipeline, respecting the window', async () => {
+    const { dealsLiveValues } = await import('../src/metrics/crmledger.js');
+    const v = dealsLiveValues(deals, 30);
+    expect(v['crm.booked_jobs']).toBe(2); // recent win + undated win
+    expect(v['crm.job_revenue']).toBe(5100);
+    expect(v['crm.pipeline_value']).toBe(2500);
+    expect(v['crm.avg_ticket']).toBe(2550);
+  });
+
+  it('returns {} with no deals so the webhook ledger stays authoritative', async () => {
+    const { dealsLiveValues } = await import('../src/metrics/crmledger.js');
+    expect(dealsLiveValues([], 30)).toEqual({});
+  });
+});

@@ -51,6 +51,17 @@ export class PipedreamConnector implements Connector {
   private gadsCache = new Map<string, { key: string; appName: string; ids: string[]; targets?: { login: string; client?: string }[]; shape?: GadsShape; ts: number }>();
   /** customerId → descriptive name, harvested from list-customer-clients responses. */
   private gadsNames = new Map<string, string>();
+  /** The ad account the owner last launched into — reads prefer it too, so an
+   *  MCC with many clients reports the business the owner actually works in. */
+  private gadsPreferred = new Map<string, string>();
+  private static GHL_SLUGS = ['gohighlevel', 'highlevel_oauth', 'highlevel', 'leadconnector'];
+
+  /** Order targets so the owner's preferred (last-launched-into) account is tried first. */
+  private preferTargets(externalUserId: string, targets: { login: string; client?: string }[]): { login: string; client?: string }[] {
+    const pref = this.gadsPreferred.get(externalUserId);
+    if (!pref) return targets;
+    return [...targets].sort((a, b) => (((b.client ?? b.login) === pref) ? 1 : 0) - (((a.client ?? a.login) === pref) ? 1 : 0));
+  }
   private static readonly DISCOVERY_TTL_MS = 10 * 60 * 1000;
 
   constructor(private readonly cfg: Config) {}
@@ -388,6 +399,54 @@ export class PipedreamConnector implements Connector {
   }
 
   /**
+   * Deals/opportunities from the connected CRM (GoHighLevel under any of its
+   * Pipedream slugs). Best-effort component discovery: finds a list/search
+   * opportunities action and normalizes rows into Deal objects — this is what
+   * turns Booked Jobs and Revenue live from the actual pipeline, without
+   * waiting for a webhook to fire.
+   */
+  async getDeals(externalUserId: string): Promise<import('../revenue/attribution.js').Deal[]> {
+    const out: import('../revenue/attribution.js').Deal[] = [];
+    try {
+      const pd = await this.backend();
+      for (const slug of PipedreamConnector.GHL_SLUGS) {
+        const accts = await this.listAccounts(externalUserId, slug).catch(() => [] as import('./types.js').ConnectedAccount[]);
+        const account = accts.find((a) => a.healthy) ?? accts[0];
+        if (!account) continue;
+        const rows = await this.listComponents(slug);
+        const isOpp = (c: any) => /opportunit/i.test(String(c.key ?? c.id ?? c.componentKey ?? ''));
+        const comp = rows.find((c) => isOpp(c) && /list|search|get/i.test(String(c.key ?? c.id ?? c.componentKey ?? ''))) ?? rows.find(isOpp);
+        if (!comp) continue;
+        const key = comp.key ?? comp.id ?? comp.componentKey;
+        const props = await this.componentProps(comp, key);
+        const appName = props.find((p: any) => p?.type === 'app')?.name ?? slug;
+        const cp: Record<string, unknown> = { [appName]: { authProvisionId: account.id } };
+        if (props.some((p: any) => p?.name === 'limit')) cp.limit = 100;
+        const res = await pd.actions.run({ externalUserId, id: key, configuredProps: cp });
+        for (const r of asRows(res?.ret ?? res?.exports ?? res)) {
+          const id = r?.id ?? r?._id;
+          if (!id) continue;
+          const status = String(r?.status ?? r?.stage ?? r?.stageName ?? '').toLowerCase();
+          out.push({
+            id: String(id),
+            value: num(r?.monetaryValue ?? r?.monetary_value ?? r?.value ?? r?.amount),
+            won: status === 'won' || /closed.?won/.test(status),
+            utmSource: r?.source ? String(r.source) : undefined,
+            createdAt: r?.createdAt ?? r?.dateAdded ?? r?.date_added ?? undefined,
+            wonAt: r?.lastStatusChangeAt ?? r?.updatedAt ?? undefined,
+            email: r?.contact?.email ?? r?.email ?? undefined,
+            phone: r?.contact?.phone ?? r?.phone ?? undefined,
+          });
+        }
+        if (out.length) return out;
+      }
+    } catch {
+      /* CRM read unavailable — callers fall back to the webhook ledger */
+    }
+    return out;
+  }
+
+  /**
    * Search terms with spend/conversions, for the Gold Miner skill. Best-effort:
    * Pipedream's Google Ads app exposes a search-terms report on some plans;
    * when no matching component exists this returns [] and the skill says so
@@ -407,7 +466,7 @@ export class PipedreamConnector implements Connector {
       const props = await this.componentProps(comp, key);
       const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
       const targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
-      const t = targets[0];
+      const t = this.preferTargets(externalUserId, targets)[0];
       const cp: Record<string, unknown> = { [appName]: { authProvisionId: account.id }, dateRange: 'LAST_30_DAYS' };
       if (t?.login && props.some((p: any) => p?.name === 'accountId')) cp.accountId = t.login;
       if (t?.client && props.some((p: any) => p?.name === 'customerClientId')) cp.customerClientId = t.client;
@@ -468,7 +527,7 @@ export class PipedreamConnector implements Connector {
     // then remember it so later loads use just that one. If a format is already
     // cached, try it alone first.
     const shapes = cachedShape ? [cachedShape, ...GADS_SHAPES.filter((s) => s.tag !== cachedShape.tag)] : GADS_SHAPES;
-    for (const t of targets.slice(0, 8)) {
+    for (const t of this.preferTargets(externalUserId, targets).slice(0, 8)) {
       for (const shape of shapes) {
         const configuredProps: Record<string, unknown> = { [appName]: { authProvisionId: account.id }, dateRange: range, fields: shape.fields, metrics: shape.metrics };
         if (t.login) configuredProps.accountId = t.login; // report "as" the login/manager
@@ -617,6 +676,8 @@ export class PipedreamConnector implements Connector {
     if (wanted && !target) {
       return { ok: false, live: true, steps: [{ step: `Target account ${targetCustomerId}`, ok: false, error: 'That Google Ads account is not reachable from your connected login.' }], note: 'Pick one of the accounts Miles lists for your connection.' };
     }
+    // Remember the pick — spend reads and search terms follow the same account.
+    if (target) this.gadsPreferred.set(externalUserId, target.client ?? target.login);
     const customerId = target?.client ?? target?.login;
     const acctVals: Record<string, string[]> = {};
     if (target?.login) acctVals.loginAccount = [target.login, 'use google ads as', 'use google ads', 'accountid'];

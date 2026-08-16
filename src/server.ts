@@ -21,7 +21,7 @@ import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type Campaign
 import { SPEC_PLATFORMS, loadSpec, searchSpecCheck, type SpecPlatform } from './specs/index.js';
 import { metricCatalog, dashboardDefaults } from './metrics/catalog.js';
 import { getMetrics } from './metrics/resolver.js';
-import { appendCrmEvent, amountFrom, crmLiveValues, calcLiveValues } from './metrics/crmledger.js';
+import { appendCrmEvent, amountFrom, crmLiveValues, calcLiveValues, dealsLiveValues } from './metrics/crmledger.js';
 import { buildLocalPresenceAudit, gbpCompletenessScore, type AuditAnswer } from './agents/localpresence.js';
 import { appendApproval, approvalLog, defaultAutonomy, normalizeAutonomy, TOS_VERSION, type ApprovalEntry } from './agents/approvallog.js';
 import { listSkills as listLibrarySkills, readSkill as readLibrarySkill } from './skills/library.js';
@@ -1363,7 +1363,11 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const data = await authStore.getUserData(u.id);
     const spendRows = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
     const adSpend = spendRows.length ? spendRows.reduce((a, r) => a + (r.spend || 0), 0) : undefined;
-    const crm = crmLiveValues(data, days);
+    // CRM live values: webhook ledger first, then the direct deals read
+    // (GHL opportunities) overrides won/revenue — the pipeline is the truth.
+    const ledger = crmLiveValues(data, days);
+    const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
+    const crm = { ...ledger, ...dealsLiveValues(deals, days) };
     // GBP completeness comes live from the Local Presence audit once taken.
     const lpAnswers = (data.localPresence as Record<string, AuditAnswer>) ?? undefined;
     const gbpScore = lpAnswers ? { 'gbp.completeness_score': gbpCompletenessScore(buildLocalPresenceAudit(lpAnswers, (data.profile ?? {}) as Record<string, string>)) } : {};

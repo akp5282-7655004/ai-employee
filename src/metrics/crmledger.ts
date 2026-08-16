@@ -69,6 +69,31 @@ export function crmLiveValues(data: Record<string, unknown>, days: number): Reco
 }
 
 /**
+ * Live values from a direct CRM deals read (GHL opportunities) — authoritative
+ * for won/revenue when present, because it reflects the whole pipeline rather
+ * than only events that fired webhooks. Returns {} when no deals exist.
+ */
+export function dealsLiveValues(deals: { value: number; won: boolean; createdAt?: string; wonAt?: string }[], days: number): Record<string, number> {
+  if (!deals.length) return {};
+  const cutoff = Date.now() - days * 86_400_000;
+  const inRange = (d: { createdAt?: string; wonAt?: string }, key: 'createdAt' | 'wonAt') => {
+    const t = Date.parse(d[key] ?? '');
+    return Number.isFinite(t) ? t >= cutoff : true; // undated deals count — better than dropping them silently
+  };
+  const won = deals.filter((d) => d.won && inRange(d, 'wonAt'));
+  const open = deals.filter((d) => !d.won);
+  const revenue = Math.round(won.reduce((a, d) => a + (d.value || 0), 0) * 100) / 100;
+  const out: Record<string, number> = {
+    'crm.estimates_won': won.length,
+    'crm.booked_jobs': won.length,
+    'crm.job_revenue': revenue,
+    'crm.pipeline_value': Math.round(open.reduce((a, d) => a + (d.value || 0), 0) * 100) / 100,
+  };
+  if (won.length > 0 && revenue > 0) out['crm.avg_ticket'] = Math.round((revenue / won.length) * 100) / 100;
+  return out;
+}
+
+/**
  * Blend live CRM values with live ad spend into the calc.* money metrics.
  * A calc metric goes live only when every input it needs is live — mixed
  * real+sample math is never shown as real.
