@@ -424,6 +424,7 @@
       <div class="navgroup" data-group="insights">
         <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="hlabel">Insights</span><svg class="ico chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
         <div class="navkids">
+          <a data-page="cmdcenter"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></svg> Command Center</a>
           <a data-page="recs"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.3 1 2.5h6c0-1.2.3-1.8 1-2.5A6 6 0 0 0 12 3Z"/></svg> Recommendations</a>
           <a data-page="analytics"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Analytics</a>
           <a data-page="meters"><svg class="ico" viewBox="0 0 24 24"><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 12 15 9M4 12a8 8 0 0 1 16 0"/></svg> Meters</a>
@@ -603,6 +604,10 @@
     <!-- SYSTEM HEALTH (what's actually working, at a glance) -->
     <section class="page" id="page-health">
       <div id="health-body" style="max-width:820px"></div>
+    </section>
+
+    <section class="page" id="page-cmdcenter">
+      <div id="cc-body"></div>
     </section>
 
     <!-- AUTOMATION HUB (the five live instant plays, all in one place) -->
@@ -1199,7 +1204,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',fblaunch:'Launch on Facebook',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',cmdcenter:'Command Center',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',fblaunch:'Launch on Facebook',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1223,6 +1228,7 @@ function setPage(id){
   $('#page-fblaunch').classList.toggle('on',id==='fblaunch');
   $('#page-autohub').classList.toggle('on',id==='autohub');
   $('#page-health').classList.toggle('on',id==='health');
+  $('#page-cmdcenter').classList.toggle('on',id==='cmdcenter');
   $('#page-ghl').classList.toggle('on',id==='ghl');
   $('#page-playbook').classList.toggle('on',id==='playbook');
   $('#page-affluence').classList.toggle('on',id==='affluence');
@@ -1260,6 +1266,7 @@ function setPage(id){
   if(id==='fblaunch') openFbLaunch();
   if(id==='autohub') openAutoHub();
   if(id==='health') openHealth();
+  if(id==='cmdcenter') openCmdCenter();
   if(id==='ghl') openGhl();
   if(id==='playbook') openPlaybook();
   if(id==='affluence') openAffluence();
@@ -2461,6 +2468,203 @@ async function doLaunch(){
   if(r.link){ const a=el('a',null,'View in Google Ads ↗'); a.href=r.link; a.target='_blank'; a.style.cssText='display:inline-block;margin-top:12px;color:var(--accent)'; c.append(a); }
   const again=el('button',null,'Build another →'); again.style.cssText='display:block;margin-top:14px;background:none;border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer'; again.onclick=openLaunch; c.append(again);
   box.append(c);
+}
+
+// ── Command Center — configurable widget dashboard + seven skills ──
+// Spec: docs/specs/dashboard-and-skills-spec.md. Additive page; the classic
+// dashboard (Overview) is untouched and remains the default landing view.
+const CC={days:30,catalog:[],connected:[],defaults:{kpi_strip:[],custom_grid:[]},layout:{widgets:[]},metrics:{}};
+const CC_PLATFORMS=[['google_ads','Google Ads'],['meta','Meta'],['lsa','Google LSA'],['gbp','Business Profile'],['calls','Calls'],['crm','CRM'],['calculated','Calculated']];
+function ccConnected(plat){ if(plat==='calculated') return true;
+  if(plat==='google_ads') return CC.connected.includes('google_ads');
+  if(plat==='crm') return CC.connected.some(a=>['gohighlevel','highlevel_oauth','highlevel','leadconnector'].includes(a));
+  if(plat==='meta') return CC.connected.some(a=>['facebook_ads','facebook'].includes(a));
+  return false; }
+function ccFmt(format,v){ if(v==null||!isFinite(v)) return '—';
+  if(format==='currency') return v>=1000?'$'+Math.round(v).toLocaleString():'$'+(+v).toFixed(2).replace(/\.00$/,'');
+  if(format==='percent_1dp') return (+v).toFixed(1)+'%';
+  if(format==='decimal_2dp') return (+v).toFixed(2);
+  if(format==='duration') return v>=120?Math.round(v/60)+'m':Math.round(v)+'s';
+  return Math.round(v).toLocaleString(); }
+function ccSpark(series){ if(!series||series.length<2) return el('span');
+  const w=110,h=26,max=Math.max.apply(null,series.concat([1e-9])),min=Math.min.apply(null,series.concat([0]));
+  const pts=series.map((v,i)=>((i/(series.length-1))*w).toFixed(1)+','+(h-((v-min)/((max-min)||1))*(h-4)-2).toFixed(1)).join(' ');
+  const NS='http://www.w3.org/2000/svg'; const svg=document.createElementNS(NS,'svg');
+  svg.setAttribute('viewBox','0 0 '+w+' '+h); svg.style.cssText='width:110px;height:26px;overflow:visible;display:block';
+  const p=document.createElementNS(NS,'polyline'); p.setAttribute('points',pts); p.setAttribute('fill','none'); p.setAttribute('stroke','#6366f1'); p.setAttribute('stroke-width','1.6'); svg.append(p); return svg; }
+function ccDelta(m){ const d=el('span'); if(!m||!isFinite(m.prior_value)||!m.prior_value) return d;
+  const pct=((m.value-m.prior_value)/Math.abs(m.prior_value))*100; const up=pct>=0;
+  const good=m.direction==='neutral'?null:((m.direction==='up_good')===up);
+  d.textContent=(up?'▲ ':'▼ ')+Math.abs(pct).toFixed(0)+'% vs prior';
+  d.style.cssText='font-size:11.5px;font-weight:700;color:'+(good==null?'var(--muted)':(good?'#16a34a':'#dc2626')); return d; }
+function ccEntry(key){ return CC.catalog.find(m=>m.key===key); }
+async function ccResolve(keys){ const need=[...new Set(keys)].filter(Boolean); if(!need.length) return;
+  try{ const r=await(await fetch('/api/metrics/resolve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({keys:need,days:CC.days})})).json();
+    (r.results||[]).forEach(m=>{CC.metrics[m.key]=m;}); }catch(e){} }
+async function ccSaveLayout(){ try{ await fetch('/api/dashboard2/layout',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({layout:CC.layout})}); }catch(e){} }
+function ccPanel(title){ const c=el('div','mcard'); c.append(el('div','sect-label',title)); return c; }
+
+function ccKpiCard(key){
+  const m=CC.metrics[key], entry=ccEntry(key);
+  const c=el('div'); c.style.cssText='background:var(--panel,#fff);border:1px solid var(--line,#e5e7eb);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0';
+  const lab=el('div','appsub',(entry?entry.label:key)); lab.style.whiteSpace='nowrap'; lab.style.overflow='hidden'; lab.style.textOverflow='ellipsis'; c.append(lab);
+  const v=el('div',null,m?ccFmt(m.format,m.value):'—'); v.style.cssText='font-size:22px;font-weight:800;letter-spacing:-.02em'; c.append(v);
+  if(m){ c.append(ccDelta(m)); c.append(ccSpark(m.series)); }
+  return c; }
+
+function ccFunnelPanel(){
+  const c=ccPanel('FUNNEL BY STAGE');
+  const g=k=>CC.metrics[k]?CC.metrics[k].value:0;
+  const stages=[['Impressions',g('google_ads.impressions')+g('meta.impressions')],['Clicks',g('google_ads.clicks')+g('meta.link_clicks')],['Leads',g('calc.blended_leads')],['Qualified',g('crm.qualified_leads')],['Booked Jobs',g('crm.booked_jobs')],['Completed',g('crm.completed_jobs')]];
+  const first=stages[0][1]||1; let worst={drop:0,idx:-1};
+  stages.forEach(([name,v],i)=>{
+    if(i>1&&stages[i-1][1]>0){ const drop=1-(v/stages[i-1][1]); if(drop>worst.drop){worst={drop,idx:i};} }
+    const row=el('div'); row.style.cssText='display:flex;align-items:center;gap:10px;margin:7px 0';
+    const lab=el('div','appsub',name); lab.style.cssText='width:92px;flex:none;font-weight:600'; row.append(lab);
+    const barWrap=el('div'); barWrap.style.cssText='flex:1;background:var(--panel2,#f1f5f9);border-radius:6px;height:18px;overflow:hidden';
+    const bar=el('div'); const w=Math.max(3,Math.pow(v/first,0.32)*100); bar.style.cssText='height:100%;width:'+w.toFixed(1)+'%;background:linear-gradient(90deg,#6366f1,#8b5cf6);border-radius:6px'; barWrap.append(bar); row.append(barWrap);
+    const num=el('div',null,Math.round(v).toLocaleString()); num.style.cssText='width:74px;text-align:right;font-weight:700;font-size:13px'; row.append(num);
+    const pct=el('div','appsub',i>0&&stages[i-1][1]>0?((v/stages[i-1][1])*100).toFixed(0)+'%':''); pct.style.cssText='width:44px;text-align:right'; row.append(pct);
+    c.append(row);
+  });
+  const rev=el('div','appsub','Revenue attributed: '+ccFmt('currency',g('crm.job_revenue'))); rev.style.marginTop='6px'; c.append(rev);
+  if(worst.idx>0){ const call=el('div',null,'⚠ Biggest leak: '+stages[worst.idx-1][0]+' → '+stages[worst.idx][0]+' ('+((1-worst.drop)*100).toFixed(0)+'% convert). Run the CPL + Funnel Reader for the fix order.'); call.style.cssText='margin-top:8px;font-size:12.5px;color:#b91c1c;font-weight:600'; c.append(call); }
+  return c; }
+
+function ccChannelsPanel(){
+  const c=ccPanel('PLACEMENTS & CHANNELS');
+  const g=k=>CC.metrics[k]?CC.metrics[k].value:0;
+  const rows=[
+    ['Google Search',g('google_ads.cost'),g('google_ads.impressions'),g('google_ads.clicks'),g('google_ads.conversions')],
+    ['Google LSA',g('lsa.spend'),g('lsa.impressions'),null,g('lsa.leads_total')],
+    ['Meta',g('meta.spend'),g('meta.impressions'),g('meta.link_clicks'),g('meta.leads')],
+    ['GBP (organic)',0,g('gbp.views_search')+g('gbp.views_maps'),g('gbp.website_clicks'),g('gbp.phone_calls')]
+  ];
+  const wrap=el('div'); wrap.style.overflowX='auto';
+  const t=el('table'); t.style.cssText='width:100%;border-collapse:collapse;font-size:12.5px';
+  const head=el('tr'); ['Channel','Spend','Impr','CTR','Leads','CPL'].forEach(h=>{const th=el('th',null,h); th.style.cssText='text-align:right;padding:6px 8px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line,#e5e7eb)'; if(h==='Channel')th.style.textAlign='left'; head.append(th);}); t.append(head);
+  rows.forEach(([name,spend,impr,clicks,leads])=>{
+    const tr=el('tr');
+    const cells=[name, spend?ccFmt('currency',spend):'$0', Math.round(impr).toLocaleString(), clicks!=null&&impr?((clicks/impr)*100).toFixed(1)+'%':'—', Math.round(leads).toLocaleString(), leads?ccFmt('currency',spend/leads):(spend?'—':'free')];
+    cells.forEach((v,i)=>{const td=el('td',null,String(v)); td.style.cssText='padding:7px 8px;text-align:right;border-bottom:1px solid var(--line,#f1f5f9)'; if(i===0){td.style.textAlign='left';td.style.fontWeight='600';} tr.append(td);});
+    t.append(tr);
+  });
+  wrap.append(t); c.append(wrap);
+  const note=el('div','appsub','Compare channels on cost per BOOKED JOB, not CPL — run the Channel Comparator for the normalized view.'); note.style.marginTop='8px'; c.append(note);
+  return c; }
+
+function ccStatusChip(status){
+  const m={needs_approval:['NEEDS APPROVAL','#fef3c7;color:#92400e'],approved:['APPROVED','#dcfce7;color:#166534'],executed:['EXECUTED','#dcfce7;color:#166534'],dismissed:['DISMISSED','var(--panel2,#eef2f6);color:var(--muted)'],read_only:['READ ONLY','#e0e7ff;color:#3730a3']};
+  const [lab,style]=m[status]||m.read_only; const s=el('span',null,lab); s.style.cssText='font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;background:'+style; return s; }
+
+async function ccSkillsPanel(){
+  const c=ccPanel('SKILL ACTIVITY');
+  let d={skills:[],runs:[]}; try{ d=await(await fetch('/api/skills7')).json(); }catch(e){}
+  const btns=el('div'); btns.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px';
+  (d.skills||[]).forEach(s=>{
+    const b=el('button',null,'▶ '+s.name); b.title=s.what; b.style.cssText='font-size:11.5px;padding:5px 9px;border:1px solid var(--line);border-radius:999px;background:var(--panel-2,#f8fafc);cursor:pointer;font-weight:600';
+    b.onclick=async()=>{ b.disabled=true; const o=b.textContent; b.textContent='Running…';
+      try{ const r=await(await fetch('/api/skills7/'+s.key+'/run',{method:'POST'})).json(); if(r.run) toast('✓ '+s.name+' finished'); }catch(e){ toast('Skill run failed.'); }
+      b.disabled=false; b.textContent=o; openCmdCenter(); };
+    btns.append(b);
+  });
+  c.append(btns);
+  const runs=(d.runs||[]).slice(0,8);
+  if(!runs.length){ c.append(el('p','appsub','No skill runs yet — press a skill above. Every run is a proposal: Miles never changes an ad account without your approval.')); return c; }
+  runs.forEach(r=>{
+    const row=el('div'); row.style.cssText='padding:8px 0;border-top:1px solid var(--line,#f1f5f9)';
+    const top=el('div'); top.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap';
+    top.append(el('b',null,r.name)); top.append(ccStatusChip(r.status));
+    if(r.source==='sample'){ const sm=el('span','appsub','sample data'); sm.style.fontSize='10.5px'; top.append(sm); }
+    row.append(top);
+    row.append(el('div','appsub',r.summary));
+    (r.details||[]).slice(0,4).forEach(x=>{ const li=el('div','appsub','· '+x); li.style.marginLeft='6px'; row.append(li); });
+    if(r.status==='needs_approval'){
+      const act=el('div'); act.style.cssText='display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap';
+      const ap=el('button',null,'Approve'); ap.style.cssText='font-size:11.5px;padding:4px 12px;border-radius:7px;border:none;background:#16a34a;color:#fff;font-weight:700;cursor:pointer';
+      if(r.approve_disabled_reason){ ap.disabled=true; ap.style.opacity='.45'; ap.style.cursor='not-allowed'; ap.title=r.approve_disabled_reason; }
+      else ap.onclick=async()=>{ await fetch('/api/skills7/act',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id,action:'approve'})}); openCmdCenter(); };
+      const di=el('button',null,'Dismiss'); di.style.cssText='font-size:11.5px;padding:4px 12px;border-radius:7px;border:1px solid var(--line);background:var(--panel-2,#f8fafc);cursor:pointer';
+      di.onclick=async()=>{ await fetch('/api/skills7/act',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id,action:'dismiss'})}); openCmdCenter(); };
+      act.append(ap,di); if(r.approve_disabled_reason){ const why=el('span','appsub',r.approve_disabled_reason); why.style.fontSize='10.5px'; act.append(why); } row.append(act);
+    }
+    c.append(row);
+  });
+  return c; }
+
+function ccWidgetCard(w,idx){
+  const entry=ccEntry(w.metric_key), m=CC.metrics[w.metric_key];
+  const c=el('div'); c.draggable=true; c.dataset.idx=idx;
+  const span=w.size==='2x1'?'grid-column:span 2;':w.size==='2x2'?'grid-column:span 2;grid-row:span 2;':'';
+  c.style.cssText=span+'background:var(--panel,#fff);border:1px solid var(--line,#e5e7eb);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;cursor:grab;position:relative;min-width:0';
+  const top=el('div'); top.style.cssText='display:flex;align-items:center;gap:6px';
+  const lab=el('div','appsub',w.custom_label||(entry?entry.label:w.metric_key)); lab.style.cssText='flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600'; top.append(lab);
+  const menu=el('button',null,'⋯'); menu.style.cssText='border:none;background:none;cursor:pointer;color:var(--muted);font-size:15px;padding:0 2px';
+  menu.onclick=(e)=>{ e.stopPropagation();
+    showModal('<h3 style="margin:0 0 10px">'+esc(w.custom_label||(entry?entry.label:w.metric_key))+'</h3><div style="display:flex;flex-direction:column;gap:8px">'
+      +'<button id="ccw-rename" class="go" style="background:var(--panel-2);color:var(--ink,#111);border:1px solid var(--line)">Rename</button>'
+      +'<button id="ccw-size" class="go" style="background:var(--panel-2);color:var(--ink,#111);border:1px solid var(--line)">Resize (now '+(w.size||'1x1')+')</button>'
+      +'<button id="ccw-del" class="go" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca">Delete card</button></div>');
+    $('#ccw-rename').onclick=()=>{ const nn=prompt('Card name',w.custom_label||(entry?entry.label:'')); if(nn!=null){ w.custom_label=nn.trim()||null; ccSaveLayout().then(renderCmdCenter); } closeModal(); };
+    $('#ccw-size').onclick=()=>{ w.size=(w.size==='1x1'||!w.size)?'2x1':(w.size==='2x1'?'2x2':'1x1'); ccSaveLayout().then(renderCmdCenter); closeModal(); };
+    $('#ccw-del').onclick=()=>{ CC.layout.widgets=CC.layout.widgets.filter(x=>x!==w); ccSaveLayout().then(renderCmdCenter); closeModal(); }; };
+  top.append(menu); c.append(top);
+  const v=el('div',null,m?ccFmt(m.format,m.value):'—'); v.style.cssText='font-size:'+(w.size==='2x2'?'34px':'22px')+';font-weight:800;letter-spacing:-.02em'; c.append(v);
+  if(m){ c.append(ccDelta(m)); if(w.card_type!=='number') c.append(ccSpark(m.series)); if(m.source==='sample'){ const s=el('div','appsub','sample'); s.style.fontSize='10px'; c.append(s); } }
+  c.ondragstart=e=>{ e.dataTransfer.setData('text/plain',String(idx)); };
+  c.ondragover=e=>e.preventDefault();
+  c.ondrop=e=>{ e.preventDefault(); const from=Number(e.dataTransfer.getData('text/plain')); const to=idx;
+    if(isFinite(from)&&from!==to){ const ws=CC.layout.widgets; const mv=ws.splice(from,1)[0]; ws.splice(to,0,mv); ws.forEach((x,i)=>{x.position=i;}); ccSaveLayout().then(renderCmdCenter); } };
+  return c; }
+
+function ccAddModal(){
+  const conn=CC_PLATFORMS.map(([k,lab])=>{ const on=ccConnected(k);
+    return '<button data-plat="'+k+'" '+(on?'':'disabled title="Connect in Integrations first"')+' style="font-size:11.5px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2,#f8fafc);cursor:'+(on?'pointer':'not-allowed')+';opacity:'+(on?'1':'.5')+'">'+lab+(on?'':' — connect')+'</button>'; }).join(' ');
+  showModal('<h3 style="margin:0 0 6px">Add a metric card</h3><p class="mdesc" style="margin:0 0 10px">Pick a platform, then a metric. Disabled platforms need a connection first (Integrations).</p><div id="cca-plats" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">'+conn+'</div><input id="cca-search" class="f" placeholder="Search metrics…" style="width:100%;margin-bottom:8px;display:none"><div id="cca-list" style="max-height:280px;overflow:auto"></div>');
+  let plat=null;
+  const renderList=()=>{ const list=$('#cca-list'); const q=($('#cca-search').value||'').toLowerCase(); list.innerHTML='';
+    CC.catalog.filter(m=>m.platform===plat&&(!q||m.label.toLowerCase().includes(q)||m.key.includes(q))).forEach(m=>{
+      const row=el('button'); row.style.cssText='display:block;width:100%;text-align:left;padding:8px 10px;border:none;background:none;cursor:pointer;border-top:1px solid var(--line,#f1f5f9)';
+      row.innerHTML='<b style="font-size:13px">'+esc(m.label)+'</b> <span class="appsub" style="font-size:11px">'+esc(m.description)+'</span>';
+      row.onclick=()=>{ CC.layout.widgets.push({id:'w'+Date.now(),metric_key:m.key,card_type:m.default_card||'number_spark',size:'1x1',position:CC.layout.widgets.length,custom_label:null});
+        ccSaveLayout().then(()=>{ closeModal(); openCmdCenter(); }); };
+      list.append(row); }); };
+  document.querySelectorAll('#cca-plats button[data-plat]').forEach(b=>{ if(b.disabled) return;
+    b.onclick=()=>{ plat=b.dataset.plat; $('#cca-search').style.display='block'; $('#cca-search').oninput=renderList; renderList(); }; }); }
+
+async function openCmdCenter(){
+  const box=$('#cc-body'); if(!box) return;
+  if(!CC.catalog.length){ box.innerHTML='<p class="appsub">Loading your Command Center…</p>';
+    try{ const r=await(await fetch('/api/metrics/catalog')).json(); CC.catalog=r.metrics||[]; CC.defaults=r.defaults||CC.defaults; CC.connected=r.connected||[]; }catch(e){ box.innerHTML=''; box.append(ovNudge('Command Center runs on the live app.')); return; } }
+  try{ const r=await(await fetch('/api/dashboard2/layout')).json(); if(r.layout) CC.layout=r.layout; }catch(e){}
+  if(!Array.isArray(CC.layout.widgets)) CC.layout.widgets=[];
+  const funnelKeys=['google_ads.impressions','meta.impressions','google_ads.clicks','meta.link_clicks','calc.blended_leads','crm.qualified_leads','crm.booked_jobs','crm.completed_jobs','crm.job_revenue','google_ads.cost','lsa.spend','meta.spend','lsa.impressions','lsa.leads_total','meta.leads','gbp.views_search','gbp.views_maps','gbp.website_clicks','gbp.phone_calls','google_ads.conversions'];
+  await ccResolve(CC.defaults.kpi_strip.concat(CC.layout.widgets.map(w=>w.metric_key)).concat(funnelKeys));
+  renderCmdCenter();
+}
+async function renderCmdCenter(){
+  const box=$('#cc-body'); if(!box) return; box.innerHTML='';
+  const anyLive=Object.values(CC.metrics).some(m=>m.source==='live');
+  const bar=el('div'); bar.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap';
+  const range=el('select','f'); [['7','Last 7 days'],['30','Last 30 days'],['90','Last 90 days']].forEach(([v,lab])=>{const o=el('option',null,lab);o.value=v;if(Number(v)===CC.days)o.selected=true;range.append(o);});
+  range.onchange=()=>{ CC.days=Number(range.value); CC.metrics={}; openCmdCenter(); }; bar.append(range);
+  const badge=el('span',null,anyLive?'● Live data':'● Sample data — connect a source'); badge.style.cssText='font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px;'+(anyLive?'background:#dcfce7;color:#166534':'background:#fef3c7;color:#92400e'); bar.append(badge);
+  const reset=el('button',null,'Reset to default'); reset.style.cssText='margin-left:auto;font-size:11.5px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2,#f8fafc);cursor:pointer';
+  reset.onclick=()=>{ CC.layout.widgets=[]; ccSaveLayout().then(openCmdCenter); }; bar.append(reset);
+  box.append(bar);
+  const strip=el('div'); strip.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:14px';
+  CC.defaults.kpi_strip.forEach(k=>strip.append(ccKpiCard(k))); box.append(strip);
+  const row2=el('div'); row2.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px;margin-bottom:12px';
+  row2.append(ccFunnelPanel(),ccChannelsPanel()); box.append(row2);
+  const row3=el('div'); row3.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px;margin-bottom:12px';
+  const exp=ccPanel('EXPERIMENTS'); exp.append(el('p','appsub','No active experiments yet. When a skill proposal becomes a test (a budget shift, a new campaign), it shows up here with its spend, leads, and verdict.')); row3.append(exp);
+  row3.append(await ccSkillsPanel()); box.append(row3);
+  const gridCard=ccPanel('YOUR METRICS — ADD ANY OF '+CC.catalog.length);
+  const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));grid-auto-rows:minmax(96px,auto);gap:10px;margin-top:8px';
+  CC.layout.widgets.forEach((w,i)=>grid.append(ccWidgetCard(w,i)));
+  const plus=el('button',null,'+ Add metric'); plus.style.cssText='border:2px dashed var(--line,#cbd5e1);border-radius:12px;background:none;color:var(--muted);font-weight:700;cursor:pointer;min-height:96px';
+  plus.onclick=ccAddModal; grid.append(plus);
+  gridCard.append(grid); box.append(gridCard);
 }
 
 // ── Campaign Playbook — expert paid-social strategic build ──

@@ -19,6 +19,9 @@ import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, a
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
 import { SPEC_PLATFORMS, loadSpec, searchSpecCheck, type SpecPlatform } from './specs/index.js';
+import { metricCatalog, dashboardDefaults } from './metrics/catalog.js';
+import { getMetrics } from './metrics/resolver.js';
+import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
 import { emptyReviewState, reviewAskText, parseRating, routeRating, promoterText, detractorText, recoveryTask, type ReviewRequestState } from './agents/reviewrequest.js';
@@ -1311,6 +1314,102 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     } catch {
       return reply.code(500).send({ error: 'Spec check unavailable.' });
     }
+  });
+
+  // ── Command Center (spec: docs/specs/dashboard-and-skills-spec.md) ────────
+  // Metric catalog + widget layout + the seven skills. Additive: the existing
+  // dashboard and its routes are untouched.
+  app.get('/api/metrics/catalog', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    let connected: string[] = [];
+    try { connected = [...new Set((await connector.listAccounts(u.id)).map((a) => a.app))]; } catch { /* none */ }
+    return { metrics: metricCatalog(), defaults: dashboardDefaults(), connected };
+  });
+
+  app.post<{ Body: { keys?: string[]; days?: number } }>('/api/metrics/resolve', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const keys = Array.isArray(req.body?.keys) ? req.body.keys.filter((k) => typeof k === 'string').slice(0, 60) : [];
+    const days = Math.min(Math.max(Number(req.body?.days) || 30, 1), 90);
+    const live: import('./metrics/resolver.js').LiveReaders = {
+      googleAdsCost: async () => {
+        const rows = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
+        return rows.length ? rows.reduce((a, r) => a + (r.spend || 0), 0) : undefined;
+      },
+    };
+    return { results: await getMetrics(keys, days, live) };
+  });
+
+  // Widget layout persistence — per user, additive table in user data.
+  app.get('/api/dashboard2/layout', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const layout = (data.dash2 as object) ?? { widgets: dashboardDefaults().custom_grid.map((k, i) => ({ id: `w${i}`, metric_key: k, card_type: 'number_spark', size: '1x1', position: i })) };
+    return { layout };
+  });
+  app.post<{ Body: { layout?: { widgets?: unknown[] } } }>('/api/dashboard2/layout', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const widgets = Array.isArray(req.body?.layout?.widgets) ? req.body!.layout!.widgets!.slice(0, 60) : [];
+    const data = await authStore.getUserData(u.id);
+    data.dash2 = { widgets, updatedAt: new Date().toISOString() };
+    await authStore.setUserData(u.id, data);
+    return { ok: true };
+  });
+
+  // The seven skills: list, run (proposal mode), and act on a run.
+  app.get('/api/skills7', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const runs = (data.skill_runs as import('./skills/seven.js').SkillRun[]) ?? [];
+    return { skills: SEVEN_SKILLS, runs: runs.slice(0, 25) };
+  });
+  app.post<{ Params: { key: string } }>('/api/skills7/:key/run', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const spendRows = (await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]))
+      .map((r) => ({ campaign: r.campaign, cost: r.spend || 0, conversions: r.conversions }));
+    const ctx: import('./skills/seven.js').SkillCtx = {
+      business: p.businessName ?? '', trade: p.industry ?? '', city: (p.serviceAreas || '').split(',')[0]?.trim() ?? '',
+      services: p.services ?? '', zips: (p.serviceAreas || '').split(',').map((x) => x.trim()).filter((x) => /^\d{5}$/.test(x)),
+      live: {
+        googleAdsCost: async () => (spendRows.length ? spendRows.reduce((a, r) => a + r.cost, 0) : undefined),
+      },
+      spendRows,
+    };
+    let run;
+    try {
+      run = await runSevenSkill(req.params.key, ctx);
+    } catch (e) {
+      return reply.code(404).send({ error: String((e as Error).message) });
+    }
+    const entry: import('./skills/seven.js').SkillRun = { ...run, id: newToken().slice(0, 10), ts: new Date().toISOString() };
+    const runs = (data.skill_runs as import('./skills/seven.js').SkillRun[]) ?? [];
+    runs.unshift(entry);
+    data.skill_runs = runs.slice(0, 100);
+    await authStore.setUserData(u.id, data);
+    return { run: entry };
+  });
+  app.post<{ Body: { id?: string; action?: string } }>('/api/skills7/act', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const { id, action } = req.body ?? {};
+    if (!id || !['approve', 'dismiss'].includes(action ?? '')) return reply.code(400).send({ error: 'id and action (approve|dismiss) required' });
+    const data = await authStore.getUserData(u.id);
+    const runs = (data.skill_runs as import('./skills/seven.js').SkillRun[]) ?? [];
+    const run = runs.find((r) => r.id === id);
+    if (!run) return reply.code(404).send({ error: 'run not found' });
+    // Approval is the logged event (ToS §3.4); execution requires write access,
+    // which none of the proposal targets have yet — status reflects reality.
+    run.status = action === 'approve' ? 'approved' : 'dismissed';
+    data.skill_runs = runs;
+    await authStore.setUserData(u.id, data);
+    return { ok: true, run };
   });
 
   // The Google Ads accounts a launch can write into — an MCC login manages

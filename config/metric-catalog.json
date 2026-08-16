@@ -1,0 +1,2749 @@
+{
+  "$schema_version": "1.0",
+  "generated_from": "docs/specs/dashboard-and-skills-spec.md §4",
+  "metrics": [
+    {
+      "key": "google_ads.impressions",
+      "platform": "google_ads",
+      "label": "Impressions",
+      "description": "Times an ad was shown",
+      "api_field": "metrics.impressions",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 11204
+    },
+    {
+      "key": "google_ads.clicks",
+      "platform": "google_ads",
+      "label": "Clicks",
+      "description": "Clicks on your ads",
+      "api_field": "metrics.clicks",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 158
+    },
+    {
+      "key": "google_ads.ctr",
+      "platform": "google_ads",
+      "label": "CTR",
+      "description": "Clicks ÷ impressions",
+      "api_field": "metrics.ctr",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "recompute",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": "google_ads.clicks / google_ads.impressions * 100",
+      "depends_on": [
+        "google_ads.clicks",
+        "google_ads.impressions"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 1.4
+    },
+    {
+      "key": "google_ads.avg_cpc",
+      "platform": "google_ads",
+      "label": "Average CPC",
+      "description": "Average cost per click",
+      "api_field": "metrics.average_cpc",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 2.61
+    },
+    {
+      "key": "google_ads.cost",
+      "platform": "google_ads",
+      "label": "Cost",
+      "description": "Total ad spend",
+      "api_field": "metrics.cost_micros",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "sum",
+      "direction": "neutral",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 412.5
+    },
+    {
+      "key": "google_ads.conversions",
+      "platform": "google_ads",
+      "label": "Conversions",
+      "description": "Primary conversion actions",
+      "api_field": "metrics.conversions",
+      "unit": "count",
+      "format": "decimal_2dp",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 24
+    },
+    {
+      "key": "google_ads.conversion_rate",
+      "platform": "google_ads",
+      "label": "Conversion Rate",
+      "description": "Conversions ÷ clicks",
+      "api_field": "metrics.conversions_from_interactions_rate",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "recompute",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": "google_ads.conversions / google_ads.clicks * 100",
+      "depends_on": [
+        "google_ads.conversions",
+        "google_ads.clicks"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 15.2
+    },
+    {
+      "key": "google_ads.cost_per_conversion",
+      "platform": "google_ads",
+      "label": "Cost per Conversion",
+      "description": "Cost ÷ conversions",
+      "api_field": "metrics.cost_per_conversion",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": "google_ads.cost / google_ads.conversions",
+      "depends_on": [
+        "google_ads.cost",
+        "google_ads.conversions"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 17.19
+    },
+    {
+      "key": "google_ads.conversion_value",
+      "platform": "google_ads",
+      "label": "Conversion Value",
+      "description": "Value of tracked conversions",
+      "api_field": "metrics.conversions_value",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 3400
+    },
+    {
+      "key": "google_ads.roas",
+      "platform": "google_ads",
+      "label": "ROAS",
+      "description": "Conversion value ÷ cost",
+      "api_field": "metrics.conversions_value_per_cost",
+      "unit": "ratio",
+      "format": "decimal_2dp",
+      "aggregation": "recompute",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": "google_ads.conversion_value / google_ads.cost",
+      "depends_on": [
+        "google_ads.conversion_value",
+        "google_ads.cost"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 8.24
+    },
+    {
+      "key": "google_ads.all_conversions",
+      "platform": "google_ads",
+      "label": "All Conversions",
+      "description": "All conversion actions incl. secondary",
+      "api_field": "metrics.all_conversions",
+      "unit": "count",
+      "format": "decimal_2dp",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 31
+    },
+    {
+      "key": "google_ads.phone_calls",
+      "platform": "google_ads",
+      "label": "Phone Calls",
+      "description": "Calls from call assets",
+      "api_field": "metrics.phone_calls",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 9
+    },
+    {
+      "key": "google_ads.call_impressions",
+      "platform": "google_ads",
+      "label": "Call Impressions",
+      "description": "Times the call option was shown",
+      "api_field": "metrics.phone_impressions",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 640
+    },
+    {
+      "key": "google_ads.search_impression_share",
+      "platform": "google_ads",
+      "label": "Search Impression Share",
+      "description": "Share of eligible impressions won",
+      "api_field": "metrics.search_impression_share",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "weighted_avg",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 42.7
+    },
+    {
+      "key": "google_ads.search_lost_is_budget",
+      "platform": "google_ads",
+      "label": "Search Lost IS (budget)",
+      "description": "Impression share lost to budget",
+      "api_field": "metrics.search_budget_lost_impression_share",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "weighted_avg",
+      "direction": "down_good",
+      "supports": [
+        "account",
+        "campaign"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 18.3
+    },
+    {
+      "key": "google_ads.search_lost_is_rank",
+      "platform": "google_ads",
+      "label": "Search Lost IS (rank)",
+      "description": "Impression share lost to ad rank",
+      "api_field": "metrics.search_rank_lost_impression_share",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "weighted_avg",
+      "direction": "down_good",
+      "supports": [
+        "account",
+        "campaign"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 39
+    },
+    {
+      "key": "google_ads.absolute_top_is",
+      "platform": "google_ads",
+      "label": "Absolute Top IS",
+      "description": "Share shown as the very first ad",
+      "api_field": "metrics.absolute_top_impression_percentage",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "weighted_avg",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 21.5
+    },
+    {
+      "key": "google_ads.top_is",
+      "platform": "google_ads",
+      "label": "Top IS",
+      "description": "Share shown above organic results",
+      "api_field": "metrics.top_impression_percentage",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "weighted_avg",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 68.2
+    },
+    {
+      "key": "google_ads.quality_score",
+      "platform": "google_ads",
+      "label": "Quality Score (avg)",
+      "description": "Average keyword quality score",
+      "api_field": "ad_group_criterion.quality_info.quality_score",
+      "unit": "count",
+      "format": "decimal_2dp",
+      "aggregation": "avg",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 6.8
+    },
+    {
+      "key": "google_ads.invalid_clicks",
+      "platform": "google_ads",
+      "label": "Invalid Clicks",
+      "description": "Clicks filtered as invalid",
+      "api_field": "metrics.invalid_clicks",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "down_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 4
+    },
+    {
+      "key": "google_ads.video_views",
+      "platform": "google_ads",
+      "label": "Video Views",
+      "description": "Video ad views",
+      "api_field": "metrics.video_views",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 0
+    },
+    {
+      "key": "google_ads.view_rate",
+      "platform": "google_ads",
+      "label": "View Rate",
+      "description": "Video views ÷ impressions",
+      "api_field": "metrics.video_view_rate",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "recompute",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 0
+    },
+    {
+      "key": "google_ads.engagements",
+      "platform": "google_ads",
+      "label": "Engagements",
+      "description": "Ad engagements",
+      "api_field": "metrics.engagements",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 210
+    },
+    {
+      "key": "google_ads.interaction_rate",
+      "platform": "google_ads",
+      "label": "Interaction Rate",
+      "description": "Interactions ÷ impressions",
+      "api_field": "metrics.interaction_rate",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "recompute",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 1.9
+    },
+    {
+      "key": "google_ads.avg_cpm",
+      "platform": "google_ads",
+      "label": "Average CPM",
+      "description": "Cost per 1,000 impressions",
+      "api_field": "metrics.average_cpm",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 36.8
+    },
+    {
+      "key": "google_ads.search_terms_count",
+      "platform": "google_ads",
+      "label": "Search Terms",
+      "description": "Distinct search terms triggering ads",
+      "api_field": "search_term_view",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "neutral",
+      "supports": [
+        "account",
+        "campaign"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 214
+    },
+    {
+      "key": "google_ads.optimization_score",
+      "platform": "google_ads",
+      "label": "Optimization Score",
+      "description": "Google's account optimization score",
+      "api_field": "customer.optimization_score",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "last",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 73.4
+    },
+    {
+      "key": "lsa.leads_total",
+      "platform": "lsa",
+      "label": "Leads (total)",
+      "description": "All LSA leads received",
+      "api_field": "lsa.leads_total",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid",
+        "leads"
+      ],
+      "sample_value": 22
+    },
+    {
+      "key": "lsa.phone_leads",
+      "platform": "lsa",
+      "label": "Phone Leads",
+      "description": "Leads that arrived as calls",
+      "api_field": "lsa.phone_leads",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid",
+        "leads"
+      ],
+      "sample_value": 17
+    },
+    {
+      "key": "lsa.message_leads",
+      "platform": "lsa",
+      "label": "Message Leads",
+      "description": "Leads that arrived as messages",
+      "api_field": "lsa.message_leads",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid",
+        "leads"
+      ],
+      "sample_value": 5
+    },
+    {
+      "key": "lsa.booked_leads",
+      "platform": "lsa",
+      "label": "Booked Leads",
+      "description": "Leads marked booked",
+      "api_field": "lsa.leads_booked",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid",
+        "leads"
+      ],
+      "sample_value": 11
+    },
+    {
+      "key": "lsa.charged_leads",
+      "platform": "lsa",
+      "label": "Charged Leads",
+      "description": "Leads Google charged for",
+      "api_field": "lsa.leads_charged",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "neutral",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid",
+        "leads"
+      ],
+      "sample_value": 19
+    },
+    {
+      "key": "lsa.disputed_leads",
+      "platform": "lsa",
+      "label": "Disputed Leads",
+      "description": "Leads disputed for credit",
+      "api_field": "lsa.leads_disputed",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "neutral",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid",
+        "leads"
+      ],
+      "sample_value": 3
+    },
+    {
+      "key": "lsa.cost_per_lead",
+      "platform": "lsa",
+      "label": "Cost per Lead",
+      "description": "Spend ÷ charged leads",
+      "api_field": "lsa.cost_per_lead",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account"
+      ],
+      "formula": "lsa.spend / lsa.charged_leads",
+      "depends_on": [
+        "lsa.spend",
+        "lsa.charged_leads"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "paid",
+        "leads"
+      ],
+      "sample_value": 38.4
+    },
+    {
+      "key": "lsa.spend",
+      "platform": "lsa",
+      "label": "Total Spend",
+      "description": "LSA spend",
+      "api_field": "lsa.cost",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "sum",
+      "direction": "neutral",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid",
+        "leads"
+      ],
+      "sample_value": 729
+    },
+    {
+      "key": "lsa.response_time_avg",
+      "platform": "lsa",
+      "label": "Lead Response Time (avg)",
+      "description": "Average minutes to respond",
+      "api_field": "lsa.avg_response_minutes",
+      "unit": "seconds",
+      "format": "duration",
+      "aggregation": "avg",
+      "direction": "down_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid",
+        "leads"
+      ],
+      "sample_value": 14
+    },
+    {
+      "key": "lsa.missed_calls",
+      "platform": "lsa",
+      "label": "Missed Calls",
+      "description": "LSA calls not answered",
+      "api_field": "lsa.missed_calls",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "down_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid",
+        "leads"
+      ],
+      "sample_value": 4
+    },
+    {
+      "key": "lsa.rating",
+      "platform": "lsa",
+      "label": "Rating",
+      "description": "LSA profile star rating",
+      "api_field": "lsa.rating",
+      "unit": "count",
+      "format": "decimal_2dp",
+      "aggregation": "last",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number",
+      "tags": [
+        "paid",
+        "leads"
+      ],
+      "sample_value": 4.8
+    },
+    {
+      "key": "lsa.review_count",
+      "platform": "lsa",
+      "label": "Review Count",
+      "description": "Reviews on the LSA profile",
+      "api_field": "lsa.review_count",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "last",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number",
+      "tags": [
+        "paid",
+        "leads"
+      ],
+      "sample_value": 86
+    },
+    {
+      "key": "lsa.impressions",
+      "platform": "lsa",
+      "label": "Ad Impressions",
+      "description": "LSA impressions (where available)",
+      "api_field": "lsa.impressions",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid",
+        "leads"
+      ],
+      "sample_value": 3120
+    },
+    {
+      "key": "lsa.budget_utilization",
+      "platform": "lsa",
+      "label": "Budget Utilization %",
+      "description": "Spend ÷ weekly budget",
+      "api_field": "lsa.budget_utilization",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "recompute",
+      "direction": "neutral",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid",
+        "leads"
+      ],
+      "sample_value": 81.2
+    },
+    {
+      "key": "gbp.views_search",
+      "platform": "gbp",
+      "label": "Profile Views (Search)",
+      "description": "Profile views from Search",
+      "api_field": "gbp.impressions_search",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "organic"
+      ],
+      "sample_value": 1840
+    },
+    {
+      "key": "gbp.views_maps",
+      "platform": "gbp",
+      "label": "Profile Views (Maps)",
+      "description": "Profile views from Maps",
+      "api_field": "gbp.impressions_maps",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "organic"
+      ],
+      "sample_value": 960
+    },
+    {
+      "key": "gbp.website_clicks",
+      "platform": "gbp",
+      "label": "Website Clicks",
+      "description": "Clicks to your website",
+      "api_field": "gbp.website_clicks",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "organic"
+      ],
+      "sample_value": 132
+    },
+    {
+      "key": "gbp.direction_requests",
+      "platform": "gbp",
+      "label": "Direction Requests",
+      "description": "Requests for directions",
+      "api_field": "gbp.direction_requests",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "organic"
+      ],
+      "sample_value": 48
+    },
+    {
+      "key": "gbp.phone_calls",
+      "platform": "gbp",
+      "label": "Phone Calls",
+      "description": "Calls from the profile",
+      "api_field": "gbp.calls",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "organic"
+      ],
+      "sample_value": 57
+    },
+    {
+      "key": "gbp.messages",
+      "platform": "gbp",
+      "label": "Messages",
+      "description": "Chats started from the profile",
+      "api_field": "gbp.messages",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "organic"
+      ],
+      "sample_value": 12
+    },
+    {
+      "key": "gbp.bookings",
+      "platform": "gbp",
+      "label": "Bookings",
+      "description": "Bookings from the profile",
+      "api_field": "gbp.bookings",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "organic"
+      ],
+      "sample_value": 6
+    },
+    {
+      "key": "gbp.photo_views",
+      "platform": "gbp",
+      "label": "Photo Views",
+      "description": "Views of profile photos",
+      "api_field": "gbp.photo_views",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "organic"
+      ],
+      "sample_value": 5230
+    },
+    {
+      "key": "gbp.total_reviews",
+      "platform": "gbp",
+      "label": "Total Reviews",
+      "description": "All-time review count",
+      "api_field": "gbp.review_count",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "last",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number",
+      "tags": [
+        "organic"
+      ],
+      "sample_value": 94
+    },
+    {
+      "key": "gbp.avg_rating",
+      "platform": "gbp",
+      "label": "Average Rating",
+      "description": "Star rating",
+      "api_field": "gbp.rating",
+      "unit": "count",
+      "format": "decimal_2dp",
+      "aggregation": "last",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number",
+      "tags": [
+        "organic"
+      ],
+      "sample_value": 4.7
+    },
+    {
+      "key": "gbp.new_reviews",
+      "platform": "gbp",
+      "label": "New Reviews (period)",
+      "description": "Reviews received in the date range",
+      "api_field": "gbp.reviews_new_30d",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "organic"
+      ],
+      "sample_value": 7
+    },
+    {
+      "key": "gbp.search_queries",
+      "platform": "gbp",
+      "label": "Search Queries",
+      "description": "Queries that surfaced the profile",
+      "api_field": "gbp.search_queries",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "neutral",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "organic"
+      ],
+      "sample_value": 410
+    },
+    {
+      "key": "meta.impressions",
+      "platform": "meta",
+      "label": "Impressions",
+      "description": "Times ads were shown",
+      "api_field": "impressions",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 48200
+    },
+    {
+      "key": "meta.reach",
+      "platform": "meta",
+      "label": "Reach",
+      "description": "Unique people reached",
+      "api_field": "reach",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 19800
+    },
+    {
+      "key": "meta.frequency",
+      "platform": "meta",
+      "label": "Frequency",
+      "description": "Average impressions per person",
+      "api_field": "frequency",
+      "unit": "ratio",
+      "format": "decimal_2dp",
+      "aggregation": "recompute",
+      "direction": "neutral",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": "meta.impressions / meta.reach",
+      "depends_on": [
+        "meta.impressions",
+        "meta.reach"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 2.43
+    },
+    {
+      "key": "meta.clicks_all",
+      "platform": "meta",
+      "label": "Clicks (all)",
+      "description": "All clicks incl. reactions/expands",
+      "api_field": "clicks",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 1470
+    },
+    {
+      "key": "meta.link_clicks",
+      "platform": "meta",
+      "label": "Link Clicks",
+      "description": "Clicks to your destination",
+      "api_field": "inline_link_clicks",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 640
+    },
+    {
+      "key": "meta.ctr_all",
+      "platform": "meta",
+      "label": "CTR (all)",
+      "description": "All clicks ÷ impressions",
+      "api_field": "ctr",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "recompute",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 3.05
+    },
+    {
+      "key": "meta.ctr_link",
+      "platform": "meta",
+      "label": "CTR (link)",
+      "description": "Link clicks ÷ impressions",
+      "api_field": "inline_link_click_ctr",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "recompute",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 1.33
+    },
+    {
+      "key": "meta.cpc_link",
+      "platform": "meta",
+      "label": "CPC (link)",
+      "description": "Cost per link click",
+      "api_field": "cost_per_inline_link_click",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 1.09
+    },
+    {
+      "key": "meta.cpm",
+      "platform": "meta",
+      "label": "CPM",
+      "description": "Cost per 1,000 impressions",
+      "api_field": "cpm",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 14.5
+    },
+    {
+      "key": "meta.spend",
+      "platform": "meta",
+      "label": "Amount Spent",
+      "description": "Total Meta spend",
+      "api_field": "spend",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "sum",
+      "direction": "neutral",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 699
+    },
+    {
+      "key": "meta.results",
+      "platform": "meta",
+      "label": "Results",
+      "description": "Results per campaign objective",
+      "api_field": "results",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 41
+    },
+    {
+      "key": "meta.cost_per_result",
+      "platform": "meta",
+      "label": "Cost per Result",
+      "description": "Spend ÷ results",
+      "api_field": "cost_per_result",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": "meta.spend / meta.results",
+      "depends_on": [
+        "meta.spend",
+        "meta.results"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 17.05
+    },
+    {
+      "key": "meta.leads",
+      "platform": "meta",
+      "label": "Leads (on-Facebook)",
+      "description": "Instant Form leads",
+      "api_field": "actions:lead",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 34
+    },
+    {
+      "key": "meta.cost_per_lead",
+      "platform": "meta",
+      "label": "Cost per Lead",
+      "description": "Spend ÷ leads",
+      "api_field": "cost_per_action_type:lead",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": "meta.spend / meta.leads",
+      "depends_on": [
+        "meta.spend",
+        "meta.leads"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 20.56
+    },
+    {
+      "key": "meta.landing_page_views",
+      "platform": "meta",
+      "label": "Landing Page Views",
+      "description": "Loaded destination views",
+      "api_field": "actions:landing_page_view",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 512
+    },
+    {
+      "key": "meta.cost_per_lpv",
+      "platform": "meta",
+      "label": "Cost per LPV",
+      "description": "Spend ÷ landing page views",
+      "api_field": "cost_per_action_type:landing_page_view",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 1.37
+    },
+    {
+      "key": "meta.conversations",
+      "platform": "meta",
+      "label": "Messaging Conversations Started",
+      "description": "New message threads from ads",
+      "api_field": "actions:onsite_conversion.messaging_conversation_started_7d",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 9
+    },
+    {
+      "key": "meta.cost_per_conversation",
+      "platform": "meta",
+      "label": "Cost per Conversation",
+      "description": "Spend ÷ conversations",
+      "api_field": "cost_per_action_type:messaging_conversation_started",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 12.2
+    },
+    {
+      "key": "meta.video_plays_3s",
+      "platform": "meta",
+      "label": "Video Plays (3s)",
+      "description": "3-second video plays",
+      "api_field": "actions:video_view",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 8600
+    },
+    {
+      "key": "meta.thruplays",
+      "platform": "meta",
+      "label": "ThruPlays",
+      "description": "15s or complete video plays",
+      "api_field": "video_thruplay_watched_actions",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 2100
+    },
+    {
+      "key": "meta.video_avg_watch",
+      "platform": "meta",
+      "label": "Video Avg Watch Time",
+      "description": "Average seconds watched",
+      "api_field": "video_avg_time_watched_actions",
+      "unit": "seconds",
+      "format": "duration",
+      "aggregation": "avg",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 7
+    },
+    {
+      "key": "meta.post_engagement",
+      "platform": "meta",
+      "label": "Post Engagement",
+      "description": "Reactions, comments, shares, clicks",
+      "api_field": "actions:post_engagement",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 940
+    },
+    {
+      "key": "meta.purchases",
+      "platform": "meta",
+      "label": "Purchases / Conversions (pixel)",
+      "description": "Pixel purchase conversions",
+      "api_field": "actions:purchase",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 0
+    },
+    {
+      "key": "meta.purchase_roas",
+      "platform": "meta",
+      "label": "Purchase ROAS",
+      "description": "Purchase value ÷ spend",
+      "api_field": "purchase_roas",
+      "unit": "ratio",
+      "format": "decimal_2dp",
+      "aggregation": "recompute",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 0
+    },
+    {
+      "key": "meta.quality_ranking",
+      "platform": "meta",
+      "label": "Quality Ranking",
+      "description": "Meta's quality ranking vs competitors",
+      "api_field": "quality_ranking",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "last",
+      "direction": "neutral",
+      "supports": [
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 3
+    },
+    {
+      "key": "meta.engagement_ranking",
+      "platform": "meta",
+      "label": "Engagement Rate Ranking",
+      "description": "Engagement ranking vs competitors",
+      "api_field": "engagement_rate_ranking",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "last",
+      "direction": "neutral",
+      "supports": [
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 3
+    },
+    {
+      "key": "meta.conversion_ranking",
+      "platform": "meta",
+      "label": "Conversion Rate Ranking",
+      "description": "Conversion ranking vs competitors",
+      "api_field": "conversion_rate_ranking",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "last",
+      "direction": "neutral",
+      "supports": [
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 3
+    },
+    {
+      "key": "meta.outbound_clicks",
+      "platform": "meta",
+      "label": "Outbound Clicks",
+      "description": "Clicks leaving Meta",
+      "api_field": "outbound_clicks",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account",
+        "campaign",
+        "adgroup",
+        "ad"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "paid"
+      ],
+      "sample_value": 590
+    },
+    {
+      "key": "calls.total",
+      "platform": "calls",
+      "label": "Total Calls",
+      "description": "All tracked calls",
+      "api_field": "calls.total",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "calls"
+      ],
+      "sample_value": 118
+    },
+    {
+      "key": "calls.first_time",
+      "platform": "calls",
+      "label": "First-Time Callers",
+      "description": "New callers",
+      "api_field": "calls.first_time",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "calls"
+      ],
+      "sample_value": 64
+    },
+    {
+      "key": "calls.repeat",
+      "platform": "calls",
+      "label": "Repeat Callers",
+      "description": "Returning callers",
+      "api_field": "calls.repeat",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "neutral",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "calls"
+      ],
+      "sample_value": 54
+    },
+    {
+      "key": "calls.answered",
+      "platform": "calls",
+      "label": "Answered Calls",
+      "description": "Calls answered live",
+      "api_field": "calls.answered",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "calls"
+      ],
+      "sample_value": 96
+    },
+    {
+      "key": "calls.missed",
+      "platform": "calls",
+      "label": "Missed Calls",
+      "description": "Calls not answered",
+      "api_field": "calls.missed",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "down_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "calls"
+      ],
+      "sample_value": 22
+    },
+    {
+      "key": "calls.missed_rate",
+      "platform": "calls",
+      "label": "Missed Call Rate",
+      "description": "Missed ÷ total",
+      "api_field": "calls.missed_rate",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account"
+      ],
+      "formula": "calls.missed / calls.total * 100",
+      "depends_on": [
+        "calls.missed",
+        "calls.total"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "calls"
+      ],
+      "sample_value": 18.6
+    },
+    {
+      "key": "calls.avg_duration",
+      "platform": "calls",
+      "label": "Avg Call Duration",
+      "description": "Average call length",
+      "api_field": "calls.avg_duration",
+      "unit": "seconds",
+      "format": "duration",
+      "aggregation": "avg",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "calls"
+      ],
+      "sample_value": 212
+    },
+    {
+      "key": "calls.over_60s",
+      "platform": "calls",
+      "label": "Calls over 60s",
+      "description": "Calls longer than a minute",
+      "api_field": "calls.over_60s",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "calls"
+      ],
+      "sample_value": 71
+    },
+    {
+      "key": "calls.qualified",
+      "platform": "calls",
+      "label": "Qualified Calls (AI-scored)",
+      "description": "Calls scored as real opportunities",
+      "api_field": "calls.qualified",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "calls"
+      ],
+      "sample_value": 52
+    },
+    {
+      "key": "calls.booked",
+      "platform": "calls",
+      "label": "Booked from Call",
+      "description": "Calls that booked a job",
+      "api_field": "calls.booked",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "calls"
+      ],
+      "sample_value": 31
+    },
+    {
+      "key": "calls.call_to_booked_rate",
+      "platform": "calls",
+      "label": "Call-to-Booked Rate",
+      "description": "Booked ÷ answered",
+      "api_field": "calls.call_to_booked_rate",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "recompute",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": "calls.booked / calls.answered * 100",
+      "depends_on": [
+        "calls.booked",
+        "calls.answered"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "calls"
+      ],
+      "sample_value": 32.3
+    },
+    {
+      "key": "calls.by_source",
+      "platform": "calls",
+      "label": "Calls by Source",
+      "description": "Call volume split by source",
+      "api_field": "calls.by_source",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "neutral",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "table_top_n",
+      "tags": [
+        "calls"
+      ],
+      "sample_value": 118
+    },
+    {
+      "key": "calls.after_hours",
+      "platform": "calls",
+      "label": "After-Hours Calls",
+      "description": "Calls outside business hours",
+      "api_field": "calls.after_hours",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "neutral",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "calls"
+      ],
+      "sample_value": 17
+    },
+    {
+      "key": "calls.voicemail",
+      "platform": "calls",
+      "label": "Voicemail Count",
+      "description": "Calls that hit voicemail",
+      "api_field": "calls.voicemail",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "down_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "calls"
+      ],
+      "sample_value": 12
+    },
+    {
+      "key": "crm.leads_created",
+      "platform": "crm",
+      "label": "Leads Created",
+      "description": "New leads in the CRM",
+      "api_field": "crm.leads_created",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "crm"
+      ],
+      "sample_value": 87
+    },
+    {
+      "key": "crm.qualified_leads",
+      "platform": "crm",
+      "label": "Qualified Leads",
+      "description": "Leads marked qualified",
+      "api_field": "crm.qualified_leads",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "crm"
+      ],
+      "sample_value": 55
+    },
+    {
+      "key": "crm.estimates_sent",
+      "platform": "crm",
+      "label": "Estimates Sent",
+      "description": "Quotes delivered",
+      "api_field": "crm.estimates_sent",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "crm"
+      ],
+      "sample_value": 38
+    },
+    {
+      "key": "crm.estimates_won",
+      "platform": "crm",
+      "label": "Estimates Won",
+      "description": "Quotes accepted",
+      "api_field": "crm.estimates_won",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "crm"
+      ],
+      "sample_value": 19
+    },
+    {
+      "key": "crm.booked_jobs",
+      "platform": "crm",
+      "label": "Booked Jobs",
+      "description": "Jobs on the schedule",
+      "api_field": "crm.booked_jobs",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "crm"
+      ],
+      "sample_value": 21
+    },
+    {
+      "key": "crm.completed_jobs",
+      "platform": "crm",
+      "label": "Completed Jobs",
+      "description": "Jobs finished",
+      "api_field": "crm.completed_jobs",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "crm"
+      ],
+      "sample_value": 18
+    },
+    {
+      "key": "crm.cancelled_jobs",
+      "platform": "crm",
+      "label": "Cancelled Jobs",
+      "description": "Jobs cancelled",
+      "api_field": "crm.cancelled_jobs",
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "down_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "crm"
+      ],
+      "sample_value": 2
+    },
+    {
+      "key": "crm.job_revenue",
+      "platform": "crm",
+      "label": "Job Revenue",
+      "description": "Revenue from completed jobs",
+      "api_field": "crm.job_revenue",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "crm"
+      ],
+      "sample_value": 41300
+    },
+    {
+      "key": "crm.avg_ticket",
+      "platform": "crm",
+      "label": "Avg Ticket",
+      "description": "Average revenue per job",
+      "api_field": "crm.avg_ticket",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": "crm.job_revenue / crm.completed_jobs",
+      "depends_on": [
+        "crm.job_revenue",
+        "crm.completed_jobs"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "crm"
+      ],
+      "sample_value": 2294
+    },
+    {
+      "key": "crm.close_rate",
+      "platform": "crm",
+      "label": "Close Rate (est→won)",
+      "description": "Estimates won ÷ sent",
+      "api_field": "crm.close_rate",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "recompute",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": "crm.estimates_won / crm.estimates_sent * 100",
+      "depends_on": [
+        "crm.estimates_won",
+        "crm.estimates_sent"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "crm"
+      ],
+      "sample_value": 50
+    },
+    {
+      "key": "crm.lead_to_book_rate",
+      "platform": "crm",
+      "label": "Lead-to-Book Rate",
+      "description": "Booked jobs ÷ leads",
+      "api_field": "crm.lead_to_book_rate",
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "recompute",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": "crm.booked_jobs / crm.leads_created * 100",
+      "depends_on": [
+        "crm.booked_jobs",
+        "crm.leads_created"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "crm"
+      ],
+      "sample_value": 24.1
+    },
+    {
+      "key": "crm.speed_to_lead_median",
+      "platform": "crm",
+      "label": "Speed to Lead (median min)",
+      "description": "Median minutes to first response",
+      "api_field": "crm.speed_to_lead_median",
+      "unit": "seconds",
+      "format": "duration",
+      "aggregation": "avg",
+      "direction": "down_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number_spark",
+      "tags": [
+        "crm"
+      ],
+      "sample_value": 9
+    },
+    {
+      "key": "crm.pipeline_value",
+      "platform": "crm",
+      "label": "Pipeline Value",
+      "description": "Open estimate value",
+      "api_field": "crm.pipeline_value",
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "last",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number",
+      "tags": [
+        "crm"
+      ],
+      "sample_value": 62400
+    },
+    {
+      "key": "calc.blended_spend",
+      "platform": "calculated",
+      "label": "Blended Spend",
+      "description": "All paid platforms combined",
+      "api_field": null,
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "sum",
+      "direction": "neutral",
+      "supports": [
+        "account"
+      ],
+      "formula": "google_ads.cost + lsa.spend + meta.spend",
+      "depends_on": [
+        "google_ads.cost",
+        "lsa.spend",
+        "meta.spend"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "blended"
+      ],
+      "sample_value": 1840.5
+    },
+    {
+      "key": "calc.blended_leads",
+      "platform": "calculated",
+      "label": "Blended Leads",
+      "description": "Leads across all channels",
+      "api_field": null,
+      "unit": "count",
+      "format": "integer",
+      "aggregation": "sum",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": "crm.leads_created",
+      "depends_on": [
+        "crm.leads_created"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "blended"
+      ],
+      "sample_value": 87
+    },
+    {
+      "key": "calc.blended_cpl",
+      "platform": "calculated",
+      "label": "Blended CPL",
+      "description": "Blended spend ÷ blended leads",
+      "api_field": null,
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account"
+      ],
+      "formula": "calc.blended_spend / calc.blended_leads",
+      "depends_on": [
+        "calc.blended_spend",
+        "calc.blended_leads"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "blended"
+      ],
+      "sample_value": 21.16
+    },
+    {
+      "key": "calc.cost_per_qualified",
+      "platform": "calculated",
+      "label": "Cost per Qualified Lead",
+      "description": "Blended spend ÷ qualified leads",
+      "api_field": null,
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account"
+      ],
+      "formula": "calc.blended_spend / crm.qualified_leads",
+      "depends_on": [
+        "calc.blended_spend",
+        "crm.qualified_leads"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "blended"
+      ],
+      "sample_value": 33.46
+    },
+    {
+      "key": "calc.cost_per_booked",
+      "platform": "calculated",
+      "label": "Cost per Booked Job",
+      "description": "Blended spend ÷ booked jobs",
+      "api_field": null,
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account"
+      ],
+      "formula": "calc.blended_spend / crm.booked_jobs",
+      "depends_on": [
+        "calc.blended_spend",
+        "crm.booked_jobs"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "blended"
+      ],
+      "sample_value": 87.64
+    },
+    {
+      "key": "calc.cost_per_completed",
+      "platform": "calculated",
+      "label": "Cost per Completed Job",
+      "description": "Blended spend ÷ completed jobs",
+      "api_field": null,
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account"
+      ],
+      "formula": "calc.blended_spend / crm.completed_jobs",
+      "depends_on": [
+        "calc.blended_spend",
+        "crm.completed_jobs"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "blended"
+      ],
+      "sample_value": 102.25
+    },
+    {
+      "key": "calc.blended_roas",
+      "platform": "calculated",
+      "label": "Blended ROAS",
+      "description": "Job revenue ÷ blended spend",
+      "api_field": null,
+      "unit": "ratio",
+      "format": "decimal_2dp",
+      "aggregation": "recompute",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": "crm.job_revenue / calc.blended_spend",
+      "depends_on": [
+        "crm.job_revenue",
+        "calc.blended_spend"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "blended"
+      ],
+      "sample_value": 22.44
+    },
+    {
+      "key": "calc.marketing_pct_revenue",
+      "platform": "calculated",
+      "label": "Marketing % of Revenue",
+      "description": "Blended spend ÷ job revenue",
+      "api_field": null,
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account"
+      ],
+      "formula": "calc.blended_spend / crm.job_revenue * 100",
+      "depends_on": [
+        "calc.blended_spend",
+        "crm.job_revenue"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "blended"
+      ],
+      "sample_value": 4.5
+    },
+    {
+      "key": "calc.lead_leak_dollars",
+      "platform": "calculated",
+      "label": "Lead Leak $",
+      "description": "Missed calls × book rate × avg ticket",
+      "api_field": null,
+      "unit": "currency",
+      "format": "currency",
+      "aggregation": "recompute",
+      "direction": "down_good",
+      "supports": [
+        "account"
+      ],
+      "formula": "calls.missed * calls.call_to_booked_rate / 100 * crm.avg_ticket",
+      "depends_on": [
+        "calls.missed",
+        "calls.call_to_booked_rate",
+        "crm.avg_ticket"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "blended"
+      ],
+      "sample_value": 16305
+    },
+    {
+      "key": "calc.budget_pacing_pct",
+      "platform": "calculated",
+      "label": "Budget Pacing %",
+      "description": "MTD spend vs where the month should be",
+      "api_field": null,
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "recompute",
+      "direction": "neutral",
+      "supports": [
+        "account"
+      ],
+      "formula": "calc.blended_spend_mtd / (settings.monthly_budget * day_of_month / days_in_month) * 100",
+      "depends_on": [
+        "calc.blended_spend"
+      ],
+      "default_card": "number_spark",
+      "tags": [
+        "blended"
+      ],
+      "sample_value": 96.3
+    },
+    {
+      "key": "calc.channel_share_spend",
+      "platform": "calculated",
+      "label": "Channel Share of Spend",
+      "description": "Each channel’s share of blended spend",
+      "api_field": null,
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "recompute",
+      "direction": "neutral",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "table_top_n",
+      "tags": [
+        "blended"
+      ],
+      "sample_value": 40.2
+    },
+    {
+      "key": "calc.channel_share_booked",
+      "platform": "calculated",
+      "label": "Channel Share of Booked Jobs",
+      "description": "Each channel’s share of booked jobs",
+      "api_field": null,
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "recompute",
+      "direction": "neutral",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "table_top_n",
+      "tags": [
+        "blended"
+      ],
+      "sample_value": 38.1
+    }
+  ]
+}

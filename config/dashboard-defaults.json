@@ -1,0 +1,14 @@
+{
+  "$comment": "PLACEHOLDER default metric set — swap this file when Akhil's contractor metric list arrives (spec §4.4). This file is the only thing that changes.",
+  "kpi_strip": [
+    "calc.blended_spend",
+    "google_ads.impressions",
+    "google_ads.clicks",
+    "calc.blended_leads",
+    "crm.booked_jobs",
+    "calc.blended_cpl",
+    "calc.cost_per_booked",
+    "crm.job_revenue"
+  ],
+  "custom_grid": []
+}
