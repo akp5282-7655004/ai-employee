@@ -124,6 +124,28 @@ const WEB_DIR = join(process.cwd(), 'web');
 // Read external data through a connector method, degrading to an empty value if the
 // method is missing or throws. Keeps a flaky live connector from 500-ing an endpoint
 // or — worse — throwing out of a scheduler tick and discarding sibling work.
+/**
+ * Short-lived per-user cache for expensive connector reads. One dashboard load
+ * hits /api/dashboard, /api/metrics/resolve (hero) and /api/metrics/resolve
+ * (metric grid) — without this, each re-runs the same Pipedream discovery and
+ * report round-trips. 60s is short enough that a refresh still shows fresh
+ * numbers, long enough that one page load pays the cost once.
+ */
+const READ_TTL_MS = 60_000;
+const readCache = new Map<string, { ts: number; value: unknown }>();
+async function cachedRead<T>(key: string, fn: () => Promise<T>, empty: T): Promise<T> {
+  const hit = readCache.get(key);
+  if (hit && Date.now() - hit.ts < READ_TTL_MS) return hit.value as T;
+  try {
+    const value = await fn();
+    readCache.set(key, { ts: Date.now(), value });
+    if (readCache.size > 500) for (const [k, v] of readCache) if (Date.now() - v.ts > READ_TTL_MS) readCache.delete(k);
+    return value;
+  } catch {
+    return empty;
+  }
+}
+
 async function safeConn<T>(fn: (() => Promise<T>) | undefined, empty: T): Promise<T> {
   try {
     return fn ? await fn() : empty;
@@ -844,12 +866,15 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       return { start: nowMs - days * 86_400_000, end: nowMs };
     })();
     const inWin = (ts?: string) => { const t = Date.parse(ts || ''); return !Number.isFinite(t) || (t >= win.start && t <= win.end); };
-    const safe = async <T,>(fn: (() => Promise<T>) | undefined, empty: T): Promise<T> => { try { return fn ? await fn() : empty; } catch { return empty; } };
-    const spend = await safe(connector.getAdSpend ? () => connector.getAdSpend!(u.id, range) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
-    const deals = await safe(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
-    const leads = await safe(connector.getLeads ? () => connector.getLeads!(u.id) : undefined, [] as import('./connectors/types.js').Lead[]);
-    const reviews = await safe(connector.getReviews ? () => connector.getReviews!(u.id) : undefined, [] as import('./connectors/types.js').Review[]);
-    const social = await safe(connector.getSocialMetrics ? () => connector.getSocialMetrics!(u.id) : undefined, null as import('./connectors/types.js').SocialMetrics | null);
+    // These are independent network reads — run them together, not in a chain,
+    // and share the results with the other endpoints this page calls.
+    const [spend, deals, leads, reviews, social] = await Promise.all([
+      cachedRead(`spend:${u.id}:${range}`, () => connector.getAdSpend ? connector.getAdSpend(u.id, range) : Promise.resolve([]), [] as import('./revenue/attribution.js').CampaignSpend[]),
+      cachedRead(`deals:${u.id}`, () => connector.getDeals ? connector.getDeals(u.id) : Promise.resolve([]), [] as import('./revenue/attribution.js').Deal[]),
+      cachedRead(`leads:${u.id}`, () => connector.getLeads ? connector.getLeads(u.id) : Promise.resolve([]), [] as import('./connectors/types.js').Lead[]),
+      cachedRead(`reviews:${u.id}`, () => connector.getReviews ? connector.getReviews(u.id) : Promise.resolve([]), [] as import('./connectors/types.js').Review[]),
+      cachedRead(`social:${u.id}`, () => connector.getSocialMetrics ? connector.getSocialMetrics(u.id) : Promise.resolve(null), null as import('./connectors/types.js').SocialMetrics | null),
+    ]);
     const totalSpend = spend.reduce((s, x) => s + (x.spend || 0), 0);
     const totalConv = spend.reduce((s, x) => s + (x.conversions || 0), 0);
     const leadsWin = leads.filter((l) => inWin(l.createdAt));
@@ -915,7 +940,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const RANGES = new Set(['LAST_7_DAYS', 'LAST_14_DAYS', 'LAST_30_DAYS', 'THIS_MONTH', 'LAST_MONTH']);
     const range = RANGES.has(String(req.query?.range)) ? String(req.query?.range) : 'LAST_30_DAYS';
     const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id, range) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
-    const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
+    const deals = await cachedRead(`deals:${u.id}`, () => connector.getDeals ? connector.getDeals(u.id) : Promise.resolve([]), [] as import('./revenue/attribution.js').Deal[]);
     let connected = false;
     try { connected = (await connector.listAccounts(u.id)).some((a) => ['google_ads', 'facebook', 'google_lsa'].includes(a.app)); } catch { /* none */ }
     const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -1360,8 +1385,10 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     // Live data: real ad spend from the connector + real CRM numbers from the
     // webhook event ledger, blended into the calc.* money metrics only when
     // every input is real.
-    const data = await authStore.getUserData(u.id);
-    const spendRows = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
+    const [data, spendRows] = await Promise.all([
+      authStore.getUserData(u.id),
+      cachedRead(`spend:${u.id}:LAST_30_DAYS`, () => connector.getAdSpend ? connector.getAdSpend(u.id) : Promise.resolve([]), [] as import('./revenue/attribution.js').CampaignSpend[]),
+    ]);
     const adSpend = spendRows.length ? spendRows.reduce((a, r) => a + (r.spend || 0), 0) : undefined;
     // CRM live values: webhook ledger first, then the direct deals read
     // (GHL opportunities) overrides won/revenue — the pipeline is the truth.

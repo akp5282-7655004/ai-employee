@@ -9,7 +9,8 @@
      system sans everywhere else, so the mark never disappears. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap" media="print" onload="this.media='all';this.onload=null">
 </head>
 <body>
 <style>
@@ -1487,7 +1488,8 @@ async function fillDashRecs(wrap){
   if(!REMOTE) return;
   let d={recommendations:[]};
   try{ d=await(await fetch('/api/recommendations')).json(); }catch(e){ return; }
-  const recs=d.recommendations||[]; if(!recs.length){ wrap.remove(); return; }
+  const recs=d.recommendations||[];
+  if(label) label.textContent='What’s next — '+(recs.length?recs.length+' decision'+(recs.length===1?'':'s')+' waiting':'nothing waiting'); if(!recs.length){ wrap.remove(); return; }
   wrap.innerHTML='';
   const head=el('div'); head.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px';
   head.innerHTML='<div class="sect-label" style="margin:0">RECOMMENDATIONS FOR YOU</div>';
@@ -2087,12 +2089,13 @@ async function dashHero(wrap, d){
   const target=Number((d.marketing||{}).targetCpa)||null;
   const cpb=g('calc.cost_per_booked'), booked=g('crm.booked_jobs');
   const onTrack=anyLive&&(target?(cpb!=null&&cpb<=target):(booked!=null&&booked>0));
-  const card=el('div','dcard dhero'); card.style.cssText+='padding:22px 24px';
-  // Verdict banner
+  const card=el('div','dcard dhero'); card.style.cssText+='padding:24px 26px';
+  // Verdict banner + period note (right)
   const vb=el('div'); vb.style.cssText='display:flex;align-items:center;gap:10px;flex-wrap:wrap';
   const dot=el('span','dot'); dot.style.background=onTrack?'var(--good)':(anyLive?'var(--warn)':'var(--muted)'); vb.append(dot);
   const vtxt=el('div',null,!anyLive?'Waiting on your data':(onTrack?'You’re on track':'Needs attention'));
-  vtxt.style.cssText='font-family:var(--ui);font-size:22px;font-weight:700;letter-spacing:-.02em;color:var(--ink)'; vb.append(vtxt);
+  vtxt.style.cssText='font-family:var(--ui);font-size:22px;font-weight:700;letter-spacing:-.02em;color:var(--ink);flex:1'; vb.append(vtxt);
+  const per=el('span','appsub','Last 30 days vs. prior'); per.style.cssText='font-size:12.5px;flex:none'; vb.append(per);
   card.append(vb);
   const why=el('div','appsub'); why.style.cssText='margin-top:4px;font-size:13.5px';
   why.textContent = !anyLive
@@ -2105,28 +2108,75 @@ async function dashHero(wrap, d){
   card.append(why);
   // The big four
   const four=el('div','bigfour'); four.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:18px';
-  const cell=(label,value,metricKey,context)=>{
-    const w=el('div','well');
-    const l=el('div',null,label); l.style.cssText='font-family:var(--ui);font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#AEAEB2'; w.append(l);
-    const v=el('div','bignum',value); v.style.marginTop='6px'; w.append(v);
-    const row=el('div'); row.style.cssText='display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap';
-    const m=M[metricKey]; if(m) row.append(ccDelta(m));
-    if(context){ const c=el('span','appsub',context); c.style.fontSize='11.5px'; row.append(c); }
-    if(m) row.append(ccSourceTag(m.source));
-    w.append(row); return w;
+  const cell=(label,value,metricKey,context,idx)=>{
+    const w=el('div'); w.style.cssText='padding:0 22px;'+(idx?'border-left:1px solid rgba(0,0,0,.07);':'padding-left:0;');
+    const l=el('div',null,label); l.style.cssText='font-family:var(--ui);font-size:13px;font-weight:500;color:var(--muted)'; w.append(l);
+    const line=el('div'); line.style.cssText='display:flex;align-items:baseline;gap:9px;margin-top:4px;flex-wrap:wrap';
+    line.append(el('div','bignum',value));
+    const m=M[metricKey]; if(m) line.append(ccDelta(m));
+    w.append(line);
+    const sub=el('div'); sub.style.cssText='display:flex;align-items:center;gap:7px;margin-top:5px;flex-wrap:wrap';
+    if(context){ const c=el('span','appsub',context); c.style.fontSize='12.5px'; sub.append(c); }
+    if(m) sub.append(ccSourceTag(m.source));
+    w.append(sub); return w;
   };
   const money=v=>v==null?'—':('$'+Math.round(v).toLocaleString());
   const count=v=>v==null?'—':Math.round(v).toLocaleString();
+  const cpl=g('calc.blended_cpl');
   four.append(
-    cell('Leads',count(g('calc.blended_leads')),'calc.blended_leads','last 30 days'),
-    cell('Ad spend',money(g('calc.blended_spend')),'calc.blended_spend','all connected platforms'),
-    cell('Booked jobs',count(booked),'crm.booked_jobs',cpb!=null?('at '+money(cpb)+' per job'):''),
-    cell('Revenue',money(g('crm.job_revenue')),'crm.job_revenue','from won jobs'),
+    cell('Leads',count(g('calc.blended_leads')),'calc.blended_leads',cpl!=null?(money(cpl)+' per lead'):'last 30 days',0),
+    cell('Ad spend',money(g('calc.blended_spend')),'calc.blended_spend','blended, last 30 days',1),
+    cell('Booked jobs',count(booked),'crm.booked_jobs',cpb!=null?(money(cpb)+' per booked job'):'from your CRM',2),
+    cell('Revenue',money(g('crm.job_revenue')),'crm.job_revenue','attributed to marketing',3),
   );
   card.append(four); wrap.innerHTML=''; wrap.append(card);
+  // Summary sentence under the verdict, built from the same live figures.
+  const bits=[];
+  const dl=M['calc.blended_leads'], dr=M['crm.job_revenue'];
+  const pct=m=>m&&m.prior_value?Math.round(((m.value-m.prior_value)/Math.abs(m.prior_value))*100):null;
+  if(pct(dl)!=null) bits.push('Leads '+(pct(dl)>=0?'up ':'down ')+Math.abs(pct(dl))+'%');
+  if(pct(dr)!=null) bits.push('revenue '+(pct(dr)>=0?'up ':'down ')+Math.abs(pct(dr))+'%');
+  if(cpb!=null) bits.push('cost per booked job holding at '+money(cpb));
+  if(bits.length){ const sum=el('div','appsub',bits.join(', ')+'.'); sum.style.cssText='margin-top:4px;font-size:13.5px;max-width:70ch'; card.insertBefore(sum, four); }
+  dashSignals(wrap, d, M);
+}
+
+// Two honest read-outs derived from the same live figures: what is earning
+// and what is leaking. Rows are only shown when the data supports them.
+function dashSignals(wrap, d, M){
+  const g=k=>M[k]?M[k].value:null;
+  const money=v=>v==null?'—':('$'+Math.round(v).toLocaleString());
+  const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px;margin-top:16px';
+  const panel=(title,tone)=>{
+    const c=el('div','dcard'); c.style.cssText+='padding:18px 20px';
+    const h=el('div'); h.style.cssText='display:flex;align-items:center;gap:9px;margin-bottom:4px';
+    const dot=el('span','dot'); dot.style.cssText+='width:9px;height:9px;background:'+(tone==='good'?'var(--good)':'var(--warn)'); h.append(dot);
+    const t=el('div',null,title); t.style.cssText='font-family:var(--ui);font-size:16px;font-weight:600;color:var(--ink);letter-spacing:-.01em'; h.append(t);
+    c.append(h); return c;
+  };
+  const row=(c,term,text)=>{ const r=el('div'); r.style.cssText='display:flex;gap:10px;padding:7px 0;font-size:13.5px;line-height:1.45';
+    const b=el('b',null,term); b.style.cssText='flex:none;min-width:104px;color:var(--ink);font-weight:600';
+    const x=el('span',null,text); x.style.color='var(--graphite)'; r.append(b,x); c.append(r); return r; };
+  // What's working
+  const good=panel('What’s working','good'); let goodN=0;
+  const cpl=g('calc.blended_cpl'), booked=g('crm.booked_jobs'), rev=g('crm.job_revenue');
+  const gbpCalls=g('gbp.phone_calls');
+  if(gbpCalls) { row(good,'GBP organic', Math.round(gbpCalls)+' calls at $0 — your cheapest channel, keep reviews flowing'); goodN++; }
+  if(booked&&rev) { row(good,'Booked work', Math.round(booked)+' jobs worth '+money(rev)+' in the last 30 days'); goodN++; }
+  if(cpl!=null) { row(good,'Cost per lead', money(cpl)+' blended across every connected platform'); goodN++; }
+  if(!goodN) row(good,'Nothing yet','Connect your ad and CRM accounts and Miles will name your best channel here.');
+  // What needs attention
+  const bad=panel('What needs attention','warn'); let badN=0;
+  const clicks=g('google_ads.clicks'), leads=g('calc.blended_leads');
+  if(clicks&&leads){ const conv=(leads/clicks)*100; if(conv<25){ row(bad,'Click leak','Only '+conv.toFixed(0)+'% of clicks become leads — run CPL + Funnel Reader for the fix order'); badN++; } }
+  const stl=(d.speedToLead||{});
+  if(!stl.enabled){ row(bad,'Speed-to-Lead','Off — 78% of homeowners hire whoever answers first'); badN++; }
+  if(!((d.upcomingPosts||[]).length)){ row(bad,'No posts','Nothing scheduled — queue a job photo, a review, and your current offer'); badN++; }
+  if(!badN) row(bad,'All clear','Nothing is leaking money right now.');
+  grid.append(good,bad); wrap.append(grid);
 }
 // ── Dashboard layer 2: decisions waiting — one numbered approval queue ──
-async function dashQueue(wrap){
+async function dashQueue(wrap, label){
   if(!REMOTE){ wrap.remove(); return; }
   let d={recommendations:[]};
   try{ d=await(await fetch('/api/recommendations')).json(); }catch(e){ wrap.remove(); return; }
@@ -2140,9 +2190,11 @@ async function dashQueue(wrap){
   const refreshFoot=()=>{
     const left=rows.filter(x=>!x.done).length;
     footTxt.textContent = left===0 ? 'Nothing else needs you today.' : (left+' decision'+(left===1?'':'s')+' waiting.');
+    if(label) label.textContent='What’s next — '+(left?left+' decision'+(left===1?'':'s')+' waiting':'nothing waiting');
     approveAll.style.display = left>1 ? '' : 'none';
+    approveAll.textContent = left===2 ? '✓ Approve both' : '✓ Approve all';
   };
-  const approveAll=el('button','btn-approve-all','Approve all');
+  const approveAll=el('button','btn-approve-all','✓ Approve all');
   approveAll.onclick=async()=>{ approveAll.disabled=true; approveAll.textContent='Applying…';
     for(const x of rows.filter(y=>!y.done)) await x.approve();
     approveAll.disabled=false; approveAll.textContent='Approve all'; refreshFoot(); };
@@ -2178,7 +2230,14 @@ function renderOverview(d){
   // Header row: title + ONE global date-window selector that sweeps every
   // date-based number on the dashboard at once.
   const head=el('div'); head.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap';
-  const htxt=el('div'); htxt.innerHTML='<h3 style="margin:0">'+(d.business?esc(d.business):'Your workspace')+' — Dashboard</h3><p class="mdesc" style="margin:4px 0 0;max-width:680px">Everything at a glance. Numbers pull from your live data; anything that needs a connected tool says so instead of showing a fake figure.</p>';
+  const hr=new Date().getHours();
+  const greet=hr<12?'Good morning':(hr<18?'Good afternoon':'Good evening');
+  const first=(typeof ME!=='undefined'&&ME.name?ME.name.split(' ')[0]:(typeof ME!=='undefined'&&ME.email?ME.email.split('@')[0]:''))||'there';
+  const today=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  const htxt=el('div'); htxt.style.cssText='display:flex;align-items:baseline;gap:12px;flex-wrap:wrap';
+  const gh=el('h3',null,greet+', '+first); gh.style.cssText='margin:0;font-family:var(--ui);font-size:26px;font-weight:700;letter-spacing:-.02em;color:var(--ink)';
+  const dt=el('span','appsub',today); dt.style.fontSize='13.5px';
+  htxt.append(gh,dt);
   const ctrl=el('div'); ctrl.style.cssText='display:flex;align-items:center;gap:8px;flex:none';
   ctrl.append(el('span','appsub','📅 Showing'));
   const gsel=el('select','f'); gsel.style.cssText='width:auto;padding:5px 10px;font-size:13px;border-radius:8px';
@@ -2190,8 +2249,8 @@ function renderOverview(d){
   box.append(el('div','layer-label','The 30-second read'));
   const heroWrap=el('div'); box.append(heroWrap); dashHero(heroWrap,d);
   // Layer 2 — decisions waiting: one numbered approval queue.
-  box.append(el('div','layer-label','What’s next — decisions waiting'));
-  const recWrap=el('div'); box.append(recWrap); dashQueue(recWrap);
+  const qLabel=el('div','layer-label','What’s next — decisions waiting'); box.append(qLabel);
+  const recWrap=el('div'); box.append(recWrap); dashQueue(recWrap,qLabel);
   // Layer 3 — the details: everything else.
   box.append(el('div','layer-label','The details'));
   const reviewWrap=el('div'); reviewWrap.style.cssText='margin:0 0 18px'; box.append(reviewWrap); fillDashReview(reviewWrap);
