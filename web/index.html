@@ -130,6 +130,12 @@
   .switch input:checked + .sl:before{transform:translateX(20px);}
   .glabel{font-size:10.5px;letter-spacing:.05em;color:var(--faint);padding:12px 10px 4px;font-weight:700;}
   .side .grow{flex:1;}
+  /* The account row carries Log out. The sidebar scrolls once the playbook list
+     runs past the viewport, which pushed Log out below the fold on a short
+     screen — you cannot sign out of a control you cannot reach. Pin it to the
+     bottom so it stays reachable however long the list above it gets. */
+  .side .acct{position:sticky;bottom:0;z-index:2;margin:6px 0 0;background:var(--card);
+    box-shadow:0 -10px 14px -10px rgba(0,0,0,.14);}
   .pill{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;color:var(--muted);font-size:13px;cursor:pointer;}
   .pill:hover{background:var(--panel-2);color:var(--ink);}
   .playbook .em{font-size:15px;}
@@ -512,7 +518,7 @@
     <div class="pill playbook">Dental Practice</div>
     <div class="pill playbook">Solar Energy</div>
     <div class="grow"></div>
-    <div class="ws" style="margin:0"><span class="sq" id="user-av">·</span><div style="min-width:0;flex:1"><b id="user-email" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</b></div><button class="cx" id="logout" title="Log out" type="button" style="cursor:pointer;display:flex;align-items:center;gap:5px;background:none;border:none;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--muted);padding:4px 6px;border-radius:8px;white-space:nowrap;flex:none" onmouseover="this.style.background='var(--panel-2)';this.style.color='var(--ink)'" onmouseout="this.style.background='none';this.style.color='var(--muted)'"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button></div>
+    <div class="ws acct"><span class="sq" id="user-av">·</span><div style="min-width:0;flex:1"><b id="user-email" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</b></div><button class="cx" id="logout" title="Log out" type="button" style="cursor:pointer;display:flex;align-items:center;gap:5px;background:none;border:none;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--muted);padding:4px 6px;border-radius:8px;white-space:nowrap;flex:none" onmouseover="this.style.background='var(--panel-2)';this.style.color='var(--ink)'" onmouseout="this.style.background='none';this.style.color='var(--muted)'"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button></div>
   </aside>
 
   <main class="main">
@@ -904,6 +910,11 @@
       <div id="ob-import-note" class="appsub" style="margin:-8px 0 14px"></div>
       <div class="pf"><div class="pf-grid" id="onboard-form"></div></div>
       <button class="pf-save" id="onboard-save">Save &amp; get started</button>
+      <!-- A way out. This overlay covers the whole app, so with no dismiss a new
+           account could not look around, switch accounts, or even log out until
+           the form was filled in. The profile can be completed later under
+           Account &amp; Setup -> Business Profile. -->
+      <button type="button" id="onboard-skip" style="width:100%;margin-top:10px;background:none;border:none;color:var(--muted);font-size:12.5px;font-family:var(--sans);cursor:pointer;padding:6px">Skip for now — I'll fill this in later</button>
     </div>
   </div>
 </div>
@@ -5840,6 +5851,11 @@ $('#pf-import').onclick=async()=>{ const btn=$('#pf-import'); const url=($('#pf-
 $('#profile-save').onclick=async()=>{ const btn=$('#profile-save'); btn.disabled=true; const p=await saveProfile(readProfileForm($('#profile-form'))); if(p){ PROFILE=p; applyIdentity(); queueChange('profile','Business profile updated'); } $('#profile-note').textContent=p?'Saved ✓':'Could not save.'; btn.disabled=false; setTimeout(()=>{$('#profile-note').textContent='';},2500); };
 $('#ob-import').onclick=async()=>{ const btn=$('#ob-import'); const url=($('#ob-website').value||'').trim(); if(!url){ $('#ob-import-note').textContent='Enter your website first (or skip and fill it in below).'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#onboard-form'),$('#ob-import-note')); btn.disabled=false; btn.textContent=old; };
 $('#ob-website').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#ob-import').click(); } });
+// Dismiss onboarding without saving. Miles keeps nudging for the profile in the
+// dashboard, but nothing is held hostage behind this form.
+function closeOnboard(){ $('#onboard').classList.remove('on'); }
+$('#onboard-skip').onclick=closeOnboard;
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&$('#onboard').classList.contains('on')) closeOnboard(); });
 $('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=readProfileForm($('#onboard-form')); if(!vals.businessName){ alert('Please enter your business name (or import it from your website above).'); return; } btn.disabled=true; const p=await saveProfile(vals); if(p){ PROFILE=p; applyIdentity(); } $('#onboard').classList.remove('on'); btn.disabled=false; };
 // ── Mobile navigation drawer ──────────────────────────────────────────────
 // Below 760px the sidebar is off-canvas; the hamburger slides it in. It closes
