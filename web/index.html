@@ -4955,7 +4955,38 @@ async function skillPush(skillId,playId,text,btn){
   }catch(e){ toast('Send failed'); }
   btn.disabled=false; btn.textContent=old;
 }
-async function openSkills(){ if(!SKILLS_LOADED) await loadSkills(); renderSkills(); }
+async function openSkills(){ if(!SKILLS_LOADED) await loadSkills(); renderSkills(); renderSkillLibrary(); }
+// ── Marketing Skills Library — 49 vendored frameworks + Miles' own seven ──
+let SKILL_LIB=null;
+async function renderSkillLibrary(){
+  const box=$('#skills-body'); if(!box) return;
+  if(!SKILL_LIB){ try{ SKILL_LIB=(await(await fetch('/api/skill-library')).json()).skills||[]; }catch(e){ SKILL_LIB=[]; } }
+  if(!SKILL_LIB.length) return;
+  const c=el('div','mcard'); c.style.marginTop='16px';
+  c.append(el('div','sect-label','MARKETING SKILLS LIBRARY — '+SKILL_LIB.length+' FRAMEWORKS MILES CAN APPLY'));
+  c.append(el('p','appsub','Expert frameworks for CRO, copywriting, ads, SEO, emails, pricing, launches and more (open source, MIT — Corey Haines). Miles’ own seven home-services skills are listed first. Click any skill to read the full playbook.'));
+  const search=el('input','f'); search.placeholder='Search '+SKILL_LIB.length+' skills…'; search.style.cssText='width:100%;margin:8px 0';
+  c.append(search);
+  const list=el('div'); list.style.cssText='max-height:420px;overflow:auto'; c.append(list);
+  const draw=()=>{
+    const q=search.value.toLowerCase(); list.innerHTML='';
+    SKILL_LIB.filter(s=>!q||s.name.includes(q)||s.description.toLowerCase().includes(q)).forEach(s=>{
+      const row=el('button'); row.style.cssText='display:flex;gap:8px;align-items:baseline;width:100%;text-align:left;padding:8px 6px;border:none;background:none;cursor:pointer;border-top:1px solid var(--line,#f1f5f9)';
+      const name=el('b',null,s.name); name.style.cssText='font-size:13px;flex:none';
+      const tag=el('span',null,s.source==='miles'?'MILES':'LIBRARY'); tag.style.cssText='font-size:9px;font-weight:800;padding:1px 6px;border-radius:999px;flex:none;'+(s.source==='miles'?'background:#dcfce7;color:#166534':'background:var(--panel2,#eef2f6);color:var(--muted)');
+      const d=el('span','appsub',s.description.slice(0,110)+(s.description.length>110?'…':'')); d.style.fontSize='11.5px';
+      row.append(name,tag,d);
+      row.onclick=async()=>{
+        let sk; try{ sk=await(await fetch('/api/skill-library/'+encodeURIComponent(s.name))).json(); }catch(e){}
+        if(!sk||!sk.content){ toast('Could not load that skill.'); return; }
+        showModal('<h3 style="margin:0 0 8px">'+esc(s.name)+'</h3><pre style="white-space:pre-wrap;font-family:inherit;font-size:12.5px;line-height:1.5;max-height:60vh;overflow:auto;background:var(--panel-2,#f8fafc);border-radius:10px;padding:12px">'+esc(sk.content)+'</pre>');
+      };
+      list.append(row);
+    });
+  };
+  search.oninput=draw; draw();
+  box.append(c);
+}
 function renderSkills(){
   const box=$('#skills-body'); box.innerHTML='';
   const h=el('div'); h.innerHTML='<h3 style="margin:0">Skills & Playbooks</h3><p class="mdesc" style="margin:4px 0 0;max-width:700px">Manage the skills installed in your workspace and keep them up to date. Find new ones in the Marketplace.</p>'; box.append(h);

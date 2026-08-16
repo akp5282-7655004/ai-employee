@@ -1,3 +1,11 @@
+---
+name: campaign-launcher
+description: Turn a brief (service line, offer, budget, geo) into a launch-ready, spec-validated Google Search or Meta Leads campaign, created PAUSED after explicit approval. Use when the user says 'launch a campaign' or 'build me ads'. For audience inputs, see service-area-audience-builder.
+metadata:
+  author: Miles AI
+  version: 1.0.0
+---
+
 # Campaign Launcher
 Trigger: "launch a campaign", "build me ads", a brief (vertical, service line, offer, budget, geo).
 Inputs required: service line, offer, daily budget, landing URL, geo; pulls the rest from the business profile.

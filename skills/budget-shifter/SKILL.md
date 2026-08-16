@@ -1,3 +1,11 @@
+---
+name: budget-shifter
+description: Move daily budget from underperformers to winners within user-set caps (max percent per day, budget floor, monthly ceiling). Use when the user says 'move budget to what works'. Proposes first; executes on approval. For which channel deserves the budget, see channel-comparator.
+metadata:
+  author: Miles AI
+  version: 1.0.0
+---
+
 # Budget Shifter
 Trigger: weekly, after Loser Pauser or Channel Comparator, "move budget to what works".
 Inputs required: user caps — max % move per day (default 20%), min budget floor per campaign (default $5/day), monthly ceiling.

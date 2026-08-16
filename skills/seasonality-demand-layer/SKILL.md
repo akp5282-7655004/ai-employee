@@ -1,3 +1,11 @@
+---
+name: seasonality-demand-layer
+description: Weekly demand memo: which home-services lines to push this week with budget weighting, from the vertical playbook and live search signals. Use when the user asks 'what should we push this week' or on a weekly schedule. For budget execution, see budget-shifter.
+metadata:
+  author: Miles AI
+  version: 1.0.0
+---
+
 # Seasonality + Demand Layer
 Trigger: weekly (Monday), or "what should we push this week".
 Inputs required: trade/vertical, service lines, geo.

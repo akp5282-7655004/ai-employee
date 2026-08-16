@@ -1,3 +1,11 @@
+---
+name: loser-pauser
+description: Find campaigns, ad groups, ad sets, and keywords spending above threshold with zero or above-target results, and propose a pause list with dollars saved. Use when the user asks 'what is wasting money' or on a weekly scan. Executes only on approval; for moving budget instead, see budget-shifter.
+metadata:
+  author: Miles AI
+  version: 1.0.0
+---
+
 # Loser Pauser
 Trigger: weekly scan, "what's wasting money".
 Inputs required: spend threshold (default $50), lookback (default 30d), CPL/cost-per-booked target if set.

@@ -1,3 +1,11 @@
+---
+name: channel-comparator
+description: Compare Google Search, LSA, PMax, and Meta on cost per qualified lead and cost per booked job for the same service line and geo, never on raw CPL. Use when the user asks 'which channel is best'. Hands execution to budget-shifter.
+metadata:
+  author: Miles AI
+  version: 1.0.0
+---
+
 # Channel Comparator
 Trigger: monthly, "which channel is best", Placements panel callout refresh.
 Inputs required: service line + geo (defaults to whole account).

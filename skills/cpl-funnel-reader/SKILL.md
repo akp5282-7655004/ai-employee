@@ -1,3 +1,11 @@
+---
+name: cpl-funnel-reader
+description: Weekly plain-English readout of spend, leads, qualified, booked, and cost per booked job per channel and blended; names the leaking funnel stage and dollarizes the missed-call leak. Use when the user asks 'how are we doing' or for the weekly readout. For channel decisions, see channel-comparator.
+metadata:
+  author: Miles AI
+  version: 1.0.0
+---
+
 # CPL + Funnel Reader
 Trigger: weekly readout, "how are we doing", funnel panel refresh.
 Inputs required: none.

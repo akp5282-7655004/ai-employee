@@ -24,6 +24,7 @@ import { getMetrics } from './metrics/resolver.js';
 import { appendCrmEvent, amountFrom, crmLiveValues, calcLiveValues } from './metrics/crmledger.js';
 import { buildLocalPresenceAudit, gbpCompletenessScore, type AuditAnswer } from './agents/localpresence.js';
 import { appendApproval, approvalLog, defaultAutonomy, normalizeAutonomy, TOS_VERSION, type ApprovalEntry } from './agents/approvallog.js';
+import { listSkills as listLibrarySkills, readSkill as readLibrarySkill } from './skills/library.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
@@ -1384,6 +1385,20 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     data.dash2 = { widgets, updatedAt: new Date().toISOString() };
     await authStore.setUserData(u.id, data);
     return { ok: true };
+  });
+
+  // ── Marketing Skills Library — vendored Agent Skills + Miles' own seven ──
+  app.get('/api/skill-library', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    return { skills: listLibrarySkills() };
+  });
+  app.get<{ Params: { name: string } }>('/api/skill-library/:name', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const skill = readLibrarySkill(req.params.name);
+    if (!skill) return reply.code(404).send({ error: 'Unknown skill.' });
+    return skill;
   });
 
   // ── Approval Log + Autonomy Settings (ToS §3.3–3.4) ──────────────────────

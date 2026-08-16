@@ -1,3 +1,11 @@
+---
+name: service-area-audience-builder
+description: Build geo + homeowner audience specs for Google, LSA, and Meta from ZIPs, radius, and service lines. Use when the user says 'build my audience', 'who should we target', or before any campaign launch. For the campaign build itself, see campaign-launcher.
+metadata:
+  author: Miles AI
+  version: 1.0.0
+---
+
 # Service Area Audience Builder
 Trigger: "build my audience", "who should we target", new account onboarding, before any campaign launch.
 Inputs required: ZIPs / radius / cities served, service lines, seasonality profile (from business profile); asks only for what is missing.
