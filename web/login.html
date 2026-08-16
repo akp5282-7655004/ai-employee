@@ -74,6 +74,14 @@
   const params=new URLSearchParams(location.search);
   const resetToken=params.get('reset'), resetUid=params.get('uid');
   const inviteToken=params.get('invite');
+  // Arriving here because a session ran out, rather than by choice — say so, or
+  // being bounced to a login screen mid-task reads as the app breaking.
+  if(params.get('expired')){
+    const n=document.createElement('div');
+    n.textContent='Your session expired — please sign in again.';
+    n.style.cssText='text-align:center;font-size:12.5px;font-weight:600;color:#86651C;background:#FBF6E7;border:1px solid #E8DCB8;border-radius:9px;padding:9px;margin-bottom:14px';
+    $('form').before(n);
+  }
   function setMode(m){
     mode=m;
     $('tab-login').classList.toggle('on',m==='login');

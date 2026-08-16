@@ -920,6 +920,36 @@
 </div>
 
 <script>
+/**
+ * Session watchdog.
+ *
+ * Roughly a hundred places call fetch(). When a session expires the server
+ * answers 401, and with nothing watching for it the app carried on looking
+ * perfectly normal while every panel quietly showed nothing — no redirect, no
+ * explanation, no clue you had been signed out. Wrapping fetch once catches
+ * every one of those call sites without touching any of them.
+ */
+(function guardSession(){
+  if (typeof window === 'undefined' || !window.fetch) return; // node import of this file
+  const real = window.fetch.bind(window);
+  let leaving = false;
+  window.fetch = async (...args) => {
+    const res = await real(...args);
+    try {
+      const url = String((args[0] && args[0].url) || args[0] || '');
+      const ours = !/^https?:\/\//.test(url) || url.startsWith(location.origin);
+      // /auth/login answers 401 for a wrong password — that is the form's to
+      // report, not a sign the session died.
+      const isSignIn = /\/auth\/(login|signup|forgot|reset)/.test(url);
+      if (res.status === 401 && ours && !isSignIn && !leaving) {
+        leaving = true;
+        location.href = '/login?expired=1';
+      }
+    } catch (e) { /* never let the guard break a real response */ }
+    return res;
+  };
+})();
+
 // Browser engine — a faithful port of the TS mock engine (packs + planner +
 // interpreter + connector + loop). No imports, so it runs in node (for testing)
 // and inline in the artifact. Keep logic identical to src/*.

@@ -101,7 +101,7 @@ import { searchCompetitors } from './research/places.js';
 import { attributeRevenue } from './revenue/attribution.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
 import { hashPassword, verifyPassword, newToken, newUserId, parseCookies } from './auth.js';
-import { MemoryStore, storageStatus, type Store, type User } from './db/index.js';
+import { isHostedDeploy, MemoryStore, storageStatus, type Store, type User } from './db/index.js';
 
 /**
  * The real backend — one engine, one source of truth. It serves the app and
@@ -221,6 +221,42 @@ async function renderAdImage(prompt: string, modelId?: string): Promise<string |
 export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   const app = Fastify({ logger: false });
 
+  /**
+   * Baseline security headers on every response.
+   *
+   * frame-ancestors / X-Frame-Options are the ones that matter most here:
+   * without them any site can load Miles in an invisible iframe over their own
+   * page and harvest a signed-in owner's clicks — on a product whose buttons
+   * approve ad spend.
+   *
+   * The CSP allows inline script and style because the app is deliberately one
+   * self-contained HTML file. That weakens CSP's XSS protection, so it is not
+   * doing the work here that frame-ancestors and nosniff are; it is a floor,
+   * not a substitute for escaping output.
+   */
+  app.addHook('onRequest', async (req, reply) => {
+    reply.header('x-content-type-options', 'nosniff');
+    reply.header('x-frame-options', 'DENY');
+    reply.header('referrer-policy', 'strict-origin-when-cross-origin');
+    reply.header('permissions-policy', 'geolocation=(), microphone=(), camera=(), payment=()');
+    reply.header(
+      'content-security-policy',
+      [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline'",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com data:",
+        "img-src 'self' data: blob: https:",
+        "connect-src 'self' https:",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+      ].join('; '),
+    );
+    // Only meaningful over TLS, and harmful to send from a plain-HTTP dev server.
+    if (isHostedDeploy()) reply.header('strict-transport-security', 'max-age=15552000; includeSubDomains');
+  });
+
   // Compress every text/JSON response above ~1KB. Node's zlib only — no extra
   // dependency, and static assets are encoded once and cached.
   app.addHook('onSend', async (req, reply, payload) => {
@@ -325,12 +361,51 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       return fallback;
     }
   };
+  /** A plain branded page for the two things that should never be raw JSON. */
+  const statusPage = (code: number, heading: string, body: string) => `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Miles — ${heading}</title><style>
+:root{color-scheme:light dark}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+  background:#F4F4F5;color:#111112;font:400 15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px}
+@media (prefers-color-scheme:dark){body{background:#111112;color:#F4F4F5}.card{background:#1B1B1E!important;border-color:#2E2E33!important}.sub{color:#8A8A92!important}}
+.card{background:#fff;border:1px solid #E6E6EA;border-radius:14px;padding:34px 30px;max-width:420px;text-align:center}
+.code{font-size:12px;letter-spacing:.09em;font-weight:700;color:#8A8A92;margin-bottom:10px}
+h1{font-size:21px;margin:0 0 8px;font-weight:700;letter-spacing:-.01em}
+.sub{color:#3F3F46;margin:0 0 22px}
+a{display:inline-block;background:#111112;color:#fff;text-decoration:none;padding:10px 20px;border-radius:9px;font-weight:600;font-size:14px}
+</style></head><body><div class="card">
+<div class="code">${code}</div><h1>${heading}</h1><p class="sub">${body}</p><a href="/">Back to Miles</a>
+</div></body></html>`;
+
+  // A mistyped URL used to return a raw Fastify JSON blob. API callers still get
+  // JSON (that is what they can parse); a browser gets a page.
+  app.setNotFoundHandler(async (req, reply) => {
+    if (req.url.startsWith('/api/') || req.url.startsWith('/auth/')) return reply.code(404).send({ error: 'Not found' });
+    return reply.code(404).type('text/html').send(statusPage(404, 'Page not found', 'That link does not lead anywhere. It may have moved, or the address may have a typo.'));
+  });
+
+  // Never show a stack trace or an internal message to whoever hit the error.
+  // The detail goes to the server log, where it is useful and not a disclosure.
+  app.setErrorHandler(async (err, req, reply) => {
+    const status = (err as { statusCode?: number }).statusCode ?? 500;
+    if (status >= 500) req.log.error({ err, url: req.url }, 'unhandled error');
+    if (req.url.startsWith('/api/') || req.url.startsWith('/auth/')) {
+      return reply.code(status).send({ error: status >= 500 ? 'Something went wrong on our end.' : (err as Error).message });
+    }
+    return reply.code(status).type('text/html').send(statusPage(status, 'Something went wrong', 'Miles hit an error loading that. Trying again usually works — if it keeps happening, let us know.'));
+  });
+
   const dashboardPage = readWeb('index.html', '<!doctype html><title>Miles</title><p>Build the web/ dir.</p>');
   const loginPage = readWeb('login.html', '<!doctype html><title>Miles — Sign in</title><p>Login page missing.</p>');
 
   // ── auth helpers ──
+  // Secure is set wherever the app is actually served over TLS. It is left off
+  // for plain-HTTP local development, where setting it would stop the cookie
+  // from ever being stored and make sign-in silently fail.
+  const SECURE_COOKIES = isHostedDeploy() || (process.env.APP_URL || '').startsWith('https://');
   const cookie = (token: string, maxAge: number) =>
-    `miles_session=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}`;
+    `miles_session=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}${SECURE_COOKIES ? '; Secure' : ''}`;
   const startSession = async (reply: FastifyReply, userId: string) => {
     const token = newToken();
     await authStore.createSession({ token, userId, expiresAt: Date.now() + SESSION_DAYS * 86400_000 });
@@ -413,6 +488,10 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   // shared sending quota. One limiter per direction.
   const forgotByEmail = new RateLimiter(3, 60 * 60_000); // 3 per address per hour
   const forgotByIp = new RateLimiter(10, 60 * 60_000); // 10 per caller per hour
+  // Sign-in guessing. Tight per account (that is the target), loose per caller
+  // (shared office and household IPs must not lock each other out).
+  const loginByEmail = new RateLimiter(8, 15 * 60_000);
+  const loginByIp = new RateLimiter(50, 15 * 60_000);
   /** Constant-time token comparison, so a reply's timing reveals nothing. */
   const sameToken = (a: string, b: string): boolean => {
     const x = Buffer.from(a);
@@ -569,7 +648,18 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   });
   app.post('/auth/login', async (req, reply) => {
     const b = (req.body ?? {}) as { email?: string; password?: string };
-    const u = b.email ? await authStore.getUserByEmail(b.email) : null;
+    const who = (b.email || '').trim().toLowerCase();
+    // Throttle guessing. Per account, because that is what an attacker targets;
+    // and per caller, more loosely, because offices and households share one IP
+    // and a tight cap there would lock out innocent people.
+    const byEmail = who ? loginByEmail.check(who) : { allowed: true, retryAfter: 0 };
+    const byIp = loginByIp.check(req.ip || 'unknown');
+    if (!byEmail.allowed || !byIp.allowed) {
+      const retryAfter = Math.max(byEmail.retryAfter, byIp.retryAfter);
+      reply.header('retry-after', String(retryAfter));
+      return reply.code(429).send({ error: `Too many sign-in attempts. Try again in ${Math.ceil(retryAfter / 60)} minutes, or reset your password.` });
+    }
+    const u = who ? await authStore.getUserByEmail(who) : null;
     if (!u || !verifyPassword(b.password ?? '', u.passwordHash))
       return reply.code(401).send({ error: 'Wrong email or password.' });
     await startSession(reply, u.id);
