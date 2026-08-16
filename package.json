@@ -2,7 +2,7 @@
   "name": "ai-employee",
   "version": "0.0.1",
   "private": true,
-  "description": "A horizontal AI marketing employee sold through vertical doors — a shared engine plus category-specific command packs. Working name; see docs/VISION.md.",
+  "description": "A horizontal AI marketing employee sold through vertical doors \u2014 a shared engine plus category-specific command packs. Working name; see docs/VISION.md.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -16,7 +16,8 @@
     "demo:agent": "tsx scripts/demo-agent.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "reset-password": "tsx scripts/reset-password.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.10.1",
