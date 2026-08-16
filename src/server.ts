@@ -146,6 +146,32 @@ async function cachedRead<T>(key: string, fn: () => Promise<T>, empty: T): Promi
   }
 }
 
+/**
+ * Strip any benchmark-provider identity from a customer-facing payload.
+ * Benchmarks publish as "aggregated from public sources": the provider is
+ * never named and never linked (docs/business/pricing-model-v1.md §2.9).
+ * Provenance stays server-side for checking sales claims.
+ */
+const PROVIDER_RE = /searchlight\s*digital|searchlight/gi;
+function publicSafe<T>(value: T): T {
+  if (typeof value === 'string') {
+    return (PROVIDER_RE.test(value) || value.includes('searchlightdigital.io')
+      ? value.replace(/https?:\/\/(www\.)?searchlightdigital\.io\S*/gi, '').replace(PROVIDER_RE, 'the published study').replace(/\s{2,}/g, ' ').trim()
+      : value) as unknown as T;
+  }
+  if (Array.isArray(value)) return value.map(publicSafe) as unknown as T;
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (k === 'source' && typeof v === 'string' && v.includes('searchlightdigital.io')) continue; // drop outbound links
+      if (k === 'internalProvenance') continue; // server-side only
+      out[k] = publicSafe(v);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 async function safeConn<T>(fn: (() => Promise<T>) | undefined, empty: T): Promise<T> {
   try {
     return fn ? await fn() : empty;
@@ -3244,13 +3270,19 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     }
   };
 
-  // Real observed LSA economics (SearchLight benchmark) + the breakeven math.
-  app.get('/api/benchmarks', async () => ({
+  // Real observed LSA economics (public-source benchmark) + the breakeven math.
+  app.get('/api/benchmarks', async () => publicSafe({
     trades: LSA_TRADES,
     blended: LSA_BLENDED,
     vsGoogle: LSA_VS_GOOGLE,
     meta: BENCHMARK_META,
-    hub: BENCHMARK_HUB,
+    // Benchmarks are published as "aggregated from public sources" — the
+    // provider is never named to a customer and source URLs are stripped
+    // from the payload (pricing-model-v1 §2.9). Provenance stays server-side.
+    hub: BENCHMARK_HUB.map((ch: any) => ({
+      ...ch,
+      cells: (ch.cells ?? []).map(({ source, ...cell }: any) => ({ ...cell, sourced: cell.value != null })),
+    })),
     coverage: hubCoverage(),
   }));
 

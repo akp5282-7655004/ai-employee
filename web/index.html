@@ -1374,7 +1374,7 @@ document.querySelectorAll('#nav .navhead').forEach(h=>h.onclick=()=>{
 
 // ═══ meters ═══
 let meterVert='solar', meterCustom='', meterInit=false;
-// Real per-trade cost-per-lead benchmarks (SearchLight Google Ads non-branded;
+// Real per-trade cost-per-lead benchmarks (public-source Google Ads non-branded;
 // low/median/high ≈ 25th/50th/75th percentile where published). Powers the "Custom"
 // industry option and defaults the meter to the customer's own trade.
 const TRADE_BENCH={
@@ -1690,7 +1690,7 @@ function refreshMeter(){
   const lg=$('#legend'); if(lg) lg.innerHTML=`<span><span class="d" style="background:var(--good)"></span>Optimal (≤${money(bm.low)})</span>
     <span><span class="d" style="background:var(--teal)"></span>Typical (${money(bm.low)}–${money(bm.high)})</span>
     <span><span class="d" style="background:var(--warn)"></span>High (>${money(bm.high)})</span>`;
-  const note=$('#meter-note'); if(note) note.textContent = bm.estimated ? '≈ Modeled from general home-services data — no SearchLight dataset for '+(bm.label||'this industry')+'. Trade-specific CPL often runs materially higher elsewhere (e.g. painting ~$138–$174 per LocaliQ / 99 Calls), so treat this as an optimistic planning target, not a measured median.' : '';
+  const note=$('#meter-note'); if(note) note.textContent = bm.estimated ? '≈ Modeled from general home-services data — no benchmark dataset for '+(bm.label||'this industry')+'. Trade-specific CPL often runs materially higher elsewhere (e.g. painting ~$138–$174 per LocaliQ / 99 Calls), so treat this as an optimistic planning target, not a measured median.' : '';
   runValidate();
 }
 function localValidate(bm,budget,leads){
@@ -2466,7 +2466,7 @@ function renderAnalytics(){
   if(aTab==='roi'||aTab==='crm') loadRevenue(aTab);
 }
 
-// ═══ real LSA benchmarks (SearchLight, Feb 2026) ═══
+// ═══ real LSA benchmarks (public source, Feb 2026) ═══
 const LSA_TRADES=[
   {trade:'Electrical',cpl:39,bookRate:43.4,avgTicket:1434,roas:8.52,accounts:112},
   {trade:'HVAC',cpl:51,bookRate:44.0,avgTicket:2110,roas:9.55,accounts:409},
@@ -2475,7 +2475,7 @@ const LSA_TRADES=[
   {trade:'Drain / Sewer',cpl:59,bookRate:39.5,avgTicket:1521,roas:5.50,accounts:23},
   {trade:'Water Heater',cpl:71,bookRate:35.0,avgTicket:2484,roas:5.13,accounts:2},
 ];
-const LSA_MATCH=42.8; // blended LSA match rate — applied to all trades (a MODELED assumption; SearchLight does not publish per-trade match rates)
+const LSA_MATCH=42.8; // blended LSA match rate — applied to all trades (a MODELED assumption; per-trade match rates are not published)
 let BENCH_MARGIN=25; // user-editable EBITDA margin for the breakeven model
 function breakevenCpl(avgTicket,bookRate,marginPct){ const l2c=(bookRate/100)*(LSA_MATCH/100); return Math.round(avgTicket*(marginPct/100)*l2c); }
 // ═══ ad studio (creative engine) ═══
@@ -5294,9 +5294,9 @@ function renderMarketList(){
   if(!items.length) g.append(el('div','appsub','No skills match that search.'));
 }
 
-// The Benchmark Hub — every channel × trade × metric SearchLight publishes. Real
-// numbers where we have them; an "Add from source →" link (honest, no fake figure)
-// where the value still lives in a SearchLight article we haven't ingested.
+// The Benchmark Hub — every channel × trade × metric published. Real
+// numbers where we have them; "Not published" where we have none (no fake figure)
+// where the value has not been ingested yet.
 let BENCH_HUB=null, BENCH_META=null, BENCH_COV=null;
 function benchVal(e){ if(e.value==null) return null; if(e.unit==='usd') return '$'+e.value.toLocaleString(); if(e.unit==='x') return e.value+'x'; if(e.unit==='pct') return e.value+'%'; return String(e.value); }
 async function renderBenchmarkHub(){
@@ -5308,8 +5308,8 @@ async function renderBenchmarkHub(){
     const chips=ch.entries.map(e=>{
       const v=benchVal(e);
       const val = v!=null
-        ? `<a class="bc-val bc-link" href="${esc(e.source)}" target="_blank" rel="noopener">${esc(v)}</a>`
-        : `<a class="bc-add" href="${esc(e.source)}" target="_blank" rel="noopener">Add from source →</a>`;
+        ? `<span class="bc-val">${esc(v)}</span>`
+        : `<span class="bc-add">Not published</span>`;
       return `<div class="benchchip${v==null?' pending':''}">
         <div class="bc-lab">${esc(e.trade)} · ${esc(e.metric)}</div>
         ${val}
@@ -5325,8 +5325,8 @@ async function renderBenchmarkHub(){
   }).join('');
   host.innerHTML=`<div class="acard">
     <div class="ah">Benchmark Hub — CPL, ROAS &amp; revenue multiples by channel and trade</div>
-    <div class="mdesc" style="margin:-8px 0 6px"><b>${cov.total}</b> first-party benchmarks from SearchLight's published studies — currently-published <b>historical snapshots</b> (periods range Q4 2025–2026), <b>not live or local</b>. These are SearchLight's own portfolio data, not an independent market census; samples &amp; methods vary. Tap any metric for its source, period &amp; sample.</div>
-    <div class="appsub" style="margin-bottom:14px">Source: SearchLight Digital home-services benchmarks (Google Ads, Local Service Ads, Facebook, Direct Mail, SEO &amp; AI). Each figure carries its own period, sample size &amp; aggregation method — read the note before acting.</div>
+    <div class="mdesc" style="margin:-8px 0 6px"><b>${cov.total}</b> industry benchmarks, aggregated from public sources — <b>historical snapshots</b> (periods range Q4 2025–2026), <b>not live or local</b>. These are published portfolio figures, not an independent market census; samples &amp; methods vary. Tap any metric for its period &amp; sample.</div>
+    <div class="appsub" style="margin-bottom:14px">Industry benchmarks, aggregated from public sources, across Google Ads, Local Service Ads, Facebook, Direct Mail, SEO &amp; AI. Each figure carries its own period, sample size &amp; aggregation method — read the note before acting.</div>
     ${sections}
   </div>`;
 }
@@ -5343,7 +5343,7 @@ function renderBenchmarks(){
       <td>$${be}</td><td>${badge}</td></tr>`; }).join('');
   host.innerHTML=`<div class="acard">
     <div class="ah">LSA Benchmarks — What a Lead Really Costs <span style="font-weight:500;color:var(--faint);font-size:12px">· by trade, Feb 2026</span></div>
-    <div class="mdesc" style="margin:-8px 0 12px">CPL alone is the wrong metric — a lead is only worth its price if enough leads become paying customers at a high enough ticket. <b>Modeled breakeven CPL</b> = avg ticket × margin × book rate × match rate. <b>Caveat:</b> a single blended <b>${LSA_MATCH}% match rate</b> is applied to every trade (SearchLight doesn't publish per-trade match rates), so these are <b>scenario estimates, not measured trade-level breakevens</b>. Sample sizes vary widely — a 2-account figure (⚠︎) is not as trustworthy as a 400-account one.</div>
+    <div class="mdesc" style="margin:-8px 0 12px">CPL alone is the wrong metric — a lead is only worth its price if enough leads become paying customers at a high enough ticket. <b>Modeled breakeven CPL</b> = avg ticket × margin × book rate × match rate. <b>Caveat:</b> a single blended <b>${LSA_MATCH}% match rate</b> is applied to every trade (per-trade match rates are not published), so these are <b>scenario estimates, not measured trade-level breakevens</b>. Sample sizes vary widely — a 2-account figure (⚠︎) is not as trustworthy as a 400-account one.</div>
     <div style="display:flex;align-items:center;gap:10px;margin:0 0 12px;flex-wrap:wrap">
       <span class="appsub">Your EBITDA margin:</span>
       <input id="bench-margin" type="range" min="10" max="45" step="1" value="${margin}" style="flex:1;min-width:160px;max-width:280px">
@@ -5352,7 +5352,7 @@ function renderBenchmarks(){
     <div style="overflow-x:auto"><table class="btable">
       <thead><tr><th style="text-align:left">Trade</th><th>Accts</th><th>CPL</th><th>Book rate</th><th>Avg ticket</th><th>ROAS</th><th>Breakeven CPL</th><th>Headroom</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-    <div class="appsub" style="margin-top:12px">Source: SearchLight Home Services LSA Benchmark · Feb 2026 · 888 contractors · $6.72M tracked spend · 126,650 leads. Breakeven is a model, not a measured benchmark — adjust the margin above to your business.</div>
+    <div class="appsub" style="margin-top:12px">Industry benchmarks, aggregated from public sources · Feb 2026 · 888 contractors · $6.72M tracked spend · 126,650 leads. Breakeven is a model, not a measured benchmark — adjust the margin above to your business.</div>
   </div>`;
   const mi=$('#bench-margin'); if(mi) mi.oninput=()=>{ BENCH_MARGIN=Number(mi.value)||25; $('#bench-margin-v').textContent=BENCH_MARGIN+'%'; renderBenchmarks(); };
 }

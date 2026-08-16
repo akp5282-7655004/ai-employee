@@ -51,7 +51,10 @@ export const LSA_VS_GOOGLE = [
 ];
 
 export const BENCHMARK_META = {
-  source: 'SearchLight Home Services LSA Benchmark',
+  /** Customer-facing label. Never name the provider (pricing-model-v1 §2.9). */
+  source: 'Industry benchmarks, aggregated from public sources',
+  /** INTERNAL ONLY — provenance for checking sales claims. Never sent to a client. */
+  internalProvenance: 'Home services LSA benchmark study, February 2026',
   period: 'February 2026',
   contractors: 888,
   spend: 6_720_000,

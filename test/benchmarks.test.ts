@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { profitability, LSA_TRADES, LSA_BLENDED, BENCHMARK_HUB, buildBenchmarkHub, hubCoverage } from '../src/packs/benchmarks.js';
+import { profitability, LSA_TRADES, LSA_BLENDED, BENCHMARK_HUB, buildBenchmarkHub, hubCoverage, BENCHMARK_META } from '../src/packs/benchmarks.js';
 
 describe('profitability math', () => {
   it('reproduces the article breakeven example (~$85 at 25% margin)', () => {
@@ -43,7 +45,7 @@ describe('profitability math', () => {
 });
 
 describe('Benchmark Hub', () => {
-  it('covers every SearchLight channel', () => {
+  it('covers every benchmark channel', () => {
     const ids = BENCHMARK_HUB.map((c) => c.id);
     expect(ids).toEqual(['google_ads', 'lsa', 'facebook', 'direct_mail', 'seo', 'ai', 'lead_quality']);
   });
@@ -58,7 +60,7 @@ describe('Benchmark Hub', () => {
     }
   });
 
-  it('every cell is a real, positive figure with a SearchLight source', () => {
+  it('every cell is a real, positive figure with internal provenance', () => {
     for (const c of BENCHMARK_HUB) {
       for (const e of c.entries) {
         expect(e.source).toMatch(/^https:\/\/searchlightdigital\.io\//);
@@ -80,5 +82,18 @@ describe('Benchmark Hub', () => {
     expect(lsa.entries.find((e) => e.trade === 'Roofing' && e.metric === 'CPL')!.value).toBe(79);
     expect(lsa.entries.find((e) => e.trade === 'Garage Door' && e.metric === 'CPL')!.value).toBe(49);
     expect(buildBenchmarkHub().length).toBe(BENCHMARK_HUB.length);
+  });
+});
+
+describe('benchmark labeling (pricing-model-v1 §2.9)', () => {
+  it('the customer-facing label never names a provider', () => {
+    expect(BENCHMARK_META.source).toBe('Industry benchmarks, aggregated from public sources');
+    expect(BENCHMARK_META.source.toLowerCase()).not.toContain('searchlight');
+  });
+
+  it('no customer-facing surface names the provider or links to it', () => {
+    const ui = readFileSync(join(process.cwd(), 'web', 'index.html'), 'utf8');
+    expect(ui.toLowerCase()).not.toContain('searchlight');
+    expect(ui).not.toContain('searchlightdigital.io');
   });
 });
