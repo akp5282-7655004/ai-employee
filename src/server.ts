@@ -22,6 +22,7 @@ import { SPEC_PLATFORMS, loadSpec, searchSpecCheck, type SpecPlatform } from './
 import { metricCatalog, dashboardDefaults } from './metrics/catalog.js';
 import { getMetrics } from './metrics/resolver.js';
 import { appendCrmEvent, amountFrom, crmLiveValues, calcLiveValues } from './metrics/crmledger.js';
+import { buildLocalPresenceAudit, gbpCompletenessScore, type AuditAnswer } from './agents/localpresence.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
@@ -1340,8 +1341,11 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const spendRows = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
     const adSpend = spendRows.length ? spendRows.reduce((a, r) => a + (r.spend || 0), 0) : undefined;
     const crm = crmLiveValues(data, days);
+    // GBP completeness comes live from the Local Presence audit once taken.
+    const lpAnswers = (data.localPresence as Record<string, AuditAnswer>) ?? undefined;
+    const gbpScore = lpAnswers ? { 'gbp.completeness_score': gbpCompletenessScore(buildLocalPresenceAudit(lpAnswers, (data.profile ?? {}) as Record<string, string>)) } : {};
     const live: import('./metrics/resolver.js').LiveReaders = {
-      values: { ...crm, ...calcLiveValues(crm, adSpend), ...(adSpend !== undefined ? { 'google_ads.cost': Math.round(adSpend * 100) / 100 } : {}) },
+      values: { ...crm, ...calcLiveValues(crm, adSpend), ...gbpScore, ...(adSpend !== undefined ? { 'google_ads.cost': Math.round(adSpend * 100) / 100 } : {}) },
     };
     return { results: await getMetrics(keys, days, live) };
   });
@@ -1362,6 +1366,26 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     data.dash2 = { widgets, updatedAt: new Date().toISOString() };
     await authStore.setUserData(u.id, data);
     return { ok: true };
+  });
+
+  // ── Local Presence audit — GBP + LSA scored against the master spec ──────
+  app.get('/api/localpresence', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const answers = (data.localPresence as Record<string, AuditAnswer>) ?? {};
+    return { audit: buildLocalPresenceAudit(answers, (data.profile ?? {}) as Record<string, string>), taken: Object.keys(answers).length > 0 };
+  });
+  app.post<{ Body: { answers?: Record<string, string> } }>('/api/localpresence', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const raw = req.body?.answers ?? {};
+    const answers: Record<string, AuditAnswer> = {};
+    for (const [k, v] of Object.entries(raw)) if (['yes', 'no', 'unknown'].includes(v) && k.length < 64) answers[k] = v as AuditAnswer;
+    const data = await authStore.getUserData(u.id);
+    data.localPresence = { ...((data.localPresence as object) ?? {}), ...answers };
+    await authStore.setUserData(u.id, data);
+    return { audit: buildLocalPresenceAudit(data.localPresence as Record<string, AuditAnswer>, (data.profile ?? {}) as Record<string, string>) };
   });
 
   // The seven skills: list, run (proposal mode), and act on a run.

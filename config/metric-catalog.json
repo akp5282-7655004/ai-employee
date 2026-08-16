@@ -2744,6 +2744,27 @@
         "blended"
       ],
       "sample_value": 38.1
+    },
+    {
+      "key": "gbp.completeness_score",
+      "platform": "gbp",
+      "label": "Profile Completeness",
+      "description": "How complete your Business Profile is vs the spec (from the Local Presence audit)",
+      "api_field": null,
+      "unit": "percent",
+      "format": "percent_1dp",
+      "aggregation": "last",
+      "direction": "up_good",
+      "supports": [
+        "account"
+      ],
+      "formula": null,
+      "depends_on": [],
+      "default_card": "number",
+      "tags": [
+        "organic"
+      ],
+      "sample_value": 62
     }
   ]
 }
