@@ -66,6 +66,28 @@ Usage:
 
 Asset files live in `exports/` (svg/, png/, jpg/). Prefer the SVGs.
 
+## Dashboard page (product UI)
+
+The dashboard is the owner's morning check-in. It answers, in order: am I on track, what's working, what's not, what do I need to decide — in under a minute.
+
+Structure (three labeled layers, top to bottom):
+1. **The 30-second read** — verdict banner ("You're on track" with a green status dot and a one-line why), then the big four at 40px/800: Leads (with % delta), Ad spend, Booked jobs (with cost per job), Revenue (with % delta). Each with a small context line underneath.
+2. **What's next — decisions waiting** — a single numbered approval queue. Each row: what the action is, its dollar impact, Approve / Skip buttons. Footer row: "nothing else needs you today" + one green "Approve both/all" pill (the only green-filled button in the product).
+3. **The details** — everything else: 7-stat ops row (pending approvals, changes live, agents deployed, agent runs, scheduled posts, credits, weather triggers), Speed-to-Lead card, automations with iOS-style toggles, What's working / What needs attention lists, funnel by stage, placements & channels table, marketing performance, skill activity, recent agent activity, Agents & automations status grid, and a dashed "+ Add metric" card (121 metrics available).
+
+Visual treatment (Apple design language on the brand system):
+- Shell: sidebar + sticky header, both translucent — `rgba(255,255,255,0.62–0.72)` with `backdrop-filter: blur(24–30px) saturate(1.6)`, hairline `rgba(0,0,0,0.05–0.06)` borders
+- Page background: `linear-gradient(180deg, #f5f5f7, #eef0f4)`
+- Cards: `rgba(255,255,255,0.72)` + blur, radius 16–22px, shadow `0 1px 2px rgba(0,0,0,0.04)` (hero card adds a soft `0 12px 32px rgba(0,0,0,0.04)`)
+- UI chrome font: system stack (`-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'`); all numbers `font-variant-numeric: tabular-nums`
+- Inner stat wells inside cards: `rgba(0,0,0,0.03)`, radius 14px
+- Section labels between layers: 11.5px, 700, uppercase, 0.1em tracking, `#AEAEB2`
+- Toggles: iOS-style 42×26px pill; status dots 8–12px, green only when ON/on-track
+- Buttons: pill; primary Ink fill, secondary `rgba(0,0,0,0.05)` fill
+- Color rules unchanged: green only for results/on-state, amber for attention (empty states, warnings), everything else monochrome
+
+Reference implementation: `Miles Dashboard.dc.html` in this project.
+
 ## Voice
 
 Clean, matter-of-fact, results-first. Numbers do the talking; copy explains what happened and what to do next. No hype, no decoration, no emoji.

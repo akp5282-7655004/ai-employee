@@ -63,9 +63,29 @@
     --brand:#FFFFFF; --teal:#D8D8DC;
     --shadow:0 1px 2px rgba(0,0,0,.5);
   }
+  /* Dashboard page (product UI) — Apple design language on the brand system
+     (docs/BRAND.md "Dashboard page"). Same color + hierarchy rules. */
+  :root{ --ui:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,sans-serif; }
+  .layer-label{font-family:var(--ui);font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#AEAEB2;margin:26px 0 12px;}
+  .dcard{text-align:left;background:rgba(255,255,255,.72);backdrop-filter:blur(26px) saturate(1.6);-webkit-backdrop-filter:blur(26px) saturate(1.6);border:1px solid rgba(0,0,0,.06);border-radius:18px;box-shadow:0 1px 2px rgba(0,0,0,.04);}
+  .dcard.dhero{border-radius:22px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.04);}
+  .well{text-align:left;background:rgba(0,0,0,.03);border-radius:14px;padding:14px 16px;}
+  .bignum{font-family:var(--ui);font-size:40px;font-weight:800;letter-spacing:-.03em;line-height:1.05;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .dot{width:10px;height:10px;border-radius:50%;flex:none;display:inline-block;}
+  @media (max-width:900px){ .bigfour{grid-template-columns:repeat(2,minmax(0,1fr))!important;} }
+  .qrow{display:flex;align-items:flex-start;gap:14px;padding:14px 0;border-top:1px solid rgba(0,0,0,.06);}
+  .qnum{font-family:var(--ui);font-variant-numeric:tabular-nums;width:22px;flex:none;color:var(--muted);font-weight:700;font-size:13px;padding-top:2px;}
+  .btn-sec{background:rgba(0,0,0,.05);border:none;border-radius:999px;padding:8px 16px;font-family:var(--ui);font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;}
+  .btn-ink{background:var(--ink);color:var(--panel);border:none;border-radius:999px;padding:8px 18px;font-family:var(--ui);font-size:13px;font-weight:600;cursor:pointer;}
+  /* The ONLY green-filled button in the product (brand: approve-all pill). */
+  .btn-approve-all{background:var(--good);color:#fff;border:none;border-radius:999px;padding:9px 20px;font-family:var(--ui);font-size:13.5px;font-weight:600;cursor:pointer;}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    .dcard{background:rgba(26,26,28,.72);border-color:rgba(255,255,255,.08);}
+    .well{background:rgba(255,255,255,.05);}
+  }}
   *{box-sizing:border-box;}
   html,body{height:100%;}
-  body{margin:0;background:var(--bg);color:var(--graphite);font-family:var(--sans);font-weight:400;-webkit-font-smoothing:antialiased;}
+  body{margin:0;background:linear-gradient(180deg,#f5f5f7,#eef0f4);background-attachment:fixed;color:var(--graphite);font-family:var(--sans);font-weight:400;-webkit-font-smoothing:antialiased;}
   h1,h2,h3,h4,b,strong{color:var(--ink);}
   h1,h2,h3{letter-spacing:-.02em;}
   .app{display:grid;grid-template-columns:250px 1fr;height:100dvh;}
@@ -2053,6 +2073,105 @@ async function diagProbe(app,btn){ btn.disabled=true; const old=btn.textContent;
   $('#dg-copy').onclick=()=>{ try{navigator.clipboard.writeText(report);}catch(e){} toast('Copied — now paste it to Miles'); };
   btn.disabled=false; btn.textContent=old;
 }
+
+// ── Dashboard layer 1: the 30-second read (docs/BRAND.md "Dashboard page") ──
+// Verdict first, then the four numbers that matter. Honest: the verdict is
+// only green when it is backed by live data.
+async function dashHero(wrap, d){
+  const keys=['calc.blended_leads','calc.blended_spend','crm.booked_jobs','calc.cost_per_booked','crm.job_revenue'];
+  const M={};
+  try{ const r=await(await fetch('/api/metrics/resolve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({keys,days:30})})).json();
+    (r.results||[]).forEach(x=>{ M[x.key]=x; }); }catch(e){}
+  const g=k=>M[k]?M[k].value:null;
+  const anyLive=keys.some(k=>M[k]&&M[k].source==='live');
+  const target=Number((d.marketing||{}).targetCpa)||null;
+  const cpb=g('calc.cost_per_booked'), booked=g('crm.booked_jobs');
+  const onTrack=anyLive&&(target?(cpb!=null&&cpb<=target):(booked!=null&&booked>0));
+  const card=el('div','dcard dhero'); card.style.cssText+='padding:22px 24px';
+  // Verdict banner
+  const vb=el('div'); vb.style.cssText='display:flex;align-items:center;gap:10px;flex-wrap:wrap';
+  const dot=el('span','dot'); dot.style.background=onTrack?'var(--good)':(anyLive?'var(--warn)':'var(--muted)'); vb.append(dot);
+  const vtxt=el('div',null,!anyLive?'Waiting on your data':(onTrack?'You’re on track':'Needs attention'));
+  vtxt.style.cssText='font-family:var(--ui);font-size:22px;font-weight:700;letter-spacing:-.02em;color:var(--ink)'; vb.append(vtxt);
+  card.append(vb);
+  const why=el('div','appsub'); why.style.cssText='margin-top:4px;font-size:13.5px';
+  why.textContent = !anyLive
+    ? 'Miles is showing sample figures until your ad and CRM data flow — connect a source in Integrations.'
+    : (target&&cpb!=null
+        ? (onTrack?('Cost per booked job is $'+Math.round(cpb).toLocaleString()+' against your $'+target+' target.')
+                  :('Cost per booked job is $'+Math.round(cpb).toLocaleString()+' — above your $'+target+' target.'))
+        : (booked?('You booked '+Math.round(booked).toLocaleString()+' jobs in the last 30 days.')
+                 :'No booked jobs recorded in the last 30 days.'));
+  card.append(why);
+  // The big four
+  const four=el('div','bigfour'); four.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:18px';
+  const cell=(label,value,metricKey,context)=>{
+    const w=el('div','well');
+    const l=el('div',null,label); l.style.cssText='font-family:var(--ui);font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#AEAEB2'; w.append(l);
+    const v=el('div','bignum',value); v.style.marginTop='6px'; w.append(v);
+    const row=el('div'); row.style.cssText='display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap';
+    const m=M[metricKey]; if(m) row.append(ccDelta(m));
+    if(context){ const c=el('span','appsub',context); c.style.fontSize='11.5px'; row.append(c); }
+    if(m) row.append(ccSourceTag(m.source));
+    w.append(row); return w;
+  };
+  const money=v=>v==null?'—':('$'+Math.round(v).toLocaleString());
+  const count=v=>v==null?'—':Math.round(v).toLocaleString();
+  four.append(
+    cell('Leads',count(g('calc.blended_leads')),'calc.blended_leads','last 30 days'),
+    cell('Ad spend',money(g('calc.blended_spend')),'calc.blended_spend','all connected platforms'),
+    cell('Booked jobs',count(booked),'crm.booked_jobs',cpb!=null?('at '+money(cpb)+' per job'):''),
+    cell('Revenue',money(g('crm.job_revenue')),'crm.job_revenue','from won jobs'),
+  );
+  card.append(four); wrap.innerHTML=''; wrap.append(card);
+}
+// ── Dashboard layer 2: decisions waiting — one numbered approval queue ──
+async function dashQueue(wrap){
+  if(!REMOTE){ wrap.remove(); return; }
+  let d={recommendations:[]};
+  try{ d=await(await fetch('/api/recommendations')).json(); }catch(e){ wrap.remove(); return; }
+  const recs=d.recommendations||[];
+  const card=el('div','dcard'); card.style.cssText+='padding:6px 20px 18px';
+  const list=el('div'); card.append(list);
+  const foot=el('div'); foot.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:14px;border-top:1px solid rgba(0,0,0,.06);margin-top:2px';
+  const footTxt=el('div','appsub'); foot.append(footTxt);
+  const dollar=r=>{ const m=String(r.why||'').match(/\$[\d,]+(\.\d+)?/)||String(r.action||'').match(/\$[\d,]+(\.\d+)?/); return m?m[0]:null; };
+  const rows=[];
+  const refreshFoot=()=>{
+    const left=rows.filter(x=>!x.done).length;
+    footTxt.textContent = left===0 ? 'Nothing else needs you today.' : (left+' decision'+(left===1?'':'s')+' waiting.');
+    approveAll.style.display = left>1 ? '' : 'none';
+  };
+  const approveAll=el('button','btn-approve-all','Approve all');
+  approveAll.onclick=async()=>{ approveAll.disabled=true; approveAll.textContent='Applying…';
+    for(const x of rows.filter(y=>!y.done)) await x.approve();
+    approveAll.disabled=false; approveAll.textContent='Approve all'; refreshFoot(); };
+  foot.append(approveAll);
+  recs.slice(0,5).forEach((r,i)=>{
+    const row=el('div','qrow'); if(i===0) row.style.borderTop='none';
+    row.append(el('div','qnum',String(i+1)));
+    const mid=el('div'); mid.style.flex='1';
+    const t=el('div',null,r.title); t.style.cssText='font-family:var(--ui);font-size:15px;font-weight:600;color:var(--ink);letter-spacing:-.01em'; mid.append(t);
+    const imp=el('div','appsub'); imp.style.cssText='margin-top:2px;font-size:12.5px';
+    const $$=dollar(r); imp.textContent=($$?$$+' impact · ':'')+(r.action||r.why||''); mid.append(imp);
+    row.append(mid);
+    const acts=el('div'); acts.style.cssText='display:flex;gap:8px;flex:none';
+    const ap=el('button','btn-ink','Approve'), sk=el('button','btn-sec','Skip');
+    const state={done:false};
+    state.approve=async()=>{ if(state.done) return; ap.disabled=true; sk.disabled=true; ap.textContent='Applying…';
+      try{ await fetch('/api/recommendations/apply',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rec:r})});
+        state.done=true; acts.innerHTML=''; const ok=el('span','appsub','Approved'); ok.style.color='var(--good)'; acts.append(ok); row.style.opacity='.65';
+      }catch(e){ ap.disabled=false; sk.disabled=false; ap.textContent='Approve'; toast('Couldn’t apply that — try again.'); } };
+    ap.onclick=async()=>{ await state.approve(); refreshFoot(); };
+    sk.onclick=async()=>{ try{ await fetch('/api/recommendations/dismiss',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id})}); }catch(e){}
+      state.done=true; row.style.transition='opacity .2s'; row.style.opacity='0'; setTimeout(()=>row.remove(),200); refreshFoot(); };
+    acts.append(ap,sk); row.append(acts); rows.push(state); list.append(row);
+  });
+  if(!recs.length){ const none=el('div','appsub','Nothing needs you today. Miles keeps watching and will surface decisions here.'); none.style.padding='14px 0'; list.append(none); }
+  card.append(foot); refreshFoot();
+  wrap.innerHTML=''; wrap.append(card);
+  if(recs.length>5){ const more=el('div','appsub','+ '+(recs.length-5)+' more — open Recommendations to see the rest.'); more.style.cssText='margin-top:8px;cursor:pointer'; more.onclick=()=>setPage('recs'); wrap.append(more); }
+}
 function renderOverview(d){
   const box=$('#overview-body'); if(!box) return; box.innerHTML=''; const k=d.kpis||{};
   if(d.range) MKT_RANGE=d.range;
@@ -2067,10 +2186,15 @@ function renderOverview(d){
   gsel.title='Time window for the whole dashboard'; gsel.onchange=async()=>{ MKT_RANGE=gsel.value; await openOverview(); };
   ctrl.append(gsel); head.append(htxt,ctrl);
   box.append(head);
-  // Finished drafts Miles built and left for your OK — front and center.
-  const reviewWrap=el('div'); reviewWrap.style.cssText='margin:18px 0'; box.append(reviewWrap); fillDashReview(reviewWrap);
-  // Recommendations, front and center — approve right here, no digging through tabs.
-  const recWrap=el('div'); recWrap.style.cssText='margin:18px 0'; box.append(recWrap); fillDashRecs(recWrap);
+  // Layer 1 — the 30-second read: verdict, then the four numbers that matter.
+  box.append(el('div','layer-label','The 30-second read'));
+  const heroWrap=el('div'); box.append(heroWrap); dashHero(heroWrap,d);
+  // Layer 2 — decisions waiting: one numbered approval queue.
+  box.append(el('div','layer-label','What’s next — decisions waiting'));
+  const recWrap=el('div'); box.append(recWrap); dashQueue(recWrap);
+  // Layer 3 — the details: everything else.
+  box.append(el('div','layer-label','The details'));
+  const reviewWrap=el('div'); reviewWrap.style.cssText='margin:0 0 18px'; box.append(reviewWrap); fillDashReview(reviewWrap);
   const g=el('div','stats'); g.style.cssText='margin:16px 0;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
   g.append(statCard('Pending approvals',k.pendingApprovals||0), statCard('Changes live',k.liveChanges||0), statCard('Agents deployed',k.agentsDeployed||0), statCard('Agent runs · '+mktRangeLabel(d.range),k.agentRuns||0), statCard('Scheduled posts',k.scheduledPosts||0), statCard('Credits used',(k.creditsUsed||0).toLocaleString()), statCard('Weather triggers',k.weatherTriggers||0));
   box.append(g);
