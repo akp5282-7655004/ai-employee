@@ -441,6 +441,7 @@
           <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
           <a data-page="health"><svg class="ico" viewBox="0 0 24 24"><path d="M3 12h4l2 5 4-12 2 7h6"/></svg> System Health</a>
           <a data-page="approvals"><svg class="ico" viewBox="0 0 24 24"><path d="M12 2 4 6v6c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V6Z"/><path d="M9 12l2 2 4-4"/></svg> Approvals &amp; Autonomy</a>
+          <a data-page="billing"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg> Plan &amp; Credits</a>
           <a data-page="profile"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
           <a data-page="deploy"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 21h14"/></svg> Deploy <span id="deploy-badge" class="navbadge" style="display:none"></span></a>
           <a data-page="logs"><svg class="ico" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l3-3 3 2 4-5"/><circle cx="7" cy="15" r="0.5"/></svg> Logs</a>
@@ -616,6 +617,10 @@
 
     <section class="page" id="page-approvals">
       <div id="ap-body" style="max-width:860px"></div>
+    </section>
+
+    <section class="page" id="page-billing">
+      <div id="bill-body" style="max-width:860px"></div>
     </section>
 
     <!-- AUTOMATION HUB (the five live instant plays, all in one place) -->
@@ -1212,7 +1217,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',approvals:'Approvals & Autonomy',fblaunch:'Launch on Facebook',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',approvals:'Approvals & Autonomy',billing:'Plan & Credits',fblaunch:'Launch on Facebook',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1238,6 +1243,7 @@ function setPage(id){
   $('#page-health').classList.toggle('on',id==='health');
   $('#page-localpresence').classList.toggle('on',id==='localpresence');
   $('#page-approvals').classList.toggle('on',id==='approvals');
+  $('#page-billing').classList.toggle('on',id==='billing');
   $('#page-ghl').classList.toggle('on',id==='ghl');
   $('#page-playbook').classList.toggle('on',id==='playbook');
   $('#page-affluence').classList.toggle('on',id==='affluence');
@@ -1277,6 +1283,7 @@ function setPage(id){
   if(id==='health') openHealth();
   if(id==='localpresence') openLocalPresence();
   if(id==='approvals') openApprovals();
+  if(id==='billing') openBilling();
   if(id==='ghl') openGhl();
   if(id==='playbook') openPlaybook();
   if(id==='affluence') openAffluence();
@@ -2675,6 +2682,60 @@ async function renderCmdCenter(){
   const plus=el('button',null,'+ Add metric'); plus.style.cssText='border:2px dashed var(--line,#cbd5e1);border-radius:12px;background:none;color:var(--muted);font-weight:700;cursor:pointer;min-height:96px';
   plus.onclick=ccAddModal; grid.append(plus);
   gridCard.append(grid); box.append(gridCard);
+}
+
+// ── Plan & Credits — bands by ad spend, launch-offer credit meter ──
+async function openBilling(){
+  const box=$('#bill-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading…</p>';
+  let d={}; try{ d=await(await fetch('/api/billing')).json(); }catch(e){}
+  box.innerHTML='';
+  if(!d.bands){ box.append(ovNudge('Billing runs on the live app.')); return; }
+  // Current plan card
+  const pc=el('div','mcard'); pc.append(el('div','sect-label','YOUR PLAN'));
+  if(d.launchOffer){
+    const h=el('div'); h.innerHTML='<b style="font-size:16px">Launch offer — $0/month</b>'; pc.append(h);
+    pc.append(el('p','appsub','First-100 accounts: $100 in credits, no expiry, hard cap. When the credits run out, accounts enroll in the band their ad spend implies (first paid month always at Starter, with 14 days notice).'));
+  }
+  const spendLine=el('p','appsub',(d.spendKnown?('Trailing-30-day ad spend under management: $'+Math.round(d.spend30).toLocaleString()):'Ad spend not readable yet — connect Google Ads for band assignment.')+(d.impliedBand?' → implied band: '+d.impliedBand.name+' ($'+d.impliedBand.monthlyPrice+'/mo)':''));
+  pc.append(spendLine);
+  // Credits bar
+  const c=d.credits; const pct=c.granted?Math.max(0,Math.min(100,(c.remaining/c.granted)*100)):0;
+  const barWrap=el('div'); barWrap.style.cssText='background:var(--panel2,#f1f5f9);border-radius:8px;height:22px;overflow:hidden;margin:10px 0 4px';
+  const bar=el('div'); bar.style.cssText='height:100%;width:'+pct.toFixed(1)+'%;background:linear-gradient(90deg,#16a34a,#4ade80);border-radius:8px'; barWrap.append(bar);
+  pc.append(barWrap);
+  pc.append(el('div','appsub','$'+c.remaining.toFixed(2)+' of $'+c.granted.toFixed(2)+' in credits remaining · $'+c.spent.toFixed(2)+' used'));
+  const honest=el('p','appsub',d.note); honest.style.cssText='margin-top:10px;padding:8px 10px;background:var(--panel-2,#f8fafc);border-radius:8px;font-size:11.5px'; pc.append(honest);
+  box.append(pc);
+  // Bands table
+  const bc=el('div','mcard'); bc.style.marginTop='12px'; bc.append(el('div','sect-label','PAID BANDS — FLAT PRICE BY AD SPEND, NEVER A PERCENTAGE'));
+  const wrap=el('div'); wrap.style.overflowX='auto'; const t=el('table'); t.style.cssText='width:100%;border-collapse:collapse;font-size:12.5px';
+  const hd=el('tr'); ['Band','Monthly ad spend','Price','Credits included','Auto top-up'].forEach(h=>{const th=el('th',null,h); th.style.cssText='text-align:left;padding:6px 8px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line,#e5e7eb)'; hd.append(th);}); t.append(hd);
+  d.bands.forEach(b=>{
+    const tr=el('tr'); if(d.impliedBand&&b.key===d.impliedBand.key) tr.style.background='var(--panel-2,#f8fafc)';
+    [(b.key===((d.impliedBand||{}).key)?'▸ ':'')+b.name, b.spendMax?('$'+b.spendMin.toLocaleString()+' – $'+b.spendMax.toLocaleString()):('Over $'+b.spendMin.toLocaleString()), '$'+b.monthlyPrice+'/mo', '$'+b.monthlyCredits+'/mo', '$'+b.topUp].forEach((v,i)=>{const td=el('td',null,v); td.style.cssText='padding:7px 8px;border-bottom:1px solid var(--line,#f1f5f9)'+(i===0?';font-weight:600':''); tr.append(td);});
+    t.append(tr);
+  });
+  wrap.append(t); bc.append(wrap);
+  bc.append(el('p','appsub','Every band includes all skills, all connectors, unlimited users, and unmetered monitoring — bands differ only by spend under management and credit bundle.'));
+  box.append(bc);
+  // What draws credits
+  const wc=el('div','mcard'); wc.style.marginTop='12px'; wc.append(el('div','sect-label','WHAT USES CREDITS (MONITORING NEVER DOES)'));
+  const names={campaign_build:'Campaign build',campaign_launch:'Campaign launch',ai_autofill:'AI auto-fill',skill_run:'Skill run',weekly_readout:'Weekly readout',email_send:'Email send',creative_generation:'Creative generation'};
+  Object.entries(d.workCosts||{}).forEach(([k,v])=>{
+    const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line,#f1f5f9);font-size:12.5px';
+    row.append(el('span',null,names[k]||k), el('b',null,'$'+Number(v).toFixed(2))); wc.append(row);
+  });
+  wc.append(el('p','appsub','Dashboards, metric pulls, pacing checks, alerts, and the funnel — always free. You are never charged for letting Miles watch the account.'));
+  box.append(wc);
+  // Usage ledger
+  const lc=el('div','mcard'); lc.style.marginTop='12px'; lc.append(el('div','sect-label','CREDIT USAGE'));
+  if(!(d.ledger||[]).length) lc.append(el('p','appsub','No credits used yet. Work items (builds, launches, skill runs, sends) will appear here with their cost.'));
+  (d.ledger||[]).forEach(e=>{
+    const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line,#f1f5f9);font-size:12.5px';
+    const l=el('div'); l.append(el('b',null,(names[e.item]||e.item))); if(e.note) l.append(el('span','appsub',' · '+e.note)); l.append(el('div','appsub',new Date(e.ts).toLocaleString()));
+    row.append(l, el('b',null,'-$'+Number(e.cost).toFixed(2))); lc.append(row);
+  });
+  box.append(lc);
 }
 
 // ── Approvals & Autonomy — the authoritative record + the rules (ToS §3) ──

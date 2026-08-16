@@ -25,6 +25,7 @@ import { appendCrmEvent, amountFrom, crmLiveValues, calcLiveValues } from './met
 import { buildLocalPresenceAudit, gbpCompletenessScore, type AuditAnswer } from './agents/localpresence.js';
 import { appendApproval, approvalLog, defaultAutonomy, normalizeAutonomy, TOS_VERSION, type ApprovalEntry } from './agents/approvallog.js';
 import { listSkills as listLibrarySkills, readSkill as readLibrarySkill } from './skills/library.js';
+import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS } from './billing/credits.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
@@ -1309,6 +1310,9 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     }
     let gadsConnected = false;
     try { gadsConnected = (await connector.listAccounts(u.id)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
+    // Meter only when the LLM actually generated copy — a deterministic
+    // build is monitoring-grade and stays free.
+    if (aiUsed) { chargeCredits(data, 'ai_autofill', 'Campaign auto-fill'); await authStore.setUserData(u.id, data); }
     return { ok: true, spec, summary: campaignSummary(spec), gadsConnected, aiUsed, llmReady: textLlmReady() };
   });
 
@@ -1385,6 +1389,29 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     data.dash2 = { widgets, updatedAt: new Date().toISOString() };
     await authStore.setUserData(u.id, data);
     return { ok: true };
+  });
+
+  // ── Billing: plan band + credits (pricing-model-v1; no processor yet) ────
+  app.get('/api/billing', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const spendRows = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
+    const spend30 = Math.round(spendRows.reduce((a, r) => a + (r.spend || 0), 0) * 100) / 100;
+    const credits = creditState(data);
+    return {
+      launchOffer: credits.launchOffer,
+      spend30,
+      spendKnown: spendRows.length > 0,
+      impliedBand: bandForSpend(spend30),
+      bands: BANDS,
+      credits: { granted: credits.granted, spent: credits.spent, remaining: credits.remaining },
+      ledger: credits.ledger.slice(0, 50),
+      workCosts: WORK_COSTS,
+      enforced: billingEnforced(),
+      paymentsConnected: false,
+      note: 'Launch offer: $0/month with $100 in credits. Monitoring is never metered — credits draw only on work items. Payments are not connected yet, so nothing is charged and an empty balance does not pause work.',
+    };
   });
 
   // ── Marketing Skills Library — vendored Agent Skills + Miles' own seven ──
@@ -1468,6 +1495,8 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     } catch (e) {
       return reply.code(404).send({ error: String((e as Error).message) });
     }
+    const charge = chargeCredits(data, 'skill_run', run.name);
+    if (charge.blocked) return reply.code(402).send({ error: 'Credits exhausted — work items are paused (monitoring continues). Top up or upgrade to keep working.' });
     const entry: import('./skills/seven.js').SkillRun = { ...run, id: newToken().slice(0, 10), ts: new Date().toISOString() };
     const runs = (data.skill_runs as import('./skills/seven.js').SkillRun[]) ?? [];
     runs.unshift(entry);
@@ -1516,9 +1545,12 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const problems = validateCampaignSpec(spec);
     if (problems.length) return reply.code(400).send({ error: 'Campaign not ready to launch', problems });
     if (!connector.launchCampaign) return reply.code(400).send({ error: 'This connector cannot launch campaigns.' });
+    if (billingEnforced() && creditState(await authStore.getUserData(u.id)).remaining <= 0)
+      return reply.code(402).send({ error: 'Credits exhausted — work items are paused (monitoring continues). Top up or upgrade to keep building.' });
     const result = await connector.launchCampaign(u.id, spec, typeof req.body?.target === 'string' ? req.body.target : undefined);
     // Record the launch attempt in the deploy/change log with the full spec attached.
     const data = await authStore.getUserData(u.id);
+    chargeCredits(data, 'campaign_launch', `Google Ads — ${spec.name}`);
     // Approval Log: the explicit confirm above IS the approval; the launch is the action.
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'campaign-launcher', title: `Approved Google Ads launch — "${spec.name}" (${spec.status}, $${spec.dailyBudget}/day)` });
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'campaign-launcher', title: `${result.ok ? 'Launched' : 'Launch FAILED'} — "${spec.name}"`, detail: result.note });
@@ -1572,8 +1604,11 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!spec || typeof spec !== 'object') return reply.code(400).send({ error: 'spec is required' });
     if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Explicit confirm required — nothing is created without it.' });
     if (!connector.launchMetaCampaign) return reply.code(400).send({ error: 'This connector cannot launch Meta campaigns.' });
+    if (billingEnforced() && creditState(await authStore.getUserData(u.id)).remaining <= 0)
+      return reply.code(402).send({ error: 'Credits exhausted — work items are paused (monitoring continues). Top up or upgrade to keep building.' });
     const result = await connector.launchMetaCampaign(u.id, spec);
     const data = await authStore.getUserData(u.id);
+    chargeCredits(data, 'campaign_launch', `Meta — ${spec.name}`);
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'meta-launcher', title: `Approved Meta launch — "${spec.name}" (PAUSED, $${spec.dailyBudget}/day)` });
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'meta-launcher', title: `${result.ok ? 'Created PAUSED draft' : 'Meta launch FAILED'} — "${spec.name}"`, detail: result.note });
     const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
@@ -3303,8 +3338,11 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!isEmail(to)) return reply.code(400).send({ error: `That doesn't look like a valid email address: "${to}"` });
     if (!subject || !body) return reply.code(400).send({ error: 'Add a subject and a message.' });
     if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Explicit confirm required before sending.' });
+    if (billingEnforced() && creditState(await authStore.getUserData(u.id)).remaining <= 0)
+      return reply.code(402).send({ error: 'Credits exhausted — work items are paused (monitoring continues). Top up or upgrade to keep working.' });
     const logSend = async (via: string) => {
       const data = await authStore.getUserData(u.id);
+      chargeCredits(data, 'email_send', `to ${to}`);
       appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: u.email, source: 'email', title: `Approved + sent email to ${to} (${via})`, detail: subject });
       await authStore.setUserData(u.id, data);
     };
