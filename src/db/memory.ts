@@ -45,6 +45,9 @@ export class MemoryStore implements Store {
   async deleteSession(token: string): Promise<void> {
     this.sessions.delete(token);
   }
+  async deleteSessionsForUser(userId: string): Promise<void> {
+    for (const [token, s] of this.sessions) if (s.userId === userId) this.sessions.delete(token);
+  }
 
   async getUserData(userId: string): Promise<Record<string, unknown>> {
     return this.data.get(userId) ?? {};

@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
+import { timingSafeEqual } from 'node:crypto';
 import { gzipSync, brotliCompressSync, constants as zlibConstants } from 'node:zlib';
 import { join } from 'node:path';
+import { RateLimiter } from './ratelimit.js';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { Agent, newSession } from './agent/index.js';
 import { MockInterpreter } from './agent/intent.js';
@@ -405,7 +407,27 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   };
   const inviteStatus = (i: Invite): 'active' | 'revoked' | 'expired' | 'used-up' =>
     i.revoked ? 'revoked' : i.exp && i.exp < Date.now() ? 'expired' : i.maxUses > 0 && i.uses >= i.maxUses ? 'used-up' : 'active';
-  const baseUrl = (req: { headers: Record<string, unknown> }) => (process.env.APP_URL || `https://${req.headers.host}`).replace(/\/$/, '');
+  // Where this app actually lives, from configuration rather than the request.
+  // Render sets RENDER_EXTERNAL_URL on every instance; APP_URL overrides it.
+  // Reset mail is abusable in two directions — bury one inbox, or drain the
+  // shared sending quota. One limiter per direction.
+  const forgotByEmail = new RateLimiter(3, 60 * 60_000); // 3 per address per hour
+  const forgotByIp = new RateLimiter(10, 60 * 60_000); // 10 per caller per hour
+  /** Constant-time token comparison, so a reply's timing reveals nothing. */
+  const sameToken = (a: string, b: string): boolean => {
+    const x = Buffer.from(a);
+    const y = Buffer.from(b);
+    return x.length === y.length && timingSafeEqual(x, y);
+  };
+  const TRUSTED_BASE = (process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/, '');
+  const baseUrl = (req: { headers: Record<string, unknown> }) => TRUSTED_BASE || `https://${req.headers.host}`.replace(/\/$/, '');
+  /**
+   * Base URL for links that get EMAILED. Deliberately never falls back to the
+   * request's Host header: anyone can forge that, and a forged host would mail a
+   * WORKING reset token to an attacker's domain. Returns undefined when the app
+   * has not been told its own address, and the caller declines to send.
+   */
+  const emailBaseUrl = (): string | undefined => TRUSTED_BASE || undefined;
   const inviteLink = (req: { headers: Record<string, unknown> }, i: Invite) => `${baseUrl(req)}/login?invite=${encodeURIComponent(i.token)}`;
 
   // ── pages (gated: no account → login) ──
@@ -563,17 +585,26 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   // Always returns ok so it never reveals whether an email is registered.
   app.post('/auth/forgot', async (req, reply) => {
     const email = ((req.body as { email?: string })?.email || '').trim().toLowerCase();
-    const u = email ? await authStore.getUserByEmail(email) : null;
-    if (u) {
+    // Anyone can call this and it sends mail, so cap it two ways: per address (so
+    // one inbox cannot be buried) and per caller (so one script cannot drain the
+    // sending quota every other account depends on). The reply is identical
+    // either way — a different answer when throttled would leak which addresses
+    // are registered, which is exactly what this endpoint avoids saying.
+    const okByEmail = email ? forgotByEmail.check(email).allowed : true;
+    const okByIp = forgotByIp.check(req.ip || 'unknown').allowed;
+    const u = email && okByEmail && okByIp ? await authStore.getUserByEmail(email) : null;
+    const base = emailBaseUrl();
+    if (u && base) {
       const token = newToken();
       const data = await authStore.getUserData(u.id);
       data.resetToken = { token, exp: Date.now() + 3600_000 };
       await authStore.setUserData(u.id, data);
-      const base = (process.env.APP_URL || `https://${req.headers.host}`).replace(/\/$/, '');
       const link = `${base}/login?reset=${token}&uid=${encodeURIComponent(u.id)}`;
       if (deliveryStatus().email) await sendEmail(u.email, 'Reset your Miles password', `Reset your Miles password with this link (expires in 1 hour):\n\n${link}\n\nIf you didn't request this, you can ignore this email.`);
     }
-    return { ok: true, emailConfigured: deliveryStatus().email };
+    // Reachable only with email delivery on but APP_URL/RENDER_EXTERNAL_URL unset.
+    // Report it as not configured rather than mailing a link built from a header.
+    return { ok: true, emailConfigured: deliveryStatus().email && !!base };
   });
   // Complete a reset from the emailed (or admin-generated) link.
   app.post('/auth/reset', async (req, reply) => {
@@ -583,9 +614,14 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!u) return reply.code(400).send({ error: 'Invalid reset link.' });
     const data = await authStore.getUserData(u.id);
     const rt = data.resetToken as { token?: string; exp?: number } | undefined;
-    if (!rt || rt.token !== b.token || !rt.exp || rt.exp < Date.now()) return reply.code(400).send({ error: 'This reset link is invalid or has expired — request a new one.' });
+    if (!rt || !rt.token || !sameToken(rt.token, b.token) || !rt.exp || rt.exp < Date.now()) return reply.code(400).send({ error: 'This reset link is invalid or has expired — request a new one.' });
     await authStore.updateUser(u.id, { passwordHash: hashPassword(b.password) });
     delete data.resetToken;
+    await authStore.setUserData(u.id, data);
+    // Sign out every existing device. If the reset happened because someone else
+    // was in the account, leaving their session alive would defeat the point.
+    await authStore.deleteSessionsForUser(u.id);
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: u.email, source: 'password-reset', title: 'Password reset via emailed link; all other sessions signed out' });
     await authStore.setUserData(u.id, data);
     await startSession(reply, u.id);
     return { ok: true, user: { id: u.id, email: u.email } };
@@ -664,8 +700,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const data = await authStore.getUserData(target.id);
     data.resetToken = { token, exp: Date.now() + 3600_000 };
     await authStore.setUserData(target.id, data);
-    const base = (process.env.APP_URL || `https://${req.headers.host}`).replace(/\/$/, '');
-    return { ok: true, link: `${base}/login?reset=${token}&uid=${encodeURIComponent(target.id)}`, email: target.email };
+    return { ok: true, link: `${baseUrl(req)}/login?reset=${token}&uid=${encodeURIComponent(target.id)}`, email: target.email };
   });
   app.put<{ Body: { inviteOnly?: boolean; allowed?: string[] } }>('/api/admin/settings', async (req, reply) => {
     const u = await requireUser(req, reply);

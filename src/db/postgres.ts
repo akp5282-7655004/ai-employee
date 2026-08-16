@@ -73,6 +73,9 @@ export class PostgresStore implements Store {
   async deleteSession(token: string): Promise<void> {
     await this.pool.query('DELETE FROM sessions WHERE token=$1', [token]);
   }
+  async deleteSessionsForUser(userId: string): Promise<void> {
+    await this.pool.query('DELETE FROM sessions WHERE user_id=$1', [userId]);
+  }
 
   async getUserData(userId: string): Promise<Record<string, unknown>> {
     const r = await this.pool.query('SELECT data FROM user_data WHERE user_id=$1', [userId]);

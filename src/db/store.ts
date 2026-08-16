@@ -31,6 +31,10 @@ export interface Store {
   createSession(s: AuthSession): Promise<void>;
   getSession(token: string): Promise<AuthSession | null>;
   deleteSession(token: string): Promise<void>;
+  /** Sign every device out of one account. Used after a password reset: when the
+   *  reset happened because someone else got in, leaving their session alive
+   *  would make the reset pointless. */
+  deleteSessionsForUser(userId: string): Promise<void>;
 
   /** Per-user blob (their intake, connected apps, saved research, …). */
   getUserData(userId: string): Promise<Record<string, unknown>>;
