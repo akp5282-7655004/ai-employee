@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { gzipSync, brotliCompressSync, constants as zlibConstants } from 'node:zlib';
 import { join } from 'node:path';
 import { RateLimiter } from './ratelimit.js';
+import { exchangeCode, googleAuthUrl, googleReady } from './auth/google.js';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { Agent, newSession } from './agent/index.js';
 import { MockInterpreter } from './agent/intent.js';
@@ -635,6 +636,98 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     await startSession(reply, user.id);
     return { ok: true, user: { id: user.id, email: user.email, name: user.name } };
   });
+
+  // ── Sign in with Google ──
+  // One button for both jobs: an unknown email creates an account, a known one
+  // signs in. Splitting them is a distinction only a developer can see.
+  const oauthCookie = (v: string, maxAge: number) =>
+    // Lax, not Strict: the browser arrives here on a redirect FROM google.com,
+    // and Strict would withhold the cookie on exactly that request.
+    `miles_oauth=${v}; HttpOnly; Path=/auth/google; SameSite=Lax; Max-Age=${maxAge}${SECURE_COOKIES ? '; Secure' : ''}`;
+
+  app.get('/auth/google', async (req, reply) => {
+    const base = emailBaseUrl();
+    if (!googleReady() || !base) return reply.redirect('/login?error=google_off');
+    const state = newToken();
+    const nonce = newToken();
+    const invite = String((req.query as { invite?: string })?.invite ?? '').trim();
+    reply.header('set-cookie', oauthCookie([state, nonce, encodeURIComponent(invite)].join('.'), 600));
+    return reply.redirect(googleAuthUrl({ base, state, nonce }));
+  });
+
+  app.get('/auth/google/callback', async (req, reply) => {
+    const base = emailBaseUrl();
+    if (!googleReady() || !base) return reply.redirect('/login?error=google_off');
+    const q = (req.query ?? {}) as { code?: string; state?: string; error?: string };
+    if (q.error) return reply.redirect('/login?error=google_cancelled');
+    // Burn the one-shot cookie no matter how this turns out.
+    reply.header('set-cookie', oauthCookie('', 0));
+    const [state, nonce, rawInvite] = String(parseCookies(req.headers.cookie)['miles_oauth'] ?? '').split('.');
+    // The state must match the one minted for this browser; that is what stops a
+    // third party from feeding us a code obtained in their own session.
+    if (!state || !nonce || !q.state || !q.code || !sameToken(state, q.state)) {
+      return reply.redirect('/login?error=google_state');
+    }
+
+    let who: import('./auth/google.js').GoogleIdentity;
+    try {
+      who = await exchangeCode({ code: q.code, base, nonce });
+    } catch {
+      return reply.redirect('/login?error=google_failed');
+    }
+    // An unverified address is not proof of ownership, and accepting one would
+    // let somebody claim an existing Miles account by asserting its email.
+    if (!who.emailVerified) return reply.redirect('/login?error=google_unverified');
+
+    const email = who.email;
+    let user = await authStore.getUserByEmail(email);
+
+    if (!user) {
+      // New account — the same invite gate a password signup passes through.
+      const invite = decodeURIComponent(rawInvite || '');
+      const inviteCheck = invite ? await checkInvite(invite, email) : { ok: false as boolean, reason: undefined as string | undefined };
+      const existing = await authStore.listUsers();
+      if (existing.length > 0) {
+        const settings = await getAdminSettings();
+        if (settings.inviteOnly) {
+          const onList = email === adminEmail() || settings.allowed.map((e) => e.toLowerCase()).includes(email);
+          if (!onList && !inviteCheck.ok) return reply.redirect('/login?error=invite_only');
+        }
+      }
+      user = {
+        id: newUserId(),
+        email,
+        name: who.name,
+        // No password was chosen, so store an unguessable one rather than a
+        // blank. Password sign-in stays impossible for this account until the
+        // owner deliberately sets one through Forgot password.
+        passwordHash: hashPassword(newToken()),
+        createdAt: new Date().toISOString(),
+      };
+      await authStore.createUser(user);
+      const udata = await authStore.getUserData(user.id);
+      udata.tosAccepted = { version: TOS_VERSION, at: new Date().toISOString(), email, via: 'google' };
+      udata.google = { sub: who.sub, picture: who.picture, linkedAt: new Date().toISOString() };
+      await authStore.setUserData(user.id, udata);
+      if (invite && inviteCheck.ok) await markInviteUsed(invite);
+    } else {
+      // Existing account — link the Google identity to it. Safe only because
+      // Google verified the address above.
+      const udata = await authStore.getUserData(user.id);
+      const prior = udata.google as { sub?: string } | undefined;
+      if (prior?.sub !== who.sub) {
+        udata.google = { sub: who.sub, picture: who.picture, linkedAt: new Date().toISOString() };
+        appendApproval(udata, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: email, source: 'google-sign-in', title: 'Google account linked to this login' });
+        await authStore.setUserData(user.id, udata);
+      }
+    }
+
+    await startSession(reply, user.id);
+    return reply.redirect('/');
+  });
+
+  /** Whether the sign-in page should offer the Google button. */
+  app.get('/auth/providers', async () => ({ google: googleReady() && !!emailBaseUrl() }));
 
   // The Terms of Service, served from the repo's legal draft so the signup
   // checkbox links to a real document. Sub-processors listed per ToS §5.4.
