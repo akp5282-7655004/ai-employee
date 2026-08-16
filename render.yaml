@@ -12,9 +12,17 @@ services:
     envVars:
       - key: NODE_VERSION
         value: '22'
-      # Real durability — accounts + customer profiles survive restarts/deploys.
-      # Paste a Postgres connection string (Supabase or Neon, both free). Without
-      # it the app falls back to in-memory storage, which resets on every restart.
+      # REQUIRED. Accounts, passwords and login sessions live here. Paste a
+      # Postgres connection string (Supabase or Neon, both free).
+      #
+      # The app refuses to start without it. That is deliberate: the old
+      # behaviour — falling back to in-memory storage — meant every deploy,
+      # crash or idle spin-down silently erased every account, which surfaced
+      # later as "it doesn't remember my password". Failing to boot is loud;
+      # losing customer accounts quietly is not.
+      #
+      # Check what a running deploy is on: GET /health -> "store".
+      # To run on temporary storage on purpose, set ALLOW_EPHEMERAL_STORE=1.
       - key: DATABASE_URL
         sync: false
       # Pipedream Connect environment. Defaults to "development" (only YOU, signed

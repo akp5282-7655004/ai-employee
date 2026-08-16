@@ -99,7 +99,7 @@ import { searchCompetitors } from './research/places.js';
 import { attributeRevenue } from './revenue/attribution.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
 import { hashPassword, verifyPassword, newToken, newUserId, parseCookies } from './auth.js';
-import { MemoryStore, type Store, type User } from './db/index.js';
+import { MemoryStore, storageStatus, type Store, type User } from './db/index.js';
 
 /**
  * The real backend — one engine, one source of truth. It serves the app and
@@ -414,6 +414,14 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return reply.type('text/html').send(u ? dashboardPage : loginPage);
   });
   app.get('/login', async (_req, reply) => reply.type('text/html').send(loginPage));
+
+  // Whether accounts actually survive a restart. Public and unauthenticated on
+  // purpose: the symptom it explains ("my account is gone", "it doesn't
+  // remember my password") is one you hit when you CAN'T sign in, so it must be
+  // answerable without signing in. Says nothing about any account — only how
+  // this server stores them. The login page reads it to warn people before they
+  // sign up into storage that will not keep them.
+  app.get('/api/storage', async () => storageStatus(authStore));
   // ── Public demo — a no-login link that lands on a populated dashboard. It signs
   // the visitor into a shared, isolated demo account seeded with sample data, so
   // anyone can look around Miles without signing up. No real customer data here. ──

@@ -50,11 +50,14 @@
     <button id="tab-signup">Sign up</button>
   </div>
   <form id="form">
-    <div id="name-wrap" style="display:none"><label>Your name</label><input id="name" autocomplete="name" placeholder="Akhil Paul"></div>
+    <div id="name-wrap" style="display:none"><label>Your name</label><input id="name" name="name" autocomplete="name" placeholder="Akhil Paul"></div>
     <label>Email</label>
-    <input id="email" type="email" autocomplete="email" placeholder="you@business.com" required>
+    <!-- name= and autocomplete="username" are what a password manager keys on.
+         With autocomplete="email" the browser treats this as an address field
+         and never pairs it with the password, so nothing is ever offered to save. -->
+    <input id="email" name="username" type="email" autocomplete="username" placeholder="you@business.com" required>
     <label>Password</label>
-    <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" required minlength="6">
+    <input id="password" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required minlength="6">
     <label id="tos-wrap" style="display:none;flex-direction:row;align-items:flex-start;gap:8px;margin-top:14px;font-weight:400;font-size:12.5px;line-height:1.4;cursor:pointer">
       <input id="tos" type="checkbox" style="margin-top:2px;width:auto"> <span>I agree to the <a href="/terms" target="_blank" style="color:var(--accent)">Terms of Service</a>, including the use of anonymized, aggregated performance data for industry benchmarks.</span>
     </label>
@@ -86,6 +89,31 @@
   }
   $('tab-login').onclick=()=>setMode('login');
   $('tab-signup').onclick=()=>setMode('signup');
+
+  // The form posts with fetch and never navigates on submit, so the browser
+  // sees no form submission to hang a "save password?" prompt on. Hand the
+  // credential to the password manager explicitly instead. Best-effort: where
+  // the API is missing (Safari, Firefox) the name/autocomplete attributes above
+  // let the browser's own heuristics take over.
+  async function saveCredential(email, password, name){
+    try{
+      if(!window.PasswordCredential || !navigator.credentials) return;
+      await navigator.credentials.store(new PasswordCredential({ id: email, password, name: name || email }));
+    }catch(e){ /* declined or unsupported — never block the sign-in */ }
+  }
+
+  // Say so, before anyone signs up, if this server cannot keep the account.
+  (async()=>{
+    try{
+      const s = await (await fetch('/api/storage')).json();
+      if(s && s.durable === false){
+        const w=document.createElement('div');
+        w.textContent='Heads up: this server is running on temporary storage, so accounts and passwords are erased when it restarts.';
+        w.style.cssText='font-size:12.5px;line-height:1.45;color:#86651C;background:#FBF6E7;border:1px solid #E8DCB8;border-radius:9px;padding:9px 11px;margin-bottom:14px';
+        $('form').before(w);
+      }
+    }catch(e){ /* the warning is a courtesy, never a blocker */ }
+  })();
   // Invite link — default to Sign up and show a friendly banner.
   if(inviteToken && !(resetToken && resetUid)){
     setMode('signup');
@@ -125,6 +153,7 @@
       const r=await fetch('/auth/'+(mode==='signup'?'signup':'login'),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
       const d=await r.json().catch(()=>({}));
       if(!r.ok){ $('err').textContent=d.error||'Something went wrong.'; btn.disabled=false; return; }
+      await saveCredential(body.email, body.password, body.name);
       window.location='/';
     }catch(err){ $('err').textContent='Network error — try again.'; btn.disabled=false; }
   });
