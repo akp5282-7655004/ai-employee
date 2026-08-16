@@ -49,12 +49,21 @@ function sampleResult(entry: MetricEntry, days: number): Omit<MetricResult, 'key
 export interface LiveReaders {
   /** Total ad spend for the range, or undefined when not connected. */
   googleAdsCost?: (days: number) => Promise<number | undefined>;
+  /** Precomputed live values by metric key (CRM ledger, calc blends, …).
+   *  Any key present here is REAL data and overrides the sample. */
+  values?: Record<string, number | undefined>;
 }
 
 export async function getMetric(key: string, days: number, live: LiveReaders = {}): Promise<MetricResult | undefined> {
   const entry = metricByKey(key);
   if (!entry) return undefined;
   const base: MetricResult = { key, label: entry.label, format: entry.format, direction: entry.direction, source: 'sample', ...sampleResult(entry, days) };
+  const lv = live.values?.[key];
+  if (typeof lv === 'number' && Number.isFinite(lv)) {
+    // Live values carry no prior-period series yet — show the number alone
+    // (prior 0 = no delta shown) rather than a fabricated trend.
+    return { ...base, value: lv, prior_value: 0, series: [], source: 'live' };
+  }
   if (key === 'google_ads.cost' && live.googleAdsCost) {
     try {
       const real = await live.googleAdsCost(days);

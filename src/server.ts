@@ -21,6 +21,7 @@ import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type Campaign
 import { SPEC_PLATFORMS, loadSpec, searchSpecCheck, type SpecPlatform } from './specs/index.js';
 import { metricCatalog, dashboardDefaults } from './metrics/catalog.js';
 import { getMetrics } from './metrics/resolver.js';
+import { appendCrmEvent, amountFrom, crmLiveValues, calcLiveValues } from './metrics/crmledger.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
@@ -1332,11 +1333,15 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!u) return;
     const keys = Array.isArray(req.body?.keys) ? req.body.keys.filter((k) => typeof k === 'string').slice(0, 60) : [];
     const days = Math.min(Math.max(Number(req.body?.days) || 30, 1), 90);
+    // Live data: real ad spend from the connector + real CRM numbers from the
+    // webhook event ledger, blended into the calc.* money metrics only when
+    // every input is real.
+    const data = await authStore.getUserData(u.id);
+    const spendRows = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
+    const adSpend = spendRows.length ? spendRows.reduce((a, r) => a + (r.spend || 0), 0) : undefined;
+    const crm = crmLiveValues(data, days);
     const live: import('./metrics/resolver.js').LiveReaders = {
-      googleAdsCost: async () => {
-        const rows = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
-        return rows.length ? rows.reduce((a, r) => a + (r.spend || 0), 0) : undefined;
-      },
+      values: { ...crm, ...calcLiveValues(crm, adSpend), ...(adSpend !== undefined ? { 'google_ads.cost': Math.round(adSpend * 100) / 100 } : {}) },
     };
     return { results: await getMetrics(keys, days, live) };
   });
@@ -1374,12 +1379,12 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const p = (data.profile ?? {}) as Record<string, string>;
     const spendRows = (await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]))
       .map((r) => ({ campaign: r.campaign, cost: r.spend || 0, conversions: r.conversions }));
+    const adSpend7 = spendRows.length ? spendRows.reduce((a, r) => a + r.cost, 0) : undefined;
+    const crm7 = crmLiveValues(data, 30);
     const ctx: import('./skills/seven.js').SkillCtx = {
       business: p.businessName ?? '', trade: p.industry ?? '', city: (p.serviceAreas || '').split(',')[0]?.trim() ?? '',
       services: p.services ?? '', zips: (p.serviceAreas || '').split(',').map((x) => x.trim()).filter((x) => /^\d{5}$/.test(x)),
-      live: {
-        googleAdsCost: async () => (spendRows.length ? spendRows.reduce((a, r) => a + r.cost, 0) : undefined),
-      },
+      live: { values: { ...crm7, ...calcLiveValues(crm7, adSpend7), ...(adSpend7 !== undefined ? { 'google_ads.cost': Math.round(adSpend7 * 100) / 100 } : {}) } },
       spendRows,
     };
     let run;
@@ -2629,10 +2634,13 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const data = await authStore.getUserData(uid);
     const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     if (!st.webhookSecret || st.webhookSecret !== secret) return reply.code(401).send({ error: 'bad token' });
-    if (!st.enabled) return { ok: true, sent: false, reason: 'Speed-to-Lead is off — turn it on to send.' };
     // Normalize the payload — accept GHL's field names and common aliases.
     const b = (req.body ?? {}) as Record<string, any>;
     const event = (req.query?.event || b.event || 'new_lead') === 'missed_call' ? 'missed_call' : 'new_lead';
+    // A lead is a lead whether or not an SMS fires — record it for the
+    // dashboard's real CRM metrics before any feature toggle can bail out.
+    appendCrmEvent(data, { type: event === 'missed_call' ? 'missed_call' : 'lead', ts: new Date().toISOString(), name: String(b.name || b.full_name || '').trim() || undefined });
+    if (!st.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Speed-to-Lead is off — turn it on to send.' }; }
     const name = String(b.name || b.full_name || b.first_name || b.contact_name || '').trim();
     const phone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
     const lead = { id: b.id ? String(b.id) : `${event}:${phone || name}`, name, phone, service: String(b.service || b.message_type || '').trim() || undefined, source: String(b.source || 'crm-webhook').trim(), message: b.message ? String(b.message) : undefined, createdAt: new Date().toISOString(), contacted: false } as import('./connectors/types.js').Lead;
@@ -2706,11 +2714,14 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     if (!stl.webhookSecret || stl.webhookSecret !== secret) return reply.code(401).send({ error: 'bad token' });
     const rs = (data.reviewRequest as ReviewRequestState) ?? emptyReviewState();
-    if (!rs.enabled) return { ok: true, sent: false, reason: 'Review requests are off — turn them on to send.' };
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry };
     const b = (req.body ?? {}) as Record<string, any>;
     const event = (req.query?.event || b.event || 'job_complete') === 'reply' ? 'reply' : 'job_complete';
+    // A completed job is real regardless of the review toggle — record it
+    // (with the job value when the CRM sends one) for the dashboard.
+    if (event === 'job_complete') appendCrmEvent(data, { type: 'job_complete', ts: new Date().toISOString(), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b) });
+    if (!rs.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Review requests are off — turn them on to send.' }; }
     const name = String(b.name || b.full_name || b.contact_name || b.first_name || '').trim();
     const phone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
     const nowISO = new Date().toISOString();
@@ -2812,7 +2823,8 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!auth) return reply.code(401).send({ error: 'bad token' });
     const { uid, data } = auth;
     const au = (data.automations as AutomationsState) ?? emptyAutomationsState();
-    if (!au.noShow.enabled) return { ok: true, sent: false, reason: 'No-show recovery is off.' };
+    appendCrmEvent(data, { type: 'no_show', ts: new Date().toISOString() });
+    if (!au.noShow.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'No-show recovery is off.' }; }
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry };
     const b = (req.body ?? {}) as Record<string, any>;
@@ -2835,10 +2847,13 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!auth) return reply.code(401).send({ error: 'bad token' });
     const { uid, data } = auth;
     const au = (data.automations as AutomationsState) ?? emptyAutomationsState();
-    if (!au.onboarding.enabled) return { ok: true, sent: false, reason: 'Onboarding is off.' };
+    const b = (req.body ?? {}) as Record<string, any>;
+    // A won deal is revenue whether or not the welcome text fires — record
+    // it (with the deal amount when the CRM sends one) for the dashboard.
+    appendCrmEvent(data, { type: 'closed_won', ts: new Date().toISOString(), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b) });
+    if (!au.onboarding.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Onboarding is off.' }; }
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry };
-    const b = (req.body ?? {}) as Record<string, any>;
     const name = hookField(b, 'name', 'full_name', 'contact_name', 'first_name');
     const phone = hookField(b, 'phone', 'phone_number', 'contact_phone');
     const msg = onboardingText(ctx, name);
