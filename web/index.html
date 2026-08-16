@@ -419,10 +419,22 @@
   .importbar input{flex:1;min-width:200px;border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:14px;background:var(--panel);color:var(--ink);outline:none;}
 
   @media (max-width:1000px){ .stats{grid-template-columns:repeat(2,1fr);} .cards{grid-template-columns:repeat(2,1fr);} .meters,.intgrid{grid-template-columns:1fr;} }
-  @media (max-width:760px){ .app{grid-template-columns:1fr;} .side{display:none;} .cards{grid-template-columns:1fr;} }
+  .navtoggle{display:none;align-items:center;justify-content:center;background:none;border:1px solid var(--line);border-radius:10px;width:38px;height:38px;cursor:pointer;color:var(--ink);flex:none;margin-right:10px;}
+  .navscrim{position:fixed;inset:0;background:rgba(17,17,18,.38);z-index:59;border:0;padding:0;}
+  @media (max-width:760px){
+    .app{grid-template-columns:1fr;}
+    .cards{grid-template-columns:1fr;}
+    .navtoggle{display:flex;}
+    /* The sidebar becomes a drawer instead of disappearing. */
+    .side{position:fixed;top:0;left:0;bottom:0;width:270px;max-width:84vw;z-index:60;
+      transform:translateX(-100%);transition:transform .22s ease;box-shadow:0 0 40px rgba(0,0,0,.18);}
+    .side.open{transform:none;}
+  }
+  @media (prefers-reduced-motion:reduce){ .side{transition:none;} }
 </style>
 
 <div class="app">
+  <div id="navscrim" class="navscrim" hidden></div>
   <aside class="side">
     <div class="brandrow"><svg class="milesmark" viewBox="0 0 100 100" width="26" height="26" role="img" aria-label="Miles"><rect x="1.5" y="1.5" width="97" height="97" rx="27" fill="#111112"/><g fill="none" stroke="#fff" stroke-width="8"><path d="M31.6 31.6A26 26 0 0 0 68.4 68.4" stroke-opacity=".22"/><path d="M31.6 31.6A26 26 0 0 1 68.4 68.4"/></g><circle cx="42" cy="50" r="4" fill="#fff"/><circle cx="58" cy="50" r="4" fill="#fff"/></svg><span class="wm">miles.ai</span></div>
     <div class="ws"><span class="sq" id="ws-av">·</span><b id="ws-name">Your Workspace</b><span class="cx"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg></span></div>
@@ -505,6 +517,7 @@
 
   <main class="main">
     <div class="pagehead">
+      <button class="navtoggle" id="navtoggle" type="button" aria-label="Menu" aria-expanded="false"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
       <h2 id="ptitle">Dashboard</h2><div class="sp"></div>
       <button class="askbtn" data-ask><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 1.9 4.8L19 9l-4 3.5L16 18l-4-2.4L8 18l1-5.5L5 9l5.1-1.2Z"/></svg> Ask Miles</button>
       <button class="tbtn" id="theme" title="Theme">◑</button>
@@ -5828,6 +5841,27 @@ $('#profile-save').onclick=async()=>{ const btn=$('#profile-save'); btn.disabled
 $('#ob-import').onclick=async()=>{ const btn=$('#ob-import'); const url=($('#ob-website').value||'').trim(); if(!url){ $('#ob-import-note').textContent='Enter your website first (or skip and fill it in below).'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#onboard-form'),$('#ob-import-note')); btn.disabled=false; btn.textContent=old; };
 $('#ob-website').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#ob-import').click(); } });
 $('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=readProfileForm($('#onboard-form')); if(!vals.businessName){ alert('Please enter your business name (or import it from your website above).'); return; } btn.disabled=true; const p=await saveProfile(vals); if(p){ PROFILE=p; applyIdentity(); } $('#onboard').classList.remove('on'); btn.disabled=false; };
+// ── Mobile navigation drawer ──────────────────────────────────────────────
+// Below 760px the sidebar is off-canvas; the hamburger slides it in. It closes
+// on selection, on backdrop tap, and on Escape — a nav you cannot dismiss is
+// worse than no nav.
+(function mobileNav(){
+  const side=document.querySelector('.side'), btn=$('#navtoggle'), scrim=$('#navscrim');
+  if(!side||!btn||!scrim) return;
+  const setOpen=(open)=>{
+    side.classList.toggle('open',open);
+    scrim.hidden=!open;
+    btn.setAttribute('aria-expanded',open?'true':'false');
+    document.body.style.overflow=open?'hidden':'';
+  };
+  btn.onclick=()=>setOpen(!side.classList.contains('open'));
+  scrim.onclick=()=>setOpen(false);
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') setOpen(false); });
+  // Any navigation choice closes the drawer.
+  side.addEventListener('click',e=>{ if(e.target.closest('a[data-page],.pill,.ws')) setOpen(false); });
+  // Returning to desktop width must never leave the drawer state stuck on.
+  window.addEventListener('resize',()=>{ if(window.innerWidth>760) setOpen(false); });
+})();
 $('#logout').onclick=async()=>{ try{ await fetch('/auth/logout',{method:'POST'}); }catch(e){} window.location='/login'; };
 async function authInit(){
   if(!REMOTE) return;
