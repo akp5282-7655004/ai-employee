@@ -23,6 +23,7 @@ import { metricCatalog, dashboardDefaults } from './metrics/catalog.js';
 import { getMetrics } from './metrics/resolver.js';
 import { appendCrmEvent, amountFrom, crmLiveValues, calcLiveValues } from './metrics/crmledger.js';
 import { buildLocalPresenceAudit, gbpCompletenessScore, type AuditAnswer } from './agents/localpresence.js';
+import { appendApproval, approvalLog, defaultAutonomy, normalizeAutonomy, TOS_VERSION, type ApprovalEntry } from './agents/approvallog.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
@@ -352,9 +353,12 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
 
   // ── auth ──
   app.post('/auth/signup', async (req, reply) => {
-    const b = (req.body ?? {}) as { email?: string; password?: string; name?: string; invite?: string };
+    const b = (req.body ?? {}) as { email?: string; password?: string; name?: string; invite?: string; tos?: boolean };
     if (!b.email || !b.password || b.password.length < 6)
       return reply.code(400).send({ error: 'Enter an email and a password of at least 6 characters.' });
+    // ToS acceptance is required and version-stamped to the account — the
+    // in-product acknowledgment matters as much as the document (ToS notes).
+    if (b.tos !== true) return reply.code(400).send({ error: 'Please accept the Terms of Service to create an account.' });
     if (await authStore.getUserByEmail(b.email))
       return reply.code(409).send({ error: 'An account with that email already exists — try logging in.' });
     const email = b.email.toLowerCase();
@@ -379,9 +383,23 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       createdAt: new Date().toISOString(),
     };
     await authStore.createUser(user);
+    const udata = await authStore.getUserData(user.id);
+    udata.tosAccepted = { version: TOS_VERSION, at: new Date().toISOString(), email };
+    await authStore.setUserData(user.id, udata);
     if (invite && inviteCheck.ok) await markInviteUsed(invite);
     await startSession(reply, user.id);
     return { ok: true, user: { id: user.id, email: user.email, name: user.name } };
+  });
+
+  // The Terms of Service, served from the repo's legal draft so the signup
+  // checkbox links to a real document. Sub-processors listed per ToS §5.4.
+  app.get('/terms', async (_req, reply) => {
+    let tos = '';
+    try { tos = readFileSync(join(process.cwd(), 'docs', 'legal', 'terms-of-service-mvp.md'), 'utf8'); } catch { tos = 'Terms of Service draft unavailable.'; }
+    const subs = '\n\n---\n\n## Sub-processors (ToS §5.4)\nThe Service currently uses: Render (hosting), Pipedream (connected-account API access), OpenRouter and Anthropic-compatible model providers (AI text), fal.ai (AI images), and a managed Postgres database. This list will move to a dedicated page before general availability.';
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Miles — Terms of Service (${TOS_VERSION})</title><style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:820px;margin:0 auto;padding:32px 20px;color:#1e293b;background:#fff}pre{white-space:pre-wrap;word-wrap:break-word;font-family:inherit;font-size:14px;line-height:1.55}a{color:#4f46e5}</style></head><body><p><a href="/">← Back to Miles</a></p><pre>${esc(tos + subs)}</pre></body></html>`;
+    return reply.type('text/html').send(html);
   });
   app.post('/auth/login', async (req, reply) => {
     const b = (req.body ?? {}) as { email?: string; password?: string };
@@ -1368,6 +1386,24 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { ok: true };
   });
 
+  // ── Approval Log + Autonomy Settings (ToS §3.3–3.4) ──────────────────────
+  app.get('/api/approvals', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return { entries: approvalLog(data).slice(0, 200), autonomy: normalizeAutonomy(data.autonomy) };
+  });
+  app.post<{ Body: { autonomy?: unknown } }>('/api/autonomy', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const next = normalizeAutonomy(req.body?.autonomy);
+    data.autonomy = next;
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'autonomy-settings', title: 'Updated Autonomy Settings', detail: `caps: ${next.caps.maxDailyMovePct}%/day move, $${next.caps.floorDailyBudget}/day floor${next.caps.monthlyCeiling ? `, $${next.caps.monthlyCeiling}/mo ceiling` : ''} · auto skills: ${Object.entries(next.perSkill).filter(([, v]) => v === 'auto').map(([k]) => k).join(', ') || 'none'}` });
+    await authStore.setUserData(u.id, data);
+    return { ok: true, autonomy: next };
+  });
+
   // ── Local Presence audit — GBP + LSA scored against the master spec ──────
   app.get('/api/localpresence', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -1421,6 +1457,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const runs = (data.skill_runs as import('./skills/seven.js').SkillRun[]) ?? [];
     runs.unshift(entry);
     data.skill_runs = runs.slice(0, 100);
+    appendApproval(data, { id: newToken().slice(0, 10), ts: entry.ts, kind: 'proposal', actor: 'miles', source: entry.skill, title: `${entry.name}: ${entry.summary.slice(0, 140)}` });
     await authStore.setUserData(u.id, data);
     return { run: entry };
   });
@@ -1437,6 +1474,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     // which none of the proposal targets have yet — status reflects reality.
     run.status = action === 'approve' ? 'approved' : 'dismissed';
     data.skill_runs = runs;
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: action === 'approve' ? 'approval' : 'dismissal', actor: u.email, source: run.skill, title: `${action === 'approve' ? 'Approved' : 'Dismissed'} — ${run.name}: ${run.summary.slice(0, 120)}` });
     await authStore.setUserData(u.id, data);
     return { ok: true, run };
   });
@@ -1466,6 +1504,9 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const result = await connector.launchCampaign(u.id, spec, typeof req.body?.target === 'string' ? req.body.target : undefined);
     // Record the launch attempt in the deploy/change log with the full spec attached.
     const data = await authStore.getUserData(u.id);
+    // Approval Log: the explicit confirm above IS the approval; the launch is the action.
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'campaign-launcher', title: `Approved Google Ads launch — "${spec.name}" (${spec.status}, $${spec.dailyBudget}/day)` });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'campaign-launcher', title: `${result.ok ? 'Launched' : 'Launch FAILED'} — "${spec.name}"`, detail: result.note });
     const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
     deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
     deploy.queue.unshift({
@@ -1518,6 +1559,8 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!connector.launchMetaCampaign) return reply.code(400).send({ error: 'This connector cannot launch Meta campaigns.' });
     const result = await connector.launchMetaCampaign(u.id, spec);
     const data = await authStore.getUserData(u.id);
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'meta-launcher', title: `Approved Meta launch — "${spec.name}" (PAUSED, $${spec.dailyBudget}/day)` });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'meta-launcher', title: `${result.ok ? 'Created PAUSED draft' : 'Meta launch FAILED'} — "${spec.name}"`, detail: result.note });
     const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
     deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
     deploy.queue.unshift({
@@ -3245,15 +3288,20 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!isEmail(to)) return reply.code(400).send({ error: `That doesn't look like a valid email address: "${to}"` });
     if (!subject || !body) return reply.code(400).send({ error: 'Add a subject and a message.' });
     if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Explicit confirm required before sending.' });
+    const logSend = async (via: string) => {
+      const data = await authStore.getUserData(u.id);
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: u.email, source: 'email', title: `Approved + sent email to ${to} (${via})`, detail: subject });
+      await authStore.setUserData(u.id, data);
+    };
     let gmail = false;
     try { gmail = new Set((await connector.listAccounts(u.id)).map((a) => a.app)).has('gmail'); } catch { /* none */ }
     if (gmail && connector.runAppTask) {
       const r = await connector.runAppTask({ externalUserId: u.id, app: 'gmail', query: 'Send email', params: { to, subject, body, message: body } });
-      if (r?.ok) { await meterUser(u.id, 'agent_run'); return { ok: true, via: 'gmail', note: `Sent to ${to} from your Gmail.` }; }
+      if (r?.ok) { await meterUser(u.id, 'agent_run'); await logSend('gmail'); return { ok: true, via: 'gmail', note: `Sent to ${to} from your Gmail.` }; }
       return reply.code(400).send({ error: r?.note || 'Gmail rejected the send — reconnect Gmail in Integrations and try again.' });
     }
     // Fallback: the app's own email provider, when configured.
-    if (deliveryStatus().email) { await sendEmail(to, subject, body); await meterUser(u.id, 'agent_run'); return { ok: true, via: 'provider', note: `Sent to ${to}.` }; }
+    if (deliveryStatus().email) { await sendEmail(to, subject, body); await meterUser(u.id, 'agent_run'); await logSend('provider'); return { ok: true, via: 'provider', note: `Sent to ${to}.` }; }
     return reply.code(400).send({ error: 'Connect Gmail in Integrations so Miles can send email as you (or configure an email provider on Render).' });
   });
 

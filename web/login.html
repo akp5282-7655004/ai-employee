@@ -51,6 +51,9 @@
     <input id="email" type="email" autocomplete="email" placeholder="you@business.com" required>
     <label>Password</label>
     <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" required minlength="6">
+    <label id="tos-wrap" style="display:none;flex-direction:row;align-items:flex-start;gap:8px;margin-top:14px;font-weight:400;font-size:12.5px;line-height:1.4;cursor:pointer">
+      <input id="tos" type="checkbox" style="margin-top:2px;width:auto"> <span>I agree to the <a href="/terms" target="_blank" style="color:var(--accent)">Terms of Service</a>, including the use of anonymized, aggregated performance data for industry benchmarks.</span>
+    </label>
     <button class="submit" id="submit" type="submit">Log in</button>
     <button type="button" id="forgot" style="width:100%;margin-top:10px;background:none;border:none;color:var(--accent);font-size:12.5px;cursor:pointer;font-family:var(--sans)">Forgot password?</button>
     <div class="err" id="err"></div>
@@ -69,6 +72,7 @@
     $('tab-login').classList.toggle('on',m==='login');
     $('tab-signup').classList.toggle('on',m==='signup');
     $('name-wrap').style.display = m==='signup'?'block':'none';
+    $('tos-wrap').style.display = m==='signup'?'flex':'none';
     $('title').textContent = m==='signup'?'Create your account':'Welcome back';
     $('subtitle').textContent = m==='signup'?'Set up your marketing employee in a minute.':'Sign in to your marketing employee.';
     $('submit').textContent = m==='signup'?'Create account':'Log in';
@@ -112,7 +116,8 @@
         const d=await r.json().catch(()=>({})); if(!r.ok){ $('err').textContent=d.error||'Could not reset.'; btn.disabled=false; return; }
         window.location='/'; return;
       }
-      const body={ email:$('email').value.trim(), password:$('password').value, name:$('name').value.trim(), invite:inviteToken||undefined };
+      if(mode==='signup' && !$('tos').checked){ $('err').textContent='Please accept the Terms of Service to create an account.'; btn.disabled=false; return; }
+      const body={ email:$('email').value.trim(), password:$('password').value, name:$('name').value.trim(), invite:inviteToken||undefined, tos:mode==='signup'?$('tos').checked:undefined };
       const r=await fetch('/auth/'+(mode==='signup'?'signup':'login'),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
       const d=await r.json().catch(()=>({}));
       if(!r.ok){ $('err').textContent=d.error||'Something went wrong.'; btn.disabled=false; return; }

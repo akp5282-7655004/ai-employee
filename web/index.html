@@ -440,6 +440,7 @@
         <div class="navkids">
           <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
           <a data-page="health"><svg class="ico" viewBox="0 0 24 24"><path d="M3 12h4l2 5 4-12 2 7h6"/></svg> System Health</a>
+          <a data-page="approvals"><svg class="ico" viewBox="0 0 24 24"><path d="M12 2 4 6v6c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V6Z"/><path d="M9 12l2 2 4-4"/></svg> Approvals &amp; Autonomy</a>
           <a data-page="profile"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
           <a data-page="deploy"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 21h14"/></svg> Deploy <span id="deploy-badge" class="navbadge" style="display:none"></span></a>
           <a data-page="logs"><svg class="ico" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l3-3 3 2 4-5"/><circle cx="7" cy="15" r="0.5"/></svg> Logs</a>
@@ -611,6 +612,10 @@
 
     <section class="page" id="page-localpresence">
       <div id="lp-body" style="max-width:860px"></div>
+    </section>
+
+    <section class="page" id="page-approvals">
+      <div id="ap-body" style="max-width:860px"></div>
     </section>
 
     <!-- AUTOMATION HUB (the five live instant plays, all in one place) -->
@@ -1207,7 +1212,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',fblaunch:'Launch on Facebook',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',approvals:'Approvals & Autonomy',fblaunch:'Launch on Facebook',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 function setPage(id){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
   openNavGroupFor(id);
@@ -1232,6 +1237,7 @@ function setPage(id){
   $('#page-autohub').classList.toggle('on',id==='autohub');
   $('#page-health').classList.toggle('on',id==='health');
   $('#page-localpresence').classList.toggle('on',id==='localpresence');
+  $('#page-approvals').classList.toggle('on',id==='approvals');
   $('#page-ghl').classList.toggle('on',id==='ghl');
   $('#page-playbook').classList.toggle('on',id==='playbook');
   $('#page-affluence').classList.toggle('on',id==='affluence');
@@ -1270,6 +1276,7 @@ function setPage(id){
   if(id==='autohub') openAutoHub();
   if(id==='health') openHealth();
   if(id==='localpresence') openLocalPresence();
+  if(id==='approvals') openApprovals();
   if(id==='ghl') openGhl();
   if(id==='playbook') openPlaybook();
   if(id==='affluence') openAffluence();
@@ -2668,6 +2675,66 @@ async function renderCmdCenter(){
   const plus=el('button',null,'+ Add metric'); plus.style.cssText='border:2px dashed var(--line,#cbd5e1);border-radius:12px;background:none;color:var(--muted);font-weight:700;cursor:pointer;min-height:96px';
   plus.onclick=ccAddModal; grid.append(plus);
   gridCard.append(grid); box.append(gridCard);
+}
+
+// ── Approvals & Autonomy — the authoritative record + the rules (ToS §3) ──
+function apKindChip(kind){
+  const m={proposal:['PROPOSAL','#e0e7ff;color:#3730a3'],approval:['APPROVED','#dcfce7;color:#166534'],action:['ACTION','#fef9c3;color:#854d0e'],dismissal:['DISMISSED','var(--panel2,#eef2f6);color:var(--muted)']};
+  const [lab,style]=m[kind]||m.action; const s=el('span',null,lab); s.style.cssText='font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;flex:none;background:'+style; return s;
+}
+async function openApprovals(){
+  const box=$('#ap-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading…</p>';
+  let d={}; try{ d=await(await fetch('/api/approvals')).json(); }catch(e){}
+  let sk={skills:[]}; try{ sk=await(await fetch('/api/skills7')).json(); }catch(e){}
+  box.innerHTML='';
+  if(!d.autonomy){ box.append(ovNudge('Approvals run on the live app.')); return; }
+  // ── Autonomy Settings ──
+  const au=d.autonomy;
+  const ac=el('div','mcard'); ac.append(el('div','sect-label','AUTONOMY SETTINGS — WHAT MILES MAY DO WITHOUT ASKING'));
+  ac.append(el('p','appsub','Default is Proposal mode: Miles proposes, you approve, nothing changes in an ad account without a logged yes. Setting a skill to Auto is a standing approval within the caps below — it takes effect once that platform has write access, and every automatic action still lands in the log.'));
+  const skillRows=el('div');
+  (sk.skills||[]).filter(s=>['loser-pauser','budget-shifter'].includes(s.key)).forEach(s=>{
+    const row=el('div'); row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line,#f1f5f9)';
+    const t=el('div'); t.style.flex='1'; t.append(el('b',null,s.name)); t.append(el('div','appsub',s.what));
+    const sel=el('select','f'); [['proposal','Propose — ask me every time'],['auto','Auto — within my caps']].forEach(([v,lab])=>{const o=el('option',null,lab);o.value=v;if((au.perSkill[s.key]||'proposal')===v)o.selected=true;sel.append(o);});
+    sel.onchange=()=>{ au.perSkill[s.key]=sel.value; };
+    row.append(t,sel); skillRows.append(row);
+  });
+  ac.append(skillRows);
+  const caps=el('div'); caps.style.cssText='display:flex;gap:14px;flex-wrap:wrap;margin-top:12px';
+  const capIn=(label,val,suffix)=>{ const w=el('div'); w.append(el('div','appsub',label)); const i=el('input','f'); i.type='number'; i.value=val; i.style.width='110px'; w.append(i); if(suffix)w.append(el('span','appsub',' '+suffix)); caps.append(w); return i; };
+  const mv=capIn('Max budget move per day','' + au.caps.maxDailyMovePct,'%');
+  const fl=capIn('Budget floor per campaign','' + au.caps.floorDailyBudget,'$/day');
+  const ce=capIn('Monthly ceiling (0 = none)','' + au.caps.monthlyCeiling,'$');
+  ac.append(caps);
+  const save=el('button','go','Save autonomy settings'); save.style.marginTop='12px';
+  save.onclick=async()=>{ save.disabled=true; const o=save.textContent; save.textContent='Saving…';
+    au.caps={maxDailyMovePct:Number(mv.value)||20,floorDailyBudget:Number(fl.value)||5,monthlyCeiling:Number(ce.value)||0};
+    try{ await fetch('/api/autonomy',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({autonomy:au})}); toast('✓ Autonomy settings saved'); }catch(e){ toast('Could not save.'); }
+    save.disabled=false; save.textContent=o; openApprovals(); };
+  ac.append(save); box.append(ac);
+  // ── Approval Log ──
+  const lc=el('div','mcard'); lc.style.marginTop='12px';
+  const head=el('div'); head.style.cssText='display:flex;align-items:center;gap:10px';
+  const lab=el('div','sect-label','APPROVAL LOG — THE AUTHORITATIVE RECORD'); lab.style.flex='1'; head.append(lab);
+  const exp=el('button',null,'⬇ Export CSV'); exp.style.cssText='font-size:11.5px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2,#f8fafc);cursor:pointer';
+  exp.onclick=()=>{ const rows=[['time','kind','actor','source','title','detail']].concat((d.entries||[]).map(e=>[e.ts,e.kind,e.actor,e.source,e.title,e.detail||'']));
+    const csv=rows.map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n');
+    const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download='miles-approval-log.csv'; a.click(); };
+  head.append(exp); lc.append(head);
+  lc.append(el('p','appsub','Every proposal Miles makes, every approval or dismissal you record, and every action executed — timestamped, newest first. This is the record both sides rely on (Terms §3.4).'));
+  const entries=(d.entries||[]);
+  if(!entries.length) lc.append(el('p','appsub','Nothing logged yet. Launch a campaign, run a skill, or send an email — every decision lands here.'));
+  entries.slice(0,50).forEach(e=>{
+    const row=el('div'); row.style.cssText='display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-top:1px solid var(--line,#f1f5f9)';
+    row.append(apKindChip(e.kind));
+    const t=el('div'); t.style.flex='1';
+    const l1=el('div',null,e.title); l1.style.cssText='font-size:13px;font-weight:600'; t.append(l1);
+    if(e.detail) t.append(el('div','appsub',e.detail));
+    t.append(el('div','appsub',new Date(e.ts).toLocaleString()+' · '+e.actor+' · '+e.source));
+    row.append(t); lc.append(row);
+  });
+  box.append(lc);
 }
 
 // ── Local Presence — GBP + LSA audit against the master spec ──
