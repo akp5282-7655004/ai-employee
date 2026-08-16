@@ -26,3 +26,14 @@ home-services skills live in `skills/` and follow the same spec.
 
 These are reference implementations for future direct API integrations;
 Miles' live integrations run through its connector layer (Pipedream).
+
+## Second source: BrianRWagner/ai-marketing-claude-code-skills
+
+21 additional skills vendored from
+[BrianRWagner/ai-marketing-claude-code-skills](https://github.com/BrianRWagner/ai-marketing-claude-code-skills)
+by Brian Wagner. That repository declares its license in its README:
+"MIT — Use freely. Attribution appreciated." (no separate LICENSE file
+upstream; the README statement is the grant). SKILL-OC.md variants
+(OpenClaw token-efficient editions) are not vendored. Excluded as
+non-marketing or tool-specific: plan-my-day, go-mode,
+vault-cleanup-auditor.
