@@ -20,7 +20,7 @@ export interface ApprovalEntry {
   detail?: string;
 }
 
-const CAP = 2000; // ToS retention is 24 months; cap is a safety bound, newest kept
+const CAP = 400; // the UI reads 50; export covers the rest before trimming
 
 /** Append an entry to the log inside a user-data object (mutates `data`). */
 export function appendApproval(data: Record<string, unknown>, entry: ApprovalEntry): void {

@@ -1,10 +1,12 @@
 import { readFileSync } from 'node:fs';
+import { gzipSync, brotliCompressSync, constants as zlibConstants } from 'node:zlib';
 import { join } from 'node:path';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { Agent, newSession } from './agent/index.js';
 import { MockInterpreter } from './agent/intent.js';
 import { LlmInterpreter } from './agent/llm.js';
 import { getConnector, type Connector } from './connectors/index.js';
+import { withUserDataCache } from './db/cache.js';
 import { loadConfig, pipedreamReady } from './config.js';
 import { getPack, listPacks, validateIntake } from './packs/index.js';
 import { LSA_TRADES, LSA_BLENDED, LSA_VS_GOOGLE, BENCHMARK_META, BENCHMARK_HUB, hubCoverage } from './packs/benchmarks.js';
@@ -172,6 +174,23 @@ function publicSafe<T>(value: T): T {
   return value;
 }
 
+/**
+ * Response compression. The dashboard ships a ~550KB HTML shell and JSON
+ * payloads on every load; uncompressed that dominates time-to-first-paint on
+ * anything but a fast connection. Encoded bodies are cached by (url, encoding)
+ * for static assets so we compress once, not per request.
+ */
+const compressCache = new Map<string, Buffer>();
+function compressBody(body: string, encoding: 'br' | 'gzip', cacheKey?: string): Buffer {
+  const key = cacheKey ? `${encoding}:${cacheKey}` : '';
+  if (key) { const hit = compressCache.get(key); if (hit) return hit; }
+  const buf = encoding === 'br'
+    ? brotliCompressSync(Buffer.from(body), { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 5 } })
+    : gzipSync(Buffer.from(body), { level: 6 });
+  if (key && buf.length < 4_000_000) compressCache.set(key, buf);
+  return buf;
+}
+
 async function safeConn<T>(fn: (() => Promise<T>) | undefined, empty: T): Promise<T> {
   try {
     return fn ? await fn() : empty;
@@ -198,6 +217,25 @@ async function renderAdImage(prompt: string, modelId?: string): Promise<string |
 
 export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   const app = Fastify({ logger: false });
+
+  // Compress every text/JSON response above ~1KB. Node's zlib only — no extra
+  // dependency, and static assets are encoded once and cached.
+  app.addHook('onSend', async (req, reply, payload) => {
+    if (typeof payload !== 'string' || payload.length < 1024) return payload;
+    const type = String(reply.getHeader('content-type') ?? '');
+    if (!/json|html|javascript|text\/|svg/.test(type)) return payload;
+    if (reply.getHeader('content-encoding')) return payload;
+    const accept = String(req.headers['accept-encoding'] ?? '');
+    const encoding = /\bbr\b/.test(accept) ? 'br' : (/\bgzip\b/.test(accept) ? 'gzip' : null);
+    if (!encoding) return payload;
+    // Cache only immutable static shells (the HTML pages), not per-user JSON.
+    const cacheable = req.method === 'GET' && /html/.test(type) ? req.url.split('?')[0] : undefined;
+    const buf = compressBody(payload, encoding, cacheable);
+    reply.header('content-encoding', encoding);
+    reply.header('vary', 'accept-encoding');
+    reply.header('content-length', String(buf.length));
+    return buf as unknown as string;
+  });
   const store = deps.store ?? new MemorySessionStore();
   const connector = deps.connector ?? getConnector();
   const interpreter =
@@ -208,7 +246,9 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     textGen: (system, user) => generateText({ system, user, maxTokens: 900 }),
   });
 
-  const authStore = deps.authStore ?? new MemoryStore();
+  // Wrapped in a short-TTL write-through cache: one page load fires ~14 API
+  // calls that each read the same per-user blob.
+  const authStore = withUserDataCache(deps.authStore ?? new MemoryStore());
 
   // GoHighLevel ships under several Pipedream app slugs (gohighlevel, the OAuth
   // variant highlevel_oauth, the LeadConnector white-label). Treat them as one CRM
@@ -1560,7 +1600,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const entry: import('./skills/seven.js').SkillRun = { ...run, id: newToken().slice(0, 10), ts: new Date().toISOString() };
     const runs = (data.skill_runs as import('./skills/seven.js').SkillRun[]) ?? [];
     runs.unshift(entry);
-    data.skill_runs = runs.slice(0, 100);
+    data.skill_runs = runs.slice(0, 40); // the panel shows 8
     appendApproval(data, { id: newToken().slice(0, 10), ts: entry.ts, kind: 'proposal', actor: 'miles', source: entry.skill, title: `${entry.name}: ${entry.summary.slice(0, 140)}` });
     await authStore.setUserData(u.id, data);
     return { run: entry };

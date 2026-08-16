@@ -63,7 +63,7 @@ export interface CreditState {
 }
 
 const LAUNCH_GRANT = 100;
-const LEDGER_CAP = 500;
+const LEDGER_CAP = 200; // the page shows 50
 
 export function creditState(data: Record<string, unknown>): CreditState {
   const raw = (data.credits ?? {}) as Partial<CreditState> & { ledger?: CreditLedgerEntry[] };

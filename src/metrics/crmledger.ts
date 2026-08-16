@@ -18,7 +18,7 @@ export interface CrmEvent {
   amount?: number; // closed_won: the deal/job value when the CRM sends one
 }
 
-const CAP = 5000;
+const CAP = 1200; // ~90 days of events for an active account; the dashboard reads 30
 
 /** Append an event to the ledger inside a user-data object (mutates `data`). */
 export function appendCrmEvent(data: Record<string, unknown>, ev: CrmEvent): void {
