@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendApproval, approvalLog, defaultAutonomy, normalizeAutonomy, TOS_VERSION } from '../src/agents/approvallog.js';
+import { appendApproval, approvalLog, APPROVAL_LOG_CAP, defaultAutonomy, normalizeAutonomy, TOS_VERSION } from '../src/agents/approvallog.js';
 
 describe('Approval Log', () => {
   it('appends newest-first and reads back', () => {
@@ -14,10 +14,11 @@ describe('Approval Log', () => {
 
   it('caps the log without dropping the newest entries', () => {
     const data: Record<string, unknown> = {};
-    for (let i = 0; i < 2100; i++) appendApproval(data, { id: String(i), ts: '2026-01-01T00:00:00Z', kind: 'action', actor: 'miles', source: 't', title: `e${i}` });
+    const n = APPROVAL_LOG_CAP + 100;
+    for (let i = 0; i < n; i++) appendApproval(data, { id: String(i), ts: '2026-01-01T00:00:00Z', kind: 'action', actor: 'miles', source: 't', title: `e${i}` });
     const log = approvalLog(data);
-    expect(log.length).toBe(2000);
-    expect(log[0]!.title).toBe('e2099');
+    expect(log.length).toBe(APPROVAL_LOG_CAP);
+    expect(log[0]!.title).toBe(`e${n - 1}`);
   });
 });
 

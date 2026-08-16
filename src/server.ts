@@ -7,6 +7,7 @@ import { MockInterpreter } from './agent/intent.js';
 import { LlmInterpreter } from './agent/llm.js';
 import { getConnector, type Connector } from './connectors/index.js';
 import { withUserDataCache } from './db/cache.js';
+import { buildSnapshot, readSnapshot, snapshotAgeMs, spendRowsOf, STALE_MS, type PlatformSnapshot } from './metrics/snapshot.js';
 import { loadConfig, pipedreamReady } from './config.js';
 import { getPack, listPacks, validateIntake } from './packs/index.js';
 import { LSA_TRADES, LSA_BLENDED, LSA_VS_GOOGLE, BENCHMARK_META, BENCHMARK_HUB, hubCoverage } from './packs/benchmarks.js';
@@ -238,6 +239,51 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   });
   const store = deps.store ?? new MemorySessionStore();
   const connector = deps.connector ?? getConnector();
+
+  /**
+   * Snapshot accessor used by every read path. Stale-while-revalidate:
+   *   - no snapshot yet  -> build one now (a new account still sees real data)
+   *   - stale snapshot   -> serve it immediately, refresh behind the request
+   *   - fresh snapshot   -> serve it
+   * Requests therefore never wait on Pipedream/Google except on the very first
+   * load of a brand-new account.
+   */
+  // One refresh per account at a time. A caller arriving mid-refresh joins the
+  // running one rather than starting a second (or being handed nothing).
+  const snapshotRefreshing = new Map<string, Promise<PlatformSnapshot | undefined>>();
+  function refreshSnapshot(userId: string): Promise<PlatformSnapshot | undefined> {
+    const running = snapshotRefreshing.get(userId);
+    if (running) return running;
+    const p = (async () => {
+      try {
+        const snap = await buildSnapshot(connector, userId);
+        const data = await authStore.getUserData(userId);
+        data.snapshot = snap;
+        await authStore.setUserData(userId, data);
+        return snap;
+      } catch {
+        return undefined;
+      } finally {
+        snapshotRefreshing.delete(userId);
+      }
+    })();
+    snapshotRefreshing.set(userId, p);
+    return p;
+  }
+  // Accounts someone is actually using right now. The scheduler keeps only
+  // these warm, so a dormant account costs no platform calls — and after a
+  // restart nothing is fetched until somebody opens a page.
+  const snapshotActive = new Map<string, number>();
+  const ACTIVE_WINDOW_MS = 30 * 60_000;
+  async function getSnapshot(userId: string, data?: Record<string, unknown>): Promise<PlatformSnapshot | undefined> {
+    snapshotActive.set(userId, Date.now());
+    const d = data ?? (await authStore.getUserData(userId));
+    const snap = readSnapshot(d);
+    const age = snapshotAgeMs(snap);
+    if (!snap) return refreshSnapshot(userId); // first ever load pays once
+    if (age > STALE_MS) void refreshSnapshot(userId); // refresh behind the response
+    return snap;
+  }
   const interpreter =
     process.env.OPENROUTER_API_KEY || process.env.ANTHROPIC_API_KEY ? new LlmInterpreter() : new MockInterpreter();
   const agent = new Agent({
@@ -932,15 +978,14 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       return { start: nowMs - days * 86_400_000, end: nowMs };
     })();
     const inWin = (ts?: string) => { const t = Date.parse(ts || ''); return !Number.isFinite(t) || (t >= win.start && t <= win.end); };
-    // These are independent network reads — run them together, not in a chain,
-    // and share the results with the other endpoints this page calls.
-    const [spend, deals, leads, reviews, social] = await Promise.all([
-      cachedRead(`spend:${u.id}:${range}`, () => connector.getAdSpend ? connector.getAdSpend(u.id, range) : Promise.resolve([]), [] as import('./revenue/attribution.js').CampaignSpend[]),
-      cachedRead(`deals:${u.id}`, () => connector.getDeals ? connector.getDeals(u.id) : Promise.resolve([]), [] as import('./revenue/attribution.js').Deal[]),
-      cachedRead(`leads:${u.id}`, () => connector.getLeads ? connector.getLeads(u.id) : Promise.resolve([]), [] as import('./connectors/types.js').Lead[]),
-      cachedRead(`reviews:${u.id}`, () => connector.getReviews ? connector.getReviews(u.id) : Promise.resolve([]), [] as import('./connectors/types.js').Review[]),
-      cachedRead(`social:${u.id}`, () => connector.getSocialMetrics ? connector.getSocialMetrics(u.id) : Promise.resolve(null), null as import('./connectors/types.js').SocialMetrics | null),
-    ]);
+    // Served from the background snapshot — no platform round-trips in the
+    // request path (see refreshSnapshot / the scheduler).
+    const snap = await getSnapshot(u.id, d);
+    const spend = snap?.campaigns ?? [];
+    const deals = (snap?.deals ?? []) as import('./revenue/attribution.js').Deal[];
+    const leads = (snap?.leads ?? []) as import('./connectors/types.js').Lead[];
+    const reviews = (snap?.reviews ?? []) as import('./connectors/types.js').Review[];
+    const social = (snap?.social ?? null) as import('./connectors/types.js').SocialMetrics | null;
     const totalSpend = spend.reduce((s, x) => s + (x.spend || 0), 0);
     const totalConv = spend.reduce((s, x) => s + (x.conversions || 0), 0);
     const leadsWin = leads.filter((l) => inWin(l.createdAt));
@@ -1005,8 +1050,13 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!u) return;
     const RANGES = new Set(['LAST_7_DAYS', 'LAST_14_DAYS', 'LAST_30_DAYS', 'THIS_MONTH', 'LAST_MONTH']);
     const range = RANGES.has(String(req.query?.range)) ? String(req.query?.range) : 'LAST_30_DAYS';
-    const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id, range) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
-    const deals = await cachedRead(`deals:${u.id}`, () => connector.getDeals ? connector.getDeals(u.id) : Promise.resolve([]), [] as import('./revenue/attribution.js').Deal[]);
+    // The snapshot holds the trailing 30 days — the default view. Any other
+    // window is a deliberate drill-down and reads the platform directly.
+    const snap = await getSnapshot(u.id);
+    const spend = range === 'LAST_30_DAYS'
+      ? (snap?.campaigns ?? [])
+      : await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id, range) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
+    const deals = (snap?.deals ?? []) as import('./revenue/attribution.js').Deal[];
     let connected = false;
     try { connected = (await connector.listAccounts(u.id)).some((a) => ['google_ads', 'facebook', 'google_lsa'].includes(a.app)); } catch { /* none */ }
     const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -1451,16 +1501,13 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     // Live data: real ad spend from the connector + real CRM numbers from the
     // webhook event ledger, blended into the calc.* money metrics only when
     // every input is real.
-    const [data, spendRows] = await Promise.all([
-      authStore.getUserData(u.id),
-      cachedRead(`spend:${u.id}:LAST_30_DAYS`, () => connector.getAdSpend ? connector.getAdSpend(u.id) : Promise.resolve([]), [] as import('./revenue/attribution.js').CampaignSpend[]),
-    ]);
-    const adSpend = spendRows.length ? spendRows.reduce((a, r) => a + (r.spend || 0), 0) : undefined;
+    const data = await authStore.getUserData(u.id);
+    const snap = await getSnapshot(u.id, data);
+    const adSpend = snap?.adSpend;
     // CRM live values: webhook ledger first, then the direct deals read
     // (GHL opportunities) overrides won/revenue — the pipeline is the truth.
     const ledger = crmLiveValues(data, days);
-    const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
-    const crm = { ...ledger, ...dealsLiveValues(deals, days) };
+    const crm = { ...ledger, ...dealsLiveValues(snap?.deals ?? [], days) };
     // GBP completeness comes live from the Local Presence audit once taken.
     const lpAnswers = (data.localPresence as Record<string, AuditAnswer>) ?? undefined;
     const gbpScore = lpAnswers ? { 'gbp.completeness_score': gbpCompletenessScore(buildLocalPresenceAudit(lpAnswers, (data.profile ?? {}) as Record<string, string>)) } : {};
@@ -1493,13 +1540,14 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    const spendRows = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
-    const spend30 = Math.round(spendRows.reduce((a, r) => a + (r.spend || 0), 0) * 100) / 100;
+    const snapB = await getSnapshot(u.id, data);
+    const spendKnown = (snapB?.campaigns ?? []).length > 0;
+    const spend30 = Math.round((snapB?.adSpend ?? 0) * 100) / 100;
     const credits = creditState(data);
     return {
       launchOffer: credits.launchOffer,
       spend30,
-      spendKnown: spendRows.length > 0,
+      spendKnown,
       impliedBand: bandForSpend(spend30),
       bands: BANDS,
       credits: { granted: credits.granted, spent: credits.spent, remaining: credits.remaining },
@@ -1576,11 +1624,11 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const p = (data.profile ?? {}) as Record<string, string>;
-    const spendRows = (await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]))
-      .map((r) => ({ campaign: r.campaign, cost: r.spend || 0, conversions: r.conversions }));
-    const adSpend7 = spendRows.length ? spendRows.reduce((a, r) => a + r.cost, 0) : undefined;
+    const snap = await getSnapshot(u.id, data);
+    const spendRows = spendRowsOf(snap);
+    const adSpend7 = snap?.adSpend;
     const crm7 = crmLiveValues(data, 30);
-    const searchTerms = await safeConn(connector.getSearchTerms ? () => connector.getSearchTerms!(u.id) : undefined, [] as { term: string; cost: number; clicks: number; conversions: number }[]);
+    const searchTerms = snap?.searchTerms ?? [];
     const ctx: import('./skills/seven.js').SkillCtx = {
       business: p.businessName ?? '', trade: p.industry ?? '', city: (p.serviceAreas || '').split(',')[0]?.trim() ?? '',
       services: p.services ?? '', zips: (p.serviceAreas || '').split(',').map((x) => x.trim()).filter((x) => /^\d{5}$/.test(x)),
@@ -3266,6 +3314,19 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       ids = await authStore.listUserIds();
     } catch {
       return;
+    }
+    // Keep the platform snapshot warm for accounts in use, so the dashboard is
+    // served from storage instead of waiting on Google/GHL. Dormant accounts
+    // are skipped entirely — nobody is looking at them.
+    const activeSince = Date.now() - ACTIVE_WINDOW_MS;
+    for (const [uid, seen] of snapshotActive) {
+      if (seen < activeSince) { snapshotActive.delete(uid); continue; }
+      try {
+        const snap = readSnapshot(await authStore.getUserData(uid));
+        if (snapshotAgeMs(snap) > STALE_MS) await refreshSnapshot(uid);
+      } catch {
+        /* one account's platforms failing never stops the tick */
+      }
     }
     for (const uid of ids) {
       try {
