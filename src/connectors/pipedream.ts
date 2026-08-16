@@ -387,6 +387,47 @@ export class PipedreamConnector implements Connector {
     });
   }
 
+  /**
+   * Search terms with spend/conversions, for the Gold Miner skill. Best-effort:
+   * Pipedream's Google Ads app exposes a search-terms report on some plans;
+   * when no matching component exists this returns [] and the skill says so
+   * (sample-labeled) instead of pretending.
+   */
+  async getSearchTerms(externalUserId: string): Promise<{ term: string; cost: number; clicks: number; conversions: number }[]> {
+    const out: { term: string; cost: number; clicks: number; conversions: number }[] = [];
+    try {
+      const pd = await this.backend();
+      const accts = await this.listAccounts(externalUserId, 'google_ads');
+      const account = accts.find((a) => a.healthy) ?? accts[0];
+      if (!account) return out;
+      const rows = await this.listComponents('google_ads');
+      const comp = rows.find((c) => /search.?term/i.test(String(c.key ?? c.id ?? c.componentKey ?? '')));
+      if (!comp) return out;
+      const key = comp.key ?? comp.id ?? comp.componentKey;
+      const props = await this.componentProps(comp, key);
+      const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+      const targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
+      const t = targets[0];
+      const cp: Record<string, unknown> = { [appName]: { authProvisionId: account.id }, dateRange: 'LAST_30_DAYS' };
+      if (t?.login && props.some((p: any) => p?.name === 'accountId')) cp.accountId = t.login;
+      if (t?.client && props.some((p: any) => p?.name === 'customerClientId')) cp.customerClientId = t.client;
+      const res = await pd.actions.run({ externalUserId, id: key, configuredProps: cp });
+      for (const r of asRows(res?.ret ?? res?.exports ?? res)) {
+        const term = r?.searchTermView?.searchTerm ?? r?.search_term ?? r?.searchTerm ?? r?.term;
+        if (!term) continue;
+        out.push({
+          term: String(term),
+          cost: num(r?.metrics?.costMicros ?? r?.metrics?.cost_micros) / 1e6 || num(r?.cost),
+          clicks: num(r?.metrics?.clicks ?? r?.clicks),
+          conversions: num(r?.metrics?.conversions ?? r?.conversions),
+        });
+      }
+    } catch {
+      /* unavailable — skill reports sample */
+    }
+    return out;
+  }
+
   /** Leaf client customer IDs (the accounts that actually run ads). */
   private async googleAdsCustomerIds(externalUserId: string, authId: string, rows: any[]): Promise<string[]> {
     const targets = await this.resolveGadsTargets(externalUserId, authId, rows);

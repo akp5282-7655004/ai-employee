@@ -202,6 +202,9 @@ export interface Connector {
   /** The Google Ads accounts a launch can write into (id + human label), so
    *  an MCC owner can pick the client account instead of Miles guessing. */
   listAdTargets?(externalUserId: string): Promise<{ id: string; login: string; name?: string; label: string }[]>;
+  /** 30-day search terms with spend/conversions (Gold Miner). Empty when the
+   *  connection doesn't expose a search-terms report. */
+  getSearchTerms?(externalUserId: string): Promise<{ term: string; cost: number; clicks: number; conversions: number }[]>;
   /** Create a full Meta (Facebook/Instagram) campaign — campaign → ad set → ad
    *  creative → ad — as a PAUSED draft in the owner's Ads Manager. Money-safe:
    *  nothing spends until the owner flips it live. Returns each step. */

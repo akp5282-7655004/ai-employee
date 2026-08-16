@@ -102,3 +102,48 @@ describe('seven skills — proposal mode', () => {
     await expect(runSevenSkill('nope', ctx)).rejects.toThrow(/Unknown skill/);
   });
 });
+
+describe('native analysis skills (8-11)', () => {
+  const base: SkillCtx = {
+    business: 'Painters In Philly', trade: 'Painting', city: 'Philadelphia',
+    services: 'Interior painting', zips: [], live: {},
+    spendRows: [{ campaign: 'Search — Interior', cost: 600, conversions: 12 }],
+  };
+
+  it('gold miner runs LIVE on real search terms and finds waste + gold', async () => {
+    const run = await runSevenSkill('search-term-gold-miner', {
+      ...base,
+      searchTerms: [
+        { term: 'painter jobs hiring', cost: 55, clicks: 20, conversions: 0 },
+        { term: 'interior painter near me', cost: 80, clicks: 25, conversions: 5 },
+        { term: 'cheap diy paint', cost: 4, clicks: 3, conversions: 0 }, // under $10 — ignored
+      ],
+    });
+    expect(run.source).toBe('live');
+    expect(run.details.join(' ')).toContain('painter jobs hiring');
+    expect(run.details.join(' ')).toContain('interior painter near me');
+    expect(run.details.join(' ')).not.toContain('cheap diy paint');
+  });
+
+  it('negative implementer builds the block list from live waste', async () => {
+    const run = await runSevenSkill('negative-keyword-implementer', {
+      ...base,
+      searchTerms: [{ term: 'painter salary', cost: 30, clicks: 12, conversions: 0 }],
+    });
+    expect(run.source).toBe('live');
+    expect(run.details[0]).toContain('"painter salary"');
+    expect(run.approve_disabled_reason).toBeTruthy(); // no write path yet — honest
+  });
+
+  it('pacing monitor projects month-end against the set budget', async () => {
+    const run = await runSevenSkill('spend-pacing-monitor', { ...base, monthlyBudget: 1000 });
+    expect(run.source).toBe('live');
+    expect(run.summary).toMatch(/Pacing at \d+% of your \$1,000\/mo budget/);
+  });
+
+  it('pacing monitor asks for a budget when none is set, still showing real spend', async () => {
+    const run = await runSevenSkill('spend-pacing-monitor', base);
+    expect(run.summary).toContain('$600');
+    expect(run.summary).toContain('Set a monthly ad budget');
+  });
+});

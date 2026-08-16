@@ -7,7 +7,7 @@ describe('skills library loader', () => {
   const all = listSkills();
 
   it('loads the vendored library plus Miles seven skills', () => {
-    expect(all.filter((s) => s.source === 'miles').length).toBe(7);
+    expect(all.filter((s) => s.source === 'miles').length).toBe(11);
     expect(all.filter((s) => s.source === 'library').length).toBeGreaterThanOrEqual(45);
   });
 

@@ -17,6 +17,10 @@ export interface SkillCtx {
   live: LiveReaders;
   /** Real per-campaign spend rows when Google Ads is connected. */
   spendRows: { campaign: string; cost: number; conversions?: number }[];
+  /** Real search terms (30d) when the connection exposes them. */
+  searchTerms?: { term: string; cost: number; clicks: number; conversions: number }[];
+  /** Owner-set monthly ad budget (profile), for pacing. */
+  monthlyBudget?: number;
 }
 
 export interface SkillRun {
@@ -40,6 +44,10 @@ export const SEVEN_SKILLS: { key: string; name: string; what: string; mode: 'pro
   { key: 'loser-pauser', name: 'Loser Pauser', what: 'Spend with zero results → proposed pause list with $ saved', mode: 'proposal' },
   { key: 'budget-shifter', name: 'Budget Shifter', what: 'Move budget from losers to winners within your caps', mode: 'proposal' },
   { key: 'channel-comparator', name: 'Channel Comparator', what: 'Google vs LSA vs Meta on cost per booked job', mode: 'proposal' },
+  { key: 'search-term-gold-miner', name: 'Search Term Gold Miner', what: 'Find wasted spend and hidden winners in your search terms', mode: 'proposal' },
+  { key: 'negative-keyword-implementer', name: 'Negative Keyword Implementer', what: 'Turn wasted search terms into a negative-keyword block list', mode: 'proposal' },
+  { key: 'spend-pacing-monitor', name: 'Spend Pacing Monitor', what: 'Track spend vs your monthly budget and project month-end', mode: 'read_only' },
+  { key: 'ad-copy-performance-ranker', name: 'Ad Copy Performance Ranker', what: 'Rank your headlines and descriptions, propose swaps', mode: 'proposal' },
 ];
 
 const fmt$ = (v: number) => `$${Math.round(v).toLocaleString('en-US')}`;
@@ -149,6 +157,83 @@ export async function runSevenSkill(key: string, ctx: SkillCtx): Promise<Omit<Sk
           'LSA leads are pay-per-lead and pre-qualified by Google Guaranteed; Search leads are cheaper but rawer — normalizing on booked jobs is the only fair comparison.',
           'GBP is $0 media cost and upstream of LSA (reviews drive LSA rank) — its calls count as booked-job source, not spend.',
           'Recommendation engine sharpens as CRM booked-job data accumulates per channel.',
+        ],
+      };
+    }
+    case 'search-term-gold-miner': {
+      const terms = ctx.searchTerms ?? [];
+      const liveTerms = terms.length > 0;
+      const rows = liveTerms ? terms : [
+        { term: `${(ctx.trade || 'painter').toLowerCase()} jobs near me`, cost: 42, clicks: 18, conversions: 0 },
+        { term: `diy ${(ctx.trade || 'painting').toLowerCase()} tips`, cost: 27, clicks: 14, conversions: 0 },
+        { term: `${(ctx.trade || 'painting').toLowerCase()} cost calculator free`, cost: 19, clicks: 9, conversions: 0 },
+        { term: `emergency ${(ctx.services || 'repair').split(',')[0]?.toLowerCase().trim() ?? 'repair'} near me`, cost: 38, clicks: 11, conversions: 4 },
+      ];
+      const waste = rows.filter((t) => t.cost >= 10 && t.conversions === 0).sort((a, b) => b.cost - a.cost);
+      const gold = rows.filter((t) => t.conversions > 0 && t.cost / Math.max(t.conversions, 1) < 25).sort((a, b) => b.conversions - a.conversions);
+      const wasted = waste.reduce((a, t) => a + t.cost, 0);
+      return {
+        skill: key, name: 'Search Term Gold Miner', status: 'needs_approval', approvable: true,
+        source: liveTerms ? 'live' : 'sample',
+        approve_disabled_reason: 'Blocking happens via the Negative Keyword Implementer — run it next with this list.',
+        summary: liveTerms
+          ? `${waste.length} search terms burned ${fmt$(wasted)} with zero conversions in 30 days; ${gold.length} hidden winner${gold.length === 1 ? '' : 's'} found.`
+          : `Sample analysis (search-term read not exposed by this connection yet): here is exactly what Miles flags once terms flow.`,
+        details: [
+          ...waste.slice(0, 5).map((t) => `WASTE: "${t.term}" — ${fmt$(t.cost)}, ${t.clicks} clicks, 0 conversions → add as negative.`),
+          ...gold.slice(0, 3).map((t) => `GOLD: "${t.term}" — ${t.conversions} conversions at ${fmt$(t.cost / Math.max(t.conversions, 1))} each → consider an exact-match keyword.`),
+        ],
+      };
+    }
+    case 'negative-keyword-implementer': {
+      const terms = (ctx.searchTerms ?? []).filter((t) => t.cost >= 10 && t.conversions === 0);
+      const liveTerms = terms.length > 0;
+      const negs = liveTerms ? terms.map((t) => t.term) : ['jobs', 'diy', 'free', 'calculator', 'how to', 'salary'];
+      const saved = liveTerms ? terms.reduce((a, t) => a + t.cost, 0) : 86;
+      return {
+        skill: key, name: 'Negative Keyword Implementer', status: 'needs_approval', approvable: true,
+        source: liveTerms ? 'live' : 'sample',
+        approve_disabled_reason: 'One-click apply ships with negative-keyword write access — until then, paste the list into Google Ads → Keywords → Negative keywords (campaign level).',
+        summary: `Block ${negs.length} money-wasting terms — saves ~${fmt$(saved)}/mo. Copy-paste list below.`,
+        details: [
+          `Negative list (phrase match): ${negs.map((n) => `"${n}"`).join(', ')}`,
+          'Where: Google Ads → Campaigns → Keywords → Negative keywords → + → Campaign level.',
+          'Rule applied: ≥$10 spend, zero conversions, 30-day window — same rule the Gold Miner uses.',
+        ],
+      };
+    }
+    case 'spend-pacing-monitor': {
+      const spend30 = ctx.spendRows.reduce((a, r) => a + r.cost, 0);
+      const budget = ctx.monthlyBudget;
+      const now = new Date();
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const projected = (spend30 / 30) * daysInMonth;
+      if (!liveSpend) {
+        return { skill: key, name: 'Spend Pacing Monitor', status: 'read_only', approvable: false, source: 'sample', summary: 'Connect Google Ads to track pacing — spend vs budget, with a month-end projection and overspend alerts.', details: [] };
+      }
+      if (!budget) {
+        return {
+          skill: key, name: 'Spend Pacing Monitor', status: 'read_only', approvable: false, source,
+          summary: `Trailing-30 spend is ${fmt$(spend30)} (projects to ~${fmt$(projected)} for a ${daysInMonth}-day month). Set a monthly ad budget in Business Profile to get pacing alerts.`,
+          details: [`Per-campaign: ${ctx.spendRows.slice(0, 5).map((r) => `${r.campaign} ${fmt$(r.cost)}`).join(' · ')}`],
+        };
+      }
+      const pct = (projected / budget) * 100;
+      return {
+        skill: key, name: 'Spend Pacing Monitor', status: 'read_only', approvable: false, source,
+        summary: `Pacing at ${pct.toFixed(0)}% of your ${fmt$(budget)}/mo budget — projected month-end ${fmt$(projected)}${pct > 110 ? ' (OVER — trim daily budgets or expect Google to cap)' : pct < 80 ? ' (UNDER — headroom to scale winners)' : ' (on track)'}.`,
+        details: [`30-day spend ${fmt$(spend30)} · ${ctx.spendRows.length} campaigns · Google can spend up to 2× a daily budget on strong days; monthly cap = daily × 30.4.`],
+      };
+    }
+    case 'ad-copy-performance-ranker': {
+      return {
+        skill: key, name: 'Ad Copy Performance Ranker', status: 'needs_approval', approvable: true, source: 'sample',
+        approve_disabled_reason: 'Needs asset-level performance reads (per-headline impressions/CTR) — not exposed by this connection yet. The method below runs the moment they are.',
+        summary: 'Ranks every headline and description by Google\'s asset performance labels + CTR, then proposes swaps for the "Low" performers.',
+        details: [
+          'Method: pull per-asset performance (Best/Good/Low + impressions), rank within each ad, flag assets rated Low with meaningful impressions.',
+          'Fix: replace flagged assets with variants from the winning patterns (your top asset\'s structure, new angle) — never edit winners.',
+          'Guardrail: minimum 2 weeks / 1,000 impressions before judging any asset.',
         ],
       };
     }

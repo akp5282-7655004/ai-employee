@@ -1483,11 +1483,14 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       .map((r) => ({ campaign: r.campaign, cost: r.spend || 0, conversions: r.conversions }));
     const adSpend7 = spendRows.length ? spendRows.reduce((a, r) => a + r.cost, 0) : undefined;
     const crm7 = crmLiveValues(data, 30);
+    const searchTerms = await safeConn(connector.getSearchTerms ? () => connector.getSearchTerms!(u.id) : undefined, [] as { term: string; cost: number; clicks: number; conversions: number }[]);
     const ctx: import('./skills/seven.js').SkillCtx = {
       business: p.businessName ?? '', trade: p.industry ?? '', city: (p.serviceAreas || '').split(',')[0]?.trim() ?? '',
       services: p.services ?? '', zips: (p.serviceAreas || '').split(',').map((x) => x.trim()).filter((x) => /^\d{5}$/.test(x)),
       live: { values: { ...crm7, ...calcLiveValues(crm7, adSpend7), ...(adSpend7 !== undefined ? { 'google_ads.cost': Math.round(adSpend7 * 100) / 100 } : {}) } },
       spendRows,
+      searchTerms,
+      monthlyBudget: Number(p.monthlyBudget) || undefined,
     };
     let run;
     try {
