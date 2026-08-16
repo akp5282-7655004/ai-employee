@@ -18,6 +18,7 @@ import { competitorAdReport } from './research/adlibrary.js';
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
+import { SPEC_PLATFORMS, loadSpec, searchSpecCheck, type SpecPlatform } from './specs/index.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
 import { emptyReviewState, reviewAskText, parseRating, routeRating, promoterText, detractorText, recoveryTask, type ReviewRequestState } from './agents/reviewrequest.js';
@@ -1285,6 +1286,31 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     let gadsConnected = false;
     try { gadsConnected = (await connector.listAccounts(u.id)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
     return { ok: true, spec, summary: campaignSummary(spec), gadsConnected, aiUsed, llmReady: textLlmReady() };
+  });
+
+  // ── Platform build specs — the master references, served as data ─────────
+  app.get('/api/specs', async () => ({ platforms: SPEC_PLATFORMS }));
+  app.get<{ Params: { platform: string } }>('/api/specs/:platform', async (req, reply) => {
+    const p = req.params.platform as SpecPlatform;
+    if (!SPEC_PLATFORMS.includes(p)) return reply.code(404).send({ error: `Unknown platform. One of: ${SPEC_PLATFORMS.join(', ')}` });
+    try {
+      return { platform: p, spec: loadSpec(p) };
+    } catch {
+      return reply.code(500).send({ error: 'Spec file unavailable.' });
+    }
+  });
+
+  // Audit a built Search campaign against Google's launch checklist.
+  app.post<{ Body: { spec?: CampaignSpec } }>('/api/campaign/speccheck', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const spec = req.body?.spec;
+    if (!spec || typeof spec !== 'object') return reply.code(400).send({ error: 'spec is required' });
+    try {
+      return { items: searchSpecCheck(spec) };
+    } catch {
+      return reply.code(500).send({ error: 'Spec check unavailable.' });
+    }
   });
 
   // The Google Ads accounts a launch can write into — an MCC login manages

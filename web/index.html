@@ -2395,6 +2395,30 @@ function renderLaunchReview(){
     b.append(t,u,d1,d2); ac.append(b); slRefs.push({t,u,d1,d2});
   });
   box.append(ac);
+  // ── Spec check — audit the build against Google's Search launch checklist ──
+  const sc=el('div','mcard'); sc.style.marginTop='12px'; sc.append(el('div','sect-label','SPEC CHECK — GOOGLE’S SEARCH REQUIREMENTS'));
+  const scBody=el('div'); scBody.append(el('p','appsub','Checking this build against the Google Ads master spec…')); sc.append(scBody);
+  const ICONS={ok:'✅',warn:'⚠️',missing:'❌',manual:'🖐'};
+  const runSpecCheck=async()=>{
+    try{
+      const r=await(await fetch('/api/campaign/speccheck',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:s})})).json();
+      scBody.innerHTML='';
+      if(!r.items){ scBody.append(el('p','appsub','Spec check unavailable.')); return; }
+      const manual=r.items.filter(i=>i.status==='manual');
+      r.items.filter(i=>i.status!=='manual').forEach(i=>{
+        const line=el('div'); line.style.cssText='display:flex;gap:8px;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--line,#eee)';
+        line.append(el('span',null,ICONS[i.status]||'•'));
+        const t=el('div'); t.append(el('div',null,i.item)); const d=el('div','appsub',i.detail); t.append(d); line.append(t);
+        scBody.append(line);
+      });
+      if(manual.length){
+        scBody.append(el('p','appsub','Finish these once in the Google Ads UI — they attach to every campaign, and this connection can’t upload images or verify phones for you:'));
+        manual.forEach(i=>{ const line=el('div','appsub','🖐 '+i.item+' — '+i.detail); line.style.padding='2px 0'; scBody.append(line); });
+      }
+    }catch(e){ scBody.innerHTML=''; scBody.append(el('p','appsub','Spec check unavailable.')); }
+  };
+  runSpecCheck();
+  box.append(sc);
   // Read the current (edited) settings back into the spec — shared by Save & Launch.
   const collect=()=>{
     s.name=nameI.value.trim(); s.dailyBudget=Number(budgetI.value)||s.dailyBudget; s.finalUrl=urlI.value.trim();

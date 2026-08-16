@@ -1,0 +1,508 @@
+{
+  "$schema_version": "1.0",
+  "platform": "meta_ads",
+  "last_verified": "2026-08",
+  "hierarchy": [
+    "campaign",
+    "ad_set",
+    "ad"
+  ],
+  "immutable_after_launch": [
+    "objective"
+  ],
+  "campaign": {
+    "objective": {
+      "type": "enum",
+      "required": true,
+      "values": [
+        "awareness",
+        "traffic",
+        "engagement",
+        "leads",
+        "app_promotion",
+        "sales"
+      ],
+      "home_services_default": "leads",
+      "never_for_leadgen": "traffic"
+    },
+    "buying_type": {
+      "values": [
+        "auction",
+        "reservation"
+      ],
+      "default": "auction"
+    },
+    "special_ad_category": {
+      "required_if": [
+        "credit",
+        "employment",
+        "housing",
+        "social_issues",
+        "financial_products"
+      ],
+      "effect": "disables age/gender/zip/detailed targeting"
+    },
+    "advantage_campaign_budget": {
+      "toggle": true,
+      "default": true
+    },
+    "budget": {
+      "mode": [
+        "daily",
+        "lifetime"
+      ],
+      "daily_overspend_pct": 75,
+      "dayparting_requires": "lifetime"
+    },
+    "ab_test": {
+      "toggle": true
+    },
+    "spending_limit": {
+      "required": false
+    },
+    "advantage_plus_types": {
+      "sales": "Advantage+ Sales",
+      "app_promotion": "Advantage+ App",
+      "leads": "Advantage+ Leads"
+    }
+  },
+  "ad_set": {
+    "conversion_location": {
+      "values": [
+        "website",
+        "app",
+        "website_and_app",
+        "messenger",
+        "whatsapp",
+        "instant_forms",
+        "calls",
+        "in_ad"
+      ]
+    },
+    "performance_goal": {
+      "by_objective": {
+        "sales": [
+          "purchase",
+          "add_to_cart",
+          "initiate_checkout",
+          "value"
+        ],
+        "leads": [
+          "leads",
+          "conversion_leads",
+          "calls"
+        ],
+        "awareness": [
+          "reach",
+          "ad_recall_lift",
+          "thruplay",
+          "2_sec_views"
+        ],
+        "traffic": [
+          "landing_page_views",
+          "link_clicks"
+        ],
+        "engagement": [
+          "post_engagement",
+          "video_views",
+          "messages",
+          "page_likes"
+        ]
+      }
+    },
+    "pixel_dataset": {
+      "required_for": "website conversions",
+      "capi_recommended": true
+    },
+    "cost_control": {
+      "values": [
+        "highest_volume",
+        "cost_per_result_goal",
+        "bid_cap",
+        "roas_goal"
+      ],
+      "default": "highest_volume"
+    },
+    "budget_if_not_cbo": {
+      "mode": [
+        "daily",
+        "lifetime"
+      ],
+      "learning_phase_events_per_week": 50
+    },
+    "audience": {
+      "advantage_plus_audience": {
+        "default": true
+      },
+      "manual": {
+        "locations": {
+          "types": [
+            "country",
+            "region",
+            "city",
+            "zip",
+            "radius"
+          ],
+          "radius_min_miles": 1
+        },
+        "age": {
+          "min": 18,
+          "max": "65+"
+        },
+        "gender": true,
+        "languages": true,
+        "detailed_targeting": true
+      },
+      "custom_audiences": {
+        "sources": [
+          "customer_list",
+          "website_visitors",
+          "app_activity",
+          "engagement",
+          "offline"
+        ],
+        "website_window_days": [
+          1,
+          180
+        ]
+      },
+      "lookalike": {
+        "source_min": 100,
+        "source_rec": 1000,
+        "size_pct": [
+          1,
+          10
+        ]
+      }
+    },
+    "placements": {
+      "advantage_plus": {
+        "default": true
+      },
+      "manual": [
+        "fb_feed",
+        "ig_feed",
+        "fb_stories",
+        "ig_stories",
+        "fb_reels",
+        "ig_reels",
+        "reels_overlay",
+        "in_stream",
+        "marketplace",
+        "right_column",
+        "ig_explore",
+        "ig_search",
+        "messenger_inbox",
+        "messenger_stories",
+        "threads",
+        "audience_network"
+      ],
+      "home_services_recommend_exclude": [
+        "audience_network"
+      ]
+    },
+    "brand_safety": {
+      "inventory_filter": [
+        "expanded",
+        "moderate",
+        "limited"
+      ]
+    },
+    "attribution": {
+      "values": [
+        "1d_click",
+        "7d_click",
+        "7d_click_1d_view",
+        "1d_engaged_view"
+      ],
+      "default": "7d_click"
+    }
+  },
+  "ad_text": {
+    "primary_text": {
+      "visible_chars": 125,
+      "hard_max": 2200,
+      "variations_max": 5
+    },
+    "headline": {
+      "safe_chars": 27,
+      "most_placements": 40,
+      "hard_max": 255,
+      "variations_max": 5
+    },
+    "description": {
+      "safe_chars": 27,
+      "hard_max": 30,
+      "variations_max": 5
+    },
+    "final_url": {
+      "required_for": "website conversions",
+      "utm_field": true
+    },
+    "cta": {
+      "values": [
+        "Shop Now",
+        "Learn More",
+        "Sign Up",
+        "Get Quote",
+        "Contact Us",
+        "Book Now",
+        "Subscribe",
+        "Download",
+        "Get Offer",
+        "Apply Now",
+        "Call Now",
+        "Send Message"
+      ],
+      "home_services_default": "Get Quote"
+    },
+    "placement_overrides": {
+      "reels_overlay_headline_max": 10,
+      "fb_reels_headline": 55,
+      "fb_reels_primary": 40,
+      "threads_primary_range": [
+        80,
+        160
+      ]
+    }
+  },
+  "formats": {
+    "single_image": {
+      "placements": {
+        "feed": {
+          "ratio": "1:1",
+          "rec": "1080x1080",
+          "min": "600x600"
+        },
+        "feed_portrait": {
+          "ratio": "4:5",
+          "rec": "1080x1350"
+        },
+        "stories_reels": {
+          "ratio": "9:16",
+          "rec": "1080x1920",
+          "min_width": 500
+        },
+        "right_column": {
+          "ratio": "1.91:1",
+          "rec": "1200x628"
+        }
+      },
+      "file_types": [
+        "jpg",
+        "png"
+      ],
+      "max_file_mb": 30,
+      "safe_zone_9_16": {
+        "avoid_top_px": 250,
+        "avoid_bottom_px": 340
+      }
+    },
+    "video": {
+      "file_types": [
+        "mp4",
+        "mov",
+        "gif"
+      ],
+      "codec": "h264",
+      "audio": "aac 128kbps+",
+      "min_fps": 30,
+      "max_file_gb": 4,
+      "rec_under_gb": 1,
+      "resolutions": {
+        "feed": "1080x1080",
+        "stories_reels": "1080x1920"
+      },
+      "duration": {
+        "feed_rec_s": [
+          15,
+          30
+        ],
+        "stories_reels_rec_max_s": 60,
+        "in_stream_s": [
+          5,
+          15
+        ]
+      },
+      "captions_required_rec": true
+    },
+    "carousel": {
+      "cards": {
+        "min": 2,
+        "max": 10
+      },
+      "uniform_ratio_required": true,
+      "ratio": "1:1",
+      "card_headline": {
+        "max_chars": 40
+      },
+      "card_description": {
+        "max_chars": 20
+      },
+      "card_url": {
+        "required": true
+      },
+      "best_card_first": {
+        "toggle": true
+      }
+    },
+    "collection": {
+      "mobile_only": true,
+      "hero": {
+        "ratios": [
+          "1:1",
+          "4:5"
+        ]
+      },
+      "grid_min_products": 4,
+      "destination": "instant_experience",
+      "headline": {
+        "max_chars": 40
+      }
+    },
+    "instant_experience": {
+      "images_max": 20,
+      "video_total_max_s": 120,
+      "image_width_rec": 1080
+    },
+    "catalog": {
+      "required_feed_fields": [
+        "id",
+        "title",
+        "description",
+        "availability",
+        "condition",
+        "price",
+        "link",
+        "image_link",
+        "brand"
+      ],
+      "image": {
+        "min": "500x500",
+        "rec": "1024x1024",
+        "ratio": "1:1",
+        "max_mb": 8
+      },
+      "pixel_events": [
+        "ViewContent",
+        "AddToCart",
+        "Purchase"
+      ]
+    },
+    "flexible": {
+      "assets_max": 10,
+      "advantage_creative_toggles": [
+        "brightness_contrast",
+        "music",
+        "3d_motion",
+        "text_improvements",
+        "image_expansion",
+        "template_variation",
+        "catalog_info"
+      ],
+      "site_links_max": 4
+    },
+    "instant_form": {
+      "types": [
+        "more_volume",
+        "higher_intent",
+        "rich_creative"
+      ],
+      "greeting_headline": {
+        "max_chars": 60
+      },
+      "background_image": "1200x628",
+      "prefill_fields": [
+        "email",
+        "phone",
+        "name",
+        "address",
+        "zip",
+        "dob",
+        "gender",
+        "company",
+        "job_title"
+      ],
+      "custom_questions_rec": [
+        1,
+        3
+      ],
+      "privacy_policy": {
+        "url_required": true,
+        "link_text_required": true
+      },
+      "completion_headline": {
+        "max_chars": 60
+      },
+      "lead_delivery": [
+        "csv_90d",
+        "crm_sync"
+      ],
+      "crm_sync_required_before_launch": true,
+      "conversion_leads_optimization": {
+        "optional": true
+      }
+    },
+    "click_to_message": {
+      "destinations": [
+        "messenger",
+        "whatsapp",
+        "ig_direct"
+      ],
+      "suggested_replies_max": 5
+    },
+    "call_ad": {
+      "phone_required": true,
+      "cta": "Call Now",
+      "mobile_only": true,
+      "recommend": "lifetime budget + business-hours dayparting"
+    }
+  },
+  "tracking_prerequisites": [
+    "pixel_installed",
+    "standard_events_mapped",
+    "capi_deduped",
+    "domain_verified",
+    "aggregated_events_prioritized(max 8)",
+    "page_and_ig_linked",
+    "business_verification_if_required"
+  ],
+  "launch_checklists": {
+    "leads": [
+      "objective=leads",
+      "conversion_location",
+      "instant_form: greeting 60c + prefill + 1-3 qualifiers + privacy url + completion cta",
+      "crm sync live",
+      "conversion leads opt if CRM feedback",
+      "creative 1:1 + 9:16",
+      "primary 125c",
+      "headline 27c",
+      "cta=Get Quote"
+    ],
+    "sales": [
+      "objective=sales",
+      "pixel+capi",
+      "goal=purchase|value",
+      "cbo on",
+      "1-3 ad sets",
+      "advantage+ audience",
+      "advantage+ placements",
+      "5 primary/5 headline/5 desc",
+      "1:1+4:5+9:16",
+      "cta=Shop Now"
+    ],
+    "awareness": [
+      "objective=awareness",
+      "goal=reach|thruplay",
+      "frequency cap",
+      "video 9:16+1:1 15s 3s hook",
+      "captions"
+    ],
+    "engagement_ctm": [
+      "objective=engagement",
+      "destination",
+      "greeting + 3-5 replies",
+      "response SLA"
+    ]
+  }
+}

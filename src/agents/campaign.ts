@@ -105,6 +105,8 @@ function rsaFor(theme: string, ctx: CampaignCtx): RsaSpec {
   const biz = ctx.business || 'Us';
   const city = ctx.city ? ` in ${ctx.city}` : '';
   const offer = ctx.offers ? clip(ctx.offers, 30) : '';
+  // Google serves best with ALL 15 headline slots filled (master spec:
+  // "recommendation: max out 15/4") — vary lengths, include the theme in ≥2.
   const headlines = [
     clip(`${theme}${city}`, 30),
     clip(`${biz} — ${theme}`, 30),
@@ -116,6 +118,11 @@ function rsaFor(theme: string, ctx: CampaignCtx): RsaSpec {
     offer ? clip(offer, 30) : 'Trusted Local Pros',
     'Same-Day Availability',
     clip(`Top-Rated ${theme}`, 30),
+    clip(`Local ${theme} Experts`, 30),
+    ctx.city ? clip(`${ctx.city}'s Trusted Choice`, 30) : 'Your Trusted Local Choice',
+    'Upfront, Honest Pricing',
+    '100% Satisfaction Focus',
+    clip(`Call Now — ${theme}`, 30),
   ].filter(Boolean);
   const descriptions = [
     clip(`${biz} offers ${theme.toLowerCase()}${city}. Fast response, upfront pricing, quality work.`, 90),
@@ -123,7 +130,8 @@ function rsaFor(theme: string, ctx: CampaignCtx): RsaSpec {
     clip(`Licensed, insured, and reliable. Call or book online for ${theme.toLowerCase()}.`, 90),
     'Trusted by your neighbors. Honest pricing, on-time service, guaranteed work.',
   ];
-  return { headlines: headlines.slice(0, 10), descriptions: descriptions.slice(0, 4) };
+  const dedup = [...new Set(headlines)];
+  return { headlines: dedup.slice(0, 15), descriptions: descriptions.slice(0, 4) };
 }
 
 /** Negative keywords that stop wasted spend for local-service search. */

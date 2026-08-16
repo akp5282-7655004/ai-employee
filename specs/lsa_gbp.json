@@ -1,0 +1,290 @@
+{
+  "$schema_version": "1.0",
+  "platforms": [
+    "google_lsa",
+    "google_business_profile"
+  ],
+  "last_verified": "2026-08",
+  "benchmark_label": "Industry benchmarks, aggregated from public sources",
+  "lsa": {
+    "eligibility": {
+      "category_supported": {
+        "required": true
+      },
+      "geo_supported": {
+        "required": true
+      },
+      "verification": [
+        "business_registration",
+        "license",
+        "insurance",
+        "owner_background_check",
+        "technician_background_checks"
+      ],
+      "badge": {
+        "values": [
+          "google_guaranteed",
+          "google_screened"
+        ],
+        "home_services": "google_guaranteed"
+      },
+      "approval_weeks": [
+        1,
+        4
+      ]
+    },
+    "profile": {
+      "business_name": {
+        "required": true,
+        "must_match": "gbp.name",
+        "no_keywords": true
+      },
+      "phone": {
+        "required": true,
+        "answered_live_in_hours": true
+      },
+      "service_categories": {
+        "min_count": 1
+      },
+      "job_types": {
+        "rule": "all offered ON, all others OFF"
+      },
+      "service_areas": {
+        "types": [
+          "zip",
+          "city",
+          "radius"
+        ],
+        "must_match": "dispatch_footprint"
+      },
+      "hours": {
+        "required": true,
+        "complete": true
+      },
+      "highlights": {
+        "required": true
+      },
+      "photos": {
+        "min_count": 5,
+        "no_stock": true
+      },
+      "license_numbers": {
+        "required": true,
+        "unexpired": true
+      },
+      "booking_link": {
+        "required": false
+      },
+      "messaging": {
+        "required": false,
+        "requires_response_process_minutes": 15
+      }
+    },
+    "budget": {
+      "period": "weekly",
+      "weekly_overspend_x": 2,
+      "bidding": {
+        "values": [
+          "maximize_leads",
+          "max_per_lead"
+        ],
+        "default": "maximize_leads",
+        "switch_to_manual_after_leads": 30
+      }
+    },
+    "lead_management": {
+      "mark_status_within_hours": 24,
+      "dispute_window_days": 30,
+      "credit_type": "budget"
+    },
+    "ranking_levers": [
+      "responsiveness",
+      "rating_and_review_count",
+      "proximity",
+      "hours",
+      "budget_bid",
+      "lead_marking"
+    ],
+    "metrics": [
+      "lsa.leads_total",
+      "lsa.leads_charged",
+      "lsa.leads_booked",
+      "lsa.leads_disputed",
+      "lsa.cost",
+      "lsa.cost_per_lead",
+      "lsa.cost_per_booked",
+      "lsa.response_rate",
+      "lsa.avg_response_minutes",
+      "lsa.rating",
+      "lsa.review_count",
+      "lsa.impressions",
+      "lsa.budget_weekly",
+      "lsa.budget_utilization"
+    ]
+  },
+  "gbp": {
+    "profile": {
+      "name": {
+        "real_world_only": true,
+        "forbidden_content": [
+          "service_keywords",
+          "city",
+          "phone",
+          "tagline"
+        ]
+      },
+      "primary_category": {
+        "count": 1,
+        "required": true
+      },
+      "additional_categories": {
+        "max_count": 9
+      },
+      "service_area_business": {
+        "hide_address": true,
+        "service_areas": {
+          "min_count": 1,
+          "max_count": 20
+        }
+      },
+      "phone": {
+        "primary": 1,
+        "additional_max": 2,
+        "primary_must_match": [
+          "website",
+          "lsa",
+          "citations"
+        ]
+      },
+      "website": {
+        "required": true,
+        "https": true
+      },
+      "hours": {
+        "regular": true,
+        "special": true,
+        "more_hours": false
+      },
+      "description": {
+        "max_chars": 750,
+        "visible_chars": 250,
+        "forbidden": [
+          "urls",
+          "pricing_promos",
+          "keyword_stuffing"
+        ]
+      },
+      "attributes": {
+        "all_applicable": true
+      },
+      "services": {
+        "min_count_primary": 5,
+        "name_max_chars": 120,
+        "description_max_chars": 300
+      },
+      "products": {
+        "required": false,
+        "name_max_chars": 58,
+        "description_max_chars": 1000,
+        "image": {
+          "ratio": "1:1",
+          "min_px": "250x250"
+        }
+      },
+      "photos": {
+        "file_types": [
+          "jpg",
+          "png"
+        ],
+        "min_kb": 10,
+        "max_mb": 5,
+        "min_px": "720x720",
+        "logo": {
+          "ratio": "1:1",
+          "rec_px": "720x720"
+        },
+        "cover": {
+          "ratio": "16:9",
+          "rec_px": "1024x576"
+        },
+        "min_total": 20,
+        "new_per_month": 1
+      },
+      "videos": {
+        "max_seconds": 30,
+        "max_mb": 75,
+        "min_res": "720p"
+      },
+      "messaging": {
+        "response_sla_hours": 24
+      },
+      "qa": {
+        "seed_min": 5,
+        "seed_max": 10
+      },
+      "posts": {
+        "types": [
+          "update",
+          "offer",
+          "event"
+        ],
+        "text_max_chars": 1500,
+        "card_visible_chars": 100,
+        "image": {
+          "ratio": "4:3",
+          "rec_px": "1200x900",
+          "min_px": "480x270"
+        },
+        "cta": [
+          "Book",
+          "Order",
+          "Buy",
+          "Learn more",
+          "Sign up",
+          "Call"
+        ],
+        "cadence_days": [
+          7,
+          14
+        ]
+      },
+      "reviews": {
+        "reply_pct_target": 100,
+        "reply_within_hours": 48,
+        "no_gating": true,
+        "no_incentives": true
+      }
+    },
+    "ranking": [
+      "primary_category",
+      "reviews",
+      "completeness",
+      "photos",
+      "posts",
+      "nap_consistency",
+      "landing_relevance"
+    ],
+    "metrics": [
+      "gbp.impressions_search",
+      "gbp.impressions_maps",
+      "gbp.calls",
+      "gbp.website_clicks",
+      "gbp.direction_requests",
+      "gbp.messages",
+      "gbp.bookings",
+      "gbp.review_count",
+      "gbp.rating",
+      "gbp.reviews_new_30d",
+      "gbp.reviews_replied_pct",
+      "gbp.avg_reply_hours",
+      "gbp.photos_count",
+      "gbp.posts_last_30d",
+      "gbp.completeness_score"
+    ]
+  },
+  "cross_platform": {
+    "comparator_normalize_on": "cost_per_booked_job",
+    "gbp_cost": 0,
+    "gbp_upstream_of_lsa": true
+  }
+}

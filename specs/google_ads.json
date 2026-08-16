@@ -1,0 +1,967 @@
+{
+  "$schema_version": "1.0",
+  "platform": "google_ads",
+  "last_verified": "2026-08",
+  "char_counting": "display-width; CJK chars count as 2",
+  "shared_campaign_settings": {
+    "daily_budget": {
+      "required": true,
+      "type": "currency",
+      "notes": "Google may spend up to 2x daily; monthly cap = daily x 30.4"
+    },
+    "start_date": {
+      "required": true
+    },
+    "end_date": {
+      "required": false
+    },
+    "locations": {
+      "required": true,
+      "targeting_options": [
+        "presence",
+        "presence_or_interest"
+      ],
+      "recommend": "presence"
+    },
+    "languages": {
+      "required": true,
+      "min_count": 1
+    },
+    "ad_schedule": {
+      "required": false
+    },
+    "conversion_goals": {
+      "required": true,
+      "notes": "primary vs secondary"
+    },
+    "url_tracking": {
+      "required": false,
+      "fields": [
+        "tracking_template",
+        "final_url_suffix",
+        "custom_parameters"
+      ]
+    },
+    "audience_segments": {
+      "required": false,
+      "modes": [
+        "targeting",
+        "observation"
+      ]
+    }
+  },
+  "assets_library": {
+    "sitelink": {
+      "fields": {
+        "link_text": {
+          "type": "text",
+          "required": true,
+          "min_count": 1,
+          "max_count": 1,
+          "max_chars": 25
+        },
+        "description_1": {
+          "type": "text",
+          "required": false,
+          "min_count": 0,
+          "max_count": 1,
+          "max_chars": 35
+        },
+        "description_2": {
+          "type": "text",
+          "required": false,
+          "min_count": 0,
+          "max_count": 1,
+          "max_chars": 35
+        },
+        "final_url": {
+          "type": "url",
+          "required": true,
+          "unique_across_sitelinks": true
+        }
+      },
+      "min_to_serve": 2,
+      "recommended_min": 4,
+      "max": 20
+    },
+    "callout": {
+      "fields": {
+        "text": {
+          "type": "text",
+          "required": true,
+          "min_count": 1,
+          "max_count": 1,
+          "max_chars": 25
+        }
+      },
+      "min_to_serve": 2,
+      "recommended": [
+        4,
+        10
+      ],
+      "max": 20,
+      "rules": [
+        "no duplicates",
+        "non-clickable"
+      ]
+    },
+    "structured_snippet": {
+      "fields": {
+        "header": {
+          "type": "enum",
+          "values": [
+            "Amenities",
+            "Brands",
+            "Courses",
+            "Degree programs",
+            "Destinations",
+            "Featured hotels",
+            "Insurance coverage",
+            "Models",
+            "Neighborhoods",
+            "Service catalog",
+            "Shows",
+            "Styles",
+            "Types"
+          ],
+          "required": true
+        },
+        "values": {
+          "type": "text",
+          "required": true,
+          "min_count": 3,
+          "max_count": 10,
+          "max_chars": 25
+        }
+      }
+    },
+    "call": {
+      "fields": {
+        "phone": {
+          "type": "phone",
+          "required": true,
+          "verified": true
+        },
+        "schedule": {
+          "required": false
+        }
+      }
+    },
+    "location": {
+      "source": "google_business_profile",
+      "required_link": true
+    },
+    "image": {
+      "square": {
+        "type": "image",
+        "ratio": "1:1",
+        "recommended_px": "1200x1200",
+        "min_px": "300x300",
+        "required": true,
+        "file_types": [
+          "jpg",
+          "png"
+        ],
+        "max_file_kb": 5120
+      },
+      "landscape": {
+        "type": "image",
+        "ratio": "1.91:1",
+        "recommended_px": "1200x628",
+        "min_px": "600x314",
+        "required": false,
+        "file_types": [
+          "jpg",
+          "png"
+        ],
+        "max_file_kb": 5120
+      },
+      "max_count": 20,
+      "rules": [
+        "text overlay <=20%",
+        "no blur",
+        "no logo-as-image",
+        "safe crop centered"
+      ]
+    },
+    "business_name": {
+      "type": "text",
+      "required": true,
+      "min_count": 1,
+      "max_count": 1,
+      "max_chars": 25,
+      "notes": "must match domain/brand; advertiser verification required"
+    },
+    "business_logo": {
+      "type": "image",
+      "ratio": "1:1",
+      "recommended_px": "1200x1200",
+      "min_px": "128x128",
+      "required": true,
+      "file_types": [
+        "jpg",
+        "png"
+      ],
+      "max_file_kb": 5120,
+      "notes": "subject centered in 80% safe area"
+    },
+    "price": {
+      "fields": {
+        "type": {
+          "type": "enum",
+          "values": [
+            "Brands",
+            "Events",
+            "Locations",
+            "Products",
+            "Product categories",
+            "Product tiers",
+            "Services",
+            "Service categories",
+            "Service tiers"
+          ]
+        },
+        "items": {
+          "min_count": 3,
+          "max_count": 8,
+          "item_header": {
+            "type": "text",
+            "required": true,
+            "min_count": 1,
+            "max_count": 1,
+            "max_chars": 25
+          },
+          "item_description": {
+            "type": "text",
+            "required": true,
+            "min_count": 1,
+            "max_count": 1,
+            "max_chars": 25
+          },
+          "price": {
+            "type": "currency",
+            "qualifier": [
+              "From",
+              "Up to",
+              "Average",
+              "None"
+            ]
+          },
+          "final_url": {
+            "type": "url",
+            "required": true
+          }
+        }
+      }
+    },
+    "promotion": {
+      "fields": {
+        "occasion": {
+          "required": false
+        },
+        "promotion_item": {
+          "type": "text",
+          "required": true,
+          "min_count": 1,
+          "max_count": 1,
+          "max_chars": 20
+        },
+        "discount_type": {
+          "type": "enum",
+          "values": [
+            "monetary",
+            "percent",
+            "up_to_monetary",
+            "up_to_percent"
+          ]
+        },
+        "promo_code": {
+          "required": false
+        },
+        "final_url": {
+          "type": "url",
+          "required": true
+        },
+        "display_dates": {
+          "required": false
+        }
+      }
+    },
+    "lead_form": {
+      "fields": {
+        "headline": {
+          "type": "text",
+          "required": true,
+          "min_count": 1,
+          "max_count": 1,
+          "max_chars": 30
+        },
+        "business_name": {
+          "type": "text",
+          "required": true,
+          "min_count": 1,
+          "max_count": 1,
+          "max_chars": 25
+        },
+        "description": {
+          "type": "text",
+          "required": true,
+          "min_count": 1,
+          "max_count": 1,
+          "max_chars": 200
+        },
+        "qualifying_questions": {
+          "max_count": 10
+        },
+        "privacy_policy_url": {
+          "type": "url",
+          "required": true
+        },
+        "background_image": {
+          "type": "image",
+          "ratio": "1.91:1",
+          "recommended_px": "1200x628",
+          "min_px": "600x314",
+          "required": false,
+          "file_types": [
+            "jpg",
+            "png"
+          ],
+          "max_file_kb": 5120
+        },
+        "post_submit_headline": {
+          "type": "text",
+          "required": true,
+          "min_count": 1,
+          "max_count": 1,
+          "max_chars": 25
+        },
+        "post_submit_description": {
+          "type": "text",
+          "required": true,
+          "min_count": 1,
+          "max_count": 1,
+          "max_chars": 200
+        }
+      }
+    }
+  },
+  "campaign_types": {
+    "search": {
+      "campaign_settings": {
+        "networks": {
+          "google_search": true,
+          "search_partners": {
+            "toggle": true,
+            "default": true
+          },
+          "display_expansion": {
+            "toggle": true,
+            "recommend": false
+          }
+        },
+        "bidding": {
+          "type": "enum",
+          "values": [
+            "manual_cpc",
+            "maximize_clicks",
+            "maximize_conversions",
+            "maximize_conversion_value",
+            "target_impression_share"
+          ],
+          "optional_targets": [
+            "max_cpc",
+            "target_cpa",
+            "target_roas"
+          ]
+        },
+        "keywords": {
+          "level": "ad_group",
+          "match_types": [
+            "broad",
+            "phrase",
+            "exact"
+          ],
+          "required": true
+        },
+        "negative_keywords": {
+          "levels": [
+            "campaign",
+            "ad_group",
+            "account_list"
+          ]
+        },
+        "device_bid_adjustments": {
+          "range_pct": [
+            -100,
+            900
+          ]
+        },
+        "ad_rotation": {
+          "values": [
+            "optimize",
+            "rotate_indefinitely"
+          ],
+          "default": "optimize"
+        },
+        "ai_max": {
+          "toggle": true,
+          "default": false
+        }
+      },
+      "ad_units": {
+        "responsive_search_ad": {
+          "final_url": {
+            "type": "url",
+            "required": true
+          },
+          "headlines": {
+            "type": "text",
+            "required": true,
+            "min_count": 3,
+            "max_count": 15,
+            "max_chars": 30,
+            "per_item_rules": [
+              "include keyword in >=2 headlines",
+              "vary lengths"
+            ]
+          },
+          "descriptions": {
+            "type": "text",
+            "required": true,
+            "min_count": 2,
+            "max_count": 4,
+            "max_chars": 90
+          },
+          "display_path": {
+            "type": "text",
+            "required": false,
+            "min_count": 0,
+            "max_count": 2,
+            "max_chars": 15
+          },
+          "pinning": {
+            "headline_positions": [
+              1,
+              2,
+              3
+            ],
+            "description_positions": [
+              1,
+              2
+            ]
+          },
+          "recommendation": "max out 15/4"
+        },
+        "call_ad": {
+          "phone": {
+            "type": "phone",
+            "required": true,
+            "verified": true
+          },
+          "headlines": {
+            "type": "text",
+            "required": false,
+            "min_count": 0,
+            "max_count": 2,
+            "max_chars": 30
+          },
+          "descriptions": {
+            "type": "text",
+            "required": true,
+            "min_count": 2,
+            "max_count": 2,
+            "max_chars": 90
+          },
+          "business_name": {
+            "type": "text",
+            "required": true,
+            "min_count": 1,
+            "max_count": 1,
+            "max_chars": 25
+          },
+          "verification_url": {
+            "type": "url",
+            "required": true,
+            "domain_must_match": true
+          }
+        }
+      },
+      "attachable_assets": [
+        "sitelink",
+        "callout",
+        "structured_snippet",
+        "call",
+        "location",
+        "image",
+        "business_name",
+        "business_logo",
+        "price",
+        "promotion",
+        "lead_form"
+      ],
+      "launch_checklist": [
+        "final_url",
+        "15 headlines",
+        "4 descriptions",
+        "2 paths",
+        "keywords+match types",
+        "negatives",
+        "bidding strategy",
+        "4+ sitelinks",
+        "4+ callouts",
+        "structured snippets",
+        "business_name",
+        "business_logo",
+        "images 1:1 + 1.91:1",
+        "call asset",
+        "location asset"
+      ]
+    },
+    "performance_max": {
+      "structure": {
+        "asset_groups_per_campaign": {
+          "max": 100
+        }
+      },
+      "campaign_settings": {
+        "objective": {
+          "type": "enum",
+          "values": [
+            "sales",
+            "leads",
+            "website_traffic",
+            "local_store_visits"
+          ]
+        },
+        "bidding": {
+          "type": "enum",
+          "values": [
+            "maximize_conversions",
+            "maximize_conversion_value"
+          ],
+          "optional_targets": [
+            "target_cpa",
+            "target_roas"
+          ],
+          "new_customers_only": {
+            "toggle": true
+          }
+        },
+        "final_url_expansion": {
+          "default": true,
+          "recommend_for_home_services": false
+        },
+        "brand_exclusions": {
+          "toggle": true
+        },
+        "negatives": {
+          "support": "limited"
+        }
+      },
+      "asset_group": {
+        "final_url": {
+          "type": "url",
+          "required": true
+        },
+        "headlines": {
+          "type": "text",
+          "required": true,
+          "min_count": 3,
+          "max_count": 15,
+          "max_chars": 30
+        },
+        "long_headlines": {
+          "type": "text",
+          "required": true,
+          "min_count": 1,
+          "max_count": 5,
+          "max_chars": 90
+        },
+        "description_short": {
+          "type": "text",
+          "required": true,
+          "min_count": 1,
+          "max_count": 1,
+          "max_chars": 60
+        },
+        "descriptions": {
+          "type": "text",
+          "required": true,
+          "min_count": 0,
+          "max_count": 4,
+          "max_chars": 90,
+          "notes": "5 total incl. short"
+        },
+        "business_name": {
+          "type": "text",
+          "required": true,
+          "min_count": 1,
+          "max_count": 1,
+          "max_chars": 25
+        },
+        "cta": {
+          "type": "enum",
+          "values": [
+            "auto",
+            "Learn More",
+            "Get Quote",
+            "Sign Up",
+            "Subscribe",
+            "Book Now",
+            "Contact Us",
+            "Download",
+            "Shop Now"
+          ]
+        },
+        "display_path": {
+          "type": "text",
+          "required": false,
+          "min_count": 0,
+          "max_count": 2,
+          "max_chars": 15
+        },
+        "images": {
+          "max_total": 20,
+          "landscape": {
+            "type": "image",
+            "ratio": "1.91:1",
+            "recommended_px": "1200x628",
+            "min_px": "600x314",
+            "required": true,
+            "file_types": [
+              "jpg",
+              "png"
+            ],
+            "max_file_kb": 5120,
+            "min_count": 1,
+            "notes": "rec 3-4"
+          },
+          "square": {
+            "type": "image",
+            "ratio": "1:1",
+            "recommended_px": "1200x1200",
+            "min_px": "300x300",
+            "required": true,
+            "file_types": [
+              "jpg",
+              "png"
+            ],
+            "max_file_kb": 5120,
+            "min_count": 1,
+            "notes": "rec 3-4"
+          },
+          "portrait": {
+            "type": "image",
+            "ratio": "4:5",
+            "recommended_px": "960x1200",
+            "min_px": "480x600",
+            "required": false,
+            "file_types": [
+              "jpg",
+              "png"
+            ],
+            "max_file_kb": 5120,
+            "notes": "strongly rec, 2"
+          }
+        },
+        "logos": {
+          "max_total": 5,
+          "square": {
+            "type": "image",
+            "ratio": "1:1",
+            "recommended_px": "1200x1200",
+            "min_px": "128x128",
+            "required": true,
+            "file_types": [
+              "jpg",
+              "png"
+            ],
+            "max_file_kb": 5120
+          },
+          "landscape": {
+            "type": "image",
+            "ratio": "4:1",
+            "recommended_px": "1200x300",
+            "min_px": "512x128",
+            "required": false,
+            "file_types": [
+              "jpg",
+              "png"
+            ],
+            "max_file_kb": 5120
+          }
+        },
+        "videos": {
+          "max_count": 5,
+          "hosting": "youtube",
+          "min_seconds": 10,
+          "orientations": [
+            "16:9",
+            "1:1",
+            "9:16"
+          ],
+          "fallback": "auto-generated slideshow if none (underperforms)"
+        },
+        "audience_signal": {
+          "required": false
+        },
+        "search_themes": {
+          "max_count": 25,
+          "max_chars": 80
+        }
+      },
+      "attachable_assets": [
+        "sitelink",
+        "callout",
+        "structured_snippet",
+        "call",
+        "price",
+        "promotion",
+        "lead_form"
+      ]
+    },
+    "demand_gen": {
+      "serves": [
+        "youtube_in_feed",
+        "youtube_in_stream",
+        "shorts",
+        "discover",
+        "gmail",
+        "display"
+      ],
+      "campaign_settings": {
+        "bidding": {
+          "values": [
+            "maximize_clicks",
+            "maximize_conversions",
+            "maximize_conversion_value"
+          ]
+        },
+        "lookalike_source_min": 1000,
+        "channel_controls": [
+          "youtube",
+          "discover",
+          "gmail",
+          "display"
+        ]
+      },
+      "formats": {
+        "single_image": {
+          "final_url": {
+            "type": "url",
+            "required": true
+          },
+          "headlines": {
+            "type": "text",
+            "required": true,
+            "min_count": 1,
+            "max_count": 5,
+            "max_chars": 40,
+            "per_item_rules": [
+              "at least one <=30 chars"
+            ]
+          },
+          "descriptions": {
+            "type": "text",
+            "required": true,
+            "min_count": 1,
+            "max_count": 5,
+            "max_chars": 90
+          },
+          "business_name": {
+            "type": "text",
+            "required": true,
+            "min_count": 1,
+            "max_count": 1,
+            "max_chars": 25
+          },
+          "images": {
+            "max_count": 20,
+            "ratios": {
+              "1.91:1": "1200x628",
+              "1:1": "1200x1200",
+              "4:5": "960x1200"
+            },
+            "max_file_kb": 5120
+          },
+          "logo": {
+            "type": "image",
+            "ratio": "1:1",
+            "recommended_px": "1200x1200",
+            "min_px": "128x128",
+            "required": true,
+            "file_types": [
+              "jpg",
+              "png"
+            ],
+            "max_file_kb": 150
+          },
+          "cta": {
+            "custom_max_chars": 10
+          }
+        },
+        "carousel": {
+          "cards": {
+            "min_count": 2,
+            "max_count": 10
+          },
+          "card_ratio": {
+            "values": [
+              "1:1",
+              "1.91:1"
+            ],
+            "uniform": true
+          },
+          "card_headline": {
+            "type": "text",
+            "required": true,
+            "min_count": 1,
+            "max_count": 1,
+            "max_chars": 40
+          },
+          "card_final_url": {
+            "required": true
+          }
+        },
+        "video": {
+          "hosting": "youtube",
+          "orientations": [
+            "16:9",
+            "1:1",
+            "9:16"
+          ],
+          "shorts_requires": "9:16",
+          "min_seconds": 10,
+          "headline": {
+            "type": "text",
+            "required": true,
+            "min_count": 1,
+            "max_count": 1,
+            "max_chars": 40
+          },
+          "description": {
+            "type": "text",
+            "required": true,
+            "min_count": 1,
+            "max_count": 1,
+            "max_chars": 90
+          },
+          "business_name": {
+            "type": "text",
+            "required": true,
+            "min_count": 1,
+            "max_count": 1,
+            "max_chars": 25
+          },
+          "cta": {
+            "required": true,
+            "custom_max_chars": 10
+          },
+          "ctv": {
+            "ratio": "16:9",
+            "min_px": "1920x1080"
+          }
+        }
+      }
+    },
+    "video": {
+      "note": "awareness/reach/views only; conversion video runs via Demand Gen or PMax",
+      "subtypes": {
+        "video_reach_efficient": {
+          "bidding": "target_cpm"
+        },
+        "video_reach_non_skippable": {
+          "bidding": "target_cpm"
+        },
+        "video_views": {
+          "bidding": [
+            "cpv",
+            "target_cpv"
+          ]
+        },
+        "ad_sequence": {
+          "bidding": "target_cpm"
+        },
+        "audio": {
+          "bidding": "target_cpm"
+        }
+      },
+      "formats": {
+        "skippable_in_stream": {
+          "duration": "any, rec <180s",
+          "skippable_after_s": 5,
+          "companion_banner": "300x60"
+        },
+        "non_skippable": {
+          "max_seconds": 15
+        },
+        "bumper": {
+          "exact_seconds": 6
+        },
+        "in_feed": {
+          "headline": {
+            "type": "text",
+            "required": true,
+            "min_count": 1,
+            "max_count": 1,
+            "max_chars": 100
+          },
+          "descriptions": {
+            "type": "text",
+            "required": true,
+            "min_count": 2,
+            "max_count": 2,
+            "max_chars": 35
+          }
+        },
+        "shorts": {
+          "ratio": "9:16",
+          "max_seconds": 60
+        }
+      },
+      "file": {
+        "resolution_rec": "1920x1080",
+        "resolution_min": "1280x720",
+        "ratios": [
+          "16:9",
+          "1:1",
+          "9:16"
+        ],
+        "audio_required": true,
+        "safe_zone": "center 90% horizontal / 80% vertical"
+      }
+    },
+    "smart": {
+      "not_recommended": true,
+      "headlines": {
+        "type": "text",
+        "required": true,
+        "min_count": 3,
+        "max_count": 3,
+        "max_chars": 30
+      },
+      "descriptions": {
+        "type": "text",
+        "required": true,
+        "min_count": 2,
+        "max_count": 2,
+        "max_chars": 90
+      },
+      "keyword_themes": {
+        "max_count": 10
+      }
+    },
+    "shopping": {
+      "n_a_for_home_services": true,
+      "feed_required": true
+    },
+    "app": {
+      "n_a_for_home_services": true
+    }
+  },
+  "local_services_ads": {
+    "separate_platform": true,
+    "see": "lsa-gbp-specs-master.md / lsa_gbp_specs.json"
+  }
+}
