@@ -9,44 +9,65 @@
      system sans everywhere else, so the mark never disappears. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap">
 </head>
 <body>
 <style>
+  /* miles.ai design system (docs/BRAND.md) — monochrome brand; the only
+     color on screen is information. Ink on Paper, signals for meaning only. */
   :root{
-    --bg:#f4f6f8; --panel:#ffffff; --panel-2:#f1f3f6; --card:#ffffff;
-    --line:#e6e9ee; --line-soft:#eef1f4;
-    --ink:#0f1216; --muted:#5f6772; --faint:#98a0aa;
-    --primary:#0f1216; --primary-ink:#ffffff;
-    --accent:#2f6bf6; --accent-soft:#e9f0ff;
-    --brand:#12a08f;
-    --good:#1f9d61; --good-soft:rgba(31,157,97,.12);
-    --teal:#12a8c4; --warn:#e08a1f; --warn-soft:rgba(224,138,31,.14);
-    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
-    --shadow:0 1px 2px rgba(15,18,22,.05),0 4px 16px rgba(15,18,22,.05);
+    /* Core neutrals */
+    --bg:#F4F4F5;        /* Canvas */
+    --panel:#FFFFFF;     /* Paper  */
+    --panel-2:#F4F4F5;   /* Canvas (inset surfaces) */
+    --panel2:#F4F4F5;
+    --card:#FFFFFF;
+    --line:#E6E6EA; --line-soft:#EFEFF2;
+    --ink:#111112;       /* Ink — logo, headings, primary buttons */
+    --graphite:#3F3F46;  /* body copy — never pure black */
+    --muted:#8A8A92;     /* Mute — labels, secondary text, icons */
+    --faint:#8A8A92;
+    --primary:#111112; --primary-ink:#FFFFFF;
+    /* Signals — semantic only. One lightness (0.55), one chroma (0.13). */
+    --good:#1B8552;   --good-tint:#E6F2EB;   /* Result Green — measured outcomes */
+    --accent:#2B6FCB; --accent-soft:#E7EEF8; /* Focus Blue — focus, links, in progress */
+    --warn:#86651C;   --warn-tint:#F3EFE2;   /* Caution Amber — needs attention */
+    --bad:#A45359;    --bad-tint:#F6EAEB;    /* Alert Red — failure, destructive */
+    --good-soft:var(--good-tint); --warn-soft:var(--warn-tint);
+    --brand:#111112;  /* brand color IS Ink — never a signal hue */
+    --teal:#3F3F46;
+    --sans:'Archivo',ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --shadow:0 1px 2px rgba(17,17,18,.06);
   }
+  /* Dark: Ink becomes surface, Paper becomes text; signals shift to L 0.72. */
   @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-    --bg:#0c0f13; --panel:#12161b; --panel-2:#1a1f26; --card:#141a20;
-    --line:#232a32; --line-soft:#1c232b;
-    --ink:#e8ebee; --muted:#98a1ac; --faint:#6a727c;
-    --primary:#eef1f4; --primary-ink:#0c0f13;
-    --accent:#6f97ff; --accent-soft:#182742; --brand:#38c6b4;
-    --good:#3ecb84; --good-soft:rgba(62,203,132,.15); --teal:#3cc3dc; --warn:#e6a545; --warn-soft:rgba(230,165,69,.16);
-    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.3);
+    --bg:#111112; --panel:#1A1A1C; --panel-2:#232326; --panel2:#232326; --card:#1A1A1C;
+    --line:#2E2E32; --line-soft:#26262A;
+    --ink:#FFFFFF; --graphite:#D8D8DC; --muted:#8A8A92; --faint:#8A8A92;
+    --primary:#FFFFFF; --primary-ink:#111112;
+    --good:#57B983; --good-tint:#1C2A22; --accent:#6BA3E8; --accent-soft:#1B2431;
+    --warn:#C0994B; --warn-tint:#2A2418; --bad:#DC8A8F; --bad-tint:#2C1D1F;
+    --good-soft:var(--good-tint); --warn-soft:var(--warn-tint);
+    --brand:#FFFFFF; --teal:#D8D8DC;
+    --shadow:0 1px 2px rgba(0,0,0,.5);
   }}
   :root[data-theme="dark"]{
-    --bg:#0c0f13; --panel:#12161b; --panel-2:#1a1f26; --card:#141a20;
-    --line:#232a32; --line-soft:#1c232b;
-    --ink:#e8ebee; --muted:#98a1ac; --faint:#6a727c;
-    --primary:#eef1f4; --primary-ink:#0c0f13;
-    --accent:#6f97ff; --accent-soft:#182742; --brand:#38c6b4;
-    --good:#3ecb84; --good-soft:rgba(62,203,132,.15); --teal:#3cc3dc; --warn:#e6a545; --warn-soft:rgba(230,165,69,.16);
-    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.3);
+    --bg:#111112; --panel:#1A1A1C; --panel-2:#232326; --panel2:#232326; --card:#1A1A1C;
+    --line:#2E2E32; --line-soft:#26262A;
+    --ink:#FFFFFF; --graphite:#D8D8DC; --muted:#8A8A92; --faint:#8A8A92;
+    --primary:#FFFFFF; --primary-ink:#111112;
+    --good:#57B983; --good-tint:#1C2A22; --accent:#6BA3E8; --accent-soft:#1B2431;
+    --warn:#C0994B; --warn-tint:#2A2418; --bad:#DC8A8F; --bad-tint:#2C1D1F;
+    --good-soft:var(--good-tint); --warn-soft:var(--warn-tint);
+    --brand:#FFFFFF; --teal:#D8D8DC;
+    --shadow:0 1px 2px rgba(0,0,0,.5);
   }
   *{box-sizing:border-box;}
   html,body{height:100%;}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
+  body{margin:0;background:var(--bg);color:var(--graphite);font-family:var(--sans);font-weight:400;-webkit-font-smoothing:antialiased;}
+  h1,h2,h3,h4,b,strong{color:var(--ink);}
+  h1,h2,h3{letter-spacing:-.02em;}
   .app{display:grid;grid-template-columns:250px 1fr;height:100dvh;}
   svg{display:block;}
   .ico{width:17px;height:17px;stroke:currentColor;stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round;flex:none;}
@@ -107,8 +128,8 @@
   /* stat cards */
   .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:26px;}
   .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow);}
-  .stat .lab{display:flex;justify-content:space-between;align-items:center;font-size:10.5px;letter-spacing:.05em;color:var(--faint);font-weight:700;text-transform:uppercase;}
-  .stat .val{font-size:21px;font-weight:800;letter-spacing:-.02em;margin-top:10px;line-height:1.15;}
+  .stat .lab{display:flex;justify-content:space-between;align-items:center;font-size:12px;letter-spacing:.1em;color:var(--muted);font-weight:600;text-transform:uppercase;}
+  .stat .val{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:21px;font-weight:500;letter-spacing:-.01em;color:var(--ink);margin-top:10px;line-height:1.15;}
 
   /* hero */
   .hero{max-width:760px;margin:6px auto 0;text-align:center;}
@@ -123,7 +144,7 @@
   .prow .sp{flex:1;}
   .modelchip{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:12px;color:var(--muted);}
   .modelchip .m{font-weight:700;color:var(--ink);}
-  .go{display:flex;align-items:center;gap:6px;background:var(--primary);color:var(--primary-ink);border:none;border-radius:10px;padding:9px 15px;font-size:13px;font-weight:600;cursor:pointer;}
+  .go{display:flex;align-items:center;gap:6px;background:var(--primary);color:var(--primary-ink);border:none;border-radius:999px;padding:10px 20px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer;}
 
   .tabs{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:22px 0;}
   .tab{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;font-size:13px;color:var(--muted);cursor:pointer;border:1px solid var(--line);background:var(--card);}
@@ -305,7 +326,7 @@
   .badge2.webhook{background:var(--primary);color:var(--primary-ink);display:inline-flex;align-items:center;gap:6px;}
   .searchbar{width:100%;max-width:1040px;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:12px 15px;font-size:14px;color:var(--ink);font-family:var(--sans);margin-bottom:18px;box-shadow:var(--shadow);}
   .searchbar:focus{outline:none;border-color:var(--accent);}
-  .sect-label{font-size:11px;letter-spacing:.05em;color:var(--faint);font-weight:700;margin:14px 0 10px;}
+  .sect-label{font-size:12px;letter-spacing:.1em;color:var(--muted);font-weight:600;text-transform:uppercase;margin:14px 0 10px;}
   .appgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:1040px;}
   .appcard{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:13px 15px;cursor:pointer;box-shadow:var(--shadow);}
   .appcard:hover{border-color:var(--accent);transform:translateY(-1px);}
@@ -453,10 +474,10 @@
     <div class="glabel">PROJECTS</div>
     <div class="pill newproj"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New project</div>
     <div class="glabel">ACTIVE PLAYBOOKS</div>
-    <div class="pill playbook"><span class="em">🛠️</span> Home Services</div>
-    <div class="pill playbook"><span class="em">🏚️</span> Roofing Restoration</div>
-    <div class="pill playbook"><span class="em">🦷</span> Dental Practice</div>
-    <div class="pill playbook"><span class="em">☀️</span> Solar Energy</div>
+    <div class="pill playbook">Home Services</div>
+    <div class="pill playbook">Roofing Restoration</div>
+    <div class="pill playbook">Dental Practice</div>
+    <div class="pill playbook">Solar Energy</div>
     <div class="grow"></div>
     <div class="ws" style="margin:0"><span class="sq" id="user-av">·</span><div style="min-width:0"><b id="user-email" style="display:block;overflow:hidden;text-overflow:ellipsis">—</b></div><span class="cx" id="logout" title="Log out" style="cursor:pointer"><svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></span></div>
   </aside>
@@ -1392,7 +1413,7 @@ async function fillDashReview(wrap){
   let d={items:[]}; try{ d=await(await fetch('/api/review')).json(); }catch(e){ return; }
   const items=d.items||[]; if(!items.length){ wrap.remove(); return; }
   wrap.innerHTML='';
-  const head=el('div'); head.style.cssText='margin:0 0 10px'; head.innerHTML='<div class="sect-label" style="margin:0">🗂️ FOR YOUR REVIEW</div><div class="appsub">Drafts Miles finished and left for your OK. Review, then approve to send to Deploy.</div>'; wrap.append(head);
+  const head=el('div'); head.style.cssText='margin:0 0 10px'; head.innerHTML='<div class="sect-label" style="margin:0">FOR YOUR REVIEW</div><div class="appsub">Drafts Miles finished and left for your OK. Review, then approve to send to Deploy.</div>'; wrap.append(head);
   const list=el('div'); list.style.cssText='display:flex;flex-direction:column;gap:12px'; wrap.append(list);
   const refresh=()=>{ if(!list.querySelector('.mcard')) wrap.remove(); };
   items.slice(0,5).forEach(it=>list.append(buildReviewCard(it,refresh)));
@@ -1419,7 +1440,7 @@ function openReviewModal(it){
   ov.append(panel); document.body.append(ov); ov.addEventListener('mousedown',(e)=>{ if(e.target===ov) ov.remove(); });
 }
 // ── Agent Recommendation Engine: daily, data-driven, one-click-approve optimizations ──
-const REC_SEV={high:{c:'#e0574a',l:'Act now'},medium:{c:'#f59e0b',l:'Worth doing'},low:{c:'#12a08f',l:'Nice to have'}};
+const REC_SEV={high:{c:'#e0574a',l:'Act now'},medium:{c:'var(--warn)',l:'Worth doing'},low:{c:'#12a08f',l:'Nice to have'}};
 const REC_CAT={ads:'Ads',leads:'Leads',email:'Email',reputation:'Reputation',content:'Content',speed:'Speed-to-Lead'};
 // One recommendation card, shared by the Dashboard and the Recommendations tab.
 // onResolved(kind) fires after approve/dismiss so callers can update surrounding UI.
@@ -1449,7 +1470,7 @@ async function fillDashRecs(wrap){
   const recs=d.recommendations||[]; if(!recs.length){ wrap.remove(); return; }
   wrap.innerHTML='';
   const head=el('div'); head.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px';
-  head.innerHTML='<div class="sect-label" style="margin:0">💡 RECOMMENDATIONS FOR YOU</div>';
+  head.innerHTML='<div class="sect-label" style="margin:0">RECOMMENDATIONS FOR YOU</div>';
   const see=el('a',null,'See all ('+recs.length+') →'); see.style.cssText='color:var(--accent);cursor:pointer;font-size:13px;white-space:nowrap'; see.onclick=()=>setPage('recs'); head.append(see);
   wrap.append(head);
   const list=el('div'); list.style.cssText='display:flex;flex-direction:column;gap:12px'; wrap.append(list);
@@ -1528,8 +1549,8 @@ async function openTeam(){
   go.onclick=runCampaign; inp.addEventListener('keydown',(e)=>{ if(e.key==='Enter') runCampaign(); });
 }
 // ── Competitor Ad Research: read the Meta Ad Library the way a veteran media buyer does ──
-function angleChip(sig){ const m={'scaling-bet':['🔥 Scaling bet','#b91c1c','#fee2e2'],'testing':['🧪 Testing','#92400e','#fef3c7'],'single':['· one-off','#475569','#e2e8f0']}; const [t,fg,bg]=m[sig]||m.single; const s=el('span',null,t); s.style.cssText='font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;color:'+fg+';background:'+bg; return s; }
-function daysBadge(n){ if(n==null) return null; const s=el('span',null,n+'d running'); s.style.cssText='font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:#eef2ff;color:#3730a3'; return s; }
+function angleChip(sig){ const m={'scaling-bet':['🔥 Scaling bet','var(--bad)','var(--bad-tint)'],'testing':['🧪 Testing','var(--warn)','var(--warn-tint)'],'single':['· one-off','#475569','#e2e8f0']}; const [t,fg,bg]=m[sig]||m.single; const s=el('span',null,t); s.style.cssText='font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;color:'+fg+';background:'+bg; return s; }
+function daysBadge(n){ if(n==null) return null; const s=el('span',null,n+'d running'); s.style.cssText='font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:#eef2ff;color:var(--accent)'; return s; }
 async function openCompetitorAds(){
   const box=$('#cads-body'); if(!box) return; box.innerHTML='';
   const head=el('div','mcard');
@@ -1548,7 +1569,7 @@ async function openCompetitorAds(){
     results.innerHTML='';
 
     // 1) Honest framing + the working path: pre-built links into the real web UI.
-    if(d.note){ const n=el('div','mcard'); n.style.borderLeft='3px solid #6366f1'; n.append(el('div','verdict tight',d.note)); results.append(n); }
+    if(d.note){ const n=el('div','mcard'); n.style.borderLeft='3px solid var(--ink)'; n.append(el('div','verdict tight',d.note)); results.append(n); }
     if((d.deepLinks||[]).length){
       const lc=el('div','mcard');
       lc.append(el('div','sect-label','OPEN IN THE AD LIBRARY (FULL US COVERAGE)'));
@@ -1673,7 +1694,7 @@ $('#v-budget').addEventListener('input',runValidate); $('#v-leads').addEventList
 // ═══ research (real US Census) ═══
 function statCard(lab,val){ const c=el('div','stat'); c.append(el('div','lab',lab), el('div','val',val)); return c; }
 // ON/OFF status pill used by the dashboard's block headers.
-function ovPill(on){ return '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;vertical-align:1px;background:'+(on?'#dcfce7;color:#166534':'var(--panel2,#eef2f6);color:var(--muted)')+'">'+(on?'ON':'OFF')+'</span>'; }
+function ovPill(on){ return '<span style="font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.1em;padding:2px 9px;border-radius:999px;vertical-align:1px;background:'+(on?'var(--ink);color:var(--panel)':'var(--panel-2);color:var(--muted);border:1px solid var(--line)')+'">'+(on?'ON':'OFF')+'</span>'; }
 function renderResearch(d){
   const box=$('#r-results'); box.innerHTML='';
   box.append(el('div','sect-label', ((d.place||d.name||'')+' · '+d.zip).toUpperCase()));
@@ -2057,28 +2078,28 @@ function renderOverview(d){
   box.append(reviewCard());
   box.append(autoCard());
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px';
-  const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<div class="sect-label" style="margin:0 0 10px">📈 MARKETING PERFORMANCE</div>';
+  const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<div class="sect-label" style="margin:0 0 10px">MARKETING PERFORMANCE</div>';
   if(mk.hasData){ const ss=el('div','stats'); ss.append(statCard('Ad spend','$'+(mk.spend||0).toLocaleString()), statCard('Cost / job', mk.cpa!=null?('$'+mk.cpa):'—'), statCard('Revenue','$'+(mk.revenue||0).toLocaleString())); mc.append(ss); mc.append(el('div','appsub','Showing '+mktRangeLabel(mk.range)+(mk.targetCpa&&mk.cpa!=null?' · target $'+mk.targetCpa+'/job · '+(mk.cpa<=mk.targetCpa?'✅ under target':'⚠︎ over target'):''))); }
   else if(mk.connected){ mc.append(ovSync('✓ Google Ads / Meta connected — Miles reads it live, on demand (no daily sync wait). Nothing showing yet means there’s no spend in '+mktRangeLabel(mk.range)+' on the account, not a delay.')); const row=el('div'); row.style.cssText='display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap'; const rb=el('button',null,'↻ Refresh now'); rb.style.cssText='background:none;border:1px solid var(--line);border-radius:8px;color:var(--accent);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:5px 10px'; rb.onclick=async()=>{ rb.disabled=true; const o=rb.textContent; rb.textContent='Pulling live…'; await openOverview(); }; const tb=el('button',null,'Diagnose connection →'); tb.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:0'; tb.onclick=()=>diagProbe('google_ads',tb); row.append(rb,tb); mc.append(row); }
   else mc.append(ovNudge('Connect Google Ads / Meta in Integrations to see real spend, cost-per-job & revenue.'));
   grid.append(mc);
-  const lk=d.leads||{}, rk=d.reviews||{}; const lc=el('div','mcard'); lc.innerHTML='<div class="sect-label" style="margin:0 0 10px">📞 LEADS & REPUTATION</div>';
+  const lk=d.leads||{}, rk=d.reviews||{}; const lc=el('div','mcard'); lc.innerHTML='<div class="sect-label" style="margin:0 0 10px">LEADS & REPUTATION</div>';
   if(lk.hasData||rk.hasData){ const ss=el('div','stats'); ss.append(statCard('New leads',lk.count||0), statCard('Uncontacted',lk.uncontacted||0), statCard('Reviews',rk.count||0), statCard('Avg rating', rk.avg!=null?(rk.avg+'★'):'—')); lc.append(ss); }
   else if(lk.connected||rk.connected){ lc.append(ovSync('✓ '+[lk.connected?'CRM':null,rk.connected?'Google Business Profile':null].filter(Boolean).join(' & ')+' connected. Your leads & reviews will populate here as they come in.')); }
   else lc.append(ovNudge('Connect your CRM & Google Business Profile to track leads and reviews here.'));
   grid.append(lc);
-  const sc=el('div','mcard'); sc.innerHTML='<div class="sect-label" style="margin:0 0 10px">📱 SOCIAL</div>';
+  const sc=el('div','mcard'); sc.innerHTML='<div class="sect-label" style="margin:0 0 10px">SOCIAL</div>';
   if(d.social&&d.social.hasData){ const ss=el('div','stats'); ss.append(statCard('Impressions',(d.social.impressions||0).toLocaleString()), statCard('Clicks',d.social.clicks||0), statCard('Likes',d.social.likes||0), statCard('Followers',(d.social.followers||0).toLocaleString())); sc.append(ss); }
   else if(d.social&&d.social.connected){ sc.append(ovSync('✓ Social connected — Miles reads it live. Impressions, clicks & followers show as soon as there’s activity on the account.')); }
   else sc.append(ovNudge('Connect Facebook / Instagram / LinkedIn to see impressions, clicks & followers.'));
   grid.append(sc);
   box.append(grid);
   const grid2=el('div'); grid2.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:16px';
-  const up=el('div','mcard'); up.innerHTML='<div class="sect-label" style="margin:0 0 10px">🗓 UPCOMING POSTS</div>';
+  const up=el('div','mcard'); up.innerHTML='<div class="sect-label" style="margin:0 0 10px">UPCOMING POSTS</div>';
   if((d.upcomingPosts||[]).length) for(const post of d.upcomingPosts){ const r=el('div'); r.style.cssText='display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px'; r.innerHTML='<span>'+esc((post.caption||'(no caption)').slice(0,40))+'</span><span class="appsub">'+fmtWhen(post.scheduledAt)+'</span>'; up.append(r); }
   else up.append(ovNudge('No posts scheduled. Create one in the Content Calendar.'));
   grid2.append(up);
-  const ra=el('div','mcard'); ra.innerHTML='<div class="sect-label" style="margin:0 0 10px">🤖 RECENT AGENT ACTIVITY</div>';
+  const ra=el('div','mcard'); ra.innerHTML='<div class="sect-label" style="margin:0 0 10px">RECENT AGENT ACTIVITY</div>';
   if((d.recentRuns||[]).length) for(const run of d.recentRuns){ const r=el('div'); r.style.cssText='display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px'; r.innerHTML='<span>'+esc((run.title||'').slice(0,40))+'</span><span class="appsub">'+fmtWhen(run.ts)+'</span>'; ra.append(r); }
   else ra.append(ovNudge('Nothing yet. Put Miles to work from “What Miles Does”.'));
   grid2.append(ra);
@@ -2092,7 +2113,7 @@ function autoCard(){
     const ns=d.noShow||{}, ob=d.onboarding||{}; const anyOn=ns.enabled||ob.enabled;
     card.innerHTML=''; card.style.border='1px solid '+(anyOn?'var(--brand)':'var(--line)');
     const topb=el('div'); topb.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
-    const left=el('div'); left.innerHTML='<div class="sect-label" style="margin:0">🔁 MORE INSTANT AUTOMATIONS '+ovPill(anyOn)+'</div><p class="mdesc" style="margin:6px 0 0;max-width:640px">Two more plays Miles runs the moment they fire in GoHighLevel.</p>';
+    const left=el('div'); left.innerHTML='<div class="sect-label" style="margin:0">MORE INSTANT AUTOMATIONS '+ovPill(anyOn)+'</div><p class="mdesc" style="margin:6px 0 0;max-width:640px">Two more plays Miles runs the moment they fire in GoHighLevel.</p>';
     const trig=el('button','ghost','🔁 Instant triggers'); trig.onclick=openAutoTriggers;
     topb.append(left,trig); card.append(topb);
     const rows=el('div'); rows.style.cssText='display:flex;flex-direction:column;gap:0;margin-top:10px';
@@ -2126,7 +2147,7 @@ function reviewCard(){
     let d={}; if(REMOTE){ try{ d=await(await fetch('/api/review-request')).json(); }catch(e){} }
     const on=!!d.enabled; card.innerHTML=''; card.style.border='1px solid '+(on?'var(--brand)':'var(--line)');
     const topb=el('div'); topb.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
-    const left=el('div'); left.innerHTML='<div class="sect-label" style="margin:0">⭐ REVIEW REQUESTS '+ovPill(on)+'</div><p class="mdesc" style="margin:6px 0 0;max-width:640px">When a job is marked complete, Miles texts a 1-10 ask. <b>9-10</b> get your Google review link; <b>1-8</b> route to a private service-recovery call — never the public link.</p>';
+    const left=el('div'); left.innerHTML='<div class="sect-label" style="margin:0">REVIEW REQUESTS '+ovPill(on)+'</div><p class="mdesc" style="margin:6px 0 0;max-width:640px">When a job is marked complete, Miles texts a 1-10 ask. <b>9-10</b> get your Google review link; <b>1-8</b> route to a private service-recovery call — never the public link.</p>';
     const acts=el('div'); acts.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
     const trig=el('button','ghost','⭐ Instant triggers'); trig.onclick=openReviewTriggers;
     const toggle=el('button','go',on?'Turn off':'Turn on'); toggle.onclick=async()=>{ toggle.disabled=true; try{ await fetch('/api/review-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({enabled:!on})}); }catch(e){} openOverview(); };
@@ -2180,7 +2201,7 @@ function stlCard(st){
   const card=el('div','mcard'); card.style.cssText='margin:16px 0;border:1px solid '+(on?'var(--brand)':'var(--line)');
   const topb=el('div'); topb.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
   const left=el('div');
-  left.innerHTML='<div class="sect-label" style="margin:0">⚡ SPEED-TO-LEAD '+ovPill(on)+'</div>'
+  left.innerHTML='<div class="sect-label" style="margin:0">SPEED-TO-LEAD '+ovPill(on)+'</div>'
     +'<p class="mdesc" style="margin:6px 0 0;max-width:640px">78% of homeowners hire whoever answers first. When on, Miles texts &amp; emails every new lead within a minute — then hands off to nurture.</p>';
   const acts=el('div'); acts.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
   const trig=el('button','ghost','⚡ Instant triggers'); trig.onclick=openStlTriggers;
@@ -2510,12 +2531,12 @@ function ccSpark(series){ if(!series||series.length<2) return el('span');
   const pts=series.map((v,i)=>((i/(series.length-1))*w).toFixed(1)+','+(h-((v-min)/((max-min)||1))*(h-4)-2).toFixed(1)).join(' ');
   const NS='http://www.w3.org/2000/svg'; const svg=document.createElementNS(NS,'svg');
   svg.setAttribute('viewBox','0 0 '+w+' '+h); svg.style.cssText='width:110px;height:26px;overflow:visible;display:block';
-  const p=document.createElementNS(NS,'polyline'); p.setAttribute('points',pts); p.setAttribute('fill','none'); p.setAttribute('stroke','#6366f1'); p.setAttribute('stroke-width','1.6'); svg.append(p); return svg; }
+  const p=document.createElementNS(NS,'polyline'); p.setAttribute('points',pts); p.setAttribute('fill','none'); p.setAttribute('stroke','var(--ink)'); p.setAttribute('stroke-width','1.6'); svg.append(p); return svg; }
 function ccDelta(m){ const d=el('span'); if(!m||!isFinite(m.prior_value)||!m.prior_value) return d;
   const pct=((m.value-m.prior_value)/Math.abs(m.prior_value))*100; const up=pct>=0;
   const good=m.direction==='neutral'?null:((m.direction==='up_good')===up);
   d.textContent=(up?'▲ ':'▼ ')+Math.abs(pct).toFixed(0)+'% vs prior';
-  d.style.cssText='font-size:11.5px;font-weight:700;color:'+(good==null?'var(--muted)':(good?'#16a34a':'#dc2626')); return d; }
+  d.style.cssText='font-size:11.5px;font-weight:700;color:'+(good==null?'var(--muted)':(good?'var(--good)':'var(--bad)')); return d; }
 function ccEntry(key){ return CC.catalog.find(m=>m.key===key); }
 async function ccResolve(keys){ const need=[...new Set(keys)].filter(Boolean); if(!need.length) return;
   try{ const r=await(await fetch('/api/metrics/resolve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({keys:need,days:CC.days})})).json();
@@ -2535,7 +2556,7 @@ function ccKpiCard(key){
   return c; }
 function ccSourceTag(source){
   const tag=el('span',null,source==='live'?'LIVE':'SAMPLE');
-  tag.style.cssText='font-size:9px;font-weight:800;letter-spacing:.04em;align-self:flex-start;padding:1px 6px;border-radius:999px;'+(source==='live'?'background:#dcfce7;color:#166534':'background:#fef3c7;color:#92400e');
+  tag.style.cssText='font-size:9px;font-weight:800;letter-spacing:.04em;align-self:flex-start;padding:1px 6px;border-radius:999px;'+(source==='live'?'background:var(--good-tint);color:var(--good)':'background:var(--warn-tint);color:var(--warn)');
   return tag; }
 
 function ccFunnelPanel(){
@@ -2547,14 +2568,14 @@ function ccFunnelPanel(){
     if(i>1&&stages[i-1][1]>0){ const drop=1-(v/stages[i-1][1]); if(drop>worst.drop){worst={drop,idx:i};} }
     const row=el('div'); row.style.cssText='display:flex;align-items:center;gap:10px;margin:7px 0';
     const lab=el('div','appsub',name); lab.style.cssText='width:92px;flex:none;font-weight:600'; row.append(lab);
-    const barWrap=el('div'); barWrap.style.cssText='flex:1;background:var(--panel2,#f1f5f9);border-radius:6px;height:18px;overflow:hidden';
-    const bar=el('div'); const w=Math.max(3,Math.pow(v/first,0.32)*100); bar.style.cssText='height:100%;width:'+w.toFixed(1)+'%;background:linear-gradient(90deg,#6366f1,#8b5cf6);border-radius:6px'; barWrap.append(bar); row.append(barWrap);
+    const barWrap=el('div'); barWrap.style.cssText='flex:1;background:var(--panel2,var(--panel-2));border-radius:6px;height:18px;overflow:hidden';
+    const bar=el('div'); const w=Math.max(3,Math.pow(v/first,0.32)*100); bar.style.cssText='height:100%;width:'+w.toFixed(1)+'%;background:var(--ink);border-radius:6px'; barWrap.append(bar); row.append(barWrap);
     const num=el('div',null,Math.round(v).toLocaleString()); num.style.cssText='width:74px;text-align:right;font-weight:700;font-size:13px'; row.append(num);
     const pct=el('div','appsub',i>0&&stages[i-1][1]>0?((v/stages[i-1][1])*100).toFixed(0)+'%':''); pct.style.cssText='width:44px;text-align:right'; row.append(pct);
     c.append(row);
   });
   const rev=el('div','appsub','Revenue attributed: '+ccFmt('currency',g('crm.job_revenue'))); rev.style.marginTop='6px'; c.append(rev);
-  if(worst.idx>0){ const call=el('div',null,'⚠ Biggest leak: '+stages[worst.idx-1][0]+' → '+stages[worst.idx][0]+' ('+((1-worst.drop)*100).toFixed(0)+'% convert). Run the CPL + Funnel Reader for the fix order.'); call.style.cssText='margin-top:8px;font-size:12.5px;color:#b91c1c;font-weight:600'; c.append(call); }
+  if(worst.idx>0){ const call=el('div',null,'⚠ Biggest leak: '+stages[worst.idx-1][0]+' → '+stages[worst.idx][0]+' ('+((1-worst.drop)*100).toFixed(0)+'% convert). Run the CPL + Funnel Reader for the fix order.'); call.style.cssText='margin-top:8px;font-size:12.5px;color:var(--bad);font-weight:600'; c.append(call); }
   return c; }
 
 function ccChannelsPanel(){
@@ -2572,7 +2593,7 @@ function ccChannelsPanel(){
   rows.forEach(([name,spend,impr,clicks,leads])=>{
     const tr=el('tr');
     const cells=[name, spend?ccFmt('currency',spend):'$0', Math.round(impr).toLocaleString(), clicks!=null&&impr?((clicks/impr)*100).toFixed(1)+'%':'—', Math.round(leads).toLocaleString(), leads?ccFmt('currency',spend/leads):(spend?'—':'free')];
-    cells.forEach((v,i)=>{const td=el('td',null,String(v)); td.style.cssText='padding:7px 8px;text-align:right;border-bottom:1px solid var(--line,#f1f5f9)'; if(i===0){td.style.textAlign='left';td.style.fontWeight='600';} tr.append(td);});
+    cells.forEach((v,i)=>{const td=el('td',null,String(v)); td.style.cssText='padding:7px 8px;text-align:right;border-bottom:1px solid var(--line,var(--panel-2))'; if(i===0){td.style.textAlign='left';td.style.fontWeight='600';} tr.append(td);});
     t.append(tr);
   });
   wrap.append(t); c.append(wrap);
@@ -2580,7 +2601,7 @@ function ccChannelsPanel(){
   return c; }
 
 function ccStatusChip(status){
-  const m={needs_approval:['NEEDS APPROVAL','#fef3c7;color:#92400e'],approved:['APPROVED','#dcfce7;color:#166534'],executed:['EXECUTED','#dcfce7;color:#166534'],dismissed:['DISMISSED','var(--panel2,#eef2f6);color:var(--muted)'],read_only:['READ ONLY','#e0e7ff;color:#3730a3']};
+  const m={needs_approval:['NEEDS APPROVAL','var(--warn-tint);color:var(--warn)'],approved:['APPROVED','var(--good-tint);color:var(--good)'],executed:['EXECUTED','var(--good-tint);color:var(--good)'],dismissed:['DISMISSED','var(--panel2,var(--panel-2));color:var(--muted)'],read_only:['READ ONLY','var(--accent-soft);color:var(--accent)']};
   const [lab,style]=m[status]||m.read_only; const s=el('span',null,lab); s.style.cssText='font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;background:'+style; return s; }
 
 async function ccSkillsPanel(){
@@ -2588,7 +2609,7 @@ async function ccSkillsPanel(){
   let d={skills:[],runs:[]}; try{ d=await(await fetch('/api/skills7')).json(); }catch(e){}
   const btns=el('div'); btns.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px';
   (d.skills||[]).forEach(s=>{
-    const b=el('button',null,'▶ '+s.name); b.title=s.what; b.style.cssText='font-size:11.5px;padding:5px 9px;border:1px solid var(--line);border-radius:999px;background:var(--panel-2,#f8fafc);cursor:pointer;font-weight:600';
+    const b=el('button',null,'▶ '+s.name); b.title=s.what; b.style.cssText='font-size:11.5px;padding:5px 9px;border:1px solid var(--line);border-radius:999px;background:var(--panel-2,var(--panel-2));cursor:pointer;font-weight:600';
     b.onclick=async()=>{ b.disabled=true; const o=b.textContent; b.textContent='Running…';
       try{ const r=await(await fetch('/api/skills7/'+s.key+'/run',{method:'POST'})).json(); if(r.run) toast('✓ '+s.name+' finished'); }catch(e){ toast('Skill run failed.'); }
       b.disabled=false; b.textContent=o; openCmdCenter(); };
@@ -2598,7 +2619,7 @@ async function ccSkillsPanel(){
   const runs=(d.runs||[]).slice(0,8);
   if(!runs.length){ c.append(el('p','appsub','No skill runs yet — press a skill above. Every run is a proposal: Miles never changes an ad account without your approval.')); return c; }
   runs.forEach(r=>{
-    const row=el('div'); row.style.cssText='padding:8px 0;border-top:1px solid var(--line,#f1f5f9)';
+    const row=el('div'); row.style.cssText='padding:8px 0;border-top:1px solid var(--line,var(--panel-2))';
     const top=el('div'); top.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap';
     top.append(el('b',null,r.name)); top.append(ccStatusChip(r.status));
     if(r.source==='sample'){ const sm=el('span','appsub','sample data'); sm.style.fontSize='10.5px'; top.append(sm); }
@@ -2607,10 +2628,10 @@ async function ccSkillsPanel(){
     (r.details||[]).slice(0,4).forEach(x=>{ const li=el('div','appsub','· '+x); li.style.marginLeft='6px'; row.append(li); });
     if(r.status==='needs_approval'){
       const act=el('div'); act.style.cssText='display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap';
-      const ap=el('button',null,'Approve'); ap.style.cssText='font-size:11.5px;padding:4px 12px;border-radius:7px;border:none;background:#16a34a;color:#fff;font-weight:700;cursor:pointer';
+      const ap=el('button',null,'Approve'); ap.style.cssText='font-size:11.5px;padding:4px 12px;border-radius:7px;border:none;background:var(--primary);color:var(--primary-ink);font-weight:600;cursor:pointer';
       if(r.approve_disabled_reason){ ap.disabled=true; ap.style.opacity='.45'; ap.style.cursor='not-allowed'; ap.title=r.approve_disabled_reason; }
       else ap.onclick=async()=>{ await fetch('/api/skills7/act',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id,action:'approve'})}); openCmdCenter(); };
-      const di=el('button',null,'Dismiss'); di.style.cssText='font-size:11.5px;padding:4px 12px;border-radius:7px;border:1px solid var(--line);background:var(--panel-2,#f8fafc);cursor:pointer';
+      const di=el('button',null,'Dismiss'); di.style.cssText='font-size:11.5px;padding:4px 12px;border-radius:7px;border:1px solid var(--line);background:var(--panel-2,var(--panel-2));cursor:pointer';
       di.onclick=async()=>{ await fetch('/api/skills7/act',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id,action:'dismiss'})}); openCmdCenter(); };
       act.append(ap,di); if(r.approve_disabled_reason){ const why=el('span','appsub',r.approve_disabled_reason); why.style.fontSize='10.5px'; act.append(why); } row.append(act);
     }
@@ -2630,7 +2651,7 @@ function ccWidgetCard(w,idx){
     showModal('<h3 style="margin:0 0 10px">'+esc(w.custom_label||(entry?entry.label:w.metric_key))+'</h3><div style="display:flex;flex-direction:column;gap:8px">'
       +'<button id="ccw-rename" class="go" style="background:var(--panel-2);color:var(--ink,#111);border:1px solid var(--line)">Rename</button>'
       +'<button id="ccw-size" class="go" style="background:var(--panel-2);color:var(--ink,#111);border:1px solid var(--line)">Resize (now '+(w.size||'1x1')+')</button>'
-      +'<button id="ccw-del" class="go" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca">Delete card</button></div>');
+      +'<button id="ccw-del" class="go" style="background:var(--bad-tint);color:var(--bad);border:1px solid var(--line)">Delete card</button></div>');
     $('#ccw-rename').onclick=()=>{ const nn=prompt('Card name',w.custom_label||(entry?entry.label:'')); if(nn!=null){ w.custom_label=nn.trim()||null; ccSaveLayout().then(renderCmdCenter); } closeModal(); };
     $('#ccw-size').onclick=()=>{ w.size=(w.size==='1x1'||!w.size)?'2x1':(w.size==='2x1'?'2x2':'1x1'); ccSaveLayout().then(renderCmdCenter); closeModal(); };
     $('#ccw-del').onclick=()=>{ CC.layout.widgets=CC.layout.widgets.filter(x=>x!==w); ccSaveLayout().then(renderCmdCenter); closeModal(); }; };
@@ -2645,12 +2666,12 @@ function ccWidgetCard(w,idx){
 
 function ccAddModal(){
   const conn=CC_PLATFORMS.map(([k,lab])=>{ const on=ccConnected(k);
-    return '<button data-plat="'+k+'" '+(on?'':'disabled title="Connect in Integrations first"')+' style="font-size:11.5px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2,#f8fafc);cursor:'+(on?'pointer':'not-allowed')+';opacity:'+(on?'1':'.5')+'">'+lab+(on?'':' — connect')+'</button>'; }).join(' ');
+    return '<button data-plat="'+k+'" '+(on?'':'disabled title="Connect in Integrations first"')+' style="font-size:11.5px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2,var(--panel-2));cursor:'+(on?'pointer':'not-allowed')+';opacity:'+(on?'1':'.5')+'">'+lab+(on?'':' — connect')+'</button>'; }).join(' ');
   showModal('<h3 style="margin:0 0 6px">Add a metric card</h3><p class="mdesc" style="margin:0 0 10px">Pick a platform, then a metric. Disabled platforms need a connection first (Integrations).</p><div id="cca-plats" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">'+conn+'</div><input id="cca-search" class="f" placeholder="Search metrics…" style="width:100%;margin-bottom:8px;display:none"><div id="cca-list" style="max-height:280px;overflow:auto"></div>');
   let plat=null;
   const renderList=()=>{ const list=$('#cca-list'); const q=($('#cca-search').value||'').toLowerCase(); list.innerHTML='';
     CC.catalog.filter(m=>m.platform===plat&&(!q||m.label.toLowerCase().includes(q)||m.key.includes(q))).forEach(m=>{
-      const row=el('button'); row.style.cssText='display:block;width:100%;text-align:left;padding:8px 10px;border:none;background:none;cursor:pointer;border-top:1px solid var(--line,#f1f5f9)';
+      const row=el('button'); row.style.cssText='display:block;width:100%;text-align:left;padding:8px 10px;border:none;background:none;cursor:pointer;border-top:1px solid var(--line,var(--panel-2))';
       row.innerHTML='<b style="font-size:13px">'+esc(m.label)+'</b> <span class="appsub" style="font-size:11px">'+esc(m.description)+'</span>';
       row.onclick=()=>{ CC.layout.widgets.push({id:'w'+Date.now(),metric_key:m.key,card_type:m.default_card||'number_spark',size:'1x1',position:CC.layout.widgets.length,custom_label:null});
         ccSaveLayout().then(()=>{ closeModal(); openCmdCenter(); }); };
@@ -2674,8 +2695,8 @@ async function renderCmdCenter(){
   const bar=el('div'); bar.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap';
   const range=el('select','f'); [['7','Last 7 days'],['30','Last 30 days'],['90','Last 90 days']].forEach(([v,lab])=>{const o=el('option',null,lab);o.value=v;if(Number(v)===CC.days)o.selected=true;range.append(o);});
   range.onchange=()=>{ CC.days=Number(range.value); CC.metrics={}; openCmdCenter(); }; bar.append(range);
-  const badge=el('span',null,anyLive?'● Live data':'● Sample data — connect a source'); badge.style.cssText='font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px;'+(anyLive?'background:#dcfce7;color:#166534':'background:#fef3c7;color:#92400e'); bar.append(badge);
-  const reset=el('button',null,'Reset to default'); reset.style.cssText='margin-left:auto;font-size:11.5px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2,#f8fafc);cursor:pointer';
+  const badge=el('span',null,anyLive?'● Live data':'● Sample data — connect a source'); badge.style.cssText='font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px;'+(anyLive?'background:var(--good-tint);color:var(--good)':'background:var(--warn-tint);color:var(--warn)'); bar.append(badge);
+  const reset=el('button',null,'Reset to default'); reset.style.cssText='margin-left:auto;font-size:11.5px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2,var(--panel-2));cursor:pointer';
   reset.onclick=()=>{ CC.layout.widgets=[]; ccSaveLayout().then(openCmdCenter); }; bar.append(reset);
   box.append(bar);
   const strip=el('div'); strip.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:14px';
@@ -2688,7 +2709,7 @@ async function renderCmdCenter(){
   const gridCard=ccPanel('YOUR METRICS — ADD ANY OF '+CC.catalog.length);
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));grid-auto-rows:minmax(96px,auto);gap:10px;margin-top:8px';
   CC.layout.widgets.forEach((w,i)=>grid.append(ccWidgetCard(w,i)));
-  const plus=el('button',null,'+ Add metric'); plus.style.cssText='border:2px dashed var(--line,#cbd5e1);border-radius:12px;background:none;color:var(--muted);font-weight:700;cursor:pointer;min-height:96px';
+  const plus=el('button',null,'+ Add metric'); plus.style.cssText='border:2px dashed var(--line,var(--line));border-radius:12px;background:none;color:var(--muted);font-weight:700;cursor:pointer;min-height:96px';
   plus.onclick=ccAddModal; grid.append(plus);
   gridCard.append(grid); box.append(gridCard);
 }
@@ -2709,19 +2730,19 @@ async function openBilling(){
   pc.append(spendLine);
   // Credits bar
   const c=d.credits; const pct=c.granted?Math.max(0,Math.min(100,(c.remaining/c.granted)*100)):0;
-  const barWrap=el('div'); barWrap.style.cssText='background:var(--panel2,#f1f5f9);border-radius:8px;height:22px;overflow:hidden;margin:10px 0 4px';
-  const bar=el('div'); bar.style.cssText='height:100%;width:'+pct.toFixed(1)+'%;background:linear-gradient(90deg,#16a34a,#4ade80);border-radius:8px'; barWrap.append(bar);
+  const barWrap=el('div'); barWrap.style.cssText='background:var(--panel2,var(--panel-2));border-radius:8px;height:22px;overflow:hidden;margin:10px 0 4px';
+  const bar=el('div'); bar.style.cssText='height:100%;width:'+pct.toFixed(1)+'%;background:var(--good);border-radius:8px'; barWrap.append(bar);
   pc.append(barWrap);
   pc.append(el('div','appsub','$'+c.remaining.toFixed(2)+' of $'+c.granted.toFixed(2)+' in credits remaining · $'+c.spent.toFixed(2)+' used'));
-  const honest=el('p','appsub',d.note); honest.style.cssText='margin-top:10px;padding:8px 10px;background:var(--panel-2,#f8fafc);border-radius:8px;font-size:11.5px'; pc.append(honest);
+  const honest=el('p','appsub',d.note); honest.style.cssText='margin-top:10px;padding:8px 10px;background:var(--panel-2,var(--panel-2));border-radius:8px;font-size:11.5px'; pc.append(honest);
   box.append(pc);
   // Bands table
   const bc=el('div','mcard'); bc.style.marginTop='12px'; bc.append(el('div','sect-label','PAID BANDS — FLAT PRICE BY AD SPEND, NEVER A PERCENTAGE'));
   const wrap=el('div'); wrap.style.overflowX='auto'; const t=el('table'); t.style.cssText='width:100%;border-collapse:collapse;font-size:12.5px';
   const hd=el('tr'); ['Band','Monthly ad spend','Price','Credits included','Auto top-up'].forEach(h=>{const th=el('th',null,h); th.style.cssText='text-align:left;padding:6px 8px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line,#e5e7eb)'; hd.append(th);}); t.append(hd);
   d.bands.forEach(b=>{
-    const tr=el('tr'); if(d.impliedBand&&b.key===d.impliedBand.key) tr.style.background='var(--panel-2,#f8fafc)';
-    [(b.key===((d.impliedBand||{}).key)?'▸ ':'')+b.name, b.spendMax?('$'+b.spendMin.toLocaleString()+' – $'+b.spendMax.toLocaleString()):('Over $'+b.spendMin.toLocaleString()), '$'+b.monthlyPrice+'/mo', '$'+b.monthlyCredits+'/mo', '$'+b.topUp].forEach((v,i)=>{const td=el('td',null,v); td.style.cssText='padding:7px 8px;border-bottom:1px solid var(--line,#f1f5f9)'+(i===0?';font-weight:600':''); tr.append(td);});
+    const tr=el('tr'); if(d.impliedBand&&b.key===d.impliedBand.key) tr.style.background='var(--panel-2,var(--panel-2))';
+    [(b.key===((d.impliedBand||{}).key)?'▸ ':'')+b.name, b.spendMax?('$'+b.spendMin.toLocaleString()+' – $'+b.spendMax.toLocaleString()):('Over $'+b.spendMin.toLocaleString()), '$'+b.monthlyPrice+'/mo', '$'+b.monthlyCredits+'/mo', '$'+b.topUp].forEach((v,i)=>{const td=el('td',null,v); td.style.cssText='padding:7px 8px;border-bottom:1px solid var(--line,var(--panel-2))'+(i===0?';font-weight:600':''); tr.append(td);});
     t.append(tr);
   });
   wrap.append(t); bc.append(wrap);
@@ -2731,7 +2752,7 @@ async function openBilling(){
   const wc=el('div','mcard'); wc.style.marginTop='12px'; wc.append(el('div','sect-label','WHAT USES CREDITS (MONITORING NEVER DOES)'));
   const names={campaign_build:'Campaign build',campaign_launch:'Campaign launch',ai_autofill:'AI auto-fill',skill_run:'Skill run',weekly_readout:'Weekly readout',email_send:'Email send',creative_generation:'Creative generation'};
   Object.entries(d.workCosts||{}).forEach(([k,v])=>{
-    const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line,#f1f5f9);font-size:12.5px';
+    const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line,var(--panel-2));font-size:12.5px';
     row.append(el('span',null,names[k]||k), el('b',null,'$'+Number(v).toFixed(2))); wc.append(row);
   });
   wc.append(el('p','appsub','Dashboards, metric pulls, pacing checks, alerts, and the funnel — always free. You are never charged for letting Miles watch the account.'));
@@ -2740,7 +2761,7 @@ async function openBilling(){
   const lc=el('div','mcard'); lc.style.marginTop='12px'; lc.append(el('div','sect-label','CREDIT USAGE'));
   if(!(d.ledger||[]).length) lc.append(el('p','appsub','No credits used yet. Work items (builds, launches, skill runs, sends) will appear here with their cost.'));
   (d.ledger||[]).forEach(e=>{
-    const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line,#f1f5f9);font-size:12.5px';
+    const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line,var(--panel-2));font-size:12.5px';
     const l=el('div'); l.append(el('b',null,(names[e.item]||e.item))); if(e.note) l.append(el('span','appsub',' · '+e.note)); l.append(el('div','appsub',new Date(e.ts).toLocaleString()));
     row.append(l, el('b',null,'-$'+Number(e.cost).toFixed(2))); lc.append(row);
   });
@@ -2749,7 +2770,7 @@ async function openBilling(){
 
 // ── Approvals & Autonomy — the authoritative record + the rules (ToS §3) ──
 function apKindChip(kind){
-  const m={proposal:['PROPOSAL','#e0e7ff;color:#3730a3'],approval:['APPROVED','#dcfce7;color:#166534'],action:['ACTION','#fef9c3;color:#854d0e'],dismissal:['DISMISSED','var(--panel2,#eef2f6);color:var(--muted)']};
+  const m={proposal:['PROPOSAL','var(--accent-soft);color:var(--accent)'],approval:['APPROVED','var(--good-tint);color:var(--good)'],action:['ACTION','var(--warn-tint);color:var(--warn)'],dismissal:['DISMISSED','var(--panel2,var(--panel-2));color:var(--muted)']};
   const [lab,style]=m[kind]||m.action; const s=el('span',null,lab); s.style.cssText='font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;flex:none;background:'+style; return s;
 }
 async function openApprovals(){
@@ -2764,7 +2785,7 @@ async function openApprovals(){
   ac.append(el('p','appsub','Default is Proposal mode: Miles proposes, you approve, nothing changes in an ad account without a logged yes. Setting a skill to Auto is a standing approval within the caps below — it takes effect once that platform has write access, and every automatic action still lands in the log.'));
   const skillRows=el('div');
   (sk.skills||[]).filter(s=>['loser-pauser','budget-shifter'].includes(s.key)).forEach(s=>{
-    const row=el('div'); row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line,#f1f5f9)';
+    const row=el('div'); row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line,var(--panel-2))';
     const t=el('div'); t.style.flex='1'; t.append(el('b',null,s.name)); t.append(el('div','appsub',s.what));
     const sel=el('select','f'); [['proposal','Propose — ask me every time'],['auto','Auto — within my caps']].forEach(([v,lab])=>{const o=el('option',null,lab);o.value=v;if((au.perSkill[s.key]||'proposal')===v)o.selected=true;sel.append(o);});
     sel.onchange=()=>{ au.perSkill[s.key]=sel.value; };
@@ -2787,7 +2808,7 @@ async function openApprovals(){
   const lc=el('div','mcard'); lc.style.marginTop='12px';
   const head=el('div'); head.style.cssText='display:flex;align-items:center;gap:10px';
   const lab=el('div','sect-label','APPROVAL LOG — THE AUTHORITATIVE RECORD'); lab.style.flex='1'; head.append(lab);
-  const exp=el('button',null,'⬇ Export CSV'); exp.style.cssText='font-size:11.5px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2,#f8fafc);cursor:pointer';
+  const exp=el('button',null,'⬇ Export CSV'); exp.style.cssText='font-size:11.5px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2,var(--panel-2));cursor:pointer';
   exp.onclick=()=>{ const rows=[['time','kind','actor','source','title','detail']].concat((d.entries||[]).map(e=>[e.ts,e.kind,e.actor,e.source,e.title,e.detail||'']));
     const csv=rows.map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n');
     const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download='miles-approval-log.csv'; a.click(); };
@@ -2796,7 +2817,7 @@ async function openApprovals(){
   const entries=(d.entries||[]);
   if(!entries.length) lc.append(el('p','appsub','Nothing logged yet. Launch a campaign, run a skill, or send an email — every decision lands here.'));
   entries.slice(0,50).forEach(e=>{
-    const row=el('div'); row.style.cssText='display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-top:1px solid var(--line,#f1f5f9)';
+    const row=el('div'); row.style.cssText='display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-top:1px solid var(--line,var(--panel-2))';
     row.append(apKindChip(e.kind));
     const t=el('div'); t.style.flex='1';
     const l1=el('div',null,e.title); l1.style.cssText='font-size:13px;font-weight:600'; t.append(l1);
@@ -2812,8 +2833,8 @@ function lpScoreRing(score,max,label){
   const pct=max?Math.round((score/max)*100):0;
   const wrap=el('div'); wrap.style.cssText='display:flex;align-items:center;gap:12px';
   const ring=el('div',null,pct+'%');
-  const col=pct>=80?'#16a34a':pct>=50?'#f59e0b':'#dc2626';
-  ring.style.cssText='width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:'+col+';background:conic-gradient('+col+' '+(pct*3.6)+'deg,var(--panel2,#eef2f6) 0);position:relative';
+  const col=pct>=80?'var(--good)':pct>=50?'var(--warn)':'var(--bad)';
+  ring.style.cssText='width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:'+col+';background:conic-gradient('+col+' '+(pct*3.6)+'deg,var(--panel2,var(--panel-2)) 0);position:relative';
   const inner=el('div',null,pct+'%'); inner.style.cssText='width:50px;height:50px;border-radius:50%;background:var(--panel,#fff);display:flex;align-items:center;justify-content:center';
   ring.textContent=''; ring.append(inner);
   const t=el('div'); t.append(el('b',null,label)); const s=el('div','appsub',score+' of '+max+' points'); t.append(s);
@@ -2822,7 +2843,7 @@ function lpScoreRing(score,max,label){
 function lpChip(cur,val,text,color){
   const b=el('button',null,text);
   const on=cur===val;
-  b.style.cssText='font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;cursor:pointer;border:1px solid '+(on?color:'var(--line)')+';background:'+(on?color:'var(--panel-2,#f8fafc)')+';color:'+(on?'#fff':'var(--muted)');
+  b.style.cssText='font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;cursor:pointer;border:1px solid '+(on?color:'var(--line)')+';background:'+(on?color:'var(--panel-2,var(--panel-2))')+';color:'+(on?'#fff':'var(--muted)');
   return b;
 }
 async function lpSave(key,val){ try{ await fetch('/api/localpresence',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({answers:{[key]:val}})}); }catch(e){} openLocalPresence(); }
@@ -2830,10 +2851,10 @@ function lpAuditCard(title,intro,items){
   const c=el('div','mcard'); c.style.marginTop='12px'; c.append(el('div','sect-label',title));
   c.append(el('p','appsub',intro));
   items.forEach(i=>{
-    const row=el('div'); row.style.cssText='display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:1px solid var(--line,#f1f5f9)';
+    const row=el('div'); row.style.cssText='display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:1px solid var(--line,var(--panel-2))';
     const chips=el('div'); chips.style.cssText='display:flex;gap:4px;flex:none;margin-top:1px';
-    const y=lpChip(i.answer,'yes','✓','#16a34a'); y.onclick=()=>lpSave(i.key,'yes');
-    const n=lpChip(i.answer,'no','✗','#dc2626'); n.onclick=()=>lpSave(i.key,'no');
+    const y=lpChip(i.answer,'yes','✓','var(--good)'); y.onclick=()=>lpSave(i.key,'yes');
+    const n=lpChip(i.answer,'no','✗','var(--bad)'); n.onclick=()=>lpSave(i.key,'no');
     const u=lpChip(i.answer,'unknown','?','#64748b'); u.onclick=()=>lpSave(i.key,'unknown');
     chips.append(y,n,u); row.append(chips);
     const t=el('div'); t.style.flex='1';
@@ -2858,8 +2879,8 @@ async function openLocalPresence(){
   if(a.priorities&&a.priorities.length){
     const pc=el('div','mcard'); pc.style.marginTop='12px'; pc.append(el('div','sect-label','FIX THESE FIRST'));
     a.priorities.forEach((p,i)=>{
-      const row=el('div'); row.style.cssText='display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line,#f1f5f9)';
-      const num=el('div',null,String(i+1)); num.style.cssText='width:22px;height:22px;border-radius:50%;background:#fef3c7;color:#92400e;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex:none';
+      const row=el('div'); row.style.cssText='display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line,var(--panel-2))';
+      const num=el('div',null,String(i+1)); num.style.cssText='width:22px;height:22px;border-radius:50%;background:var(--warn-tint);color:var(--warn);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex:none';
       const t=el('div'); const lab=el('div',null,'['+p.area+'] '+p.label); lab.style.cssText='font-size:13px;font-weight:600'; t.append(lab); t.append(el('div','appsub',p.why));
       row.append(num,t); pc.append(row);
     });
@@ -2872,13 +2893,13 @@ async function openLocalPresence(){
 // ── Campaign Playbook — expert paid-social strategic build ──
 // ── System Health: what's actually working, at a glance ──
 function healthDot(status){
-  const m={live:['#16a34a','Sending live'],ok:['#16a34a','Working'],hold:['#f59e0b','Holding'],off:['#94a3b8','Off'],todo:['#f59e0b','To do']};
+  const m={live:['var(--good)','Sending live'],ok:['var(--good)','Working'],hold:['var(--warn)','Holding'],off:['var(--muted)','Off'],todo:['var(--warn)','To do']};
   const [c,lab]=m[status]||m.todo; const s=el('span',null,''); s.style.cssText='display:inline-block;width:9px;height:9px;border-radius:50%;background:'+c;s.title=lab; return s;
 }
 function healthRow(name,status,note){
   const r=el('div'); r.style.cssText='display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line,#e5e7eb)';
   r.append(healthDot(status)); const l=el('div'); l.style.flex='1'; l.append(el('b',null,name)); if(note){ const n=el('div','appsub',note); n.style.marginTop='1px'; l.append(n); } r.append(l);
-  const badge=el('span',null,({live:'LIVE',ok:'OK',hold:'HOLDING',off:'OFF',todo:'TO DO'})[status]||status); badge.style.cssText='font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;'+(status==='live'||status==='ok'?'background:#dcfce7;color:#166534':status==='off'?'background:var(--panel2,#eef2f6);color:var(--muted)':'background:#fef3c7;color:#92400e'); r.append(badge);
+  const badge=el('span',null,({live:'LIVE',ok:'OK',hold:'HOLDING',off:'OFF',todo:'TO DO'})[status]||status); badge.style.cssText='font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;'+(status==='live'||status==='ok'?'background:var(--good-tint);color:var(--good)':status==='off'?'background:var(--panel2,var(--panel-2));color:var(--muted)':'background:var(--warn-tint);color:var(--warn)'); r.append(badge);
   return r;
 }
 async function openHealth(){
@@ -2900,8 +2921,8 @@ async function openHealth(){
   sect('CONNECTIONS & KEYS', d.keys||[], k=>healthRow(k.name,k.done?'ok':'todo',k.note));
   // To-do checklist (the not-done keys + holding automations)
   const todo=[]; (d.keys||[]).forEach(k=>{ if(!k.done) todo.push(k.note); }); (d.automations||[]).forEach(a=>{ if(a.status==='hold') todo.push(a.name+': '+a.reason); });
-  if(todo.length){ const c=el('div','mcard'); c.style.cssText='margin-top:14px;border-left:3px solid #f59e0b'; c.append(el('div','sect-label','WHAT’S LEFT TO DO')); const ul=el('ul'); ul.style.cssText='margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px'; todo.forEach(t=>ul.append(el('li','appsub',t))); c.append(ul); box.append(c); }
-  else { const c=el('div','mcard'); c.style.cssText='margin-top:14px;border-left:3px solid var(--good,#16a34a)'; c.append(el('div','verdict tight','✅ Everything’s connected and live. Nothing waiting on you.')); box.append(c); }
+  if(todo.length){ const c=el('div','mcard'); c.style.cssText='margin-top:14px;border-left:3px solid var(--warn)'; c.append(el('div','sect-label','WHAT’S LEFT TO DO')); const ul=el('ul'); ul.style.cssText='margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px'; todo.forEach(t=>ul.append(el('li','appsub',t))); c.append(ul); box.append(c); }
+  else { const c=el('div','mcard'); c.style.cssText='margin-top:14px;border-left:3px solid var(--good,var(--good))'; c.append(el('div','verdict tight','✅ Everything’s connected and live. Nothing waiting on you.')); box.append(c); }
 }
 // ── Automation Hub: all five live instant plays, set up from one screen ──
 function ahUrlBlock(urls){
@@ -2910,11 +2931,11 @@ function ahUrlBlock(urls){
   return wrap;
 }
 function ahCard(o){
-  const card=el('div','mcard'); card.style.cssText='margin-bottom:14px;border-left:3px solid '+(o.on?'var(--good,#16a34a)':'var(--line,#e5e7eb)');
+  const card=el('div','mcard'); card.style.cssText='margin-bottom:14px;border-left:3px solid '+(o.on?'var(--good,var(--good))':'var(--line,#e5e7eb)');
   const top=el('div'); top.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
   const left=el('div'); left.style.flex='1'; left.innerHTML='<b style="font-size:15px">'+o.icon+' '+esc(o.title)+'</b><div class="appsub" style="margin-top:3px;max-width:520px">'+o.desc+'</div>';
   const right=el('div'); right.style.cssText='display:flex;gap:8px;align-items:center';
-  const pill=el('span',null,o.on?'ON':'OFF'); pill.style.cssText='font-size:11px;font-weight:800;padding:3px 9px;border-radius:999px;'+(o.on?'background:#dcfce7;color:#166534':'background:var(--panel2,#eef2f6);color:var(--muted)');
+  const pill=el('span',null,o.on?'ON':'OFF'); pill.style.cssText='font-size:11px;font-weight:800;padding:3px 9px;border-radius:999px;'+(o.on?'background:var(--good-tint);color:var(--good)':'background:var(--panel2,var(--panel-2));color:var(--muted)');
   const tog=el('button',o.on?'ghost':'go',o.on?'Turn off':'Turn on'); tog.onclick=o.onToggle;
   right.append(pill,tog); top.append(left,right); card.append(top);
   if(o.on){
@@ -2933,7 +2954,7 @@ async function openAutoHub(){
   box.innerHTML='';
   const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">⚙️ Automation Hub</h3><p class="mdesc" style="margin:6px 0 0;max-width:640px">The five instant plays Miles runs through GoHighLevel. Turn one on, open its <b>Connection URLs</b>, and paste the webhook into a one-step GHL workflow (Trigger → Webhook). Miles does the rest — instantly, gated, and logged.</p>'; box.append(h);
   const canSend = stl.canSend||rev.canSend||au.canSend;
-  if(!canSend){ const b=el('div','mcard'); b.style.borderLeft='3px solid #f59e0b'; b.append(el('div','verdict tight','Connect GoHighLevel in Integrations so these actually send. Until then Miles drafts each message and holds it.')); box.append(b); }
+  if(!canSend){ const b=el('div','mcard'); b.style.borderLeft='3px solid var(--warn)'; b.append(el('div','verdict tight','Connect GoHighLevel in Integrations so these actually send. Until then Miles drafts each message and holds it.')); box.append(b); }
   const ns=au.noShow||{}, ob=au.onboarding||{};
   const post=(url,body)=>fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).catch(()=>{});
   // 1 + 2: Speed-to-Lead (new lead + missed call share the responder)
@@ -2961,7 +2982,7 @@ async function openGhl(){
   const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">⚡ GoHighLevel Automations</h3><p class="mdesc" style="margin:6px 0 0;max-width:660px">A veteran operator’s 32-workflow library, tailored to '+esc(pb.business)+' ('+esc(pb.trade)+') and ordered by ROI. Each recipe is ready to build in GHL — trigger, steps, and timing. The ones Miles can run for you through your connected tools are flagged <b>Miles runs this</b>.</p>';
   box.append(h);
   // Honest scope note
-  const note=el('div','mcard'); note.style.borderLeft='3px solid #6366f1'; note.append(el('div','verdict tight','Heads up: GoHighLevel’s workflow builder isn’t fully open to automation, so Miles can’t silently create these 32 workflows inside your GHL account. What it does: hand you each recipe tailored & ready to paste, run the flagged ones natively, and order the build by what recovers revenue fastest.')); box.append(note);
+  const note=el('div','mcard'); note.style.borderLeft='3px solid var(--ink)'; note.append(el('div','verdict tight','Heads up: GoHighLevel’s workflow builder isn’t fully open to automation, so Miles can’t silently create these 32 workflows inside your GHL account. What it does: hand you each recipe tailored & ready to paste, run the flagged ones natively, and order the build by what recovers revenue fastest.')); box.append(note);
   // Stats
   const stats=el('div'); stats.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0';
   const sc=(k,v)=>{ const c=el('div','mcard'); c.style.padding='14px'; c.append(el('div','appsub',k)); const b=el('div',null,v); b.style.cssText='font-size:24px;font-weight:800;margin-top:2px'; c.append(b); return c; };
@@ -2971,7 +2992,7 @@ async function openGhl(){
   const bo=el('div','mcard'); bo.append(el('div','sect-label','BUILD ORDER — START HERE'));
   bo.append(el('p','appsub',pb.season.note));
   const bog=el('div'); bog.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:8px';
-  for(const w of pb.buildOrder){ const c=el('div'); c.style.cssText='border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:10px'; c.append(el('b',null,w.week)); c.append(el('div','appsub',w.focus)); const chips=el('div'); chips.style.cssText='display:flex;gap:5px;flex-wrap:wrap;margin-top:6px'; w.recipes.forEach(n=>{ const ch=el('span',null,'#'+n); ch.style.cssText='font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--panel2,#eef2ff);color:#3730a3'; chips.append(ch); }); c.append(chips); bog.append(c); }
+  for(const w of pb.buildOrder){ const c=el('div'); c.style.cssText='border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:10px'; c.append(el('b',null,w.week)); c.append(el('div','appsub',w.focus)); const chips=el('div'); chips.style.cssText='display:flex;gap:5px;flex-wrap:wrap;margin-top:6px'; w.recipes.forEach(n=>{ const ch=el('span',null,'#'+n); ch.style.cssText='font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--panel2,#eef2ff);color:var(--accent)'; chips.append(ch); }); c.append(chips); bog.append(c); }
   bo.append(bog); box.append(bo);
   // Recipes by section (expandable)
   for(const section of pb.sections){
@@ -2990,7 +3011,7 @@ function ghlRecipeRow(r){
   const nb=el('span',null,'#'+r.n); nb.style.cssText='font-size:12px;font-weight:700;color:var(--muted);min-width:26px';
   const t=el('b',null,r.title); t.style.flex='1';
   head.append(nb,t);
-  if(r.milesRuns){ const badge=el('span',null,'✓ Miles runs this'); badge.style.cssText='font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;color:#166534;background:#dcfce7'; head.append(badge); }
+  if(r.milesRuns){ const badge=el('span',null,'✓ Miles runs this'); badge.style.cssText='font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;color:var(--good);background:var(--good-tint)'; head.append(badge); }
   const chev=el('span',null,'▸'); chev.style.cssText='color:var(--muted);transition:transform .15s'; head.append(chev);
   row.append(head);
   const body=el('div'); body.style.cssText='display:none;margin:8px 0 4px 26px';
@@ -3008,8 +3029,8 @@ function ghlRecipeRow(r){
 // ── Launch on Facebook: business + offer → build → review → paused draft in Meta ──
 function fbConnBanner(status){
   const c=el('div','mcard');
-  if(status&&status.ready){ c.style.borderLeft='3px solid var(--good,#16a34a)'; c.append(el('div','verdict tight','✅ Connected to your Meta ad account ('+esc(status.account||'')+'). Campaigns build as a PAUSED draft you review before spending.')); }
-  else { c.style.borderLeft='3px solid #f59e0b';
+  if(status&&status.ready){ c.style.borderLeft='3px solid var(--good,var(--good))'; c.append(el('div','verdict tight','✅ Connected to your Meta ad account ('+esc(status.account||'')+'). Campaigns build as a PAUSED draft you review before spending.')); }
+  else { c.style.borderLeft='3px solid var(--warn)';
     const d=el('div'); d.innerHTML='<b>Connect your Meta ad account to launch.</b> Add these on Render (Environment), then reload — from your Meta ad account:<br><span class="appsub">• <code>META_ADS_ACCESS_TOKEN</code> — a token with ads_management<br>• <code>META_AD_ACCOUNT_ID</code> — your numeric ad-account id (no “act_”)<br>• <code>META_PAGE_ID</code> — the Facebook Page the ads run under</span><br><span class="appsub" style="margin-top:6px;display:block">Until then you can still build & review the full campaign below — the launch button just stays disabled.</span>';
     c.append(d);
   }
@@ -3060,10 +3081,10 @@ function renderFbReview(spec,issues,status){
   const av=el('div',null,(esc((spec.name||'A')[0]||'A')).toUpperCase()); av.style.cssText='width:32px;height:32px;border-radius:50%;background:#1877f2;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700'; ph.append(av); const pn=el('div'); pn.append(el('div',null,'Your Page')); const sp=el('div','appsub','Sponsored'); pn.append(sp); ph.append(pn); card.append(ph);
   const msg=el('div',null,spec.ad.primaryText); msg.style.cssText='padding:0 12px 10px;white-space:pre-line;font-size:14px'; card.append(msg);
   const img=el('div'); img.style.cssText='height:150px;background:linear-gradient(135deg,#0e7490,#155e75);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px'; img.textContent=spec.ad.headline; card.append(img);
-  const foot=el('div'); foot.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;background:var(--panel2,#f8fafc)'; const ft=el('div'); ft.append(el('div','appsub',(spec.website||'your website').replace(/^https?:\/\//,''))); const fh=el('div',null,spec.ad.headline); fh.style.fontWeight='600'; ft.append(fh); const fd=el('div','appsub',spec.ad.description); ft.append(fd); foot.append(ft); const cta=el('button','ghost',(spec.ad.cta||'LEARN_MORE').replace(/_/g,' ')); cta.style.pointerEvents='none'; foot.append(cta); card.append(foot);
+  const foot=el('div'); foot.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;background:var(--panel2,var(--panel-2))'; const ft=el('div'); ft.append(el('div','appsub',(spec.website||'your website').replace(/^https?:\/\//,''))); const fh=el('div',null,spec.ad.headline); fh.style.fontWeight='600'; ft.append(fh); const fd=el('div','appsub',spec.ad.description); ft.append(fd); foot.append(ft); const cta=el('button','ghost',(spec.ad.cta||'LEARN_MORE').replace(/_/g,' ')); cta.style.pointerEvents='none'; foot.append(cta); card.append(foot);
   ap.append(card); box.append(ap);
   // Issues
-  if(issues&&issues.length){ const iw=el('div','mcard'); iw.style.marginTop='14px'; iw.style.borderLeft='3px solid #f59e0b'; iw.append(el('div','sect-label','BEFORE YOU LAUNCH')); const ul=el('ul'); ul.style.cssText='margin:8px 0 0;padding-left:18px'; issues.forEach(i=>ul.append(el('li','appsub',i))); iw.append(ul); box.append(iw); }
+  if(issues&&issues.length){ const iw=el('div','mcard'); iw.style.marginTop='14px'; iw.style.borderLeft='3px solid var(--warn)'; iw.append(el('div','sect-label','BEFORE YOU LAUNCH')); const ul=el('ul'); ul.style.cssText='margin:8px 0 0;padding-left:18px'; issues.forEach(i=>ul.append(el('li','appsub',i))); iw.append(ul); box.append(iw); }
   // Launch bar
   const bar=el('div','mcard'); bar.style.marginTop='14px'; bar.style.display='flex'; bar.style.gap='10px'; bar.style.flexWrap='wrap';
   const go=el('button','go', status&&status.ready?'🚀 Push to Meta as a paused draft':'🔒 Connect Meta to push');
@@ -3077,10 +3098,10 @@ async function doFbLaunch(spec){
   const bar=box.lastChild; const go=bar&&bar.querySelector('button'); if(go){ go.disabled=true; go.textContent='Pushing to Meta…'; }
   let r={ok:false,steps:[],note:'No response.'};
   try{ r=await(await fetch('/api/meta/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec,confirm:true})})).json(); }catch(e){ r={ok:false,steps:[],note:'Request failed — check your connection.'}; }
-  const res=el('div','mcard'); res.style.marginTop='14px'; res.style.borderLeft='3px solid '+(r.ok?'var(--good,#16a34a)':'#dc2626');
-  res.append(el('div','sect-label', r.ok?'✅ BUILT AS A PAUSED DRAFT':'⚠️ SOME STEPS FAILED'));
+  const res=el('div','mcard'); res.style.marginTop='14px'; res.style.borderLeft='3px solid '+(r.ok?'var(--good,var(--good))':'var(--bad)');
+  res.append(el('div','sect-label', r.ok?'BUILT AS A PAUSED DRAFT':'SOME STEPS FAILED'));
   if(r.note) res.append(el('p','appsub',r.note));
-  const ul=el('div'); ul.style.cssText='display:flex;flex-direction:column;gap:5px;margin-top:8px'; (r.steps||[]).forEach(st=>{ const row=el('div','appsub',(st.ok?'✓ ':'✗ ')+st.step+(st.error?(' — '+st.error):'')); if(!st.ok) row.style.color='#dc2626'; ul.append(row); }); res.append(ul);
+  const ul=el('div'); ul.style.cssText='display:flex;flex-direction:column;gap:5px;margin-top:8px'; (r.steps||[]).forEach(st=>{ const row=el('div','appsub',(st.ok?'✓ ':'✗ ')+st.step+(st.error?(' — '+st.error):'')); if(!st.ok) row.style.color='var(--bad)'; ul.append(row); }); res.append(ul);
   if(r.link){ const a=el('a','go','Open it in Meta Ads Manager ↗'); a.href=r.link; a.target='_blank'; a.rel='noopener'; a.style.cssText='display:inline-block;margin-top:12px;text-decoration:none'; res.append(a); }
   if(go){ if(r.ok){ go.textContent='✓ Pushed to Meta'; go.style.opacity='0.6'; } else { go.disabled=false; go.textContent='🚀 Try again'; } }
   box.append(res);
@@ -3332,7 +3353,7 @@ function _lum(h){ const c=_rgb(h); return (0.299*c.r+0.587*c.g+0.114*c.b)/255; }
 function _ink(bg){ return _lum(bg)>0.62?'#0b1020':'#ffffff'; }
 function _scheme(d,v){
   const b=(d.colors&&d.colors[0])||'#12a08f';
-  if(v===0){ const ik=_ink(b); return {bg:b, ink:ik, sub:ik==='#ffffff'?'rgba(255,255,255,.85)':'rgba(0,0,0,.7)', hi:ik==='#ffffff'?'#ffe27a':'#b91c1c', btn:ik, btnInk:b}; }
+  if(v===0){ const ik=_ink(b); return {bg:b, ink:ik, sub:ik==='#ffffff'?'rgba(255,255,255,.85)':'rgba(0,0,0,.7)', hi:ik==='#ffffff'?'#ffe27a':'var(--bad)', btn:ik, btnInk:b}; }
   if(v===1){ return {bg:'#0b1020', ink:'#ffffff', sub:'#c9d2e2', hi:b, btn:b, btnInk:_ink(b)}; }
   return {bg:'#f4f6f9', ink:'#0b1020', sub:'#5b6472', hi:b, btn:b, btnInk:_ink(b)};
 }
@@ -4109,9 +4130,9 @@ $('#as-import').onclick=async()=>{ const url=$('#as-import-url').value.trim(); i
 
 // ── Website Audit ──
 function openAudit(){ const inp=$('#audit-url'); if(inp && !inp.value){ inp.value=(typeof ASSETS!=='undefined'&&ASSETS.website)||''; } }
-const AUDIT_COLOR={good:'#16a34a',warn:'#d97706',bad:'#dc2626'};
+const AUDIT_COLOR={good:'var(--good)',warn:'#d97706',bad:'var(--bad)'};
 const AUDIT_DOT={good:'✓',warn:'!',bad:'✕'};
-function gradeColor(g){ return g==='A'?'#16a34a':g==='B'?'#65a30d':g==='C'?'#d97706':g==='D'?'#ea580c':'#dc2626'; }
+function gradeColor(g){ return g==='A'?'var(--good)':g==='B'?'#65a30d':g==='C'?'#d97706':g==='D'?'#ea580c':'var(--bad)'; }
 function renderAudit(d){
   const body=$('#audit-body'); body.innerHTML='';
   const head=el('div','','');
@@ -4777,7 +4798,7 @@ async function setUsage(box){
   const top=el('div'); top.style.cssText='display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px';
   top.innerHTML='<b>'+(m.credits||0).toLocaleString()+' / '+(m.allowance||1000).toLocaleString()+' credits</b><span class="appsub">'+(m.pct||0)+'% used'+(m.overage?' · '+m.overage+' over':'')+'</span>';
   const track=el('div'); track.style.cssText='height:10px;border-radius:6px;background:var(--panel-2);overflow:hidden;border:1px solid var(--line)';
-  const fill=el('div'); fill.style.cssText='height:100%;width:'+Math.min(100,m.pct||0)+'%;background:'+((m.pct||0)>=100?'#dc2626':(m.pct||0)>=80?'#d97706':'#16a34a');
+  const fill=el('div'); fill.style.cssText='height:100%;width:'+Math.min(100,m.pct||0)+'%;background:'+((m.pct||0)>=100?'var(--bad)':(m.pct||0)>=80?'#d97706':'var(--good)');
   track.append(fill); barWrap.append(top,track); card.append(barWrap);
   if((m.rows||[]).length){ const br=el('div'); br.style.cssText='margin-top:14px'; br.append(el('div','sect-label','THIS MONTH'));
     for(const r of m.rows){ const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px'; row.innerHTML='<span>'+esc(r.label)+'</span><span class="appsub">× '+r.count+'</span>'; br.append(row); }
@@ -5041,15 +5062,15 @@ async function renderSkillLibrary(){
   const draw=()=>{
     const q=search.value.toLowerCase(); list.innerHTML='';
     SKILL_LIB.filter(s=>!q||s.name.includes(q)||s.description.toLowerCase().includes(q)).forEach(s=>{
-      const row=el('button'); row.style.cssText='display:flex;gap:8px;align-items:baseline;width:100%;text-align:left;padding:8px 6px;border:none;background:none;cursor:pointer;border-top:1px solid var(--line,#f1f5f9)';
+      const row=el('button'); row.style.cssText='display:flex;gap:8px;align-items:baseline;width:100%;text-align:left;padding:8px 6px;border:none;background:none;cursor:pointer;border-top:1px solid var(--line,var(--panel-2))';
       const name=el('b',null,s.name); name.style.cssText='font-size:13px;flex:none';
-      const tag=el('span',null,s.source==='miles'?'MILES':'LIBRARY'); tag.style.cssText='font-size:9px;font-weight:800;padding:1px 6px;border-radius:999px;flex:none;'+(s.source==='miles'?'background:#dcfce7;color:#166534':'background:var(--panel2,#eef2f6);color:var(--muted)');
+      const tag=el('span',null,s.source==='miles'?'MILES':'LIBRARY'); tag.style.cssText='font-size:9px;font-weight:800;padding:1px 6px;border-radius:999px;flex:none;'+(s.source==='miles'?'background:var(--good-tint);color:var(--good)':'background:var(--panel2,var(--panel-2));color:var(--muted)');
       const d=el('span','appsub',s.description.slice(0,110)+(s.description.length>110?'…':'')); d.style.fontSize='11.5px';
       row.append(name,tag,d);
       row.onclick=async()=>{
         let sk; try{ sk=await(await fetch('/api/skill-library/'+encodeURIComponent(s.name))).json(); }catch(e){}
         if(!sk||!sk.content){ toast('Could not load that skill.'); return; }
-        showModal('<h3 style="margin:0 0 8px">'+esc(s.name)+'</h3><pre style="white-space:pre-wrap;font-family:inherit;font-size:12.5px;line-height:1.5;max-height:60vh;overflow:auto;background:var(--panel-2,#f8fafc);border-radius:10px;padding:12px">'+esc(sk.content)+'</pre>');
+        showModal('<h3 style="margin:0 0 8px">'+esc(s.name)+'</h3><pre style="white-space:pre-wrap;font-family:inherit;font-size:12.5px;line-height:1.5;max-height:60vh;overflow:auto;background:var(--panel-2,var(--panel-2));border-radius:10px;padding:12px">'+esc(sk.content)+'</pre>');
       };
       list.append(row);
     });
@@ -5258,11 +5279,11 @@ function renderStack(connected){
 }
 const CONN_EMOJI={google_ads:'🟢',meta_ads:'📘',google_my_business:'📍',gohighlevel:'🎯',facebook_pages:'📘',google_lsa:'🛡️'};
 function connDetailCard(d){
-  const c=el('div','mcard'); c.style.cssText='padding:14px;'+(d.connected?'border-left:3px solid var(--good,#16a34a)':'border-left:3px solid #f59e0b');
+  const c=el('div','mcard'); c.style.cssText='padding:14px;'+(d.connected?'border-left:3px solid var(--good,var(--good))':'border-left:3px solid var(--warn)');
   const head=el('div'); head.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:8px';
   if(d.logo){ const im=el('img'); im.src=d.logo; im.style.cssText='width:34px;height:34px;border-radius:8px;object-fit:cover'; im.onerror=()=>{im.remove();}; head.append(im); }
-  else { const av=el('div',null,CONN_EMOJI[d.app]||'🔌'); av.style.cssText='width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--panel2,#f1f5f9);font-size:18px'; head.append(av); }
-  const ht=el('div'); ht.style.flex='1'; ht.append(el('b',null,d.label)); const st=el('div',null,d.connected?'✓ Connected':'Not connected'); st.style.cssText='font-size:12px;font-weight:600;color:'+(d.connected?'var(--good,#16a34a)':'#b45309'); ht.append(st); head.append(ht);
+  else { const av=el('div',null,CONN_EMOJI[d.app]||'🔌'); av.style.cssText='width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--panel2,var(--panel-2));font-size:18px'; head.append(av); }
+  const ht=el('div'); ht.style.flex='1'; ht.append(el('b',null,d.label)); const st=el('div',null,d.connected?'✓ Connected':'Not connected'); st.style.cssText='font-size:12px;font-weight:600;color:'+(d.connected?'var(--good,var(--good))':'#b45309'); ht.append(st); head.append(ht);
   c.append(head);
   if(d.connected){
     if(d.accountName){ const an=el('div',null,d.accountName); an.style.fontWeight='600'; c.append(an); }
@@ -5427,7 +5448,7 @@ async function milesDoTask(text){
   b.append(list); chat.scrollTop=chat.scrollHeight;
   // Kick off the real build, then play the steps so it always reads as "working".
   const p=fetch('/api/miles/task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({request:text})}).then(r=>r.json()).catch(()=>null);
-  for(const row of rows){ row.dot.textContent='●'; row.dot.style.color='var(--accent)'; row.r.style.color='var(--ink)'; await new Promise(r=>setTimeout(r,620)); row.dot.textContent='✓'; row.dot.style.color='#16a34a'; }
+  for(const row of rows){ row.dot.textContent='●'; row.dot.style.color='var(--accent)'; row.r.style.color='var(--ink)'; await new Promise(r=>setTimeout(r,620)); row.dot.textContent='✓'; row.dot.style.color='var(--good)'; }
   const d=await p; b.className='bubble md'; b.innerHTML='';
   if(d&&d.ok){
     b.innerHTML=mdToHtml('✅ **Done.** I built your **'+(d.title||'draft')+'** using your brand and offer.\n\nIt’s on your **Dashboard → “For your review.”** Take a look and hit **Approve & Deploy** when it looks right.'+(d.live?'':'\n\n_Demo draft — add an OPENROUTER_API_KEY on Render and I’ll write it fully custom for you._'));
