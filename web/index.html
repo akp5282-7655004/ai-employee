@@ -2528,8 +2528,15 @@ function ccKpiCard(key){
   const c=el('div'); c.style.cssText='background:var(--panel,#fff);border:1px solid var(--line,#e5e7eb);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0';
   const lab=el('div','appsub',(entry?entry.label:key)); lab.style.whiteSpace='nowrap'; lab.style.overflow='hidden'; lab.style.textOverflow='ellipsis'; c.append(lab);
   const v=el('div',null,m?ccFmt(m.format,m.value):'—'); v.style.cssText='font-size:22px;font-weight:800;letter-spacing:-.02em'; c.append(v);
-  if(m){ c.append(ccDelta(m)); c.append(ccSpark(m.series)); }
+  if(m){ c.append(ccDelta(m)); c.append(ccSpark(m.series));
+    // Every card says what it is — LIVE (real account/CRM data) or SAMPLE.
+    c.append(ccSourceTag(m.source));
+  }
   return c; }
+function ccSourceTag(source){
+  const tag=el('span',null,source==='live'?'LIVE':'SAMPLE');
+  tag.style.cssText='font-size:9px;font-weight:800;letter-spacing:.04em;align-self:flex-start;padding:1px 6px;border-radius:999px;'+(source==='live'?'background:#dcfce7;color:#166534':'background:#fef3c7;color:#92400e');
+  return tag; }
 
 function ccFunnelPanel(){
   const c=ccPanel('FUNNEL BY STAGE');
@@ -2629,7 +2636,7 @@ function ccWidgetCard(w,idx){
     $('#ccw-del').onclick=()=>{ CC.layout.widgets=CC.layout.widgets.filter(x=>x!==w); ccSaveLayout().then(renderCmdCenter); closeModal(); }; };
   top.append(menu); c.append(top);
   const v=el('div',null,m?ccFmt(m.format,m.value):'—'); v.style.cssText='font-size:'+(w.size==='2x2'?'34px':'22px')+';font-weight:800;letter-spacing:-.02em'; c.append(v);
-  if(m){ c.append(ccDelta(m)); if(w.card_type!=='number') c.append(ccSpark(m.series)); if(m.source==='sample'){ const s=el('div','appsub','sample'); s.style.fontSize='10px'; c.append(s); } }
+  if(m){ c.append(ccDelta(m)); if(w.card_type!=='number') c.append(ccSpark(m.series)); c.append(ccSourceTag(m.source)); }
   c.ondragstart=e=>{ e.dataTransfer.setData('text/plain',String(idx)); };
   c.ondragover=e=>e.preventDefault();
   c.ondrop=e=>{ e.preventDefault(); const from=Number(e.dataTransfer.getData('text/plain')); const to=idx;
