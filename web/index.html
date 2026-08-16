@@ -1392,7 +1392,7 @@ async function fillDashReview(wrap){
   let d={items:[]}; try{ d=await(await fetch('/api/review')).json(); }catch(e){ return; }
   const items=d.items||[]; if(!items.length){ wrap.remove(); return; }
   wrap.innerHTML='';
-  const head=el('div'); head.style.cssText='margin:0 0 10px'; head.innerHTML='<h3 style="margin:0">🗂️ For your review</h3><div class="appsub">Drafts Miles finished and left for your OK. Review, then approve to send to Deploy.</div>'; wrap.append(head);
+  const head=el('div'); head.style.cssText='margin:0 0 10px'; head.innerHTML='<div class="sect-label" style="margin:0">🗂️ FOR YOUR REVIEW</div><div class="appsub">Drafts Miles finished and left for your OK. Review, then approve to send to Deploy.</div>'; wrap.append(head);
   const list=el('div'); list.style.cssText='display:flex;flex-direction:column;gap:12px'; wrap.append(list);
   const refresh=()=>{ if(!list.querySelector('.mcard')) wrap.remove(); };
   items.slice(0,5).forEach(it=>list.append(buildReviewCard(it,refresh)));
@@ -1449,7 +1449,7 @@ async function fillDashRecs(wrap){
   const recs=d.recommendations||[]; if(!recs.length){ wrap.remove(); return; }
   wrap.innerHTML='';
   const head=el('div'); head.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px';
-  head.innerHTML='<h3 style="margin:0">💡 Recommendations for you</h3>';
+  head.innerHTML='<div class="sect-label" style="margin:0">💡 RECOMMENDATIONS FOR YOU</div>';
   const see=el('a',null,'See all ('+recs.length+') →'); see.style.cssText='color:var(--accent);cursor:pointer;font-size:13px;white-space:nowrap'; see.onclick=()=>setPage('recs'); head.append(see);
   wrap.append(head);
   const list=el('div'); list.style.cssText='display:flex;flex-direction:column;gap:12px'; wrap.append(list);
@@ -1672,6 +1672,8 @@ $('#v-budget').addEventListener('input',runValidate); $('#v-leads').addEventList
 
 // ═══ research (real US Census) ═══
 function statCard(lab,val){ const c=el('div','stat'); c.append(el('div','lab',lab), el('div','val',val)); return c; }
+// ON/OFF status pill used by the dashboard's block headers.
+function ovPill(on){ return '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;vertical-align:1px;background:'+(on?'#dcfce7;color:#166534':'var(--panel2,#eef2f6);color:var(--muted)')+'">'+(on?'ON':'OFF')+'</span>'; }
 function renderResearch(d){
   const box=$('#r-results'); box.innerHTML='';
   box.append(el('div','sect-label', ((d.place||d.name||'')+' · '+d.zip).toUpperCase()));
@@ -2055,28 +2057,28 @@ function renderOverview(d){
   box.append(reviewCard());
   box.append(autoCard());
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px';
-  const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<h3 style="margin:0 0 10px">📈 Marketing performance</h3>';
+  const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<div class="sect-label" style="margin:0 0 10px">📈 MARKETING PERFORMANCE</div>';
   if(mk.hasData){ const ss=el('div','stats'); ss.append(statCard('Ad spend','$'+(mk.spend||0).toLocaleString()), statCard('Cost / job', mk.cpa!=null?('$'+mk.cpa):'—'), statCard('Revenue','$'+(mk.revenue||0).toLocaleString())); mc.append(ss); mc.append(el('div','appsub','Showing '+mktRangeLabel(mk.range)+(mk.targetCpa&&mk.cpa!=null?' · target $'+mk.targetCpa+'/job · '+(mk.cpa<=mk.targetCpa?'✅ under target':'⚠︎ over target'):''))); }
   else if(mk.connected){ mc.append(ovSync('✓ Google Ads / Meta connected — Miles reads it live, on demand (no daily sync wait). Nothing showing yet means there’s no spend in '+mktRangeLabel(mk.range)+' on the account, not a delay.')); const row=el('div'); row.style.cssText='display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap'; const rb=el('button',null,'↻ Refresh now'); rb.style.cssText='background:none;border:1px solid var(--line);border-radius:8px;color:var(--accent);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:5px 10px'; rb.onclick=async()=>{ rb.disabled=true; const o=rb.textContent; rb.textContent='Pulling live…'; await openOverview(); }; const tb=el('button',null,'Diagnose connection →'); tb.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:0'; tb.onclick=()=>diagProbe('google_ads',tb); row.append(rb,tb); mc.append(row); }
   else mc.append(ovNudge('Connect Google Ads / Meta in Integrations to see real spend, cost-per-job & revenue.'));
   grid.append(mc);
-  const lk=d.leads||{}, rk=d.reviews||{}; const lc=el('div','mcard'); lc.innerHTML='<h3 style="margin:0 0 10px">📞 Leads & reputation</h3>';
+  const lk=d.leads||{}, rk=d.reviews||{}; const lc=el('div','mcard'); lc.innerHTML='<div class="sect-label" style="margin:0 0 10px">📞 LEADS & REPUTATION</div>';
   if(lk.hasData||rk.hasData){ const ss=el('div','stats'); ss.append(statCard('New leads',lk.count||0), statCard('Uncontacted',lk.uncontacted||0), statCard('Reviews',rk.count||0), statCard('Avg rating', rk.avg!=null?(rk.avg+'★'):'—')); lc.append(ss); }
   else if(lk.connected||rk.connected){ lc.append(ovSync('✓ '+[lk.connected?'CRM':null,rk.connected?'Google Business Profile':null].filter(Boolean).join(' & ')+' connected. Your leads & reviews will populate here as they come in.')); }
   else lc.append(ovNudge('Connect your CRM & Google Business Profile to track leads and reviews here.'));
   grid.append(lc);
-  const sc=el('div','mcard'); sc.innerHTML='<h3 style="margin:0 0 10px">📱 Social</h3>';
+  const sc=el('div','mcard'); sc.innerHTML='<div class="sect-label" style="margin:0 0 10px">📱 SOCIAL</div>';
   if(d.social&&d.social.hasData){ const ss=el('div','stats'); ss.append(statCard('Impressions',(d.social.impressions||0).toLocaleString()), statCard('Clicks',d.social.clicks||0), statCard('Likes',d.social.likes||0), statCard('Followers',(d.social.followers||0).toLocaleString())); sc.append(ss); }
   else if(d.social&&d.social.connected){ sc.append(ovSync('✓ Social connected — Miles reads it live. Impressions, clicks & followers show as soon as there’s activity on the account.')); }
   else sc.append(ovNudge('Connect Facebook / Instagram / LinkedIn to see impressions, clicks & followers.'));
   grid.append(sc);
   box.append(grid);
   const grid2=el('div'); grid2.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:16px';
-  const up=el('div','mcard'); up.innerHTML='<h3 style="margin:0 0 10px">🗓 Upcoming posts</h3>';
+  const up=el('div','mcard'); up.innerHTML='<div class="sect-label" style="margin:0 0 10px">🗓 UPCOMING POSTS</div>';
   if((d.upcomingPosts||[]).length) for(const post of d.upcomingPosts){ const r=el('div'); r.style.cssText='display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px'; r.innerHTML='<span>'+esc((post.caption||'(no caption)').slice(0,40))+'</span><span class="appsub">'+fmtWhen(post.scheduledAt)+'</span>'; up.append(r); }
   else up.append(ovNudge('No posts scheduled. Create one in the Content Calendar.'));
   grid2.append(up);
-  const ra=el('div','mcard'); ra.innerHTML='<h3 style="margin:0 0 10px">🤖 Recent agent activity</h3>';
+  const ra=el('div','mcard'); ra.innerHTML='<div class="sect-label" style="margin:0 0 10px">🤖 RECENT AGENT ACTIVITY</div>';
   if((d.recentRuns||[]).length) for(const run of d.recentRuns){ const r=el('div'); r.style.cssText='display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px'; r.innerHTML='<span>'+esc((run.title||'').slice(0,40))+'</span><span class="appsub">'+fmtWhen(run.ts)+'</span>'; ra.append(r); }
   else ra.append(ovNudge('Nothing yet. Put Miles to work from “What Miles Does”.'));
   grid2.append(ra);
@@ -2090,7 +2092,7 @@ function autoCard(){
     const ns=d.noShow||{}, ob=d.onboarding||{}; const anyOn=ns.enabled||ob.enabled;
     card.innerHTML=''; card.style.border='1px solid '+(anyOn?'var(--brand)':'var(--line)');
     const topb=el('div'); topb.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
-    const left=el('div'); left.innerHTML='<h3 style="margin:0">🔁 More Instant Automations</h3><p class="mdesc" style="margin:4px 0 0;max-width:640px">Two more plays Miles runs the moment they fire in GoHighLevel.</p>';
+    const left=el('div'); left.innerHTML='<div class="sect-label" style="margin:0">🔁 MORE INSTANT AUTOMATIONS '+ovPill(anyOn)+'</div><p class="mdesc" style="margin:6px 0 0;max-width:640px">Two more plays Miles runs the moment they fire in GoHighLevel.</p>';
     const trig=el('button','ghost','🔁 Instant triggers'); trig.onclick=openAutoTriggers;
     topb.append(left,trig); card.append(topb);
     const rows=el('div'); rows.style.cssText='display:flex;flex-direction:column;gap:0;margin-top:10px';
@@ -2124,7 +2126,7 @@ function reviewCard(){
     let d={}; if(REMOTE){ try{ d=await(await fetch('/api/review-request')).json(); }catch(e){} }
     const on=!!d.enabled; card.innerHTML=''; card.style.border='1px solid '+(on?'var(--brand)':'var(--line)');
     const topb=el('div'); topb.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
-    const left=el('div'); left.innerHTML='<h3 style="margin:0">⭐ Review Requests <span class="appsub" style="font-weight:700;color:'+(on?'var(--brand)':'var(--faint)')+'">· '+(on?'On':'Off')+'</span></h3><p class="mdesc" style="margin:4px 0 0;max-width:640px">When a job is marked complete, Miles texts a 1-10 ask. <b>9-10</b> get your Google review link; <b>1-8</b> route to a private service-recovery call — never the public link.</p>';
+    const left=el('div'); left.innerHTML='<div class="sect-label" style="margin:0">⭐ REVIEW REQUESTS '+ovPill(on)+'</div><p class="mdesc" style="margin:6px 0 0;max-width:640px">When a job is marked complete, Miles texts a 1-10 ask. <b>9-10</b> get your Google review link; <b>1-8</b> route to a private service-recovery call — never the public link.</p>';
     const acts=el('div'); acts.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
     const trig=el('button','ghost','⭐ Instant triggers'); trig.onclick=openReviewTriggers;
     const toggle=el('button','go',on?'Turn off':'Turn on'); toggle.onclick=async()=>{ toggle.disabled=true; try{ await fetch('/api/review-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({enabled:!on})}); }catch(e){} openOverview(); };
@@ -2178,8 +2180,8 @@ function stlCard(st){
   const card=el('div','mcard'); card.style.cssText='margin:16px 0;border:1px solid '+(on?'var(--brand)':'var(--line)');
   const topb=el('div'); topb.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
   const left=el('div');
-  left.innerHTML='<h3 style="margin:0">⚡ Speed-to-Lead <span class="appsub" style="font-weight:700;color:'+(on?'var(--brand)':'var(--faint)')+'">· '+(on?'On':'Off')+'</span></h3>'
-    +'<p class="mdesc" style="margin:4px 0 0;max-width:640px">78% of homeowners hire whoever answers first. When on, Miles texts &amp; emails every new lead within a minute — then hands off to nurture.</p>';
+  left.innerHTML='<div class="sect-label" style="margin:0">⚡ SPEED-TO-LEAD '+ovPill(on)+'</div>'
+    +'<p class="mdesc" style="margin:6px 0 0;max-width:640px">78% of homeowners hire whoever answers first. When on, Miles texts &amp; emails every new lead within a minute — then hands off to nurture.</p>';
   const acts=el('div'); acts.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
   const trig=el('button','ghost','⚡ Instant triggers'); trig.onclick=openStlTriggers;
   const toggle=el('button','go',on?'Turn off':'Turn on');
