@@ -23,6 +23,7 @@ import { buildRecommendations, type Recommendation } from './agents/recommend.js
 import { competitorAdReport, searchCompetitorAds } from './research/adlibrary.js';
 import { offerBrief, offerMix, readWinners, suggestedOfferLines, survivalByOfferKind } from './research/offers.js';
 import { parseCapturedAds, readCaptured, writeCaptured } from './research/capture.js';
+import { CHANNELS, competitiveAudit, MAX_COMPETITORS } from './research/competitive.js';
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
@@ -2054,6 +2055,45 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       .map((s) => s.trim())
       .filter(Boolean);
     return competitorAdReport(q, 'US', competitors);
+  });
+
+  // ── Competitive audit — you against five rivals, every channel ──
+  // The input to the whole acquisition loop. Crawling is slow (six sites), so
+  // the result is stored and served back until the owner re-runs it.
+  app.get('/api/competitive/audit', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const saved = data.competitiveAudit as import('./research/competitive.js').CompetitiveAudit | undefined;
+    return {
+      audit: saved ?? null,
+      // Seed the form from what the profile already knows.
+      yourUrl: p.website || null,
+      competitors: (p.competitors || '').split(/[,\n]/).map((s) => s.trim()).filter(Boolean).slice(0, MAX_COMPETITORS),
+      channels: CHANNELS,
+      max: MAX_COMPETITORS,
+    };
+  });
+
+  app.post<{ Body: { url?: string; competitors?: string[] } }>('/api/competitive/audit', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const yourUrl = (req.body?.url || p.website || '').trim();
+    if (!yourUrl) return reply.code(400).send({ error: 'Enter your website first — everything is measured relative to it.' });
+    const rivals = (req.body?.competitors ?? []).map((s) => String(s || '').trim()).filter(Boolean);
+    if (!rivals.length) return reply.code(400).send({ error: 'Add at least one competitor website to compare against.' });
+
+    const audit = await competitiveAudit(yourUrl, rivals);
+    data.competitiveAudit = audit;
+    // Remember the inputs so the owner does not retype them every time.
+    data.profile = { ...p, website: audit.you ?? yourUrl, competitors: rivals.join(', ') };
+    await authStore.setUserData(u.id, data);
+    chargeCredits(data, 'skill_run', 'Competitive audit');
+    await authStore.setUserData(u.id, data);
+    return { ok: true, audit };
   });
 
   // ── Market Scan — competitors around you, what they're offering, what survives ──
