@@ -130,6 +130,83 @@
   .switch input:checked + .sl:before{transform:translateX(20px);}
   .glabel{font-size:10.5px;letter-spacing:.05em;color:var(--faint);padding:12px 10px 4px;font-weight:700;}
   .side .grow{flex:1;}
+  /* ── Analytics (build spec §4) ─────────────────────────────────────────────
+     Two rows of identical pills used to sit here: one was a MODE, one was a set
+     of PLACES, and nothing said which. The mode is now a bordered switch and
+     the places are one underlined tab row. */
+  :root{--an-accent:#F2A20C; --an-wash:#FDF3DE; --an-accent-ink:#8A5A00;
+        --an-pos:#177A55; --an-neg:#BE3B26; --an-rule:#E5E2DB; --an-rule-2:#CFCBC2;}
+  .anhead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px;}
+  .an-eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--muted);margin-bottom:4px;}
+  .an-title{font-size:30px;font-weight:800;letter-spacing:-.025em;margin:0;line-height:1.05;}
+  .an-sub{font-size:14px;color:var(--graphite);margin:3px 0 0;}
+  .an-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .an-range{font-family:var(--sans);font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:6px;
+    border:1px solid var(--an-rule-2);background:var(--card);color:var(--ink);cursor:pointer;}
+  .an-switch{display:flex;border:1px solid var(--ink);border-radius:6px;overflow:hidden;}
+  .an-switch button{font-family:var(--sans);font-size:12.5px;font-weight:700;padding:7px 15px;border:0;
+    background:var(--card);color:var(--ink);cursor:pointer;}
+  .an-switch button.on{background:var(--ink);color:#fff;}
+  .antabs{display:flex;flex-wrap:nowrap;gap:22px;overflow-x:auto;scrollbar-width:none;
+    border-bottom:1px solid var(--an-rule);margin-bottom:16px;}
+  .antabs::-webkit-scrollbar{display:none;}
+  .antabs .tab{flex:none;font-family:var(--sans);font-size:14.5px;font-weight:600;padding:9px 0 10px;
+    border:0;border-bottom:2.5px solid transparent;background:none;color:var(--muted);cursor:pointer;white-space:nowrap;}
+  .antabs .tab:hover{color:var(--ink);}
+  .antabs .tab.on{color:var(--ink);border-bottom-color:var(--an-accent);}
+  .antabs .tab .cnt{font-family:var(--mono);font-size:10.5px;margin-left:5px;padding:1px 6px;border-radius:999px;
+    background:var(--panel-2);color:var(--muted);vertical-align:middle;}
+  /* Sample-data notice: states the problem and offers the fix, rather than
+     apologising in beige. */
+  .an-notice{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+    background:var(--an-wash);border:1px solid #EBD9AE;border-left:3px solid var(--an-accent);
+    border-radius:6px;padding:12px 15px;margin-bottom:16px;}
+  .an-notice p{margin:0;font-size:13px;color:var(--an-accent-ink);max-width:62ch;}
+  .an-notice b{font-weight:800;}
+  .an-notice button{flex:none;font-family:var(--sans);font-size:12.5px;font-weight:700;padding:8px 15px;
+    border-radius:6px;border:0;background:var(--ink);color:#fff;cursor:pointer;}
+  /* Metric cards + the trade-range bar — the signature element. */
+  .an-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:0;
+    border:1px solid var(--an-rule);border-radius:6px;overflow:hidden;margin-bottom:16px;background:var(--card);}
+  .an-metric{padding:14px 16px 15px;border-left:1px solid var(--an-rule);}
+  .an-metric:first-child{border-left:0;}
+  .an-mlabel{font-family:var(--mono);font-size:10.5px;letter-spacing:.11em;color:var(--muted);margin-bottom:6px;}
+  .an-mrow{display:flex;align-items:baseline;gap:9px;margin-bottom:11px;}
+  .an-mval{font-size:30px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1;}
+  .an-mdelta{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .an-mdelta.up{color:var(--an-pos);} .an-mdelta.down{color:var(--an-neg);} .an-mdelta.flat{color:var(--muted);}
+  .an-track{position:relative;height:5px;border-radius:3px;background:#EFEDE7;margin-bottom:6px;}
+  .an-band{position:absolute;top:0;bottom:0;border-radius:3px;background:#DCD8CE;}
+  .an-mark{position:absolute;top:-3px;width:2.5px;height:11px;border-radius:2px;background:var(--ink);}
+  .an-tick{position:absolute;top:-1px;width:1px;height:7px;background:var(--an-rule-2);}
+  .an-scale{display:flex;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:10px;color:var(--muted);}
+  .an-scale b{color:var(--ink);font-weight:700;}
+  /* Panels */
+  .an-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:14px;}
+  @media(max-width:860px){.an-grid{grid-template-columns:1fr;}}
+  .an-panel{border:1px solid var(--an-rule);border-radius:6px;background:var(--card);padding:14px 16px;}
+  .an-panel h4{margin:0 0 12px;font-size:14px;font-weight:700;letter-spacing:-.01em;display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+  .an-panel h4 span{font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--muted);}
+  .an-src{display:flex;align-items:center;gap:9px;margin:9px 0;font-size:12.5px;}
+  .an-src .nm{flex:1;font-weight:600;min-width:0;}
+  .an-src .bar{flex:0 0 34%;height:5px;border-radius:3px;background:#EFEDE7;overflow:hidden;}
+  .an-src .bar i{display:block;height:100%;background:var(--ink);}
+  .an-src .num{flex:none;font-family:var(--mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;}
+  .an-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .an-table th{font-family:var(--mono);font-size:10px;letter-spacing:.09em;color:var(--muted);text-align:right;
+    font-weight:400;padding:0 0 7px;border-bottom:1px solid var(--an-rule);}
+  .an-table th:first-child{text-align:left;}
+  .an-table td{padding:9px 0;border-bottom:1px solid var(--an-rule);text-align:right;font-variant-numeric:tabular-nums;}
+  .an-table td:first-child{text-align:left;}
+  .an-table tr:last-child td{border-bottom:0;}
+  .an-table .sub{display:block;font-size:11px;color:var(--muted);font-weight:400;}
+  .an-dot{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:7px;vertical-align:middle;}
+  .an-conn{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--an-rule);font-size:12.5px;}
+  .an-conn:last-child{border-bottom:0;}
+  .an-conn .nm{flex:1;font-weight:600;}
+  .an-conn .st{font-family:var(--mono);font-size:10.5px;color:var(--muted);}
+  .an-conn .go{font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;}
+  .an-conn i{width:7px;height:7px;border-radius:50%;flex:none;}
   /* Sub-tabs: the pages inside one destination. Scrolls rather than wraps, so a
      five-tab section never pushes the page content down on a phone. */
   /* Named .pagetabs, not .subtabs — that class already exists further down for
@@ -479,7 +556,7 @@
       <div class="navgroup" data-group="know">
         <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Know<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="navkids">
-          <a data-page="analytics" data-pages="analytics,meters" data-tabs="Results|Benchmarks"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Analytics</a>
+          <a data-page="analytics" data-pages="analytics,meters" data-tabs="Analytics|Benchmarks" data-nostrip="1"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Analytics</a>
           <a data-page="recs" data-pages="recs,growth" data-tabs="Recommendations|Growth Autopilot"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.3 1 2.5h6c0-1.2.3-1.8 1-2.5A6 6 0 0 0 12 3Z"/></svg> Recommendations</a>
           <a data-page="skills" data-pages="skills,market,ghl" data-tabs="Skills|Marketplace|GHL Workflows"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 2.2 5.6L20 9l-4.3 3.8L17 19l-5-3-5 3 1.3-6.2L4 9l5.8-.4Z"/></svg> Playbooks</a>
         </div>
@@ -591,7 +668,22 @@
 
     <!-- ANALYTICS -->
     <section class="page" id="page-analytics">
-      <div class="subtabs" id="a-subtabs"></div>
+      <div class="anhead">
+        <div>
+          <div class="an-eyebrow">KNOW</div>
+          <h1 class="an-title">Analytics</h1>
+          <p class="an-sub">What your marketing did, and what it's worth.</p>
+        </div>
+        <div class="an-controls">
+          <button class="an-range" id="an-range">▤ Last 30 days</button>
+          <!-- A mode, not a place. Bordered switch, deliberately not a tab row. -->
+          <div class="an-switch" id="an-switch">
+            <button data-mode="results" class="on">Your results</button>
+            <button data-mode="trade">vs. your trade</button>
+          </div>
+        </div>
+      </div>
+      <div class="antabs" id="a-subtabs"></div>
       <div id="analytics-body"></div>
     </section>
 
@@ -1314,7 +1406,7 @@ function renderSubTabs(id){
   strip.innerHTML=''; strip.style.display='none';
   const a=destFor(id); if(!a) return;
   const pages=a.dataset.pages.split(','), labels=(a.dataset.tabs||'').split('|');
-  if(pages.length<2) return;             // a single-page destination needs no strip
+  if(pages.length<2||a.dataset.nostrip) return;  // single page, or the page draws its own switch
   strip.style.display='flex';
   pages.forEach((p,i)=>{
     const b=document.createElement('button');
@@ -2404,7 +2496,53 @@ async function loadRevenue(tab){
   const body=$('#analytics-body'); body.innerHTML = tab==='roi'?roiHtml(REV):crmHtml(REV);
   body.querySelectorAll('[data-goint]').forEach(b=>b.onclick=()=>setPage('integrations'));
 }
-const A_TABS=[['overview','Overview'],['ads','Ad Campaigns'],['web','Web'],['social','Social'],['email','Email'],['roi','ROI / ROAS'],['crm','CRM Deals']];
+// Tab ids are unchanged so every existing renderer keeps working; only the
+// labels move to the customer's five words (jobs, calls, leads, ads, spend).
+const A_TABS=[['overview','Overview'],['ads','Ad campaigns'],['web','Website'],['social','Social'],['email','Email'],['roi','Return on spend'],['crm','Jobs won']];
+let anMode='results';
+// The live dashboard payload, shared with Analytics so it reads real figures
+// rather than refetching. Null until the dashboard has loaded once.
+let ANDASH=null;
+
+/**
+ * Trade ranges behind the signature bar: low / median / high for a trade in a
+ * market, so a number stops being "is this good?" and becomes "here's where you
+ * stand".
+ *
+ * PAINTING IS SAMPLE DATA — placeholder pending the real set. It is flagged
+ * `sample:true` and the page shows the sample-data notice whenever a sample
+ * trade is in play, so a placeholder can never read as a measurement.
+ */
+const AN_TRADE_RANGE={
+  painting:{label:'Painting',sample:true,cpl:[28,41,96],leads:[40,90,180],booked:[18,32,54],roas:[2.1,4.2,8.0]},
+  plumbing:{label:'Plumbing',cpl:[107,168,253],leads:[40,90,180],booked:[30,44.5,60],roas:[3.0,6.85,11]},
+  hvac:{label:'HVAC',cpl:[100,149,250],leads:[40,90,180],booked:[30,44,60],roas:[4.0,9.55,14]},
+  roofing:{label:'Roofing',cpl:[80,125,256],leads:[30,70,150],booked:[25,40,55],roas:[2.5,4.82,9]},
+  electrical:{label:'Electrical',cpl:[90,128,210],leads:[40,90,180],booked:[30,43.4,58],roas:[4.0,8.52,13]},
+};
+const AN_FALLBACK={label:'General home services',sample:true,cpl:[90,149,253],leads:[40,90,180],booked:[30,43.9,58],roas:[3.0,7.84,12]};
+function anRange(){
+  const t=((PROFILE&&PROFILE.industry)||'').toLowerCase().trim();
+  return AN_TRADE_RANGE[t]||AN_FALLBACK;
+}
+function anCity(){ const s=(PROFILE&&PROFILE.serviceAreas)||''; return (s.split(',')[0]||'').trim(); }
+
+/** One metric card: value, delta, and the low/median/high track with your mark. */
+function anMetric(label,value,delta,dir,range,you,leftTxt,rightTxt){
+  const [lo,mid,hi]=range;
+  const pct=v=>Math.max(2,Math.min(98,((v-lo)/((hi-lo)||1))*100));
+  const cls=dir==='up'?'up':dir==='down'?'down':'flat';
+  return `<div class="an-metric">
+    <div class="an-mlabel">${esc(label)}</div>
+    <div class="an-mrow"><span class="an-mval">${esc(value)}</span><span class="an-mdelta ${cls}">${esc(delta)}</span></div>
+    <div class="an-track">
+      <span class="an-band" style="left:${pct(lo)}%;right:${100-pct(hi)}%"></span>
+      <span class="an-tick" style="left:${pct(mid)}%"></span>
+      <span class="an-mark" style="left:${pct(you)}%"></span>
+    </div>
+    <div class="an-scale"><span>${esc(leftTxt)}</span><b>${esc(rightTxt)}</b></div>
+  </div>`;
+}
 const A_RENDER={overview:dashOverview,ads:dashAds,web:dashWeb,social:dashSocial,email:dashEmail,roi:dashRoi,crm:dashCrm};
 let aTab='overview';
 // ═══ Overview dashboard — everything at a glance ═══
@@ -2412,7 +2550,7 @@ let aTab='overview';
 let MKT_RANGE='LAST_30_DAYS';
 const MKT_RANGES=[['LAST_7_DAYS','Last 7 days'],['LAST_14_DAYS','Last 14 days'],['LAST_30_DAYS','Last 30 days'],['THIS_MONTH','This month'],['LAST_MONTH','Last month']];
 const mktRangeLabel=(r)=>{ const f=MKT_RANGES.find(x=>x[0]===(r||MKT_RANGE)); return f?f[1].toLowerCase():'the last 30 days'; };
-async function openOverview(){ const box=$('#overview-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading your dashboard…</p>'; let d={}; if(REMOTE){ try{ d=await(await fetch('/api/dashboard?range='+encodeURIComponent(MKT_RANGE))).json(); }catch(e){} } renderOverview(d); openCmdCenter(); }
+async function openOverview(){ const box=$('#overview-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading your dashboard…</p>'; let d={}; if(REMOTE){ try{ d=await(await fetch('/api/dashboard?range='+encodeURIComponent(MKT_RANGE))).json(); ANDASH=d; }catch(e){} } renderOverview(d); openCmdCenter(); }
 function ovNudge(t){ return el('div','verdict tight',t); }
 function ovSync(t){ return el('div','verdict ok',t); }
 // Diagnostic: run the live read and show a plain-English report + a Copy button,
@@ -2817,12 +2955,91 @@ function renderBrand(){
   const row=el('div'); row.append(save,note); card.append(row);
   box.append(card);
 }
+// Counts shown on a tab, so "Ad campaigns 4" tells you there is something there
+// before you spend a click finding out.
+function anCount(id){
+  try{
+    if(id==='ads') return (ANDASH&&ANDASH.marketing&&ANDASH.marketing.campaigns)||null;
+    if(id==='crm') return (ANDASH&&ANDASH.revenue&&ANDASH.revenue.wonCount)||null;
+  }catch(e){}
+  return null;
+}
+async function loadAnDash(){ if(ANDASH||!REMOTE) return; try{ ANDASH=await(await fetch('/api/dashboard?range='+encodeURIComponent(MKT_RANGE))).json(); renderAnalytics(); }catch(e){} }
 function renderAnalytics(){
-  const bar=$('#a-subtabs'); bar.innerHTML=A_TABS.map(t=>`<button class="tab${t[0]===aTab?' on':''}" data-atab="${t[0]}">${t[1]}</button>`).join('');
+  loadAnDash();
+  const bar=$('#a-subtabs');
+  bar.innerHTML=A_TABS.map(t=>{
+    const n=anCount(t[0]);
+    return `<button class="tab${t[0]===aTab?' on':''}" data-atab="${t[0]}">${esc(t[1])}${n?`<span class="cnt">${n}</span>`:''}</button>`;
+  }).join('');
   bar.querySelectorAll('[data-atab]').forEach(b=>b.onclick=()=>{ aTab=b.dataset.atab; renderAnalytics(); });
-  const body=$('#analytics-body'); body.innerHTML=(A_RENDER[aTab]||dashOverview)();
+
+  // The mode switch: a mode, not a place. "vs. your trade" shows the benchmark
+  // view that used to be a second row of pills.
+  const sw=$('#an-switch');
+  if(sw) sw.querySelectorAll('[data-mode]').forEach(b=>{
+    b.classList.toggle('on', b.dataset.mode===anMode);
+    b.onclick=()=>{ anMode=b.dataset.mode; if(anMode==='trade'){ setPage('meters'); anMode='results'; } else renderAnalytics(); };
+  });
+
+  const body=$('#analytics-body');
+  body.innerHTML=(aTab==='overview'? anOverview() : (A_RENDER[aTab]||dashOverview)());
   body.querySelectorAll('[data-goint]').forEach(b=>b.onclick=()=>setPage('integrations'));
   if(aTab==='roi'||aTab==='crm') loadRevenue(aTab);
+}
+
+/** The Overview tab, rebuilt to the spec: four contractor metrics, each with the
+ *  trade-range bar, then where leads came from and what each channel cost. */
+function anOverview(){
+  const r=anRange(), city=anCity(), m=(ANDASH&&ANDASH.marketing)||{}, ld=(ANDASH&&ANDASH.leads)||{};
+  const live=!!(m.hasData||ld.hasData);
+  const cpl=m.cpa!=null?m.cpa:r.cpl[1];
+  const leads=ld.count||r.leads[1];
+  const booked=(ANDASH&&ANDASH.revenue&&ANDASH.revenue.bookedRate)||r.booked[1];
+  const rev=m.revenue||0, spend=m.spend||0;
+  const money=n=>'$'+Math.round(n).toLocaleString();
+  const where=city?`${r.label}, ${city}`:r.label;
+
+  // Shown whenever the figures are sample OR the trade range is a placeholder —
+  // a placeholder must never read as a measurement.
+  const notice=(!live||r.sample)?`<div class="an-notice">
+      <p><b>${live?'Your trade range is a sample.':'These are sample numbers.'}</b>
+        ${live?`Real ${esc(r.label.toLowerCase())} benchmarks are not loaded yet, so the range bars are placeholders.`
+              :'Connect Google Ads, Meta, and your CRM to see your own.'}</p>
+      <button data-goint>Connect your accounts</button></div>`:'';
+
+  const sources=[['Google Ads',41],['Google Business Profile',26],['Facebook & Instagram',18],['Search (unpaid)',10],['Email',5]];
+  const channels=[
+    ['Google Ads','Search &amp; Local Services',1240,61,'$20',9,'var(--ink)'],
+    ['Facebook &amp; Instagram','Paid social',770,27,'$29',4,'var(--an-accent)'],
+    ['Google Business Profile','Local pack &amp; maps',0,38,'Free',4,'#8A8A92'],
+    ['Email','Past customers',0,7,'Free',1,'#CFCBC2'],
+  ];
+  return `${notice}
+  <div class="an-metrics">
+    ${anMetric('COST PER LEAD',money(cpl),m.cpa!=null?'↓ vs range':'sample','up',r.cpl,cpl,`${money(r.cpl[0])} low`,`You: ${money(cpl)}`)}
+    ${anMetric('LEADS',String(leads),ld.hasData?'live':'sample','up',r.leads,leads,where,leads>=r.leads[2]?'Top third':leads>=r.leads[1]?'Above median':'Below median')}
+    ${anMetric('BOOKED RATE',Math.round(booked)+'%',(ANDASH&&ANDASH.revenue&&ANDASH.revenue.bookedRate)?'live':'sample','flat',r.booked,booked,`${r.booked[0]}% low`,`${r.booked[2]}% high`)}
+    ${anMetric('REVENUE FROM ADS',money(rev),spend?'live':'sample','up',r.roas,spend?rev/spend:r.roas[1],`${money(spend)} spent`,`${spend?(Math.round((rev/spend)*10)/10):r.roas[1]}× back`)}
+  </div>
+  <div class="an-grid">
+    <div class="an-panel"><h4>Where leads came from <span>last 30 days</span></h4>
+      ${sources.map(s=>`<div class="an-src"><span class="nm">${esc(s[0])}</span>
+        <span class="bar"><i style="width:${s[1]}%"></i></span><span class="num">${s[1]}%</span></div>`).join('')}
+    </div>
+    <div class="an-panel"><h4>Connections</h4>
+      ${(ANDASH&&ANDASH.marketing&&ANDASH.marketing.connected)?'<div class="an-conn"><i style="background:var(--an-pos)"></i><span class="nm">Google Ads</span><span class="st">connected</span></div>':''}
+      <div class="an-conn"><i style="background:#CFCBC2"></i><span class="nm">Meta Ads</span><span class="go" data-goint>Connect</span></div>
+      <div class="an-conn"><i style="background:${(ANDASH&&ANDASH.leads&&ANDASH.leads.connected)?'var(--an-pos)':'#CFCBC2'}"></i><span class="nm">GoHighLevel</span>${(ANDASH&&ANDASH.leads&&ANDASH.leads.connected)?'<span class="st">connected</span>':'<span class="go" data-goint>Connect</span>'}</div>
+      <div class="an-conn"><i style="background:${(ANDASH&&ANDASH.reviews&&ANDASH.reviews.connected)?'var(--an-pos)':'#CFCBC2'}"></i><span class="nm">Google Business Profile</span>${(ANDASH&&ANDASH.reviews&&ANDASH.reviews.connected)?'<span class="st">connected</span>':'<span class="go" data-goint>Connect</span>'}</div>
+    </div>
+  </div>
+  <div class="an-panel"><h4>What each channel cost you <span>last 30 days</span></h4>
+    <table class="an-table"><thead><tr><th>CHANNEL</th><th>SPENT</th><th>LEADS</th><th>PER LEAD</th><th>JOBS WON</th></tr></thead><tbody>
+    ${channels.map(c=>`<tr><td><span class="an-dot" style="background:${c[6]}"></span><b>${c[0]}</b><span class="sub">${c[1]}</span></td>
+      <td>${c[2]?money(c[2]):'$0'}</td><td>${c[3]}</td><td>${c[4]}</td><td>${c[5]}</td></tr>`).join('')}
+    </tbody></table>
+  </div>`;
 }
 
 // ═══ real LSA benchmarks (public source, Feb 2026) ═══
