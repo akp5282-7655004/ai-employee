@@ -150,11 +150,11 @@
   .antabs{display:flex;flex-wrap:nowrap;gap:22px;overflow-x:auto;scrollbar-width:none;
     border-bottom:1px solid var(--an-rule);margin-bottom:16px;}
   .antabs::-webkit-scrollbar{display:none;}
-  .antabs .tab{flex:none;font-family:var(--sans);font-size:14.5px;font-weight:600;padding:9px 0 10px;
+  .antabs .antab{flex:none;font-family:var(--sans);font-size:14.5px;font-weight:600;padding:9px 0 10px;
     border:0;border-bottom:2.5px solid transparent;background:none;color:var(--muted);cursor:pointer;white-space:nowrap;}
-  .antabs .tab:hover{color:var(--ink);}
-  .antabs .tab.on{color:var(--ink);border-bottom-color:var(--an-accent);}
-  .antabs .tab .cnt{font-family:var(--mono);font-size:10.5px;margin-left:5px;padding:1px 6px;border-radius:999px;
+  .antabs .antab:hover{color:var(--ink);}
+  .antabs .antab.on{color:var(--ink);border-bottom-color:var(--an-accent);}
+  .antabs .antab .cnt{font-family:var(--mono);font-size:10.5px;margin-left:5px;padding:1px 6px;border-radius:999px;
     background:var(--panel-2);color:var(--muted);vertical-align:middle;}
   /* Sample-data notice: states the problem and offers the fix, rather than
      apologising in beige. */
@@ -2970,7 +2970,7 @@ function renderAnalytics(){
   const bar=$('#a-subtabs');
   bar.innerHTML=A_TABS.map(t=>{
     const n=anCount(t[0]);
-    return `<button class="tab${t[0]===aTab?' on':''}" data-atab="${t[0]}">${esc(t[1])}${n?`<span class="cnt">${n}</span>`:''}</button>`;
+    return `<button class="antab${t[0]===aTab?' on':''}" data-atab="${t[0]}">${esc(t[1])}${n?`<span class="cnt">${n}</span>`:''}</button>`;
   }).join('');
   bar.querySelectorAll('[data-atab]').forEach(b=>b.onclick=()=>{ aTab=b.dataset.atab; renderAnalytics(); });
 
