@@ -20,7 +20,9 @@ import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText,
 import { resolveKit, kitHasGuidance, type BrandKit } from './brand/kit.js';
 import { templatedReady, templatedListTemplates, templatedRender, type RenderLayer } from './creative/templated.js';
 import { buildRecommendations, type Recommendation } from './agents/recommend.js';
-import { competitorAdReport } from './research/adlibrary.js';
+import { competitorAdReport, searchCompetitorAds } from './research/adlibrary.js';
+import { offerBrief, offerMix, readWinners, suggestedOfferLines, survivalByOfferKind } from './research/offers.js';
+import { parseCapturedAds, readCaptured, writeCaptured } from './research/capture.js';
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
@@ -2052,6 +2054,134 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       .map((s) => s.trim())
       .filter(Boolean);
     return competitorAdReport(q, 'US', competitors);
+  });
+
+  // ── Market Scan — competitors around you, what they're offering, what survives ──
+  // The whole scan exists to reach one sentence: which KIND of offer lasts in
+  // this market. Ads come from whatever sources are available — the Ad Library
+  // API where it covers the country, plus anything captured by hand — and the
+  // analysis is identical either way.
+  const marketAds = async (data: Record<string, unknown>, q: string): Promise<{ ads: import('./research/adlibrary.js').CompetitorAd[]; sources: Record<string, number> }> => {
+    const captured = readCaptured(data);
+    let api: import('./research/adlibrary.js').CompetitorAd[] = [];
+    try { api = await searchCompetitorAds({ terms: q, countries: ['US'], limit: 30 }); } catch { /* not configured, or no coverage */ }
+    return { ads: [...api, ...captured], sources: { adLibraryApi: api.length, captured: captured.length } };
+  };
+
+  app.get<{ Querystring: { q?: string; zip?: string } }>('/api/market/scan', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const trade = (p.industry || 'home services').trim();
+    const area = (req.query?.zip || (p.serviceAreas || '').split(',')[0] || '').trim();
+    const q = (req.query?.q || [trade, area].filter(Boolean).join(' ')).trim();
+
+    // Who is around you (Google Places). Off without a key — reported, not faked.
+    const placesConfigured = !!process.env.GOOGLE_PLACES_KEY;
+    let competitors: Awaited<ReturnType<typeof searchCompetitors>> = null;
+    try { competitors = placesConfigured ? await searchCompetitors(q) : null; } catch { competitors = null; }
+
+    const { ads, sources } = await marketAds(data, q);
+    const winners = readWinners(ads);
+    const survival = survivalByOfferKind(ads);
+    const brief = offerBrief(ads, trade);
+
+    return {
+      query: q,
+      trade,
+      area: area || null,
+      // Every headline number carries where it came from, so an empty scan reads
+      // as "nothing connected yet" rather than as "no competition".
+      stats: {
+        competitorsFound: competitors?.length ?? 0,
+        adsAnalyzed: ads.length,
+        likelyWinners: winners.filter((w) => w.confidence !== 'weak').length,
+        advertisersSeen: new Set(ads.map((a) => a.page)).size,
+      },
+      sources: { ...sources, places: placesConfigured },
+      competitors: (competitors ?? []).slice(0, 25),
+      offerMix: offerMix(ads),
+      survival,
+      winners: winners.slice(0, 12),
+      brief,
+      // The honest read on coverage — the US commercial gap is real and stated.
+      note: ads.length === 0
+        ? 'No competitor ads yet. The Ad Library API does not return US commercial ads, so paste what you see in the Ad Library web UI to start the analysis.'
+        : sources.adLibraryApi === 0
+          ? `Analysing ${ads.length} ads you captured. The Ad Library API returns no US commercial ads, so this set is what you pasted in.`
+          : `Analysing ${ads.length} ads.`,
+      placesConfigured,
+    };
+  });
+
+  // Paste ads out of the Ad Library web UI. Additive, so a market can be built
+  // up over several sittings.
+  app.post<{ Body: { text?: string; replace?: boolean } }>('/api/market/ads', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const text = String(req.body?.text ?? '');
+    if (!text.trim()) return reply.code(400).send({ error: 'Paste some ads first.' });
+    const parsed = parseCapturedAds(text);
+    if (!parsed.ads.length) {
+      return reply.code(400).send({ error: 'Nothing readable in that paste. Include the advertiser name, the "running N days" line, and the ad text — one ad per block, blank line between ads.' });
+    }
+    const data = await authStore.getUserData(u.id);
+    const existing = req.body?.replace ? [] : readCaptured(data);
+    const set = writeCaptured(data, [...parsed.ads, ...existing]);
+    await authStore.setUserData(u.id, data);
+    return { ok: true, added: parsed.ads.length, skipped: parsed.skipped, undated: parsed.undated, total: set.ads.length };
+  });
+
+  // Turn the winning angle into ad copy for THIS business. Proposals only —
+  // an offer line is a promise to a customer ("$500 off" commits real money,
+  // "0% financing" commits a lender arrangement), so nothing here publishes.
+  // The owner picks an offer, then runs it through the normal approval path.
+  app.post<{ Body: { offer?: string; kind?: string } }>('/api/market/generate', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const trade = (p.industry || 'home services').trim();
+    const { ads } = await marketAds(data, [trade, (p.serviceAreas || '').split(',')[0] ?? ''].filter(Boolean).join(' '));
+    const brief = offerBrief(ads, trade);
+    const kind = (req.body?.kind as import('./research/offers.js').OfferKind | undefined) ?? brief?.kind;
+    if (!kind) return reply.code(400).send({ error: 'Not enough competitor ads yet to read an offer type. Capture more ads first.' });
+
+    const options = suggestedOfferLines(kind, trade);
+    // An owner-supplied line always wins over a template — it is their promise.
+    const offer = (req.body?.offer ?? '').trim() || options[0];
+    if (!offer) return reply.code(400).send({ error: 'Choose an offer line to feature.' });
+
+    const creatives = generateAdCopy({
+      // The profile stores the trade under `industry`; reading a `category` that
+      // is never set silently fell back to plumbing copy for every business.
+      vertical: p.vertical || p.industry || undefined,
+      category: p.category || p.industry || undefined,
+      offer,
+      businessName: p.businessName,
+      city: (p.serviceAreas || '').split(',')[0]?.trim(),
+      services: p.services,
+    });
+    return {
+      ok: true,
+      published: false,
+      kind,
+      offer,
+      offerOptions: options,
+      rationale: brief?.rationale ?? null,
+      creatives,
+      note: 'Proposals only — nothing is live. Choose an offer you can actually honour, then launch it through the normal approval flow (campaigns are created paused).',
+    };
+  });
+
+  app.delete('/api/market/ads', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    writeCaptured(data, []);
+    await authStore.setUserData(u.id, data);
+    return { ok: true, total: 0 };
   });
 
   // ── Miles as CMO — one AI employee who runs the whole marketing function ───

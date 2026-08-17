@@ -233,6 +233,33 @@ export interface OfferBrief {
 }
 
 /**
+ * Offer lines a business could run for a given kind — templates in the owner's
+ * own terms, never a competitor's wording.
+ *
+ * These are PROPOSALS, and the distinction matters: an offer line is a promise
+ * to a customer. "$500 off" commits the business to $500 it may not want to
+ * give, and "0% financing" commits it to a lender arrangement it may not have.
+ * Nothing here may be published without the owner choosing it.
+ */
+export function suggestedOfferLines(kind: OfferKind, trade: string): string[] {
+  const t = (trade || 'home services').toLowerCase();
+  const byKind: Record<OfferKind, string[]> = {
+    financing: ['0% financing for 12 months', 'Monthly payment plans available', 'Flexible payments — ask about our plans'],
+    free_inspection: [`Free ${t} inspection`, 'Free inspection and written report', 'Book a free on-site inspection'],
+    free_estimate: ['Free, no-obligation estimate', 'Free in-home estimate', 'Get your free quote today'],
+    seasonal_tuneup: ['Seasonal tune-up special', 'Pre-season service check', 'Maintenance plan — book your visit'],
+    warranty: ['Backed by our written guarantee', 'Workmanship warranty included', 'Satisfaction guaranteed, in writing'],
+    percent_off: ['Save on your first service', 'Seasonal discount available'],
+    dollar_off: ['Ask about our current savings', 'Limited savings on new installs'],
+    price_anchor: [`${t.charAt(0).toUpperCase() + t.slice(1)} starting from a clear flat price`, 'Upfront pricing, no surprises'],
+    urgency: ['Booking this month — limited slots', 'A few appointments left this week'],
+    social_proof: ['Trusted by your neighbours', 'Rated by local homeowners'],
+    branding_only: [],
+  };
+  return byKind[kind] ?? [];
+}
+
+/**
  * The bridge into ad generation. This deliberately hands over the ANGLE — the
  * offer kind and why it wins — and never a competitor's copy. Reusing their
  * words is someone else's copyright, and Meta rejects near-duplicate creative

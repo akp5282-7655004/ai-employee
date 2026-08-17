@@ -1627,8 +1627,147 @@ async function openTeam(){
 // ── Competitor Ad Research: read the Meta Ad Library the way a veteran media buyer does ──
 function angleChip(sig){ const m={'scaling-bet':['🔥 Scaling bet','var(--bad)','var(--bad-tint)'],'testing':['🧪 Testing','var(--warn)','var(--warn-tint)'],'single':['· one-off','#475569','#e2e8f0']}; const [t,fg,bg]=m[sig]||m.single; const s=el('span',null,t); s.style.cssText='font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;color:'+fg+';background:'+bg; return s; }
 function daysBadge(n){ if(n==null) return null; const s=el('span',null,n+'d running'); s.style.cssText='font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:#eef2ff;color:var(--accent)'; return s; }
+// ── Market Scan ──────────────────────────────────────────────────────────────
+// The panel the whole scan exists to reach: which KIND of offer survives in
+// this market. Everything above it is plumbing.
+function msBar(label,pct,note){
+  const row=el('div'); row.style.cssText='display:flex;align-items:center;gap:10px;margin:6px 0';
+  const l=el('div',null,label); l.style.cssText='flex:0 0 42%;font-size:12.5px;font-weight:600';
+  const track=el('div'); track.style.cssText='flex:1;height:8px;border-radius:999px;background:var(--panel-2);overflow:hidden';
+  const fill=el('div'); fill.style.cssText='height:100%;border-radius:999px;background:var(--ink);width:'+Math.max(2,Math.min(100,pct))+'%';
+  track.append(fill);
+  const v=el('div',null,note); v.style.cssText='flex:0 0 92px;text-align:right;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums';
+  row.append(l,track,v); return row;
+}
+const MS_CONF={strong:['Strong','#1B8552','#E8F5EE'],moderate:['Worth watching','#86651C','#FBF6E7'],weak:['Weak signal','#8A8A92','#F4F4F5']};
+function msConfChip(c){ const [t,fg,bg]=MS_CONF[c]||MS_CONF.weak; const s=el('span',null,t); s.style.cssText='font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;color:'+fg+';background:'+bg; return s; }
+
+async function renderMarketScan(box){
+  const wrap=el('div','mcard');
+  wrap.append(el('h3',null,'Market Scan'));
+  wrap.append(el('p','mdesc','Which kind of offer actually survives around you — read across every competitor ad, not from any single one.'));
+  box.append(wrap);
+  const body=el('div'); wrap.append(body);
+  body.innerHTML='<p class="appsub">Reading your market…</p>';
+
+  let d=null;
+  try{ d=await(await fetch('/api/market/scan')).json(); }catch(e){}
+  body.innerHTML='';
+  if(!d){ body.append(el('p','appsub','Could not read the market just now.')); return; }
+
+  // Headline counts, each one traceable to where it came from.
+  const stats=el('div'); stats.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:12px 0';
+  const card=(n,label)=>{ const c=el('div'); c.style.cssText='border:1px solid var(--line);border-radius:11px;padding:12px 14px;background:var(--card)';
+    const b=el('div',null,String(n)); b.style.cssText='font-size:26px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums';
+    const s=el('div',null,label); s.style.cssText='font-size:11.5px;color:var(--muted);margin-top:2px'; c.append(b,s); return c; };
+  stats.append(card(d.stats.competitorsFound,'competitors nearby'));
+  stats.append(card(d.stats.adsAnalyzed,'ads analysed'));
+  stats.append(card(d.stats.likelyWinners,'likely winners'));
+  stats.append(card(d.stats.advertisersSeen,'advertisers seen'));
+  body.append(stats);
+
+  if(d.note){ const n=el('div'); n.style.cssText='font-size:12.5px;line-height:1.5;color:var(--graphite);background:var(--panel-2);border-radius:9px;padding:10px 12px;margin-bottom:12px'; n.textContent=d.note; body.append(n); }
+  if(!d.placesConfigured){ const n=el('div'); n.style.cssText='font-size:12px;color:var(--muted);margin-bottom:12px'; n.textContent='Competitor mapping is off — add GOOGLE_PLACES_KEY to switch it on.'; body.append(n); }
+
+  // Paste-in capture: the Ad Library API does not return US commercial ads.
+  const cap=el('div'); cap.style.cssText='border:1px dashed var(--line);border-radius:11px;padding:12px;margin-bottom:14px';
+  cap.append(el('div','layer-label','ADD COMPETITOR ADS'));
+  const help=el('p','appsub','Open the Meta Ad Library, search your trade and city, then copy what you see and paste it here — advertiser name, the “running N days” line, and the ad text. One ad per block, blank line between ads.');
+  help.style.margin='4px 0 8px'; cap.append(help);
+  const ta=el('textarea'); ta.className='f'; ta.rows=5; ta.style.cssText='width:100%;margin:0;font-family:var(--mono);font-size:12px'; ta.placeholder='Acme Roofing\nSponsored · running 37 days · 3 ads\n0% financing on a new roof — no payments for 12 months.';
+  cap.append(ta);
+  const capRow=el('div'); capRow.style.cssText='display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap';
+  const capBtn=el('button','go','Add ads'); capBtn.style.flex='none';
+  const capNote=el('span','appsub'); capNote.style.margin='0';
+  capRow.append(capBtn,capNote);
+  if(d.stats.adsAnalyzed){ const clr=el('button',null,'Clear all'); clr.style.cssText='background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;font-family:var(--sans)';
+    clr.onclick=async()=>{ await fetch('/api/market/ads',{method:'DELETE'}); openCompetitorAds(); }; capRow.append(clr); }
+  cap.append(capRow); body.append(cap);
+  capBtn.onclick=async()=>{
+    if(!ta.value.trim()){ capNote.textContent='Paste some ads first.'; return; }
+    capBtn.disabled=true; capNote.textContent='Reading…';
+    try{
+      const r=await fetch('/api/market/ads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:ta.value})});
+      const j=await r.json();
+      if(!r.ok){ capNote.textContent=j.error||'Could not read that.'; capBtn.disabled=false; return; }
+      // Say exactly what happened, including what could not be used.
+      capNote.textContent='Added '+j.added+(j.skipped?(' · '+j.skipped+' block(s) had no ad text'):'')+(j.undated?(' · '+j.undated+' with no run length'):'');
+      ta.value=''; setTimeout(()=>openCompetitorAds(),700);
+    }catch(e){ capNote.textContent='Network error.'; }
+    capBtn.disabled=false;
+  };
+
+  if(!d.stats.adsAnalyzed) return;
+
+  // The payoff panel.
+  if((d.survival||[]).length){
+    const s=el('div'); s.style.marginBottom='16px';
+    s.append(el('div','layer-label','OFFER TYPES BY HOW LONG THEY LAST'));
+    const cap2=el('p','appsub','Averaged across advertisers — a far safer read than any one long-running ad.'); cap2.style.margin='2px 0 8px'; s.append(cap2);
+    const max=Math.max(...d.survival.map(x=>x.avgDays),1);
+    for(const row of d.survival.slice(0,7)){
+      s.append(msBar(row.label,(row.avgDays/max)*100,row.avgDays+'d'+(row.reliable?'':' ·thin')));
+    }
+    const thin=d.survival.filter(x=>!x.reliable).length;
+    if(thin){ const t=el('p','appsub','“thin” = fewer than 4 ads carry that offer, so its average is not yet meaningful.'); t.style.margin='6px 0 0'; s.append(t); }
+    body.append(s);
+  }
+
+  if((d.offerMix||[]).length){
+    const s=el('div'); s.style.marginBottom='16px';
+    s.append(el('div','layer-label','WHAT THE MARKET IS RUNNING'));
+    for(const row of d.offerMix.slice(0,7)) s.append(msBar(row.label,row.sharePct,row.sharePct+'%'));
+    body.append(s);
+  }
+
+  if((d.winners||[]).length){
+    const s=el('div'); s.style.marginBottom='16px';
+    s.append(el('div','layer-label','ADS MOST LIKELY TO BE EARNING'));
+    for(const w of d.winners.slice(0,6)){
+      const r=el('div'); r.style.cssText='border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0';
+      const top=el('div'); top.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px';
+      const nm=el('b',null,w.ad.page); nm.style.fontSize='13px';
+      top.append(nm,msConfChip(w.confidence));
+      const meta=el('span','appsub',w.daysRunning+'d · '+w.variants+' variant'+(w.variants===1?'':'s')); meta.style.margin='0'; top.append(meta);
+      r.append(top);
+      const why=el('div',null,w.why); why.style.cssText='font-size:12.5px;color:var(--graphite)'; r.append(why);
+      s.append(r);
+    }
+    body.append(s);
+  }
+
+  // The call, and the one button that acts on it.
+  if(d.brief){
+    const b=el('div'); b.style.cssText='border:1px solid var(--line);border-left:3px solid var(--ink);border-radius:11px;padding:14px;background:var(--card)';
+    b.append(el('div','layer-label','WHAT TO RUN'));
+    const h=el('div',null,d.brief.label); h.style.cssText='font-size:19px;font-weight:800;letter-spacing:-.01em;margin:2px 0 6px'; b.append(h);
+    const why=el('p',null,d.brief.rationale); why.style.cssText='font-size:13px;line-height:1.55;color:var(--graphite);margin:0 0 10px'; b.append(why);
+    const gen=el('button','go','Write my version of this ad'); gen.style.flex='none'; b.append(gen);
+    const out=el('div'); out.style.marginTop='12px'; b.append(out);
+    gen.onclick=async()=>{
+      gen.disabled=true; out.innerHTML='<p class="appsub">Writing…</p>';
+      try{
+        const r=await fetch('/api/market/generate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({})});
+        const j=await r.json(); out.innerHTML='';
+        if(!r.ok){ out.append(el('p','appsub',j.error||'Could not write that.')); gen.disabled=false; return; }
+        const nb=el('div'); nb.style.cssText='font-size:12px;color:var(--muted);margin-bottom:8px'; nb.textContent=j.note; out.append(nb);
+        for(const c of j.creatives){
+          const cc=el('div'); cc.style.cssText='border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0';
+          const hl=el('b',null,c.headline); hl.style.cssText='display:block;font-size:14px;margin-bottom:3px'; cc.append(hl);
+          const bd=el('div',null,c.body); bd.style.cssText='font-size:12.5px;color:var(--graphite)'; cc.append(bd);
+          const ct=el('span',null,c.cta); ct.style.cssText='display:inline-block;margin-top:6px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--panel-2)'; cc.append(ct);
+          out.append(cc);
+        }
+      }catch(e){ out.innerHTML=''; out.append(el('p','appsub','Network error.')); }
+      gen.disabled=false;
+    };
+    body.append(b);
+  }
+}
+
 async function openCompetitorAds(){
   const box=$('#cads-body'); if(!box) return; box.innerHTML='';
+  if(REMOTE) await renderMarketScan(box);
   const head=el('div','mcard');
   head.append(el('h3',null,'Competitor Ad Research'));
   head.append(el('p','mdesc','See the Facebook & Instagram ads your local competitors are running — and, more importantly, read the signals that tell you what’s actually working. Then turn a winning angle into your own ad or campaign in one click.'));
