@@ -24,6 +24,7 @@ import { competitorAdReport, searchCompetitorAds } from './research/adlibrary.js
 import { offerBrief, offerMix, readWinners, suggestedOfferLines, survivalByOfferKind } from './research/offers.js';
 import { parseCapturedAds, readCaptured, writeCaptured } from './research/capture.js';
 import { CHANNELS, competitiveAudit, MAX_COMPETITORS } from './research/competitive.js';
+import { briefFromSelection, buildLibrary, filterLibrary, libraryFacets, readSelection, writeSelection, SELECTION_CAP } from './research/library.js';
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
@@ -2212,6 +2213,94 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       rationale: brief?.rationale ?? null,
       creatives,
       note: 'Proposals only — nothing is live. Choose an offer you can actually honour, then launch it through the normal approval flow (campaigns are created paused).',
+    };
+  });
+
+  // ── Ad Library — browse everything captured, pick what you like ──
+  // Miles ranks and explains; the owner decides. They are the only person who
+  // knows which promises their business can actually keep.
+  app.get<{ Querystring: { advertiser?: string; kind?: string; minDays?: string; selectedOnly?: string } }>(
+    '/api/library', async (req, reply) => {
+      const u = await requireUser(req, reply);
+      if (!u) return;
+      const data = await authStore.getUserData(u.id);
+      const lib = buildLibrary(readCaptured(data), readSelection(data));
+      const q = req.query ?? {};
+      const shown = filterLibrary(lib, {
+        advertiser: q.advertiser || undefined,
+        kind: (q.kind as import('./research/offers.js').OfferKind) || undefined,
+        minDays: q.minDays ? Number(q.minDays) : undefined,
+        selectedOnly: q.selectedOnly === '1',
+      });
+      const p = (data.profile ?? {}) as Record<string, string>;
+      return {
+        total: lib.length,
+        ads: shown,
+        // Facets come from the whole library, not the filtered view, so the
+        // filters do not vanish as soon as one is applied.
+        facets: libraryFacets(lib),
+        selection: briefFromSelection(lib.filter((a) => a.selected), (p.industry || 'home services').trim()),
+        cap: SELECTION_CAP,
+      };
+    });
+
+  app.post<{ Body: { id?: string; ids?: string[]; on?: boolean } }>('/api/library/select', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const current = new Set(readSelection(data));
+    const ids = req.body?.ids ?? (req.body?.id ? [req.body.id] : []);
+    if (!ids.length) return reply.code(400).send({ error: 'Nothing to select.' });
+    const known = new Set(readCaptured(data).map((a) => a.id));
+    for (const id of ids) {
+      if (!known.has(id)) continue; // never hold a selection for an ad that is gone
+      if (req.body?.on === false) current.delete(id);
+      else if (req.body?.on === true) current.add(id);
+      else current.has(id) ? current.delete(id) : current.add(id);
+    }
+    const saved = writeSelection(data, [...current]);
+    await authStore.setUserData(u.id, data);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const lib = buildLibrary(readCaptured(data), saved);
+    return { ok: true, selected: saved, count: saved.length, cap: SELECTION_CAP, selection: briefFromSelection(lib.filter((a) => a.selected), (p.industry || 'home services').trim()) };
+  });
+
+  // Reskin what was picked: the shared structure of those ads, in this
+  // business's voice and offer. Proposals only — nothing publishes.
+  app.post<{ Body: { offer?: string } }>('/api/library/reskin', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const trade = (p.industry || 'home services').trim();
+    const lib = buildLibrary(readCaptured(data), readSelection(data));
+    const picked = lib.filter((a) => a.selected);
+    const sel = briefFromSelection(picked, trade);
+    if (!sel) return reply.code(400).send({ error: 'Pick at least one ad from the library first.' });
+
+    const kind = sel.leadKind ?? sel.kinds[0]!.kind;
+    const options = suggestedOfferLines(kind, trade);
+    const offer = (req.body?.offer ?? '').trim() || options[0];
+    if (!offer) return reply.code(400).send({ error: 'Choose an offer line to feature.' });
+
+    const creatives = generateAdCopy({
+      vertical: p.vertical || p.industry || undefined,
+      category: p.category || p.industry || undefined,
+      offer,
+      businessName: p.businessName,
+      city: (p.serviceAreas || '').split(',')[0]?.trim(),
+      services: p.services,
+    });
+    return {
+      ok: true,
+      published: false,
+      basedOn: picked.map((a) => ({ page: a.page, offerLabel: a.offerLabel, daysRunning: a.daysRunning })),
+      reading: sel.reading,
+      kind,
+      offer,
+      offerOptions: options,
+      creatives,
+      note: 'Proposals only — nothing is live. Pick an offer you can actually honour, then launch it through the normal approval flow (campaigns are created paused).',
     };
   });
 
