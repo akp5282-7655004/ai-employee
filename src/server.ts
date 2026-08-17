@@ -587,7 +587,20 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   });
   // Scheduler heartbeat — last time the due-tick ran (in-process or via cron).
   let lastTickAt: string | null = null;
-  app.get('/health', async () => ({ ok: true, interpreter: interpreter.name, connector: connector.name, store: authStore.name, schedulerLastTick: lastTickAt }));
+  // Which build is actually serving. Render sets RENDER_GIT_COMMIT on every
+  // deploy; without this the only way to answer "did my change ship?" is to go
+  // and read a dashboard, which is a bad way to answer a yes/no question.
+  const BUILD = (process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || '').slice(0, 7) || 'dev';
+  const BUILT_AT = new Date().toISOString(); // process start = deploy time
+  app.get('/health', async () => ({
+    ok: true,
+    build: BUILD,
+    startedAt: BUILT_AT,
+    interpreter: interpreter.name,
+    connector: connector.name,
+    store: authStore.name,
+    schedulerLastTick: lastTickAt,
+  }));
 
   // External cron trigger — lets a durable pinger (Render Cron, cron-job.org, a
   // GitHub Action) guarantee the schedule fires even if the in-process timer stalls

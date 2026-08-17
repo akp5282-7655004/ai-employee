@@ -128,3 +128,23 @@ describe('not found and errors', () => {
     await app.close();
   });
 });
+
+describe('build identity', () => {
+  it('reports which commit is serving, so "did it ship?" is answerable from a URL', async () => {
+    process.env.RENDER_GIT_COMMIT = '4a3d344abcdef0123456789';
+    const app = buildServer({ authStore: new MemoryStore() });
+    const j = (await app.inject({ method: 'GET', url: '/health' })).json();
+    expect(j.build).toBe('4a3d344'); // short SHA, as a dashboard shows it
+    expect(j.startedAt).toMatch(/^\d{4}-/);
+    await app.close();
+    delete process.env.RENDER_GIT_COMMIT;
+  });
+
+  it('says "dev" rather than an empty string when nothing set it', async () => {
+    delete process.env.RENDER_GIT_COMMIT;
+    delete process.env.GIT_COMMIT;
+    const app = buildServer({ authStore: new MemoryStore() });
+    expect((await app.inject({ method: 'GET', url: '/health' })).json().build).toBe('dev');
+    await app.close();
+  });
+});
