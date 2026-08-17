@@ -25,6 +25,7 @@ import { offerBrief, offerMix, readWinners, suggestedOfferLines, survivalByOffer
 import { parseCapturedAds, readCaptured, writeCaptured } from './research/capture.js';
 import { CHANNELS, competitiveAudit, MAX_COMPETITORS } from './research/competitive.js';
 import { briefFromSelection, buildLibrary, filterLibrary, libraryFacets, readSelection, writeSelection, SELECTION_CAP } from './research/library.js';
+import { buildMetaAssets, buildSearchAssets, checkMetaPack, checkSearchPack } from './creative/tospec.js';
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
@@ -2204,6 +2205,17 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       city: (p.serviceAreas || '').split(',')[0]?.trim(),
       services: p.services,
     });
+    // Same spec-complete pack as the library reskin — both routes lead to a
+    // launch, so both must produce something launch-ready.
+    const specInput = {
+      trade,
+      city: (p.serviceAreas || '').split(',')[0]?.trim(),
+      businessName: p.businessName,
+      offer,
+      services: (p.services || '').split(',').map((s) => s.trim()).filter(Boolean),
+    };
+    const search = buildSearchAssets(specInput);
+    const meta = buildMetaAssets(specInput);
     return {
       ok: true,
       published: false,
@@ -2212,6 +2224,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       offerOptions: options,
       rationale: brief?.rationale ?? null,
       creatives,
+      assets: {
+        google: { pack: search, checks: checkSearchPack(search) },
+        meta: { pack: meta, checks: checkMetaPack(meta) },
+      },
       note: 'Proposals only — nothing is live. Choose an offer you can actually honour, then launch it through the normal approval flow (campaigns are created paused).',
     };
   });
@@ -2291,6 +2307,18 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       city: (p.serviceAreas || '').split(',')[0]?.trim(),
       services: p.services,
     });
+    // Built to the platform specs, not to three token variations — Google wants
+    // 15 headlines and 4 descriptions before it serves properly, and leaving the
+    // other twelve to the owner is the work they bought this to avoid.
+    const specInput = {
+      trade,
+      city: (p.serviceAreas || '').split(',')[0]?.trim(),
+      businessName: p.businessName,
+      offer,
+      services: (p.services || '').split(',').map((s) => s.trim()).filter(Boolean),
+    };
+    const search = buildSearchAssets(specInput);
+    const meta = buildMetaAssets(specInput);
     return {
       ok: true,
       published: false,
@@ -2300,6 +2328,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       offer,
       offerOptions: options,
       creatives,
+      assets: {
+        google: { pack: search, checks: checkSearchPack(search) },
+        meta: { pack: meta, checks: checkMetaPack(meta) },
+      },
       note: 'Proposals only — nothing is live. Pick an offer you can actually honour, then launch it through the normal approval flow (campaigns are created paused).',
     };
   });

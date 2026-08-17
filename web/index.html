@@ -1760,6 +1760,7 @@ async function renderMarketScan(box){
           const ct=el('span',null,c.cta); ct.style.cssText='display:inline-block;margin-top:6px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--panel-2)'; cc.append(ct);
           out.append(cc);
         }
+        if(j.assets) out.append(specPack(j.assets));
       }catch(e){ out.innerHTML=''; out.append(el('p','appsub','Network error.')); }
       gen.disabled=false;
     };
@@ -1817,6 +1818,7 @@ async function renderAdLibrary(box, filter){
           const bd=el('div',null,c.body); bd.style.cssText='font-size:12.5px;color:var(--graphite)'; cc.append(bd);
           out.append(cc);
         }
+        if(j.assets) out.append(specPack(j.assets));
       }catch(e){ out.innerHTML=''; out.append(el('p','appsub','Network error.')); }
       go.disabled=false;
     };
@@ -1855,6 +1857,62 @@ async function renderAdLibrary(box, filter){
     grid.append(c);
   }
   body.append(grid);
+}
+
+// ── Spec-complete asset pack ─────────────────────────────────────────────────
+// Google needs 15 headlines and 4 descriptions before it serves properly; three
+// token lines leave the owner to write the other twelve by hand.
+function specPack(assets){
+  const wrap=el('div'); wrap.style.marginTop='14px';
+  const tabs=el('div'); tabs.style.cssText='display:flex;gap:6px;margin-bottom:10px';
+  const body=el('div');
+  const chip=(txt,fg,bg)=>{ const s=el('span',null,txt); s.style.cssText='font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;color:'+fg+';background:'+bg; return s; };
+  const STAT={ok:['#1B8552','#E8F5EE'],warn:['#86651C','#FBF6E7'],bad:['#A45359','#F9EDEE']};
+
+  const list=(label,items,limit)=>{
+    const d=el('div'); d.style.marginBottom='12px';
+    d.append(el('div','layer-label',label+' ('+items.length+')'));
+    for(const it of items){
+      const r=el('div'); r.style.cssText='display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px solid var(--line)';
+      const t=el('span',null,it); t.style.cssText='flex:1;font-size:12.5px;color:var(--ink)';
+      const n=el('span',null,String(it.length)); n.style.cssText='flex:none;font-size:11px;font-variant-numeric:tabular-nums;color:'+(limit&&it.length>limit?'var(--bad)':'var(--muted)');
+      r.append(t,n); d.append(r);
+    }
+    return d;
+  };
+
+  const paint=(which)=>{
+    body.innerHTML='';
+    const a=assets[which]; if(!a) return;
+    const cl=el('div'); cl.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px';
+    for(const c of a.checks){ const [fg,bg]=STAT[c.status]||STAT.warn;
+      const s=chip(c.item+' · '+c.detail,fg,bg); s.style.fontWeight='600'; cl.append(s); }
+    body.append(cl);
+    if(which==='google'){
+      body.append(list('HEADLINES',a.pack.headlines,30));
+      body.append(list('DESCRIPTIONS',a.pack.descriptions,90));
+      body.append(list('CALLOUTS',a.pack.callouts,25));
+      body.append(list('SITELINKS',a.pack.sitelinks.map(s=>s.text),25));
+      body.append(list(a.pack.snippet.header.toUpperCase(),a.pack.snippet.values,25));
+    }else{
+      body.append(list('PRIMARY TEXT',a.pack.primaryTexts,125));
+      body.append(list('HEADLINES',a.pack.headlines,27));
+      body.append(list('DESCRIPTIONS',a.pack.descriptions,27));
+      const c=el('div','appsub','Call to action: '+a.pack.cta); c.style.margin='0'; body.append(c);
+    }
+    for(const s of (a.pack.shortfalls||[])){ const w=el('div',null,s); w.style.cssText='font-size:12px;color:#86651C;margin-top:6px'; body.append(w); }
+  };
+
+  for(const [k,label] of [['google','Google Ads'],['meta','Meta']]){
+    const b=el('button',null,label);
+    b.style.cssText='font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;cursor:pointer;font-family:var(--sans);border:1px solid var(--line);background:var(--card);color:var(--graphite)';
+    b.onclick=()=>{ [...tabs.children].forEach(x=>{x.style.background='var(--card)';x.style.color='var(--graphite)';x.style.borderColor='var(--line)';});
+      b.style.background='var(--ink)'; b.style.color='#fff'; b.style.borderColor='var(--ink)'; paint(k); };
+    tabs.append(b);
+  }
+  wrap.append(el('div','layer-label','READY TO PASTE INTO THE PLATFORM'),tabs,body);
+  tabs.children[0].click();
+  return wrap;
 }
 
 let CADS_FILTER={};
