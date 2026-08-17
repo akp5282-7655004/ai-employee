@@ -130,6 +130,19 @@
   .switch input:checked + .sl:before{transform:translateX(20px);}
   .glabel{font-size:10.5px;letter-spacing:.05em;color:var(--faint);padding:12px 10px 4px;font-weight:700;}
   .side .grow{flex:1;}
+  /* Sub-tabs: the pages inside one destination. Scrolls rather than wraps, so a
+     five-tab section never pushes the page content down on a phone. */
+  /* Named .pagetabs, not .subtabs — that class already exists further down for
+     four other strips and would both clobber this and be clobbered by it.
+     Scrolls rather than wraps, so a five-tab section stays one row on a phone. */
+  .pagetabs{display:flex;flex-wrap:nowrap;gap:6px;padding:10px 22px 0;overflow-x:auto;scrollbar-width:none;}
+  .pagetabs::-webkit-scrollbar{display:none;}
+  .pagetab{flex:none;font-family:var(--sans);font-size:12.5px;font-weight:600;padding:5px 12px;
+    border-radius:999px;cursor:pointer;border:1px solid var(--line);background:var(--card);
+    color:var(--muted);white-space:nowrap;}
+  .pagetab:hover{color:var(--ink);}
+  .pagetab.on{background:var(--ink);border-color:var(--ink);color:#fff;}
+  @media(max-width:720px){.pagetabs{padding:10px 14px 0;}}
   /* The account row carries Log out. The sidebar scrolls once the playbook list
      runs past the viewport, which pushed Log out below the fold on a short
      screen — you cannot sign out of a control you cannot reach. Pin it to the
@@ -446,67 +459,38 @@
     <div class="ws"><span class="sq" id="ws-av">·</span><b id="ws-name">Your Workspace</b><span class="cx"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg></span></div>
     <div class="newtask" data-ask><svg class="ico" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-9 9c0 1.6.42 3.1 1.15 4.4L3 21l4.8-1.1A9 9 0 1 0 12 3Z"/></svg> Chat with Miles</div>
     <nav class="nav" id="nav">
-      <a data-page="overview" class="on"><svg class="ico" viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0"/><path d="M12 13l4-3"/><path d="M4 13h1M19 13h1M12 3v1"/></svg> Dashboard</a>
-
-      <div class="navgroup" data-group="agents">
-        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/></svg><span class="hlabel">Miles</span><svg class="ico chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+      <div class="navgroup open" data-group="run">
+        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0"/><path d="M12 13l4-3"/><path d="M4 13h1M19 13h1M12 3v1"/></svg> Run<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="navkids">
-          <a data-page="team"><svg class="ico" viewBox="0 0 24 24"><path d="M3 11l18-7-7 18-2.5-7.5L3 11z"/></svg> Campaigns</a>
-          <a data-page="agents"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M8 13h.01M16 13h.01"/></svg> What Miles Does</a>
-          <a data-page="schedules"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M12 3h.01M5 4L3 6M19 4l2 2"/></svg> Scheduled Tasks</a>
-          <a data-page="wireframe"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11M3 14h6"/></svg> Agent Wireframe</a>
-          <a data-page="autopilot"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M12 12l4-2"/></svg> Autopilot</a>
-          <a data-page="skills"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 2.2 5.6L20 9l-4.3 3.8L17 19l-5-3-5 3 1.3-6.2L4 9l5.8-.4Z"/></svg> Skills &amp; Playbooks</a>
+          <a data-page="overview" data-pages="overview" data-tabs="Dashboard"><svg class="ico" viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0"/><path d="M12 13l4-3"/><path d="M4 13h1M19 13h1M12 3v1"/></svg> Dashboard</a>
+          <a data-page="launch" data-pages="playbook,launch,fblaunch,adstudio" data-tabs="Plan|Google Ads|Facebook|Ad Copy"><svg class="ico" viewBox="0 0 24 24"><path d="M5 13a8 8 0 0 1 16 0"/><path d="M12 3v2M4 13H2M22 13h-2M12 13l4-4"/><circle cx="12" cy="13" r="1.6"/></svg> Launch</a>
+          <a data-page="studio" data-pages="studio,editor,calendar" data-tabs="Create|Edit|Schedule"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4 3.6L17 19l-5-3-5 3 1-6.4L4 9l5.8-.7Z"/></svg> Studio</a>
+          <a data-page="adsmgr" data-pages="adsmgr" data-tabs="Ads Manager"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16"/></svg> Ads Manager</a>
+          <a data-page="localpresence" data-pages="localpresence" data-tabs="Local Presence"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-7-5.2-7-11a7 7 0 0 1 14 0c0 5.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.6"/></svg> Local Presence</a>
         </div>
       </div>
-
-      <div class="navgroup" data-group="marketing">
-        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4 3.6L17 19l-5-3-5 3 1-6.4L4 9l5.8-.7Z"/></svg><span class="hlabel">Marketing</span><svg class="ico chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+      <div class="navgroup" data-group="compete">
+        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3M7 9l3 2-3 2V9zM14 9h4M14 13h3"/></svg> Compete<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="navkids">
-          <a data-page="editor"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> Editor</a>
-          <a data-page="studio"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4 3.6L17 19l-5-3-5 3 1-6.4L4 9l5.8-.7Z"/></svg> Creative Studio</a>
-          <a data-page="adstudio"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg> Ad Studio</a>
-          <a data-page="playbook"><svg class="ico" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg> Campaign Playbook</a>
-          <a data-page="launch"><svg class="ico" viewBox="0 0 24 24"><path d="M5 13a8 8 0 0 1 16 0"/><path d="M12 3v2M4 13H2M22 13h-2M12 13l4-4"/><circle cx="12" cy="13" r="1.6"/></svg> Launch a Campaign</a>
-          <a data-page="fblaunch"><svg class="ico" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3Z"/></svg> Launch on Facebook</a>
-          <a data-page="localpresence"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-7-5.2-7-11a7 7 0 0 1 14 0c0 5.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.6"/></svg> Local Presence</a>
-          <a data-page="adsmgr"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16"/></svg> Ads Manager</a>
-          <a data-page="growth"><svg class="ico" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7h-5M21 7v5"/></svg> Growth Autopilot</a>
-          <a data-page="autohub"><svg class="ico" viewBox="0 0 24 24"><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/><circle cx="12" cy="12" r="3.5"/></svg> Automation Hub</a>
-          <a data-page="ghl"><svg class="ico" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6.5l7 4.5M8.5 17.5l7-4.5"/></svg> GHL Automations</a>
-          <a data-page="calendar"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg> Content Calendar</a>
-          <a data-page="brand"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7l1.3 3 3.2.2-2.4 2.1.8 3.1L12 13.9 9.1 15.5l.8-3.1L7.5 10.2 10.7 10Z"/></svg> Brand Guidelines</a>
-          <a data-page="assets"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Assets</a>
-          <a data-page="audit"><svg class="ico" viewBox="0 0 24 24"><path d="M4 4h16v12H4z"/><path d="M4 8h16M8 12h6"/><circle cx="17" cy="18" r="3"/><path d="M19.5 20.5L22 23"/></svg> Website Audit</a>
-          <a data-page="hub"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg> Marketing Hub</a>
+          <a data-page="cads" data-pages="cads,affluence,research" data-tabs="Ads & Market Scan|Market Map|Demographics"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3M7 9l3 2-3 2V9zM14 9h4M14 13h3"/></svg> Competitors</a>
+          <a data-page="audit" data-pages="audit" data-tabs="Site &amp; Competitor Audits"><svg class="ico" viewBox="0 0 24 24"><path d="M4 4h16v12H4z"/><path d="M4 8h16M8 12h6"/><circle cx="17" cy="18" r="3"/><path d="M19.5 20.5L22 23"/></svg> Audits</a>
         </div>
       </div>
-
-      <div class="navgroup" data-group="insights">
-        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="hlabel">Insights</span><svg class="ico chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+      <div class="navgroup" data-group="know">
+        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Know<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="navkids">
-          <a data-page="recs"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.3 1 2.5h6c0-1.2.3-1.8 1-2.5A6 6 0 0 0 12 3Z"/></svg> Recommendations</a>
-          <a data-page="analytics"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Analytics</a>
-          <a data-page="meters"><svg class="ico" viewBox="0 0 24 24"><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 12 15 9M4 12a8 8 0 0 1 16 0"/></svg> Meters</a>
-          <a data-page="research"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg> Research</a>
-          <a data-page="affluence"><svg class="ico" viewBox="0 0 24 24"><path d="M3 21h18M6 21V9l6-4 6 4v12M9 21v-4h6v4M12 3v2"/></svg> Market Map</a>
-          <a data-page="cads"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3M7 9l3 2-3 2V9zM14 9h4M14 13h3"/></svg> Competitor Ads</a>
-          <a data-page="weather"><svg class="ico" viewBox="0 0 24 24"><path d="M17 14a4 4 0 0 0-1-7.87A6 6 0 0 0 4 8a4 4 0 0 0 .5 8H17Z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/></svg> Weather Triggers</a>
+          <a data-page="analytics" data-pages="analytics,meters" data-tabs="Results|Benchmarks"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Analytics</a>
+          <a data-page="recs" data-pages="recs,growth" data-tabs="Recommendations|Growth Autopilot"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.3 1 2.5h6c0-1.2.3-1.8 1-2.5A6 6 0 0 0 12 3Z"/></svg> Recommendations</a>
+          <a data-page="skills" data-pages="skills,market,ghl" data-tabs="Skills|Marketplace|GHL Workflows"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 2.2 5.6L20 9l-4.3 3.8L17 19l-5-3-5 3 1.3-6.2L4 9l5.8-.4Z"/></svg> Playbooks</a>
         </div>
       </div>
-
-      <div class="navgroup" data-group="account">
-        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg><span class="hlabel">Account &amp; Setup</span><span class="navbadge" id="acct-badge" style="display:none"></span><svg class="ico chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+      <div class="navgroup" data-group="set-up">
+        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Set up<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="navkids">
-          <a data-page="integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
-          <a data-page="health"><svg class="ico" viewBox="0 0 24 24"><path d="M3 12h4l2 5 4-12 2 7h6"/></svg> System Health</a>
-          <a data-page="approvals"><svg class="ico" viewBox="0 0 24 24"><path d="M12 2 4 6v6c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V6Z"/><path d="M9 12l2 2 4-4"/></svg> Approvals &amp; Autonomy</a>
-          <a data-page="billing"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg> Plan &amp; Credits</a>
-          <a data-page="profile"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
-          <a data-page="deploy"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 21h14"/></svg> Deploy <span id="deploy-badge" class="navbadge" style="display:none"></span></a>
-          <a data-page="logs"><svg class="ico" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l3-3 3 2 4-5"/><circle cx="7" cy="15" r="0.5"/></svg> Logs</a>
-          <a data-page="market"><svg class="ico" viewBox="0 0 24 24"><path d="M3 9h18l-1.4-5.3A1 1 0 0 0 18.6 3H5.4a1 1 0 0 0-1 .7L3 9Z"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9M9 13h6"/></svg> Marketplace</a>
-          <a data-page="settings"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg> Settings</a>
+          <a data-page="profile" data-pages="profile,brand,assets" data-tabs="Profile|Brand|Assets"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
+          <a data-page="integrations" data-pages="integrations" data-tabs="Integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
+          <a data-page="autohub" data-pages="autohub,schedules,weather,autopilot,approvals" data-tabs="Plays|Scheduled|Weather|Autonomy|Approvals"><svg class="ico" viewBox="0 0 24 24"><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/><circle cx="12" cy="12" r="3.5"/></svg> Automations</a>
+          <a data-page="settings" data-pages="settings,billing,health,logs" data-tabs="Account|Plan &amp; Credits|System Health|Change Log"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg> Settings</a>
         </div>
       </div>
     </nav>
@@ -528,6 +512,8 @@
       <button class="askbtn" data-ask><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 1.9 4.8L19 9l-4 3.5L16 18l-4-2.4L8 18l1-5.5L5 9l5.1-1.2Z"/></svg> Ask Miles</button>
       <button class="tbtn" id="theme" title="Theme">◑</button>
     </div>
+    <!-- Pages belonging to the current destination. Hidden when it owns one. -->
+    <div class="pagetabs" id="pagetabs" style="display:none"></div>
 
     <!-- HOME (dashboard / agents / skills share this) -->
     <!-- OVERVIEW DASHBOARD -->
@@ -1316,9 +1302,35 @@ function renderCards(){
 
 // ═══ pages ═══
 const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',approvals:'Approvals & Autonomy',billing:'Plan & Credits',fblaunch:'Launch on Facebook',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+// A destination can own several pages — Launch owns the plan, both channel
+// launchers and the ad-copy writer. The nav lists the destination; its pages
+// become a tab strip, so a four-step job stops looking like four unrelated
+// places in the sidebar.
+function destFor(id){
+  return [...document.querySelectorAll('#nav a[data-pages]')].find(a=>a.dataset.pages.split(',').includes(id));
+}
+function renderSubTabs(id){
+  const strip=$('#pagetabs'); if(!strip) return;
+  strip.innerHTML=''; strip.style.display='none';
+  const a=destFor(id); if(!a) return;
+  const pages=a.dataset.pages.split(','), labels=(a.dataset.tabs||'').split('|');
+  if(pages.length<2) return;             // a single-page destination needs no strip
+  strip.style.display='flex';
+  pages.forEach((p,i)=>{
+    const b=document.createElement('button');
+    b.className='pagetab'+(p===id?' on':'');
+    b.textContent=labels[i]||p;
+    b.onclick=()=>setPage(p);
+    strip.append(b);
+  });
+}
 function setPage(id){
-  document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.page===id));
+  const dest=destFor(id);
+  // Highlight the DESTINATION, not the page — otherwise moving between tabs
+  // looks like leaving the section you are standing in.
+  document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',!!dest&&a===dest));
   openNavGroupFor(id);
+  renderSubTabs(id);
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
   const homeIds=['agents'];
   $('#page-home').classList.toggle('on',homeIds.includes(id));
@@ -1414,8 +1426,9 @@ document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>setPage(a.dataset.p
 // Collapsible nav groups: expand the group holding the active page; a header click
 // toggles its group open (accordion — opening one collapses the others).
 function openNavGroupFor(id){
+  const dest=destFor(id);
   document.querySelectorAll('#nav .navgroup').forEach(g=>{
-    const has=!!g.querySelector('a[data-page="'+id+'"]');
+    const has=!!(dest&&g.contains(dest));
     g.classList.toggle('open',has);
     const head=g.querySelector('.navhead'); if(head) head.classList.toggle('active',has);
   });
