@@ -1484,7 +1484,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return { ok: true };
   });
 
-  // Import brand data from a customer's website to pre-fill their Assets.
+  // Crawl a customer's website to pre-fill their Business Profile.
   app.post<{ Body: { url?: string } }>('/api/import-site', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
@@ -1492,7 +1492,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!url) return reply.code(400).send({ error: 'url required' });
     try {
       const d = await importSite(url);
-      if (!d) return reply.code(404).send({ error: 'Couldn’t read that site — check the URL and try again.' });
+      if (!d || !d.foundFields) {
+        return reply.code(404).send({
+          error: d?.blocked
+            ? 'That site turned Miles away — its firewall blocked the request, so there was nothing to read. Fill the form in below and Miles will work from that.'
+            : 'Couldn’t read that site — check the URL and try again.',
+          blocked: !!d?.blocked,
+        });
+      }
       return d;
     } catch (err) {
       return reply.code(502).send({ error: String((err as Error).message) });

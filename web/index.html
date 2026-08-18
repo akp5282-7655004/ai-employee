@@ -6405,7 +6405,9 @@ $('#theme').onclick=()=>{const c=document.documentElement.getAttribute('data-the
 const PROFILE_SECTIONS=[
   {title:'Your business',fields:[
     {k:'businessName',label:'Business name',type:'text',full:true,ph:'e.g. Rivera Plumbing & AC'},
-    {k:'industry',label:'Industry',type:'select',options:['Home Services','Plumbing','HVAC','Electrical','Roofing','Landscaping','Cleaning','Pest Control','Dental','Solar','Other']},
+    // Kept in step with TRADES in src/research/site.ts — the importer can only
+    // fill this field with a label that exists here.
+    {k:'industry',label:'Industry',type:'select',blank:true,options:['Home Services','Painting','Plumbing','HVAC','Electrical','Roofing','Landscaping','Cleaning','Pest Control','Remodeling','Flooring','Windows & Doors','Garage Doors','Concrete & Masonry','Fencing','Siding & Gutters','Tree Service','Pool Service','Restoration','Appliance Repair','Solar','Dental','Other']},
     {k:'yearStarted',label:'Year founded',type:'number',ph:'e.g. 2012'},
     {k:'description',label:'What you do & what makes you different',type:'textarea',full:true,ph:'Your pitch in a sentence or two — the thing customers pick you for.'},
     {k:'phone',label:'Phone',type:'text'},
@@ -6433,7 +6435,7 @@ const PROFILE_SECTIONS=[
   ]},
   {title:'SEO & website',fields:[
     {k:'website',label:'Website',type:'text',full:true,ph:'yourbusiness.com'},
-    {k:'websitePlatform',label:'Website platform',type:'select',options:['Not sure','WordPress','Wix','Squarespace','GoDaddy','GoHighLevel','Webflow','Custom']},
+    {k:'websitePlatform',label:'Website platform',type:'select',options:['Not sure','WordPress','Wix','Squarespace','GoDaddy','GoHighLevel','Webflow','Shopify','Duda','HubSpot','Custom']},
     {k:'gbpClaimed',label:'Google Business Profile claimed?',type:'select',options:['Not sure','Yes','No']},
     {k:'targetKeywords',label:'Services / keywords you want to rank for',type:'textarea',full:true,ph:'emergency plumber phoenix, water heater repair…'},
   ]},
@@ -6470,20 +6472,58 @@ function buildProfileForm(container,vals){
     for(const f of sec.fields){
       const w=el('div',f.full?'full':''); w.append(el('label',null,f.label));
       let inp;
-      if(f.type==='select'){ inp=el('select'); for(const o of f.options){ const op=el('option',null,o); op.value=o; if(vals[f.k]===o)op.selected=true; inp.append(op);} }
+      // A select with blank:true starts genuinely empty, so "not answered yet"
+      // is visible instead of masquerading as the first option.
+      if(f.type==='select'){ inp=el('select'); const opts=f.blank?['',...f.options]:f.options; for(const o of opts){ const op=el('option',null,o||'—'); op.value=o; if((vals[f.k]||'')===o)op.selected=true; inp.append(op);} }
       else if(f.type==='textarea'){ inp=el('textarea'); inp.value=vals[f.k]||''; if(f.ph)inp.placeholder=f.ph; }
       else { inp=el('input'); inp.type=f.type; inp.value=(vals[f.k]!=null?vals[f.k]:''); if(f.ph)inp.placeholder=f.ph; }
       inp.dataset.k=f.k; w.append(inp); container.append(w);
     }
   }
 }
+// Every field the crawler can produce, mapped to its profile key. Anything the
+// crawler learns but the profile has no home for simply isn't listed here.
+const IMPORT_MAP={website:'website',businessName:'businessName',description:'description',industry:'industry',
+  yearStarted:'yearStarted',employees:'employees',services:'services',serviceAreas:'serviceAreas',
+  currentOffers:'currentOffers',targetKeywords:'targetKeywords',phone:'phone',email:'email',address:'address',
+  city:'city',state:'state',zip:'zip',websitePlatform:'websitePlatform',runningAds:'runningAds',
+  collectsEmails:'collectsEmails',emailTool:'emailTool',facebook:'facebook',instagram:'instagram',
+  linkedin:'linkedin',youtube:'youtube',tiktok:'tiktok',brandColors:'brandColors'};
+// A dropdown counts as unanswered while it still holds its default, so an
+// import can fill it — but a value the dropdown doesn't offer is never forced in.
+function fillable(inp,v){
+  if(inp.tagName==='SELECT'){
+    const opts=[...inp.options].map(o=>o.value);
+    if(!opts.includes(String(v))) return false;
+    const cur=String(inp.value||'');
+    return !cur || cur===opts[0];
+  }
+  return !String(inp.value||'').trim();
+}
 // Fill empty form fields from a website-crawl result. Returns how many it filled.
 function applyImportToForm(container,d){
-  const map={website:'website',businessName:'businessName',description:'description',services:'services',phone:'phone',email:'email',address:'address',city:'city',state:'state',zip:'zip',facebook:'facebook',instagram:'instagram',linkedin:'linkedin',youtube:'youtube',tiktok:'tiktok',brandColor:'brandColors'};
   let n=0;
-  for(const [src,dst] of Object.entries(map)){ const v=d[src]; if(v){ const inp=container.querySelector('[data-k="'+dst+'"]'); if(inp && !String(inp.value||'').trim()){ inp.value=v; n++; } } }
+  for(const [src,dst] of Object.entries(IMPORT_MAP)){
+    const v=d[src]; if(v===undefined||v===null||v==='') continue;
+    const inp=container.querySelector('[data-k="'+dst+'"]');
+    if(inp && fillable(inp,v)){ inp.value=v; n++; }
+  }
+  // Fall back to the theme color when the stylesheet gave us nothing better.
+  if(!d.brandColors && d.brandColor){ const inp=container.querySelector('[data-k="brandColors"]'); if(inp && fillable(inp,d.brandColor)){ inp.value=d.brandColor; n++; } }
   if(d.logo){ ASSETS=ASSETS||{photos:[]}; if(!ASSETS.logo){ ASSETS.logo=d.logo; try{ saveAssets(); }catch(e){} } }
   return n;
+}
+// Name the fields still empty after an import, so "it didn't find much" is a
+// list the owner can act on rather than a feeling.
+function stillBlank(container){
+  const targets=new Set(Object.values(IMPORT_MAP));
+  const out=[];
+  for(const f of PROFILE_FIELDS){
+    if(!targets.has(f.k)) continue;
+    const inp=container.querySelector('[data-k="'+f.k+'"]');
+    if(inp && !String(inp.value||'').trim()) out.push(f.label.toLowerCase());
+  }
+  return out;
 }
 async function runSiteImport(url,container,noteEl){
   if(!url){ return; }
@@ -6494,7 +6534,14 @@ async function runSiteImport(url,container,noteEl){
     const d=await r.json().catch(()=>({}));
     if(!r.ok){ if(noteEl) noteEl.textContent=d.error||'Couldn’t read that site — check the URL, or just fill it in below.'; return 0; }
     const n=applyImportToForm(container,d);
-    if(noteEl) noteEl.textContent='✓ Imported '+n+' field'+(n===1?'':'s')+' — review below and fill in the rest.';
+    if(noteEl){
+      const pages=d.pagesRead||1;
+      const blank=stillBlank(container);
+      let msg='✓ Read '+pages+' page'+(pages===1?'':'s')+' and filled '+n+' field'+(n===1?'':'s')+'.';
+      if(blank.length) msg+=' Couldn’t find '+blank.slice(0,4).join(', ')+(blank.length>4?' and '+(blank.length-4)+' more':'')+' — add those below.';
+      else msg+=' Review below and hit Save.';
+      noteEl.textContent=msg;
+    }
     return n;
   }catch(e){ if(noteEl) noteEl.textContent='Couldn’t read that site — you can fill it in below.'; return 0; }
 }
