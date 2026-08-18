@@ -36,6 +36,10 @@ import { appendCrmEvent, amountFrom, crmLiveValues, calcLiveValues, dealsLiveVal
 import { buildLocalPresenceAudit, gbpCompletenessScore, type AuditAnswer } from './agents/localpresence.js';
 import { appendApproval, approvalLog, defaultAutonomy, normalizeAutonomy, TOS_VERSION, type ApprovalEntry } from './agents/approvallog.js';
 import { listSkills as listLibrarySkills, readSkill as readLibrarySkill } from './skills/library.js';
+import {
+  cadenceFor, frameworkGuidance, isSkillDue, MAX_ACTIVE_FRAMEWORKS, MAX_DEPLOYED_SKILLS,
+  normalizeDeployed, normalizeFrameworks,
+} from './skills/deploy.js';
 import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS } from './billing/credits.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
@@ -1039,7 +1043,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const svc = p.services ? ` Services: ${p.services}.` : '';
     const loc = p.serviceAreas ? ` Area: ${p.serviceAreas}.` : '';
     const user = `Business: ${biz} (${trade}).${svc}${loc}`;
-    const text = await generateText({ system: match.play.system, user, maxTokens: 900 });
+    // Frameworks the owner deployed are guidance for this play, picked for relevance.
+    const system = match.play.system + frameworkGuidance(
+      normalizeFrameworks(data.activeFrameworks, (n) => listLibrarySkills().some((s) => s.name === n)),
+      `${match.skill.name} ${match.play.label} ${match.skill.category} ${trade}`,
+    );
+    const text = await generateText({ system, user, maxTokens: 900 });
     if (text) return { text, live: true, skill: match.skill.name, play: match.play.label, push: match.play.push ?? null };
     return {
       text: `“${match.play.label}” is ready to generate. Add an OpenRouter key on Render and Miles will write this custom for ${biz} — expert ${match.skill.category.toLowerCase()} output, on-brand, in seconds.`,
@@ -1816,6 +1825,102 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     return { skills: listLibrarySkills() };
   });
+
+  // ── Deployments — a skill that is working, not just installed ─────────────
+  const deployedOf = (data: Record<string, unknown>) => normalizeDeployed(data.deployedSkills);
+  const frameworksOf = (data: Record<string, unknown>) =>
+    normalizeFrameworks(data.activeFrameworks, (n) => listLibrarySkills().some((s) => s.name === n));
+
+  app.get('/api/deployments', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return {
+      skills: deployedOf(data),
+      frameworks: frameworksOf(data),
+      available: SEVEN_SKILLS.map((s) => ({ ...s, cadence: cadenceFor(s.key) })),
+      maxFrameworks: MAX_ACTIVE_FRAMEWORKS,
+    };
+  });
+
+  /**
+   * Deploy a skill or a framework. Deploying a skill runs it once straight away
+   * — an owner who presses Deploy should see what it produces, not wait a week
+   * to find out whether it works.
+   */
+  app.post<{ Body: { kind?: string; id?: string; all?: boolean } }>('/api/deployments', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const { kind, id, all } = req.body ?? {};
+    const data = await authStore.getUserData(u.id);
+
+    if (kind === 'framework') {
+      const known = listLibrarySkills();
+      const active = frameworksOf(data);
+      const wanted = (id ?? '').trim();
+      if (!known.some((s) => s.name === wanted)) return reply.code(404).send({ error: 'Unknown framework.' });
+      if (active.includes(wanted)) return { ok: true, frameworks: active };
+      if (active.length >= MAX_ACTIVE_FRAMEWORKS) {
+        return reply.code(409).send({
+          error: `Miles writes with ${MAX_ACTIVE_FRAMEWORKS} frameworks at a time — any more and none of them land. Remove one to deploy this.`,
+          frameworks: active,
+        });
+      }
+      const next = [...active, wanted];
+      data.activeFrameworks = next;
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'deployments', title: `Deployed framework — ${wanted}` });
+      await authStore.setUserData(u.id, data);
+      return { ok: true, frameworks: next };
+    }
+
+    if (kind !== 'skill') return reply.code(400).send({ error: 'kind must be "skill" or "framework"' });
+
+    const keys = all ? SEVEN_SKILLS.map((s) => s.key) : [(id ?? '').trim()];
+    const deployed = deployedOf(data);
+    const added: string[] = [];
+    const failed: { key: string; error: string }[] = [];
+    for (const key of keys) {
+      const def = SEVEN_SKILLS.find((s) => s.key === key);
+      if (!def) { failed.push({ key, error: 'Unknown skill.' }); continue; }
+      if (deployed.some((d) => d.key === key)) continue;
+      if (deployed.length >= MAX_DEPLOYED_SKILLS) break;
+      const now = new Date().toISOString();
+      // A first run right now, so Deploy produces something visible today.
+      const res = await runAndRecordSkill(u.id, data, key, 'schedule');
+      if (res.error) { failed.push({ key, error: res.error }); if (res.code === 402) break; continue; }
+      deployed.push({ key, name: def.name, cadence: cadenceFor(key), deployedAt: now, lastRunAt: now, runs: 1 });
+      added.push(def.name);
+    }
+    data.deployedSkills = deployed;
+    if (added.length) {
+      appendApproval(data, {
+        id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'deployments',
+        title: `Deployed ${added.length} skill${added.length === 1 ? '' : 's'} — ${added.slice(0, 5).join(', ')}${added.length > 5 ? '…' : ''}`,
+        detail: 'Runs on its own cadence in proposal mode; nothing is applied without approval.',
+      });
+    }
+    await authStore.setUserData(u.id, data);
+    return { ok: true, skills: deployed, added, failed };
+  });
+
+  app.delete<{ Body: { kind?: string; id?: string } }>('/api/deployments', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const { kind, id } = req.body ?? {};
+    const data = await authStore.getUserData(u.id);
+    if (kind === 'framework') {
+      const next = frameworksOf(data).filter((n) => n !== id);
+      data.activeFrameworks = next;
+      await authStore.setUserData(u.id, data);
+      return { ok: true, frameworks: next };
+    }
+    if (kind !== 'skill') return reply.code(400).send({ error: 'kind must be "skill" or "framework"' });
+    const next = deployedOf(data).filter((d) => d.key !== id);
+    data.deployedSkills = next;
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'dismissal', actor: u.email, source: 'deployments', title: `Undeployed skill — ${id}` });
+    await authStore.setUserData(u.id, data);
+    return { ok: true, skills: next };
+  });
   app.get<{ Params: { name: string } }>('/api/skill-library/:name', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
@@ -1870,39 +1975,57 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const runs = (data.skill_runs as import('./skills/seven.js').SkillRun[]) ?? [];
     return { skills: SEVEN_SKILLS, runs: runs.slice(0, 25) };
   });
-  app.post<{ Params: { key: string } }>('/api/skills7/:key/run', async (req, reply) => {
-    const u = await requireUser(req, reply);
-    if (!u) return;
-    const data = await authStore.getUserData(u.id);
+  /** The live picture one of the seven skills reasons over. */
+  const buildSkillCtx = async (uid: string, data: Record<string, unknown>): Promise<import('./skills/seven.js').SkillCtx> => {
     const p = (data.profile ?? {}) as Record<string, string>;
-    const snap = await getSnapshot(u.id, data);
-    const spendRows = spendRowsOf(snap);
+    const snap = await getSnapshot(uid, data);
     const adSpend7 = snap?.adSpend;
     const crm7 = crmLiveValues(data, 30);
-    const searchTerms = snap?.searchTerms ?? [];
-    const ctx: import('./skills/seven.js').SkillCtx = {
+    return {
       business: p.businessName ?? '', trade: p.industry ?? '', city: (p.serviceAreas || '').split(',')[0]?.trim() ?? '',
       services: p.services ?? '', zips: (p.serviceAreas || '').split(',').map((x) => x.trim()).filter((x) => /^\d{5}$/.test(x)),
       live: { values: { ...crm7, ...calcLiveValues(crm7, adSpend7), ...(adSpend7 !== undefined ? { 'google_ads.cost': Math.round(adSpend7 * 100) / 100 } : {}) } },
-      spendRows,
-      searchTerms,
+      spendRows: spendRowsOf(snap),
+      searchTerms: snap?.searchTerms ?? [],
       monthlyBudget: Number(p.monthlyBudget) || undefined,
     };
+  };
+
+  /**
+   * Run one skill and file its proposal. The single path a skill run takes,
+   * whether the owner pressed the button or the schedule did — so a deployed
+   * skill cannot acquire powers a manual run does not have.
+   */
+  const runAndRecordSkill = async (
+    uid: string, data: Record<string, unknown>, key: string, via: 'manual' | 'schedule',
+  ): Promise<{ run?: import('./skills/seven.js').SkillRun; error?: string; code?: number }> => {
     let run;
     try {
-      run = await runSevenSkill(req.params.key, ctx);
+      run = await runSevenSkill(key, await buildSkillCtx(uid, data));
     } catch (e) {
-      return reply.code(404).send({ error: String((e as Error).message) });
+      return { error: String((e as Error).message), code: 404 };
     }
     const charge = chargeCredits(data, 'skill_run', run.name);
-    if (charge.blocked) return reply.code(402).send({ error: 'Credits exhausted — work items are paused (monitoring continues). Top up or upgrade to keep working.' });
+    if (charge.blocked) return { error: 'Credits exhausted — work items are paused (monitoring continues). Top up or upgrade to keep working.', code: 402 };
     const entry: import('./skills/seven.js').SkillRun = { ...run, id: newToken().slice(0, 10), ts: new Date().toISOString() };
     const runs = (data.skill_runs as import('./skills/seven.js').SkillRun[]) ?? [];
     runs.unshift(entry);
     data.skill_runs = runs.slice(0, 40); // the panel shows 8
-    appendApproval(data, { id: newToken().slice(0, 10), ts: entry.ts, kind: 'proposal', actor: 'miles', source: entry.skill, title: `${entry.name}: ${entry.summary.slice(0, 140)}` });
-    await authStore.setUserData(u.id, data);
+    appendApproval(data, {
+      id: newToken().slice(0, 10), ts: entry.ts, kind: 'proposal', actor: 'miles', source: entry.skill,
+      title: `${entry.name}${via === 'schedule' ? ' (deployed)' : ''}: ${entry.summary.slice(0, 140)}`,
+    });
     return { run: entry };
+  };
+
+  app.post<{ Params: { key: string } }>('/api/skills7/:key/run', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const res = await runAndRecordSkill(u.id, data, req.params.key, 'manual');
+    if (res.error) return reply.code(res.code ?? 400).send({ error: res.error });
+    await authStore.setUserData(u.id, data);
+    return { run: res.run };
   });
   app.post<{ Body: { id?: string; action?: string } }>('/api/skills7/act', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -3881,6 +4004,21 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           if (agent.deliver?.email || agent.deliver?.sms) delivered.push({ agent, run });
           changed = true;
         }
+        // Deployed skills — each runs itself on the cadence its playbook asks
+        // for, down the same proposal path a manual run takes.
+        const deployed = normalizeDeployed(data.deployedSkills);
+        let deployChanged = false;
+        for (const s of deployed) {
+          if (!isSkillDue(s, now)) continue;
+          const res = await runAndRecordSkill(uid, data, s.key, 'schedule');
+          if (res.error) continue; // out of credits or skill gone — try again next tick
+          s.lastRunAt = new Date().toISOString();
+          s.runs += 1;
+          bumpMeter(data, 'agent_run');
+          deployChanged = true;
+        }
+        if (deployChanged) { data.deployedSkills = deployed; changed = true; }
+
         // Publish any content posts whose scheduled time has arrived.
         const posts = (data.scheduledPosts as ScheduledPost[]) ?? [];
         for (const post of posts) {

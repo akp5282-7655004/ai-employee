@@ -379,6 +379,22 @@
   /* marketing hub */
   .hubhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
   .folgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;}
+  /* Deployment — a skill that is running, not just installed. Names are all
+     prefixed dep- because this stylesheet already owns .tab, .hero and .subtabs. */
+  .depgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:12px;}
+  .depcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px 14px;display:flex;flex-direction:column;gap:6px;}
+  .depcard.on{border-color:var(--good);background:var(--good-tint);}
+  .dep-top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+  .dep-name{font-size:13.5px;font-weight:700;}
+  .dep-cad{font-size:10px;font-weight:800;letter-spacing:.03em;padding:2px 7px;border-radius:999px;background:var(--panel-2);color:var(--muted);white-space:nowrap;}
+  .dep-what{font-size:12px;color:var(--muted);line-height:1.45;flex:1;}
+  .dep-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px;}
+  .dep-btn{font-size:12px;font-weight:650;padding:5px 14px;border-radius:8px;border:none;background:var(--primary);color:var(--primary-ink);cursor:pointer;}
+  .dep-btn[disabled]{opacity:.5;cursor:not-allowed;}
+  .dep-btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:600;padding:4px 10px;}
+  .dep-live{font-size:11.5px;font-weight:700;color:var(--good);display:flex;align-items:center;gap:5px;}
+  .dep-dot{width:7px;height:7px;border-radius:50%;background:var(--good);flex:none;}
+  .dep-note{font-size:11.5px;color:var(--muted);line-height:1.5;}
   .folder{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:var(--shadow);cursor:pointer;transition:border-color .15s;}
   .folder:hover{border-color:var(--accent);}
   .folder .fic{font-size:26px;margin-bottom:10px;}
@@ -5912,9 +5928,141 @@ async function skillPush(skillId,playId,text,btn){
   }catch(e){ toast('Send failed'); }
   btn.disabled=false; btn.textContent=old;
 }
-async function openSkills(){ if(!SKILLS_LOADED) await loadSkills(); renderSkills(); renderSkillLibrary(); }
+// ── Deployment — putting a skill to work instead of just reading it ──────────
+let DEPLOYED=null;
+async function loadDeployments(force){
+  if(DEPLOYED&&!force) return DEPLOYED;
+  if(!REMOTE){ DEPLOYED={skills:[],frameworks:[],available:[],maxFrameworks:8}; return DEPLOYED; }
+  try{ DEPLOYED=await(await fetch('/api/deployments')).json(); }
+  catch(e){ DEPLOYED={skills:[],frameworks:[],available:[],maxFrameworks:8}; }
+  return DEPLOYED;
+}
+const depSkill=k=>((DEPLOYED&&DEPLOYED.skills)||[]).find(s=>s.key===k);
+const depFramework=n=>(((DEPLOYED&&DEPLOYED.frameworks)||[]).indexOf(n)>=0);
+function depAgo(iso){
+  if(!iso) return '';
+  const m=Math.floor((Date.now()-Date.parse(iso))/60000);
+  if(!isFinite(m)||m<0) return '';
+  if(m<2) return 'just now'; if(m<60) return m+'m ago';
+  const h=Math.floor(m/60); if(h<24) return h+'h ago';
+  return Math.floor(h/24)+'d ago';
+}
+async function deployPost(body){
+  const r=await fetch('/api/deployments',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+  return {ok:r.ok,d:await r.json().catch(()=>({}))};
+}
+async function undeploy(kind,id){
+  await fetch('/api/deployments',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({kind,id})});
+  await loadDeployments(true);
+}
+async function deployAction(btn,body,okMsg){
+  if(!REMOTE){ toast('Deploying runs on the live app'); return false; }
+  btn.disabled=true; const old=btn.textContent; btn.textContent='Deploying…';
+  const {ok,d}=await deployPost(body);
+  btn.disabled=false; btn.textContent=old;
+  if(!ok){ toast(d.error||'Could not deploy that.'); return false; }
+  await loadDeployments(true);
+  if(d.failed&&d.failed.length) toast(okMsg+' — '+d.failed.length+' could not start');
+  else toast(okMsg);
+  return true;
+}
+// Miles' own skills: the ones that actually run. Deploying schedules them.
+function renderDeployables(box){
+  const host=el('div'); host.id='dep-section'; box.append(host); drawDeployables(host);
+}
+// Repaint every place a deploy state is shown — the grid and the library rows —
+// without rebuilding the page, so a search in progress survives.
+function syncDeployUI(){
+  const h=document.getElementById('dep-section'); if(h) drawDeployables(h);
+  if(SKILL_LIB_DRAW) try{ SKILL_LIB_DRAW(); }catch(e){}
+}
+function drawDeployables(box){
+  box.innerHTML='';
+  const avail=(DEPLOYED&&DEPLOYED.available)||[];
+  if(!avail.length) return;
+  const live=((DEPLOYED&&DEPLOYED.skills)||[]).length;
+  const head=el('div'); head.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:22px 0 4px';
+  head.append(el('div','sect-label','MILES SKILLS — '+live+' OF '+avail.length+' DEPLOYED'));
+  if(live<avail.length){
+    const all=el('button','dep-btn','Deploy all '+(avail.length-live));
+    all.onclick=async()=>{ if(await deployAction(all,{kind:'skill',all:true},'All skills deployed')) syncDeployUI(); };
+    head.append(all);
+  }
+  box.append(head);
+  box.append(el('p','dep-note','A deployed skill runs itself on its own cadence and files what it finds for your approval. It never changes an ad account on its own — deploying grants a schedule, not permission to spend.'));
+  const g=el('div','depgrid'); g.style.marginTop='12px';
+  for(const s of avail){
+    const on=depSkill(s.key);
+    const card=el('div','depcard'+(on?' on':''));
+    const top=el('div','dep-top'); top.append(el('div','dep-name',s.name));
+    top.append(el('span','dep-cad',s.cadence==='daily'?'DAILY':s.cadence==='monthly'?'MONTHLY':'WEEKLY'));
+    card.append(top);
+    card.append(el('div','dep-what',s.what));
+    const foot=el('div','dep-foot');
+    if(on){
+      const liveTag=el('span','dep-live'); liveTag.append(el('span','dep-dot'));
+      liveTag.append(document.createTextNode('Deployed'+(on.lastRunAt?' · ran '+depAgo(on.lastRunAt):'')));
+      const stop=el('button','dep-btn ghost','Stop');
+      stop.onclick=async()=>{ stop.disabled=true; await undeploy('skill',s.key); syncDeployUI(); };
+      foot.append(liveTag,stop);
+    } else {
+      const b=el('button','dep-btn','Deploy');
+      b.onclick=async()=>{ if(await deployAction(b,{kind:'skill',id:s.key},s.name+' deployed — first run is in your approvals')) syncDeployUI(); };
+      foot.append(b);
+      const once=el('button','dep-btn ghost','Run once');
+      once.onclick=async()=>{ once.disabled=true; const o=once.textContent; once.textContent='Running…';
+        try{ const r=await(await fetch('/api/skills7/'+s.key+'/run',{method:'POST'})).json(); toast(r.run?'✓ '+s.name+' finished — see Approvals':(r.error||'Run failed')); }catch(e){ toast('Run failed'); }
+        once.disabled=false; once.textContent=o; };
+      foot.append(once);
+    }
+    card.append(foot);
+    g.append(card);
+  }
+  box.append(g);
+}
+async function openSkills(){ if(!SKILLS_LOADED) await loadSkills(); await loadDeployments(true); renderSkills(); renderSkillLibrary(); }
 // ── Marketing Skills Library — 49 vendored frameworks + Miles' own seven ──
-let SKILL_LIB=null;
+let SKILL_LIB=null, SKILL_LIB_DRAW=null;
+/**
+ * One Deploy button per skill, doing the right thing for its kind: a Miles
+ * skill goes on the schedule, a library framework joins the set Miles writes
+ * with. Both are reversible from the same button.
+ */
+function skillDeployButton(s,redraw){
+  const isMiles=s.source==='miles';
+  const on=isMiles?!!depSkill(s.name):depFramework(s.name);
+  const b=el('button','dep-btn'+(on?' ghost':'')); b.style.flex='none';
+  b.textContent=on?'✓ Deployed':'Deploy';
+  b.title=on?'Click to stop':(isMiles?'Put this skill on Miles’ schedule':'Have Miles write with this framework');
+  // Repaint just this button and the deployed grid — never the whole page, so
+  // a search in progress survives deploying several frameworks in a row.
+  const settle=()=>{
+    syncDeployUI();
+    if(!redraw && b.parentNode) b.parentNode.replaceChild(skillDeployButton(s,redraw),b);
+  };
+  b.onclick=async(ev)=>{
+    ev.stopPropagation();
+    if(on){ b.disabled=true; await undeploy(isMiles?'skill':'framework',s.name); settle(); return; }
+    const ok=await deployAction(b,isMiles?{kind:'skill',id:s.name}:{kind:'framework',id:s.name},
+      isMiles?s.name+' deployed — first run is in your approvals':s.name+' is now part of how Miles writes');
+    if(ok) settle();
+  };
+  return b;
+}
+// The full playbook, with the same Deploy control the row carries.
+async function openSkillDoc(s){
+  let sk; try{ sk=await(await fetch('/api/skill-library/'+encodeURIComponent(s.name))).json(); }catch(e){}
+  if(!sk||!sk.content){ toast('Could not load that skill.'); return; }
+  showModal('<h3 style="margin:0 0 8px">'+esc(s.name)+'</h3><div id="skdoc-act" style="margin:0 0 10px"></div><pre style="white-space:pre-wrap;font-family:inherit;font-size:12.5px;line-height:1.5;max-height:52vh;overflow:auto;background:var(--panel-2,var(--panel-2));border-radius:10px;padding:12px">'+esc(sk.content)+'</pre>');
+  const host=document.getElementById('skdoc-act');
+  if(host){
+    host.style.cssText='display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px';
+    host.append(skillDeployButton(s,null));
+    host.append(el('span','dep-note',s.source==='miles'
+      ?'Deploying runs this on its own cadence and files each result for your approval.'
+      :'Deploying makes Miles write with this framework.'));
+  }
+}
 async function renderSkillLibrary(){
   const box=$('#skills-body'); if(!box) return;
   if(!SKILL_LIB){ try{ SKILL_LIB=(await(await fetch('/api/skill-library')).json()).skills||[]; }catch(e){ SKILL_LIB=[]; } }
@@ -5928,20 +6076,18 @@ async function renderSkillLibrary(){
   const draw=()=>{
     const q=search.value.toLowerCase(); list.innerHTML='';
     SKILL_LIB.filter(s=>!q||s.name.includes(q)||s.description.toLowerCase().includes(q)).forEach(s=>{
-      const row=el('button'); row.style.cssText='display:flex;gap:8px;align-items:baseline;width:100%;text-align:left;padding:8px 6px;border:none;background:none;cursor:pointer;border-top:1px solid var(--line,var(--panel-2))';
+      const row=el('div'); row.style.cssText='display:flex;gap:8px;align-items:center;width:100%;padding:4px 6px;border-top:1px solid var(--line,var(--panel-2))';
+      const open=el('button'); open.style.cssText='display:flex;gap:8px;align-items:baseline;flex:1;min-width:0;text-align:left;padding:6px 0;border:none;background:none;cursor:pointer';
       const name=el('b',null,s.name); name.style.cssText='font-size:13px;flex:none';
       const tag=el('span',null,s.source==='miles'?'MILES':'LIBRARY'); tag.style.cssText='font-size:9px;font-weight:800;padding:1px 6px;border-radius:999px;flex:none;'+(s.source==='miles'?'background:var(--good-tint);color:var(--good)':'background:var(--panel2,var(--panel-2));color:var(--muted)');
-      const d=el('span','appsub',s.description.slice(0,110)+(s.description.length>110?'…':'')); d.style.fontSize='11.5px';
-      row.append(name,tag,d);
-      row.onclick=async()=>{
-        let sk; try{ sk=await(await fetch('/api/skill-library/'+encodeURIComponent(s.name))).json(); }catch(e){}
-        if(!sk||!sk.content){ toast('Could not load that skill.'); return; }
-        showModal('<h3 style="margin:0 0 8px">'+esc(s.name)+'</h3><pre style="white-space:pre-wrap;font-family:inherit;font-size:12.5px;line-height:1.5;max-height:60vh;overflow:auto;background:var(--panel-2,var(--panel-2));border-radius:10px;padding:12px">'+esc(sk.content)+'</pre>');
-      };
+      const d=el('span','appsub',s.description.slice(0,110)+(s.description.length>110?'…':'')); d.style.cssText='font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      open.append(name,tag,d);
+      open.onclick=()=>openSkillDoc(s);
+      row.append(open,skillDeployButton(s,draw));
       list.append(row);
     });
   };
-  search.oninput=draw; draw();
+  SKILL_LIB_DRAW=draw; search.oninput=draw; draw();
   box.append(c);
 }
 function renderSkills(){
@@ -5950,6 +6096,7 @@ function renderSkills(){
   const banner=el('div','acard'); banner.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0';
   banner.innerHTML='<div><b>🛍️ Discover more in the Marketplace</b><div class="mdesc" style="margin:2px 0 0">Browse bundles, featured picks, and the full catalog of skills to install.</div></div>';
   const br=el('button','go','Browse →'); br.onclick=()=>setPage('market'); banner.append(br); box.append(banner);
+  renderDeployables(box);
   box.append(el('div','sect-label','INSTALLED SKILLS'));
   const installed=skillList().filter(m=>isInstalled(m.id));
   if(!installed.length){ box.append(el('div','verdict tight','No skills installed yet. Open the Marketplace to add capabilities like Google Ads, Meta Ads, or Local SEO.')); return; }
