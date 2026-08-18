@@ -40,6 +40,11 @@ import {
   cadenceFor, frameworkGuidance, isSkillDue, MAX_ACTIVE_FRAMEWORKS, MAX_DEPLOYED_SKILLS,
   normalizeDeployed, normalizeFrameworks,
 } from './skills/deploy.js';
+import {
+  applyCosts, closeCostContext, costLedger, drainCosts, openCostContext,
+  pendingAccounts, setCostAccount, UNCLAIMED, withCostAccount,
+} from './billing/costsink.js';
+import { itemEconomics, PRICES_STAMPED, rollup, TARGET_MARGIN, THIN_MARGIN, unpricedWork } from './billing/cogs.js';
 import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS } from './billing/credits.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
@@ -85,7 +90,7 @@ import { fetchDemographics, zipAffluence } from './research/census.js';
 import { fetchWeather, evaluateWeatherTriggers } from './research/weather.js';
 import { importSite } from './research/site.js';
 import { auditSite, buildAuditPrompt, fallbackAuditSummary } from './research/audit.js';
-import { applyMeter, summarizeUsage, type MeterKind, type Usage } from './usage/meter.js';
+import { ACTION_LABEL, applyMeter, CREDIT_COST, summarizeUsage, type MeterKind, type Usage } from './usage/meter.js';
 import { modelsForKind, modelById, defaultModel, modelActive, recommendModel, type MediaKind } from './creative/models.js';
 import { openaiGenerateImage } from './creative/openai_image.js';
 import { higgsfieldGenerateImage, higgsfieldGenerateVideo } from './creative/higgsfield.js';
@@ -244,6 +249,11 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
    * doing the work here that frame-ancestors and nosniff are; it is a floor,
    * not a substitute for escaping output.
    */
+  // Every LLM call made while serving a request is attributed to that request's
+  // account. Opened here in callback form so the whole handler runs inside it.
+  app.addHook('onRequest', (req, reply, done) => { openCostContext(done); });
+  app.addHook('onResponse', async () => { closeCostContext(); });
+
   app.addHook('onRequest', async (req, reply) => {
     reply.header('x-content-type-options', 'nosniff');
     reply.header('x-frame-options', 'DENY');
@@ -430,6 +440,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   const requireUser = async (req: FastifyRequest, reply: FastifyReply): Promise<User | null> => {
     const u = await getUser(req);
     if (!u) reply.code(401).send({ error: 'not signed in' });
+    else setCostAccount(u.id);
     return u;
   };
 
@@ -1824,6 +1835,47 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     return { skills: listLibrarySkills() };
+  });
+
+  /**
+   * Unit economics — what the work sells for, what it costs to serve, and the
+   * gross margin between them. Every figure states whether it is measured from
+   * provider-reported usage or modelled from the price table, because a
+   * projection read as a measurement is how a business talks itself into a
+   * margin it does not have.
+   */
+  app.get('/api/economics', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    // Bank anything this account has spent that has not been written yet.
+    const drained = drainCosts(u.id);
+    if (Object.keys(drained).length) { applyCosts(data, drained); await authStore.setUserData(u.id, data); }
+
+    const led = costLedger(data);
+    const credits = creditState(data);
+    const model = process.env.OPENROUTER_MODEL || process.env.ANTHROPIC_MODEL || 'openai/gpt-4o-mini';
+    const items = itemEconomics(WORK_COSTS, led.items, model);
+    const unclaimed = led.items[UNCLAIMED];
+    // Revenue is what the customer was actually charged, not list price × runs.
+    // Unclaimed inference is counted against it — it was spent either way.
+    const totals = rollup(credits.spent, items, unclaimed?.costUsd ?? 0);
+    return {
+      target: TARGET_MARGIN,
+      thin: THIN_MARGIN,
+      items,
+      totals,
+      model,
+      pricesStamped: PRICES_STAMPED,
+      tokens: { input: led.inputTokens, output: led.outputTokens, calls: led.calls },
+      // Cost with no revenue against it — retries, previews, anything given away.
+      unclaimed: unclaimed ? { costUsd: unclaimed.costUsd, runs: unclaimed.runs } : null,
+      // How much of the picture is real rather than projected.
+      measuredShare: led.calls > 0 ? Math.round((led.providerReported / led.calls) * 100) / 100 : 0,
+      // Metered but never billed — the actions that spend and return nothing.
+      leaks: unpricedWork(CREDIT_COST, ACTION_LABEL, WORK_COSTS, ((data.usage as Usage | undefined)?.actions ?? {}) as Record<string, number>),
+      updatedAt: led.updatedAt ?? null,
+    };
   });
 
   // ── Deployments — a skill that is working, not just installed ─────────────
@@ -3988,6 +4040,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         /* one account's platforms failing never stops the tick */
       }
     }
+    // Bank what inference has cost since the last tick. Batched deliberately:
+    // a fraction-of-a-cent generation must never cost a database write.
+    for (const uid of pendingAccounts()) {
+      try {
+        const data = await authStore.getUserData(uid);
+        applyCosts(data, drainCosts(uid));
+        await authStore.setUserData(uid, data);
+      } catch { /* costs stay pending and are banked on the next tick */ }
+    }
+
     for (const uid of ids) {
       try {
         const data = await authStore.getUserData(uid);
@@ -4010,7 +4072,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         let deployChanged = false;
         for (const s of deployed) {
           if (!isSkillDue(s, now)) continue;
-          const res = await runAndRecordSkill(uid, data, s.key, 'schedule');
+          // Unattended work costs real money too — attribute it like any other run.
+          const res = await withCostAccount(uid, 'skill_run', () => runAndRecordSkill(uid, data, s.key, 'schedule'));
           if (res.error) continue; // out of credits or skill gone — try again next tick
           s.lastRunAt = new Date().toISOString();
           s.runs += 1;

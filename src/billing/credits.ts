@@ -14,6 +14,8 @@
  * then the meter is real accounting, visible in-app, enforcing nothing.
  */
 
+import { claimCostItem } from './costsink.js';
+
 export interface Band {
   key: 'launch' | 'starter' | 'growth' | 'scale';
   name: string;
@@ -94,6 +96,9 @@ export function chargeCredits(data: Record<string, unknown>, item: string, note?
   const cost = WORK_COSTS[item];
   const before = creditState(data);
   if (!cost) return { state: before, blocked: false }; // monitoring — never metered
+  // Cost and revenue land on the same line: whatever this request has spent on
+  // inference is what serving this billable item cost.
+  claimCostItem(item);
   if (billingEnforced() && before.remaining <= 0) return { state: before, blocked: true };
   const ledger = [{ ts: new Date().toISOString(), item, cost, note }, ...before.ledger].slice(0, LEDGER_CAP);
   data.credits = { granted: before.granted, launchOffer: before.launchOffer, ledger };

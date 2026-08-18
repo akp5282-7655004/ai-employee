@@ -379,6 +379,24 @@
   /* marketing hub */
   .hubhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
   .folgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;}
+  /* Unit economics. Prefixed mg- (margin) — checked against the sheet first. */
+  .mg-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .mg-big{font-size:30px;font-weight:750;line-height:1.1;font-variant-numeric:tabular-nums;}
+  .mg-sub{font-size:11.5px;color:var(--muted);}
+  .mg-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:14px 0 4px;}
+  .mg-kpi{background:var(--panel-2);border-radius:10px;padding:10px 12px;}
+  .mg-kpi b{display:block;font-size:17px;font-variant-numeric:tabular-nums;}
+  .mg-tbl{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums;}
+  .mg-tbl th{text-align:left;padding:6px 8px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);}
+  .mg-tbl td{padding:7px 8px;border-bottom:1px solid var(--line);}
+  .mg-tbl td.n{text-align:right;}
+  .mg-pill{font-size:9.5px;font-weight:800;letter-spacing:.03em;padding:2px 7px;border-radius:999px;white-space:nowrap;}
+  .mg-healthy{background:var(--good-tint);color:var(--good);}
+  .mg-thin{background:var(--warn-tint);color:var(--warn);}
+  .mg-underwater{background:var(--bad-tint,#fde8e4);color:var(--bad,#be3b26);}
+  .mg-unmeasured{background:var(--panel-2);color:var(--muted);}
+  .mg-basis{font-size:9.5px;font-weight:700;color:var(--muted);letter-spacing:.03em;margin-left:6px;}
+  .mg-leak{border-left:3px solid var(--warn);padding:8px 10px;background:var(--warn-tint);border-radius:0 8px 8px 0;margin-top:8px;}
   /* Deployment — a skill that is running, not just installed. Names are all
      prefixed dep- because this stylesheet already owns .tab, .hero and .subtabs. */
   .depgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:12px;}
@@ -3495,6 +3513,71 @@ async function renderCmdCenter(){
 }
 
 // ── Plan & Credits — bands by ad spend, launch-offer credit meter ──
+// ── Unit economics — what the work sells for vs what it costs to serve ──────
+const mgPct=v=>v===null||v===undefined?'—':(v*100).toFixed(1)+'%';
+const mgUsd=v=>'$'+(Math.abs(v)<0.01&&v!==0?v.toFixed(5):v.toFixed(2));
+async function renderEconomics(box){
+  let d=null; try{ d=await(await fetch('/api/economics')).json(); }catch(e){}
+  if(!d||!d.items) return;
+  const c=el('div','mcard'); c.style.marginTop='12px';
+  c.append(el('div','sect-label','UNIT ECONOMICS — WHAT THE WORK COSTS TO SERVE'));
+
+  const t=d.totals;
+  const head=el('div','mg-head');
+  const left=el('div');
+  const big=el('div','mg-big',t.margin===null?'Not measured yet':mgPct(t.margin));
+  if(t.margin===null) big.style.fontSize='20px';
+  big.style.color=t.margin===null?'var(--muted)':t.margin>=d.target?'var(--good)':t.margin<0?'var(--bad,#be3b26)':'var(--warn)';
+  left.append(big);
+  left.append(el('div','mg-sub',t.margin===null
+    ? 'No run has been costed yet — margin appears once generations have been served. Target '+mgPct(d.target)
+    : 'Gross margin on inference · target '+mgPct(d.target)));
+  head.append(left);
+  head.append(el('span','mg-pill mg-'+t.health,t.health.toUpperCase()));
+  c.append(head);
+
+  const k=el('div','mg-kpis');
+  const kpi=(label,val,sub)=>{ const b=el('div','mg-kpi'); b.append(el('b',null,val)); b.append(el('div','mg-sub',label)); if(sub) b.append(el('div','mg-sub',sub)); return b; };
+  k.append(kpi('Charged to customers','$'+t.revenue.toFixed(2)));
+  k.append(kpi('Cost to serve',mgUsd(t.cost),t.runs+' work item'+(t.runs===1?'':'s')));
+  k.append(kpi('Gross profit','$'+t.gross.toFixed(2)));
+  k.append(kpi('Measured, not modelled',Math.round((d.measuredShare||0)*100)+'%',d.tokens.calls+' call'+(d.tokens.calls===1?'':'s')));
+  if(d.unclaimed&&d.unclaimed.costUsd>0){ const u=kpi('Served free',mgUsd(d.unclaimed.costUsd),'billed nothing'); u.querySelector('b').style.color='var(--warn)'; k.append(u); }
+  c.append(k);
+
+  const wrap=el('div'); wrap.style.overflowX='auto';
+  const tbl=el('table','mg-tbl');
+  const hd=el('tr'); ['Work item','Price','Cost/run','Margin','Runs','Floor @ '+mgPct(d.target),''].forEach((x,i)=>{ const th=el('th',null,x); if(i>0&&i<6) th.style.textAlign='right'; hd.append(th); }); tbl.append(hd);
+  d.items.forEach(i=>{
+    const tr=el('tr');
+    const name=el('td'); name.append(document.createTextNode(i.item.replace(/_/g,' ')));
+    const basis=el('span','mg-basis',' '+i.basis.toUpperCase()); name.append(basis); tr.append(name);
+    [['$'+i.price.toFixed(2)],[mgUsd(i.unitCost)],[mgPct(i.margin)],[String(i.runs)],['$'+i.breakEvenPrice.toFixed(2)]].forEach(([v])=>{ const td=el('td','n',v); tr.append(td); });
+    const st=el('td'); st.append(el('span','mg-pill mg-'+i.health,i.health.toUpperCase())); tr.append(st);
+    tbl.append(tr);
+  });
+  wrap.append(tbl); c.append(wrap);
+
+  // The honest caveats — a margin figure is worthless without its scope.
+  const notes=[];
+  notes.push('This is gross margin on model inference only. It excludes hosting, database, email and any other fixed cost, so it is not the margin of the business.');
+  notes.push('MODELLED rows are projections from published list prices (checked '+d.pricesStamped+', model '+d.model+'); MEASURED rows are what the provider actually billed. Modelled figures move as prices move — re-check before quoting them.');
+  if(d.unclaimed&&d.unclaimed.costUsd>0) notes.push('Included above: '+mgUsd(d.unclaimed.costUsd)+' spent on generations no work item billed for — free previews, retries, and features that generate without charging. This is counted against the margin because it was spent either way.');
+  notes.forEach(n=>{ const p=el('p','appsub',n); p.style.cssText='margin:10px 0 0;font-size:11.5px'; c.append(p); });
+
+  if((d.leaks||[]).length){
+    const media=d.leaks.filter(l=>l.media);
+    const leak=el('div','mg-leak');
+    leak.append(el('b',null,'Metered but never billed — '+d.leaks.length+' action'+(d.leaks.length===1?'':'s')));
+    leak.append(el('div','mg-sub',d.leaks.map(l=>l.label+(l.runs?' ('+l.runs+')':'')).join(' · ')));
+    const listOf=a=>a.length<2?(a[0]||''):a.slice(0,-1).join(', ')+' and '+a[a.length-1];
+    leak.append(el('div','mg-sub',media.length
+      ? 'These draw usage credits but no dollars. '+listOf(media.map(m=>m.label.toLowerCase()))+' call paid media APIs that cost far more per run than text, so every one is served at a loss. Give them a price in WORK_COSTS or cap them by plan.'
+      : 'These draw usage credits but no dollars, so their cost never reaches this margin. Give them a price in WORK_COSTS to bill them.'));
+    c.append(leak);
+  }
+  box.append(c);
+}
 async function openBilling(){
   const box=$('#bill-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading…</p>';
   let d={}; try{ d=await(await fetch('/api/billing')).json(); }catch(e){}
@@ -3528,6 +3611,7 @@ async function openBilling(){
   wrap.append(t); bc.append(wrap);
   bc.append(el('p','appsub','Every band includes all skills, all connectors, unlimited users, and unmetered monitoring — bands differ only by spend under management and credit bundle.'));
   box.append(bc);
+  await renderEconomics(box);
   // What draws credits
   const wc=el('div','mcard'); wc.style.marginTop='12px'; wc.append(el('div','sect-label','WHAT USES CREDITS (MONITORING NEVER DOES)'));
   const names={campaign_build:'Campaign build',campaign_launch:'Campaign launch',ai_autofill:'AI auto-fill',skill_run:'Skill run',weekly_readout:'Weekly readout',email_send:'Email send',creative_generation:'Creative generation'};
