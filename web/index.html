@@ -3591,6 +3591,21 @@ async function openBilling(){
   }
   const spendLine=el('p','appsub',(d.spendKnown?('Trailing-30-day ad spend under management: $'+Math.round(d.spend30).toLocaleString()):'Ad spend not readable yet — connect Google Ads for band assignment.')+(d.impliedBand?' → implied band: '+d.impliedBand.name+' ($'+d.impliedBand.monthlyPrice+'/mo)':''));
   pc.append(spendLine);
+  if(d.subscription){
+    const s=d.subscription;
+    const statusLabel={active:['Active','var(--good-tint);color:var(--good)'],past_due:['Payment failed — update your card','var(--warn-tint);color:var(--warn)'],canceled:['Canceled','var(--panel-2);color:var(--muted)']}[s.status]||['—','var(--panel-2);color:var(--muted)'];
+    const row=el('div'); row.style.cssText='display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px';
+    const chip=el('span',null,statusLabel[0]); chip.style.cssText='font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;background:'+statusLabel[1];
+    const bandName=((d.bands||[]).find(b=>b.key===s.band)||{}).name||s.band;
+    row.append(el('b',null,bandName+' plan'),chip);
+    if(s.currentPeriodEnd) row.append(el('span','appsub','renews '+new Date(s.currentPeriodEnd).toLocaleDateString()));
+    const portal=el('button','ghost','Manage Billing →');
+    portal.onclick=async()=>{ portal.disabled=true; try{ const r=await(await fetch('/api/billing/portal',{method:'POST'})).json(); if(r.url) location.href=r.url; else toast(r.error||'Could not open billing portal.'); }catch(e){ toast('Could not open billing portal.'); } portal.disabled=false; };
+    row.append(portal);
+    pc.append(row);
+  } else if(d.paymentsConnected){
+    pc.append(el('p','appsub','No paid plan yet — pick a band below to subscribe.'));
+  }
   // Credits bar
   const c=d.credits; const pct=c.granted?Math.max(0,Math.min(100,(c.remaining/c.granted)*100)):0;
   const barWrap=el('div'); barWrap.style.cssText='background:var(--panel2,var(--panel-2));border-radius:8px;height:22px;overflow:hidden;margin:10px 0 4px';
@@ -3602,10 +3617,27 @@ async function openBilling(){
   // Bands table
   const bc=el('div','mcard'); bc.style.marginTop='12px'; bc.append(el('div','sect-label','PAID BANDS — FLAT PRICE BY AD SPEND, NEVER A PERCENTAGE'));
   const wrap=el('div'); wrap.style.overflowX='auto'; const t=el('table'); t.style.cssText='width:100%;border-collapse:collapse;font-size:12.5px';
-  const hd=el('tr'); ['Band','Monthly ad spend','Price','Credits included','Auto top-up'].forEach(h=>{const th=el('th',null,h); th.style.cssText='text-align:left;padding:6px 8px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line,#e5e7eb)'; hd.append(th);}); t.append(hd);
+  const hd=el('tr'); ['Band','Monthly ad spend','Price','Credits included','Auto top-up',''].forEach(h=>{const th=el('th',null,h); th.style.cssText='text-align:left;padding:6px 8px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line,#e5e7eb)'; hd.append(th);}); t.append(hd);
   d.bands.forEach(b=>{
     const tr=el('tr'); if(d.impliedBand&&b.key===d.impliedBand.key) tr.style.background='var(--panel-2,var(--panel-2))';
     [(b.key===((d.impliedBand||{}).key)?'▸ ':'')+b.name, b.spendMax?('$'+b.spendMin.toLocaleString()+' – $'+b.spendMax.toLocaleString()):('Over $'+b.spendMin.toLocaleString()), '$'+b.monthlyPrice+'/mo', '$'+b.monthlyCredits+'/mo', '$'+b.topUp].forEach((v,i)=>{const td=el('td',null,v); td.style.cssText='padding:7px 8px;border-bottom:1px solid var(--line,var(--panel-2))'+(i===0?';font-weight:600':''); tr.append(td);});
+    const actTd=el('td'); actTd.style.cssText='padding:7px 8px;border-bottom:1px solid var(--line,var(--panel-2))';
+    const onThisBand=d.subscription&&d.subscription.band===b.key&&d.subscription.status==='active';
+    if(onThisBand){ actTd.append(el('span','appsub','Current plan')); }
+    else {
+      const btn=el('button',null,d.subscription?'Switch':'Subscribe'); btn.style.cssText='font-size:11.5px;padding:5px 12px;border-radius:7px;border:none;background:var(--primary);color:var(--primary-ink);font-weight:600;cursor:pointer';
+      if(!d.paymentsConnected){ btn.disabled=true; btn.style.opacity='.45'; btn.style.cursor='not-allowed'; btn.title='Payments aren’t connected yet.'; }
+      else if(!b.checkoutReady){ btn.disabled=true; btn.style.opacity='.45'; btn.style.cursor='not-allowed'; btn.title='This plan isn’t finished being set up in Stripe yet.'; }
+      else btn.onclick=async()=>{
+        btn.disabled=true; const o=btn.textContent; btn.textContent='Redirecting…';
+        try{
+          const r=await(await fetch('/api/billing/checkout',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({band:b.key})})).json();
+          if(r.url) location.href=r.url; else { toast(r.error||'Could not start checkout.'); btn.disabled=false; btn.textContent=o; }
+        }catch(e){ toast('Could not start checkout.'); btn.disabled=false; btn.textContent=o; }
+      };
+      actTd.append(btn);
+    }
+    tr.append(actTd);
     t.append(tr);
   });
   wrap.append(t); bc.append(wrap);
@@ -6857,8 +6889,19 @@ async function authInit(){
   }catch(e){}
 }
 
+// After a Stripe Checkout or Billing Portal redirect lands back here.
+function handleBillingReturn(){
+  const q=new URLSearchParams(location.search);
+  const status=q.get('billing');
+  if(!status) return;
+  history.replaceState(null,'',location.pathname); // never re-fire this on a refresh
+  if(status==='success') toast('✓ Subscribed — your credits are on their way (usually within a few seconds).');
+  else if(status==='cancelled') toast('Checkout cancelled — no charge was made.');
+  // 'return' = back from the self-service Billing Portal (cancel/update card/swap plan) — no toast needed, just land on Billing.
+  setPage('billing');
+}
 // init
-(async()=>{ await authInit(); await loadPacks(); await fetchConnections(); const solar=PACKMETA.find(p=>p.id==='solar'); if(solar)$('#stat-cpa').textContent=money(solar.cpa.median)+' Market Median'; updateConnStat(); renderTabs(); renderCards(); setPage('overview'); })();
+(async()=>{ await authInit(); await loadPacks(); await fetchConnections(); const solar=PACKMETA.find(p=>p.id==='solar'); if(solar)$('#stat-cpa').textContent=money(solar.cpa.median)+' Market Median'; updateConnStat(); renderTabs(); renderCards(); setPage('overview'); handleBillingReturn(); })();
 </script>
 </body>
 </html>

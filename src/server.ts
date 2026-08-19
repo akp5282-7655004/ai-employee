@@ -46,6 +46,11 @@ import {
 } from './billing/costsink.js';
 import { itemEconomics, PRICES_STAMPED, rollup, TARGET_MARGIN, THIN_MARGIN, unpricedWork } from './billing/cogs.js';
 import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS } from './billing/credits.js';
+import {
+  bandForPriceId, createCheckoutSession, createPortalSession, priceIdForBand,
+  stripeReady, userIdForCustomer, verifyWebhook, type PaidBand,
+} from './billing/stripe.js';
+import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, updateBand } from './billing/subscription.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
@@ -235,6 +240,16 @@ async function renderAdImage(prompt: string, modelId?: string): Promise<string |
 
 export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   const app = Fastify({ logger: false });
+
+  // Stripe's webhook signature is computed over the exact request bytes, so the
+  // JSON parser has to keep the raw buffer around instead of only handing back
+  // the parsed object. Every other route keeps working exactly as before —
+  // req.body is still the parsed JSON; req.rawBody is the one thing that's new.
+  app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+    (req as unknown as { rawBody: Buffer }).rawBody = body as Buffer;
+    if (!body.length) { done(null, {}); return; }
+    try { done(null, JSON.parse(body.toString('utf8'))); } catch (err) { done(err as Error); }
+  });
 
   /**
    * Baseline security headers on every response.
@@ -1815,19 +1830,161 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const spendKnown = (snapB?.campaigns ?? []).length > 0;
     const spend30 = Math.round((snapB?.adSpend ?? 0) * 100) / 100;
     const credits = creditState(data);
+    const sub = billingState(data);
+    const paymentsConnected = stripeReady();
     return {
       launchOffer: credits.launchOffer,
       spend30,
       spendKnown,
       impliedBand: bandForSpend(spend30),
-      bands: BANDS,
+      bands: BANDS.map((b) => ({ ...b, checkoutReady: !!priceIdForBand(b.key as PaidBand) })),
       credits: { granted: credits.granted, spent: credits.spent, remaining: credits.remaining },
       ledger: credits.ledger.slice(0, 50),
       workCosts: WORK_COSTS,
       enforced: billingEnforced(),
-      paymentsConnected: false,
-      note: 'Launch offer: $0/month with $100 in credits. Monitoring is never metered — credits draw only on work items. Payments are not connected yet, so nothing is charged and an empty balance does not pause work.',
+      paymentsConnected,
+      subscription: sub.status === 'none' ? null : sub,
+      note: paymentsConnected
+        ? 'Monitoring is never metered — credits draw only on work items. Your card is held by Stripe; Miles never sees or stores it.'
+        : 'Launch offer: $0/month with $100 in credits. Monitoring is never metered — credits draw only on work items. Payments are not connected yet, so nothing is charged and an empty balance does not pause work.',
     };
+  });
+
+  /** A Stripe-hosted checkout page for one paid band. The customer enters their
+   *  card on Stripe's own page — it never touches this server. */
+  app.post<{ Body: { band?: string } }>('/api/billing/checkout', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (!stripeReady()) return reply.code(503).send({ error: 'Payments aren’t connected yet — ask your admin to finish Stripe setup.' });
+    const band = req.body?.band;
+    if (band !== 'starter' && band !== 'growth' && band !== 'scale') return reply.code(400).send({ error: 'band must be starter, growth, or scale' });
+    const base = emailBaseUrl();
+    if (!base) return reply.code(503).send({ error: 'APP_URL is not set — checkout needs a real return address.' });
+    const res = await createCheckoutSession({
+      bandKey: band, userId: u.id, email: u.email,
+      successUrl: `${base}/?billing=success`, cancelUrl: `${base}/?billing=cancelled`,
+    });
+    if ('error' in res) return reply.code(502).send(res);
+    return res;
+  });
+
+  /** The Stripe-hosted self-service page — cancel, swap plan, update card, see invoices. */
+  app.post('/api/billing/portal', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (!stripeReady()) return reply.code(503).send({ error: 'Payments aren’t connected yet.' });
+    const data = await authStore.getUserData(u.id);
+    const sub = billingState(data);
+    if (!sub.stripeCustomerId) return reply.code(404).send({ error: 'No subscription on this account yet — pick a plan first.' });
+    const base = emailBaseUrl();
+    if (!base) return reply.code(503).send({ error: 'APP_URL is not set.' });
+    const res = await createPortalSession(sub.stripeCustomerId, `${base}/?billing=return`);
+    if ('error' in res) return reply.code(502).send(res);
+    return res;
+  });
+
+  /**
+   * Stripe webhook — the only unauthenticated write route in the app, secured
+   * instead by a signature Stripe computes with a secret only it and this
+   * server know (STRIPE_WEBHOOK_SECRET). Nothing here is trusted until that
+   * verifies. Every event type Miles doesn't act on is acknowledged and
+   * ignored — Stripe retries on anything but a 2xx, so unhandled types must
+   * still return ok or Stripe will keep re-sending them forever.
+   */
+  app.post('/api/stripe/webhook', async (req, reply) => {
+    const sig = req.headers['stripe-signature'];
+    const raw = (req as unknown as { rawBody?: Buffer }).rawBody;
+    if (!sig || typeof sig !== 'string' || !raw) return reply.code(400).send({ error: 'missing signature' });
+    const event = await verifyWebhook(raw, sig);
+    if ('error' in event) return reply.code(400).send(event);
+
+    const findUser = async (customerId: string | null): Promise<{ id: string } | undefined> => {
+      if (!customerId) return undefined;
+      const uid = await userIdForCustomer(customerId);
+      return uid ? { id: uid } : undefined;
+    };
+
+    try {
+      switch (event.type) {
+        case 'checkout.session.completed': {
+          const s = event.data.object as import('stripe').default.Checkout.Session;
+          const uid = s.client_reference_id;
+          const customerId = typeof s.customer === 'string' ? s.customer : s.customer?.id;
+          const subId = typeof s.subscription === 'string' ? s.subscription : s.subscription?.id;
+          if (uid && customerId && subId) {
+            const data = await authStore.getUserData(uid);
+            linkCheckout(data, customerId, subId);
+            appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: 'stripe', source: 'billing', title: 'Checkout completed — subscription linked' });
+            await authStore.setUserData(uid, data);
+          }
+          break;
+        }
+        case 'invoice.paid': {
+          const inv = event.data.object as import('stripe').default.Invoice;
+          const customerId = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id ?? null;
+          const subField = (inv as unknown as { subscription?: string | { id: string } | null }).subscription;
+          const subId = typeof subField === 'string' ? subField : subField?.id;
+          const priceId = inv.lines?.data?.[0]?.pricing?.price_details?.price
+            ?? (inv.lines?.data?.[0] as unknown as { price?: { id?: string } })?.price?.id;
+          const bandKey = bandForPriceId(typeof priceId === 'string' ? priceId : undefined);
+          const user = await findUser(customerId);
+          if (user && subId && bandKey && inv.id) {
+            const data = await authStore.getUserData(user.id);
+            const periodEnd = new Date(((inv.lines?.data?.[0]?.period?.end) ?? Math.floor(Date.now() / 1000) + 2_592_000) * 1000).toISOString();
+            const r = applyRenewal(data, { invoiceId: inv.id, customerId: customerId!, subscriptionId: subId, bandKey, periodEnd });
+            if (r.applied) {
+              appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: 'stripe', source: 'billing', title: `Subscription renewed — ${r.band}, +$${r.granted} credits` });
+              await authStore.setUserData(user.id, data);
+            }
+          }
+          break;
+        }
+        case 'invoice.payment_failed': {
+          const inv = event.data.object as import('stripe').default.Invoice;
+          const customerId = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id ?? null;
+          const subField = (inv as unknown as { subscription?: string | { id: string } | null }).subscription;
+          const subId = typeof subField === 'string' ? subField : subField?.id;
+          const user = await findUser(customerId);
+          if (user && subId) {
+            const data = await authStore.getUserData(user.id);
+            markPastDue(data, subId);
+            await authStore.setUserData(user.id, data);
+          }
+          break;
+        }
+        case 'customer.subscription.deleted': {
+          const s = event.data.object as import('stripe').default.Subscription;
+          const customerId = typeof s.customer === 'string' ? s.customer : s.customer?.id ?? null;
+          const user = await findUser(customerId);
+          if (user) {
+            const data = await authStore.getUserData(user.id);
+            markCanceled(data, s.id);
+            await authStore.setUserData(user.id, data);
+          }
+          break;
+        }
+        case 'customer.subscription.updated': {
+          const s = event.data.object as import('stripe').default.Subscription;
+          const customerId = typeof s.customer === 'string' ? s.customer : s.customer?.id ?? null;
+          const priceId = s.items?.data?.[0]?.price?.id;
+          const bandKey = bandForPriceId(priceId);
+          const user = await findUser(customerId);
+          if (user && bandKey) {
+            const data = await authStore.getUserData(user.id);
+            updateBand(data, s.id, bandKey);
+            await authStore.setUserData(user.id, data);
+          }
+          break;
+        }
+        default:
+          break; // acknowledged, no action needed
+      }
+    } catch {
+      // A malformed event, or a Stripe lookup that failed transiently, never
+      // fails the webhook back to Stripe — it would just retry forever.
+      // Log-worthy, but not this account's fault.
+    }
+    return { received: true };
   });
 
   // ── Marketing Skills Library — vendored Agent Skills + Miles' own seven ──
