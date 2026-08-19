@@ -3403,7 +3403,7 @@ function ccStatusChip(status){
   const [lab,style]=m[status]||m.read_only; const s=el('span',null,lab); s.style.cssText='font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;background:'+style; return s; }
 
 async function ccSkillsPanel(){
-  const c=ccPanel('SKILL ACTIVITY');
+  const c=ccPanel('SKILL ACTIVITY'); c.id='skill-activity';
   let d={skills:[],runs:[]}; try{ d=await(await fetch('/api/skills7')).json(); }catch(e){}
   const btns=el('div'); btns.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px';
   (d.skills||[]).forEach(s=>{
@@ -6012,15 +6012,33 @@ async function skillPush(skillId,playId,text,btn){
   }catch(e){ toast('Send failed'); }
   btn.disabled=false; btn.textContent=old;
 }
+// Jump to a deployed skill's actual output — the Skill Activity panel on the
+// Dashboard — and flash it, so "Deployed · ran 1d ago" is never a dead end.
+function goToSkillActivity(){
+  setPage('overview');
+  const tryScroll=(n)=>{
+    const el2=document.getElementById('skill-activity');
+    if(!el2){ if(n>0) setTimeout(()=>tryScroll(n-1),150); return; }
+    el2.scrollIntoView({behavior:'smooth',block:'start'});
+    el2.style.transition='box-shadow .3s'; el2.style.boxShadow='0 0 0 3px var(--accent)';
+    setTimeout(()=>{ el2.style.boxShadow=''; },1800);
+  };
+  setTimeout(()=>tryScroll(10),200); // openCmdCenter() renders async — retry until the panel exists
+}
 // ── Deployment — putting a skill to work instead of just reading it ──────────
-let DEPLOYED=null;
+let DEPLOYED=null, DEPLOYED_RUNS=[];
 async function loadDeployments(force){
   if(DEPLOYED&&!force) return DEPLOYED;
-  if(!REMOTE){ DEPLOYED={skills:[],frameworks:[],available:[],maxFrameworks:8}; return DEPLOYED; }
-  try{ DEPLOYED=await(await fetch('/api/deployments')).json(); }
-  catch(e){ DEPLOYED={skills:[],frameworks:[],available:[],maxFrameworks:8}; }
+  if(!REMOTE){ DEPLOYED={skills:[],frameworks:[],available:[],maxFrameworks:8}; DEPLOYED_RUNS=[]; return DEPLOYED; }
+  try{
+    const [dep,sk]=await Promise.all([fetch('/api/deployments'),fetch('/api/skills7')]);
+    DEPLOYED=await dep.json();
+    DEPLOYED_RUNS=(await sk.json()).runs||[];
+  }catch(e){ DEPLOYED={skills:[],frameworks:[],available:[],maxFrameworks:8}; DEPLOYED_RUNS=[]; }
   return DEPLOYED;
 }
+// The most recent run recorded for this skill — what "Deployed · ran Xd ago" actually produced.
+function lastRunFor(key){ return DEPLOYED_RUNS.find(r=>r.skill===key); }
 const depSkill=k=>((DEPLOYED&&DEPLOYED.skills)||[]).find(s=>s.key===k);
 const depFramework=n=>(((DEPLOYED&&DEPLOYED.frameworks)||[]).indexOf(n)>=0);
 function depAgo(iso){
@@ -6089,6 +6107,18 @@ function drawDeployables(box){
       const stop=el('button','dep-btn ghost','Stop');
       stop.onclick=async()=>{ stop.disabled=true; await undeploy('skill',s.key); syncDeployUI(); };
       foot.append(liveTag,stop);
+      // What it actually found, right on the card — not just proof it ran.
+      const last=lastRunFor(s.key);
+      if(last){
+        const prev=el('div','dep-note'); prev.style.cssText='margin-top:6px;width:100%';
+        prev.append(document.createTextNode(last.summary.slice(0,140)+(last.summary.length>140?'…':'')));
+        card.append(prev);
+        const view=el('button','dep-btn ghost','View full result →'); view.style.cssText+='margin-top:6px';
+        view.onclick=goToSkillActivity;
+        card.append(view);
+      } else {
+        card.append(el('div','dep-note','Deployed just now — its first run hasn\'t landed yet. Check back shortly.'));
+      }
     } else {
       const b=el('button','dep-btn','Deploy');
       b.onclick=async()=>{ if(await deployAction(b,{kind:'skill',id:s.key},s.name+' deployed — first run is in your approvals')) syncDeployUI(); };
