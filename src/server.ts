@@ -857,6 +857,28 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     await startSession(reply, u.id);
     return { ok: true, user: { id: u.id, email: u.email } };
   });
+  /**
+   * Emergency password reset — a break-glass escape hatch for when the normal
+   * emailed-link flow can't be used (e.g. an operator locked themselves out
+   * across several stale links). Disabled unless ADMIN_RESET_SECRET is set on
+   * the server, and useless without knowing that secret — remove the env var
+   * once account access is recovered to close this off again.
+   */
+  app.get<{ Querystring: { secret?: string; email?: string; password?: string } }>('/admin/emergency-reset', async (req, reply) => {
+    const secret = process.env.ADMIN_RESET_SECRET;
+    if (!secret || !req.query.secret || !sameToken(req.query.secret, secret)) return reply.code(404).send({ error: 'not found' });
+    const email = (req.query.email || '').trim().toLowerCase();
+    const password = req.query.password || '';
+    if (!email || password.length < 6) return reply.code(400).send({ error: 'Provide ?email=&password= (password at least 6 characters).' });
+    const u = await authStore.getUserByEmail(email);
+    if (!u) return reply.code(404).send({ error: 'No account with that email.' });
+    await authStore.updateUser(u.id, { passwordHash: hashPassword(password) });
+    const data = await authStore.getUserData(u.id);
+    delete data.resetToken;
+    await authStore.setUserData(u.id, data);
+    await authStore.deleteSessionsForUser(u.id);
+    return { ok: true, message: `Password updated for ${email} — log in with the new password.` };
+  });
   app.get('/auth/me', async (req, reply) => {
     const u = await getUser(req);
     if (!u) return reply.code(401).send({ error: 'not signed in' });
