@@ -159,6 +159,27 @@ describe('the webhook, signed and posted over real HTTP', () => {
     await app.close();
   });
 
+  it('also grants credits when Stripe sends the newer invoice.parent.subscription_details shape (no top-level subscription field)', async () => {
+    const store = new MemoryStore();
+    const app = buildServer({ authStore: store });
+    const c = await session(app, 'newshape@example.com');
+    const uid = (await store.listUserIds())[0]!;
+    await send(app, 'checkout.session.completed', { client_reference_id: uid, customer: 'cus_new', subscription: 'sub_new' });
+    custMap.set('cus_new', uid);
+    const before = (await get(app, '/api/billing', c)).json().credits.granted;
+
+    const r = await send(app, 'invoice.paid', {
+      id: 'in_new', customer: 'cus_new',
+      parent: { subscription_details: { subscription: 'sub_new' } },
+      lines: { data: [{ pricing: { price_details: { price: 'price_starter' } }, period: { end: Math.floor(Date.now() / 1000) + 2_592_000 } }] },
+    });
+    expect(r.statusCode).toBe(200);
+    const after = (await get(app, '/api/billing', c)).json();
+    expect(after.credits.granted).toBe(before + 50);
+    expect(after.subscription.band).toBe('starter');
+    await app.close();
+  });
+
   it('never double-grants when Stripe re-sends the same invoice event', async () => {
     const store = new MemoryStore();
     const app = buildServer({ authStore: store });

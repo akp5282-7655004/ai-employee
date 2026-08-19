@@ -1904,6 +1904,20 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       return uid ? { id: uid } : undefined;
     };
 
+    // Stripe moved Invoice.subscription to Invoice.parent.subscription_details.subscription
+    // in newer API versions — read both so this keeps working across accounts on
+    // either version instead of silently finding nothing on the new one.
+    const invoiceSubscriptionId = (inv: import('stripe').default.Invoice): string | undefined => {
+      const legacy = (inv as unknown as { subscription?: string | { id: string } | null }).subscription;
+      if (typeof legacy === 'string') return legacy;
+      if (legacy && typeof legacy === 'object') return legacy.id;
+      const viaParent = (inv as unknown as { parent?: { subscription_details?: { subscription?: string | { id: string } | null } } }).parent
+        ?.subscription_details?.subscription;
+      if (typeof viaParent === 'string') return viaParent;
+      if (viaParent && typeof viaParent === 'object') return viaParent.id;
+      return undefined;
+    };
+
     try {
       switch (event.type) {
         case 'checkout.session.completed': {
@@ -1922,12 +1936,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         case 'invoice.paid': {
           const inv = event.data.object as import('stripe').default.Invoice;
           const customerId = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id ?? null;
-          const subField = (inv as unknown as { subscription?: string | { id: string } | null }).subscription;
-          const subId = typeof subField === 'string' ? subField : subField?.id;
+          const subId = invoiceSubscriptionId(inv);
           const priceId = inv.lines?.data?.[0]?.pricing?.price_details?.price
             ?? (inv.lines?.data?.[0] as unknown as { price?: { id?: string } })?.price?.id;
           const bandKey = bandForPriceId(typeof priceId === 'string' ? priceId : undefined);
           const user = await findUser(customerId);
+          if (!(user && subId && bandKey && inv.id)) {
+            req.log.warn({ eventType: event.type, hasUser: !!user, subId, priceId, bandKey, invoiceId: inv.id }, 'invoice.paid: skipped — missing a required field');
+          }
           if (user && subId && bandKey && inv.id) {
             const data = await authStore.getUserData(user.id);
             const periodEnd = new Date(((inv.lines?.data?.[0]?.period?.end) ?? Math.floor(Date.now() / 1000) + 2_592_000) * 1000).toISOString();
@@ -1942,8 +1958,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         case 'invoice.payment_failed': {
           const inv = event.data.object as import('stripe').default.Invoice;
           const customerId = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id ?? null;
-          const subField = (inv as unknown as { subscription?: string | { id: string } | null }).subscription;
-          const subId = typeof subField === 'string' ? subField : subField?.id;
+          const subId = invoiceSubscriptionId(inv);
           const user = await findUser(customerId);
           if (user && subId) {
             const data = await authStore.getUserData(user.id);
@@ -1979,10 +1994,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         default:
           break; // acknowledged, no action needed
       }
-    } catch {
+    } catch (err) {
       // A malformed event, or a Stripe lookup that failed transiently, never
-      // fails the webhook back to Stripe — it would just retry forever.
-      // Log-worthy, but not this account's fault.
+      // fails the webhook back to Stripe — it would just retry forever. Still
+      // logged, so a real bug here shows up in the server logs instead of
+      // vanishing behind the 200 Stripe always sees.
+      req.log.error({ eventType: event.type, err: (err as Error).message }, 'stripe webhook handler failed');
     }
     return { received: true };
   });
