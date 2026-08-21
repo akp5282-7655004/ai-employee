@@ -424,7 +424,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // The detail goes to the server log, where it is useful and not a disclosure.
   app.setErrorHandler(async (err, req, reply) => {
     const status = (err as { statusCode?: number }).statusCode ?? 500;
-    if (status >= 500) req.log.error({ err, url: req.url }, 'unhandled error');
+    // Fastify's own logger is off (logger: false) to avoid per-request noise,
+    // which means req.log is a silent no-op — console.error is what actually
+    // reaches Render's log stream.
+    if (status >= 500) console.error('unhandled error', { url: req.url, err: (err as Error).message, stack: (err as Error).stack });
     if (req.url.startsWith('/api/') || req.url.startsWith('/auth/')) {
       return reply.code(status).send({ error: status >= 500 ? 'Something went wrong on our end.' : (err as Error).message });
     }
@@ -1964,7 +1967,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           const bandKey = bandForPriceId(typeof priceId === 'string' ? priceId : undefined);
           const user = await findUser(customerId);
           if (!(user && subId && bandKey && inv.id)) {
-            req.log.warn({ eventType: event.type, hasUser: !!user, subId, priceId, bandKey, invoiceId: inv.id }, 'invoice.paid: skipped — missing a required field');
+            console.warn('invoice.paid: skipped — missing a required field', { eventType: event.type, hasUser: !!user, subId, priceId, bandKey, invoiceId: inv.id });
           }
           if (user && subId && bandKey && inv.id) {
             const data = await authStore.getUserData(user.id);
@@ -2021,7 +2024,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       // fails the webhook back to Stripe — it would just retry forever. Still
       // logged, so a real bug here shows up in the server logs instead of
       // vanishing behind the 200 Stripe always sees.
-      req.log.error({ eventType: event.type, err: (err as Error).message }, 'stripe webhook handler failed');
+      console.error('stripe webhook handler failed', { eventType: event.type, err: (err as Error).message });
     }
     return { received: true };
   });
