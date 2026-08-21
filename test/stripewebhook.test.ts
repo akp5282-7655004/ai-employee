@@ -20,7 +20,15 @@ const stripeForSigning = new Stripe('sk_test_unused'); // key is never used for 
 const custMap = new Map<string, string>();
 vi.mock('../src/billing/stripe.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/billing/stripe.js')>();
-  return { ...actual, userIdForCustomer: async (customerId: string) => custMap.get(customerId) };
+  return {
+    ...actual,
+    userIdForCustomer: async (customerId: string) => custMap.get(customerId),
+    // The real implementation would PATCH the customer on Stripe's API; the mock
+    // just records it in the same map userIdForCustomer reads, so a test can
+    // rely on checkout.session.completed's own handler to make the link — no
+    // manual custMap.set needed — exactly like production.
+    stampCustomer: async (customerId: string, userId: string) => { custMap.set(customerId, userId); },
+  };
 });
 
 const ENV = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_PRICE_STARTER', 'STRIPE_PRICE_GROWTH', 'STRIPE_PRICE_SCALE', 'APP_URL'] as const;
@@ -171,6 +179,28 @@ describe('the webhook, signed and posted over real HTTP', () => {
     const r = await send(app, 'invoice.paid', {
       id: 'in_new', customer: 'cus_new',
       parent: { subscription_details: { subscription: 'sub_new' } },
+      lines: { data: [{ pricing: { price_details: { price: 'price_starter' } }, period: { end: Math.floor(Date.now() / 1000) + 2_592_000 } }] },
+    });
+    expect(r.statusCode).toBe(200);
+    const after = (await get(app, '/api/billing', c)).json();
+    expect(after.credits.granted).toBe(before + 50);
+    expect(after.subscription.band).toBe('starter');
+    await app.close();
+  });
+
+  it('finds the account on invoice.paid using only what checkout.session.completed itself links — no test-side custMap.set', async () => {
+    const store = new MemoryStore();
+    const app = buildServer({ authStore: store });
+    const c = await session(app, 'realflow@example.com');
+    const uid = (await store.listUserIds())[0]!;
+    // Deliberately no custMap.set('cus_real', uid) here — checkout.session.completed's
+    // own handler must be the thing that makes 'cus_real' resolve to uid, the same
+    // way stampCustomer is supposed to do it against the real Stripe API.
+    await send(app, 'checkout.session.completed', { client_reference_id: uid, customer: 'cus_real', subscription: 'sub_real' });
+    const before = (await get(app, '/api/billing', c)).json().credits.granted;
+
+    const r = await send(app, 'invoice.paid', {
+      id: 'in_real', customer: 'cus_real', subscription: 'sub_real',
       lines: { data: [{ pricing: { price_details: { price: 'price_starter' } }, period: { end: Math.floor(Date.now() / 1000) + 2_592_000 } }] },
     });
     expect(r.statusCode).toBe(200);

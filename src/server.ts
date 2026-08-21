@@ -48,7 +48,7 @@ import { itemEconomics, PRICES_STAMPED, rollup, TARGET_MARGIN, THIN_MARGIN, unpr
 import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS } from './billing/credits.js';
 import {
   bandForPriceId, createCheckoutSession, createPortalSession, priceIdForBand,
-  stripeReady, userIdForCustomer, verifyWebhook, type PaidBand,
+  stampCustomer, stripeReady, userIdForCustomer, verifyWebhook, type PaidBand,
 } from './billing/stripe.js';
 import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, updateBand } from './billing/subscription.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
@@ -1955,6 +1955,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
             linkCheckout(data, customerId, subId);
             appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: 'stripe', source: 'billing', title: 'Checkout completed — subscription linked' });
             await authStore.setUserData(uid, data);
+            // Every later webhook keys off the customer, not this session — without
+            // this stamp, invoice.paid and friends have no way back to this account.
+            await stampCustomer(customerId, uid);
           }
           break;
         }

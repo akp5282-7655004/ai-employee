@@ -93,12 +93,26 @@ export async function verifyWebhook(rawBody: Buffer, signature: string): Promise
   }
 }
 
-/** Pull the milesUserId back off a customer's metadata (set at checkout). */
+/** Pull the milesUserId back off a customer's metadata (stamped by stampCustomer below). */
 export async function userIdForCustomer(customerId: string): Promise<string | undefined> {
   const stripe = await getClient();
   const customer = await stripe.customers.retrieve(customerId);
   if (customer.deleted) return undefined;
   return customer.metadata?.milesUserId || undefined;
+}
+
+/**
+ * Stamp the Miles account id onto the Stripe *customer*, not just the
+ * subscription — called once, right after checkout.session.completed links
+ * the two. Every later webhook (invoice.paid, a failed payment, a
+ * cancellation, a plan change) carries a customer id but not always a
+ * subscription id, so userIdForCustomer above is how they all find their way
+ * back to an account. Without this stamp those events have nothing to look
+ * up and silently do nothing.
+ */
+export async function stampCustomer(customerId: string, userId: string): Promise<void> {
+  const stripe = await getClient();
+  await stripe.customers.update(customerId, { metadata: { milesUserId: userId } });
 }
 
 /** Reset the client between tests, or after env vars change. */
