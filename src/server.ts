@@ -427,7 +427,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     // Fastify's own logger is off (logger: false) to avoid per-request noise,
     // which means req.log is a silent no-op — console.error is what actually
     // reaches Render's log stream.
-    if (status >= 500) console.error('unhandled error', { url: req.url, err: (err as Error).message, stack: (err as Error).stack });
+    if (status >= 500) console.error(`unhandled error ${JSON.stringify({ url: req.url, err: (err as Error).message })}`);
     if (req.url.startsWith('/api/') || req.url.startsWith('/auth/')) {
       return reply.code(status).send({ error: status >= 500 ? 'Something went wrong on our end.' : (err as Error).message });
     }
@@ -1967,7 +1967,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           const bandKey = bandForPriceId(typeof priceId === 'string' ? priceId : undefined);
           const user = await findUser(customerId);
           if (!(user && subId && bandKey && inv.id)) {
-            console.warn('invoice.paid: skipped — missing a required field', { eventType: event.type, hasUser: !!user, subId, priceId, bandKey, invoiceId: inv.id });
+            console.warn(`invoice.paid: skipped — missing a required field ${JSON.stringify({ eventType: event.type, hasUser: !!user, subId, priceId, bandKey, invoiceId: inv.id })}`);
           }
           if (user && subId && bandKey && inv.id) {
             const data = await authStore.getUserData(user.id);
@@ -2024,7 +2024,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       // fails the webhook back to Stripe — it would just retry forever. Still
       // logged, so a real bug here shows up in the server logs instead of
       // vanishing behind the 200 Stripe always sees.
-      console.error('stripe webhook handler failed', { eventType: event.type, err: (err as Error).message });
+      console.error(`stripe webhook handler failed ${JSON.stringify({ eventType: event.type, err: (err as Error).message })}`);
     }
     return { received: true };
   });
