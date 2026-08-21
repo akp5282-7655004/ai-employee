@@ -18,11 +18,17 @@ const stripeForSigning = new Stripe('sk_test_unused'); // key is never used for 
  * Stripe's uptime, while every other function in the module stays real.
  */
 const custMap = new Map<string, string>();
+// Deliberately separate from custMap: production reads subscription metadata
+// through a completely different Stripe object than customer metadata, and a
+// test that conflated the two would miss the exact race this map exists to
+// catch — a subscription lookup succeeding before the customer stamp lands.
+const subMap = new Map<string, string>();
 vi.mock('../src/billing/stripe.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/billing/stripe.js')>();
   return {
     ...actual,
     userIdForCustomer: async (customerId: string) => custMap.get(customerId),
+    userIdForSubscription: async (subscriptionId: string) => subMap.get(subscriptionId),
     // The real implementation would PATCH the customer on Stripe's API; the mock
     // just records it in the same map userIdForCustomer reads, so a test can
     // rely on checkout.session.completed's own handler to make the link — no
@@ -42,6 +48,7 @@ beforeEach(() => {
   process.env.STRIPE_PRICE_SCALE = 'price_scale';
   process.env.APP_URL = 'https://miles.example.com';
   custMap.clear();
+  subMap.clear();
 });
 afterEach(() => {
   for (const k of ENV) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
@@ -201,6 +208,29 @@ describe('the webhook, signed and posted over real HTTP', () => {
 
     const r = await send(app, 'invoice.paid', {
       id: 'in_real', customer: 'cus_real', subscription: 'sub_real',
+      lines: { data: [{ pricing: { price_details: { price: 'price_starter' } }, period: { end: Math.floor(Date.now() / 1000) + 2_592_000 } }] },
+    });
+    expect(r.statusCode).toBe(200);
+    const after = (await get(app, '/api/billing', c)).json();
+    expect(after.credits.granted).toBe(before + 50);
+    expect(after.subscription.band).toBe('starter');
+    await app.close();
+  });
+
+  it('grants credits on invoice.paid even when the customer stamp has not landed yet (checkout.session.completed racing behind it)', async () => {
+    const store = new MemoryStore();
+    const app = buildServer({ authStore: store });
+    const c = await session(app, 'race@example.com');
+    const uid = (await store.listUserIds())[0]!;
+    // Only the subscription is resolvable — as if checkout.session.completed's
+    // own stampCustomer call hasn't finished yet. Real Stripe subscription
+    // metadata is set synchronously at Checkout creation, before invoice.paid
+    // can possibly fire, which is exactly what subMap stands in for here.
+    subMap.set('sub_fast', uid);
+    const before = (await get(app, '/api/billing', c)).json().credits.granted;
+
+    const r = await send(app, 'invoice.paid', {
+      id: 'in_fast', customer: 'cus_fast', subscription: 'sub_fast',
       lines: { data: [{ pricing: { price_details: { price: 'price_starter' } }, period: { end: Math.floor(Date.now() / 1000) + 2_592_000 } }] },
     });
     expect(r.statusCode).toBe(200);

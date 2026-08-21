@@ -102,6 +102,21 @@ export async function userIdForCustomer(customerId: string): Promise<string | un
 }
 
 /**
+ * Pull the milesUserId off the *subscription's* metadata instead — set via
+ * subscription_data.metadata at Checkout Session creation, so it exists on
+ * the subscription the instant Stripe creates it, before any webhook about
+ * that subscription can possibly fire. Preferred over userIdForCustomer
+ * wherever a subscription id is available: stampCustomer's write to the
+ * customer happens in a separate, later API call, so a webhook that arrives
+ * fast (invoice.paid on a brand-new subscription often does) can beat it.
+ */
+export async function userIdForSubscription(subscriptionId: string): Promise<string | undefined> {
+  const stripe = await getClient();
+  const sub = await stripe.subscriptions.retrieve(subscriptionId);
+  return sub.metadata?.milesUserId || undefined;
+}
+
+/**
  * Stamp the Miles account id onto the Stripe *customer*, not just the
  * subscription — called once, right after checkout.session.completed links
  * the two. Every later webhook (invoice.paid, a failed payment, a

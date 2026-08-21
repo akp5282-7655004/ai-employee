@@ -48,7 +48,7 @@ import { itemEconomics, PRICES_STAMPED, rollup, TARGET_MARGIN, THIN_MARGIN, unpr
 import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS } from './billing/credits.js';
 import {
   bandForPriceId, createCheckoutSession, createPortalSession, priceIdForBand,
-  stampCustomer, stripeReady, userIdForCustomer, verifyWebhook, type PaidBand,
+  stampCustomer, stripeReady, userIdForCustomer, userIdForSubscription, verifyWebhook, type PaidBand,
 } from './billing/stripe.js';
 import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, updateBand } from './billing/subscription.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
@@ -1923,7 +1923,21 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const event = await verifyWebhook(raw, sig);
     if ('error' in event) return reply.code(400).send(event);
 
-    const findUser = async (customerId: string | null): Promise<{ id: string } | undefined> => {
+    // Subscription metadata is set at Checkout creation, before the subscription
+    // even exists — no race possible. Customer metadata is a separate, later
+    // write (stampCustomer) that a fast-arriving webhook (invoice.paid on a
+    // brand-new subscription often does) can beat, so try the subscription
+    // first and only fall back to the customer when no subscription id is at hand.
+    const findUser = async (customerId: string | null, subscriptionId?: string): Promise<{ id: string } | undefined> => {
+      if (subscriptionId) {
+        // A lookup failure here (a deleted subscription, a transient Stripe
+        // error) should fall through to the customer lookup, not abort the
+        // whole event — the customer stamp is the backstop for exactly this.
+        try {
+          const uid = await userIdForSubscription(subscriptionId);
+          if (uid) return { id: uid };
+        } catch { /* fall through */ }
+      }
       if (!customerId) return undefined;
       const uid = await userIdForCustomer(customerId);
       return uid ? { id: uid } : undefined;
@@ -1968,7 +1982,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           const priceId = inv.lines?.data?.[0]?.pricing?.price_details?.price
             ?? (inv.lines?.data?.[0] as unknown as { price?: { id?: string } })?.price?.id;
           const bandKey = bandForPriceId(typeof priceId === 'string' ? priceId : undefined);
-          const user = await findUser(customerId);
+          const user = await findUser(customerId, subId);
           if (!(user && subId && bandKey && inv.id)) {
             console.warn(`invoice.paid: skipped — missing a required field ${JSON.stringify({ eventType: event.type, hasUser: !!user, subId, priceId, bandKey, invoiceId: inv.id })}`);
           }
@@ -1987,7 +2001,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           const inv = event.data.object as import('stripe').default.Invoice;
           const customerId = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id ?? null;
           const subId = invoiceSubscriptionId(inv);
-          const user = await findUser(customerId);
+          const user = await findUser(customerId, subId);
           if (user && subId) {
             const data = await authStore.getUserData(user.id);
             markPastDue(data, subId);
@@ -1998,7 +2012,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         case 'customer.subscription.deleted': {
           const s = event.data.object as import('stripe').default.Subscription;
           const customerId = typeof s.customer === 'string' ? s.customer : s.customer?.id ?? null;
-          const user = await findUser(customerId);
+          const user = await findUser(customerId, s.id);
           if (user) {
             const data = await authStore.getUserData(user.id);
             markCanceled(data, s.id);
@@ -2011,7 +2025,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           const customerId = typeof s.customer === 'string' ? s.customer : s.customer?.id ?? null;
           const priceId = s.items?.data?.[0]?.price?.id;
           const bandKey = bandForPriceId(priceId);
-          const user = await findUser(customerId);
+          const user = await findUser(customerId, s.id);
           if (user && bandKey) {
             const data = await authStore.getUserData(user.id);
             updateBand(data, s.id, bandKey);
