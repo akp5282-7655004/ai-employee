@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { gzipSync, brotliCompressSync, constants as zlibConstants } from 'node:zlib';
 import { join } from 'node:path';
 import { RateLimiter } from './ratelimit.js';
@@ -302,11 +302,27 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const accept = String(req.headers['accept-encoding'] ?? '');
     const encoding = /\bbr\b/.test(accept) ? 'br' : (/\bgzip\b/.test(accept) ? 'gzip' : null);
     if (!encoding) return payload;
-    // Cache only immutable static shells (the HTML pages), not per-user JSON.
-    const cacheable = req.method === 'GET' && /html/.test(type) ? req.url.split('?')[0] : undefined;
+    // Key the encoded-body cache on the BODY, never on the URL.
+    //
+    // A URL key is wrong here because '/' does not have one body: it returns the
+    // dashboard to a signed-in caller and the login page to everyone else. Keyed
+    // on '/', whichever of the two was compressed first was then replayed to every
+    // later caller — so after any anonymous hit, signing in appeared to fail
+    // (correct session, correct cookie, login page served anyway) until the
+    // process restarted, and repeated retries tripped the sign-in rate limiter.
+    //
+    // Hashing the body keeps the "compress each distinct document once" win with
+    // no way for two different documents to share an entry.
+    const cacheable = req.method === 'GET' && /html/.test(type)
+      ? createHash('sha256').update(payload).digest('base64url')
+      : undefined;
     const buf = compressBody(payload, encoding, cacheable);
     reply.header('content-encoding', encoding);
-    reply.header('vary', 'accept-encoding');
+    // Additive: a route that already varies on something (e.g. '/' on cookie)
+    // must keep it — overwriting here would drop that and re-open the same hole
+    // one layer out, in shared caches.
+    const priorVary = String(reply.getHeader('vary') ?? '');
+    reply.header('vary', /accept-encoding/i.test(priorVary) ? priorVary : (priorVary ? `${priorVary}, accept-encoding` : 'accept-encoding'));
     reply.header('content-length', String(buf.length));
     return buf as unknown as string;
   });
@@ -551,6 +567,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // ── pages (gated: no account → login) ──
   app.get('/', async (req, reply) => {
     const u = await getUser(req);
+    // This one URL returns two different documents depending on the session, so
+    // say so: no shared or browser cache may keep one and serve it to the other.
+    reply.header('cache-control', 'private, no-store');
+    reply.header('vary', 'cookie, accept-encoding');
     return reply.type('text/html').send(u ? dashboardPage : loginPage);
   });
   app.get('/login', async (_req, reply) => reply.type('text/html').send(loginPage));
