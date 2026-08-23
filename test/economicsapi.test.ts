@@ -17,6 +17,46 @@ async function session(app: App, email = 'econ@example.com'): Promise<string> {
 }
 const get = (app: App, url: string, cookie: string) => app.inject({ method: 'GET', url, headers: { cookie } });
 
+/**
+ * Read /api/economics as `email`. The route is owner-only, and isAdmin honours
+ * ADMIN_EMAIL ahead of "first account created" — so this scopes ownership to
+ * whichever account an assertion needs to read as, without giving up the gate.
+ */
+async function economicsAs(app: App, email: string, cookie: string) {
+  process.env.ADMIN_EMAIL = email;
+  try {
+    return (await get(app, '/api/economics', cookie)).json();
+  } finally {
+    delete process.env.ADMIN_EMAIL;
+  }
+}
+
+/**
+ * Cost-to-serve and per-item margin are the operator's numbers. A paying
+ * customer reading "cost/run $0.0006, margin 99.9%" on their own billing page
+ * learns exactly what markup they pay — so this is owner-only at the route,
+ * not merely hidden in the UI.
+ *
+ * The first account created is the owner when ADMIN_EMAIL is unset, so the
+ * second signup is a plain customer.
+ */
+describe('unit economics is owner-only', () => {
+  it('serves the owner and refuses everyone else', async () => {
+    const app = buildServer({ authStore: new MemoryStore() });
+    const owner = await session(app, 'owner@example.com');
+    const customer = await session(app, 'customer@example.com');
+
+    expect((await get(app, '/api/economics', owner)).statusCode).toBe(200);
+
+    const refused = await get(app, '/api/economics', customer);
+    expect(refused.statusCode).toBe(403);
+    // And nothing about costs leaks in the refusal body.
+    const body = refused.body;
+    expect(body).not.toMatch(/unitCost|margin|cost/i);
+    await app.close();
+  });
+});
+
 describe('the economics endpoint', () => {
   it('needs a session', async () => {
     const app = buildServer({ authStore: new MemoryStore() });
@@ -111,7 +151,7 @@ describe('the economics endpoint', () => {
     const a = await session(app, 'a@example.com');
     const b = await session(app, 'b@example.com');
     await app.inject({ method: 'POST', url: '/api/skills7/loser-pauser/run', headers: { cookie: a } });
-    expect((await get(app, '/api/economics', b)).json().totals.revenue).toBe(0);
+    expect((await economicsAs(app, 'b@example.com', b)).totals.revenue).toBe(0);
     await app.close();
   });
 });
@@ -163,8 +203,8 @@ describe('cost attribution through a real request', () => {
     const a = await session(app, 'a2@example.com');
     const b = await session(app, 'b2@example.com');
     await app.inject({ method: 'POST', url: '/api/skills/play', headers: { cookie: a }, payload: { skillId: 'google-ads', playId: 'rsa' } });
-    expect((await get(app, '/api/economics', b)).json().tokens.calls).toBe(0);
-    expect((await get(app, '/api/economics', a)).json().tokens.calls).toBe(1);
+    expect((await economicsAs(app, 'b2@example.com', b)).tokens.calls).toBe(0);
+    expect((await economicsAs(app, 'a2@example.com', a)).tokens.calls).toBe(1);
     await app.close();
   });
 });
