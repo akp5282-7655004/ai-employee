@@ -3517,10 +3517,15 @@ async function renderCmdCenter(){
 const mgPct=v=>v===null||v===undefined?'—':(v*100).toFixed(1)+'%';
 const mgUsd=v=>'$'+(Math.abs(v)<0.01&&v!==0?v.toFixed(5):v.toFixed(2));
 async function renderEconomics(box){
+  // Owner only. This card shows cost-to-serve and per-item margin — the
+  // operator's view of their own business. A customer reading "cost/run
+  // $0.0006, margin 99.9%" on their billing page learns exactly what markup
+  // they pay. The route is 403 for non-owners too; this just avoids the call.
+  if(!IS_ADMIN) return;
   let d=null; try{ d=await(await fetch('/api/economics')).json(); }catch(e){}
   if(!d||!d.items) return;
   const c=el('div','mcard'); c.style.marginTop='12px';
-  c.append(el('div','sect-label','UNIT ECONOMICS — WHAT THE WORK COSTS TO SERVE'));
+  c.append(el('div','sect-label','UNIT ECONOMICS — WHAT THE WORK COSTS TO SERVE (OWNER ONLY)'));
 
   const t=d.totals;
   const head=el('div','mg-head');
@@ -3611,16 +3616,45 @@ async function openBilling(){
   const barWrap=el('div'); barWrap.style.cssText='background:var(--panel2,var(--panel-2));border-radius:8px;height:22px;overflow:hidden;margin:10px 0 4px';
   const bar=el('div'); bar.style.cssText='height:100%;width:'+pct.toFixed(1)+'%;background:var(--good);border-radius:8px'; barWrap.append(bar);
   pc.append(barWrap);
-  pc.append(el('div','appsub','$'+c.remaining.toFixed(2)+' of $'+c.granted.toFixed(2)+' in credits remaining · $'+c.spent.toFixed(2)+' used'));
+  // Lead with what the balance BUYS, not what it is worth. A dollar figure here
+  // sits inches from the plan price and invites the wrong comparison — and on
+  // Starter the two numbers are nearly identical, which reads as "I paid $149
+  // to get $150." Units answer the question people actually have.
+  const vp=(d.workCosts||{}).video;
+  const leftUnits=vp?Math.floor(c.remaining/vp):null;
+  // The dollar balance is an operator's number, not a customer's. Owners get it
+  // for reconciliation; customers get what it buys.
+  pc.append(el('div','appsub',
+    (leftUnits!==null ? leftUnits+' videos left this month' : 'Media allowance')
+    + (IS_ADMIN ? ' · $'+c.remaining.toFixed(2)+' of $'+c.granted.toFixed(2)+' in media credits' : '')));
   const honest=el('p','appsub',d.note); honest.style.cssText='margin-top:10px;padding:8px 10px;background:var(--panel-2,var(--panel-2));border-radius:8px;font-size:11.5px'; pc.append(honest);
   box.append(pc);
   // Bands table
   const bc=el('div','mcard'); bc.style.marginTop='12px'; bc.append(el('div','sect-label','PAID BANDS — FLAT PRICE BY AD SPEND, NEVER A PERCENTAGE'));
   const wrap=el('div'); wrap.style.overflowX='auto'; const t=el('table'); t.style.cssText='width:100%;border-collapse:collapse;font-size:12.5px';
-  const hd=el('tr'); ['Band','Monthly ad spend','Price','Credits included','Auto top-up',''].forEach(h=>{const th=el('th',null,h); th.style.cssText='text-align:left;padding:6px 8px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line,#e5e7eb)'; hd.append(th);}); t.append(hd);
+  // Never show the credit bundle as a dollar figure next to the price: "$149/mo"
+  // beside "$50/mo included" reads as "you pay $149 and get $50", which is both
+  // unflattering and wrong — the price buys unlimited work, and credits only
+  // ever buy media. Show the units they actually get instead.
+  const vPrice=(d.workCosts||{}).video, iPrice=(d.workCosts||{}).image;
+  const included=(b)=>{
+    const parts=[];
+    if(vPrice) parts.push(Math.floor(b.monthlyCredits/vPrice)+' videos');
+    if(iPrice) parts.push(Math.floor(b.monthlyCredits/iPrice).toLocaleString()+' images');
+    return parts.length ? 'Unlimited work + '+parts.join(' or ') : 'Unlimited work';
+  };
+  // Owners see the credit bundle and top-up increment for reconciliation;
+  // customers do not. To a customer "$50/mo credits" beside "$149/mo" only
+  // ever prompts the wrong subtraction.
+  const cols=IS_ADMIN
+    ? ['Band','Monthly ad spend','Price','Included every month','Credits (admin)','Top-up (admin)','']
+    : ['Band','Monthly ad spend','Price','Included every month',''];
+  const hd=el('tr'); cols.forEach(h=>{const th=el('th',null,h); th.style.cssText='text-align:left;padding:6px 8px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line,#e5e7eb)'; hd.append(th);}); t.append(hd);
   d.bands.forEach(b=>{
     const tr=el('tr'); if(d.impliedBand&&b.key===d.impliedBand.key) tr.style.background='var(--panel-2,var(--panel-2))';
-    [(b.key===((d.impliedBand||{}).key)?'▸ ':'')+b.name, b.spendMax?('$'+b.spendMin.toLocaleString()+' – $'+b.spendMax.toLocaleString()):('Over $'+b.spendMin.toLocaleString()), '$'+b.monthlyPrice+'/mo', '$'+b.monthlyCredits+'/mo', '$'+b.topUp].forEach((v,i)=>{const td=el('td',null,v); td.style.cssText='padding:7px 8px;border-bottom:1px solid var(--line,var(--panel-2))'+(i===0?';font-weight:600':''); tr.append(td);});
+    const cells=[(b.key===((d.impliedBand||{}).key)?'▸ ':'')+b.name, b.spendMax?('$'+b.spendMin.toLocaleString()+' – $'+b.spendMax.toLocaleString()):('Over $'+b.spendMin.toLocaleString()), '$'+b.monthlyPrice+'/mo', included(b)];
+    if(IS_ADMIN) cells.push('$'+b.monthlyCredits+'/mo', '$'+b.topUp);
+    cells.forEach((v,i)=>{const td=el('td',null,v); td.style.cssText='padding:7px 8px;border-bottom:1px solid var(--line,var(--panel-2))'+(i===0?';font-weight:600':'')+(IS_ADMIN&&i>=4?';color:var(--muted)':''); tr.append(td);});
     const actTd=el('td'); actTd.style.cssText='padding:7px 8px;border-bottom:1px solid var(--line,var(--panel-2))';
     const onThisBand=d.subscription&&d.subscription.band===b.key&&d.subscription.status==='active';
     if(onThisBand){ actTd.append(el('span','appsub','Current plan')); }
@@ -3641,19 +3675,19 @@ async function openBilling(){
     t.append(tr);
   });
   wrap.append(t); bc.append(wrap);
-  bc.append(el('p','appsub','Every band includes all skills, all connectors, unlimited users, and unlimited campaigns, skill runs, readouts, AI copy and email — plus unmetered monitoring. Bands differ only by spend under management and the media credits included.'));
+  bc.append(el('p','appsub','Every band includes all skills, all connectors, unlimited users, and unlimited campaigns, skill runs, weekly readouts, AI copy, email automations and website audits — plus unmetered monitoring, always. Videos and images draw from your monthly allowance; when it runs out you can top up or move up a band.'));
   box.append(bc);
   await renderEconomics(box);
   // What draws credits
-  const wc=el('div','mcard'); wc.style.marginTop='12px'; wc.append(el('div','sect-label','WHAT USES CREDITS'));
-  const names={video:'Video',image:'Image',audio:'Voiceover'};
-  const per={video:'each',image:'each',audio:'each'};
+  const wc=el('div','mcard'); wc.style.marginTop='12px'; wc.append(el('div','sect-label','MEDIA — WHAT YOUR PLAN INCLUDES'));
+  const names={video:'Videos',image:'Images',audio:'Voiceovers'};
   Object.entries(d.workCosts||{}).forEach(([k,v])=>{
     const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line,var(--panel-2));font-size:12.5px';
     const buys=(d.buys||[]).find(b=>b.kind===k);
-    const left=el('span',null,(names[k]||k)+' '+(per[k]||''));
-    const right=el('b',null,'$'+Number(v).toFixed(2)+(buys?'  ·  '+buys.includedPerMonth+'/mo included':''));
-    row.append(left,right); wc.append(row);
+    // Lead with the allowance, then the overage rate. "$1.50" alone reads as a
+    // per-use charge on a plan people already paid for.
+    const right=el('b',null,(buys?buys.includedPerMonth.toLocaleString()+' included each month  ·  ':'')+'then $'+Number(v).toFixed(2)+' each');
+    row.append(el('span',null,names[k]||k),right); wc.append(row);
   });
   wc.append(el('p','appsub','Everything else is unlimited — campaigns, skill runs, weekly readouts, AI copy, email automations, website audits, and all monitoring. Credits only ever buy media.'));
   box.append(wc);
