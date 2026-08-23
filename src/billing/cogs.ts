@@ -20,6 +20,9 @@
  *    forever, and re-check the stamp before quoting a margin to anyone.
  */
 
+import { isMediaKind, mediaCost } from './media.js';
+import { UNLIMITED_ITEMS } from './credits.js';
+
 export interface ModelPrice {
   /** USD per 1M input tokens. */
   input: number;
@@ -95,7 +98,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
  * known token costs, not a figure any of them published. Treat it as this
  * business's target, not as an observed industry fact.
  */
-export const TARGET_MARGIN = 0.7;
+export const TARGET_MARGIN = 0.75;
 /** Below this, an item is losing money on volume and needs repricing. */
 export const THIN_MARGIN = 0.5;
 
@@ -125,6 +128,21 @@ export function health(margin: number | null): Health {
  * measured yet. These are deliberate, stated assumptions — the maxTokens the
  * call sites request plus a prompt allowance — not observations.
  */
+/**
+ * Per-asset vendor costs for work that is not billed by the token.
+ *
+ * A rendered image or video is priced by the vendor per asset, so modelling it
+ * from token counts reports a video at roughly a thousandth of its real cost —
+ * and shows 99.9% margin on the single item that actually costs money. These
+ * are the numbers that make the margin table mean something.
+ *
+ * Sourced from MEDIA_COST (see billing/media.ts) so there is one place to
+ * change a price, and overridable there via MEDIA_COSTS_JSON.
+ */
+export function vendorUnitCost(item: string): number | undefined {
+  return isMediaKind(item) ? mediaCost(item) : undefined;
+}
+
 export const MODELLED_TOKENS: Record<string, { input: number; output: number }> = {
   campaign_build: { input: 2500, output: 1800 },
   campaign_launch: { input: 1200, output: 600 },
@@ -170,9 +188,15 @@ export function itemEconomics(
     const m = measured[item];
     const useMeasured = !!m && m.runs > 0 && m.costUsd > 0;
     const tokens = MODELLED_TOKENS[item];
+    // Media is billed by the vendor per rendered asset, not per token, so a
+    // token model would report a video at a thousandth of its real cost and
+    // show 99.9% margin on the one item that actually costs money.
+    const vendor = vendorUnitCost(item);
     const unitCost = useMeasured
       ? round6(m!.costUsd / m!.runs)
-      : tokens ? tokenCostUsd(model, tokens.input, tokens.output) : 0;
+      : vendor !== undefined
+        ? vendor
+        : tokens ? tokenCostUsd(model, tokens.input, tokens.output) : 0;
     const margin = marginPct(price, unitCost);
     return {
       item,
@@ -228,6 +252,11 @@ export function unpricedWork(
       const via = BILLED_THROUGH[kind];
       return !(via && retail[via] !== undefined);
     })
+    // Work that is free BY DECISION is not a leak. A leak is work that spends
+    // money with nobody having chosen that — which is exactly how video came
+    // to be free on every plan. Deliberate and accidental must not look alike
+    // in this list, or the list stops being read.
+    .filter((kind) => !(UNLIMITED_ITEMS as readonly string[]).includes(kind))
     .map((kind) => ({ kind, label: labels[kind] ?? kind, runs: runs[kind] ?? 0, media: COSTLY_UNPRICED.has(kind) }))
     .sort((a, b) => Number(b.media) - Number(a.media) || b.runs - a.runs);
 }
