@@ -3641,21 +3641,25 @@ async function openBilling(){
     t.append(tr);
   });
   wrap.append(t); bc.append(wrap);
-  bc.append(el('p','appsub','Every band includes all skills, all connectors, unlimited users, and unmetered monitoring — bands differ only by spend under management and credit bundle.'));
+  bc.append(el('p','appsub','Every band includes all skills, all connectors, unlimited users, and unlimited campaigns, skill runs, readouts, AI copy and email — plus unmetered monitoring. Bands differ only by spend under management and the media credits included.'));
   box.append(bc);
   await renderEconomics(box);
   // What draws credits
-  const wc=el('div','mcard'); wc.style.marginTop='12px'; wc.append(el('div','sect-label','WHAT USES CREDITS (MONITORING NEVER DOES)'));
-  const names={campaign_build:'Campaign build',campaign_launch:'Campaign launch',ai_autofill:'AI auto-fill',skill_run:'Skill run',weekly_readout:'Weekly readout',email_send:'Email send',creative_generation:'Creative generation'};
+  const wc=el('div','mcard'); wc.style.marginTop='12px'; wc.append(el('div','sect-label','WHAT USES CREDITS'));
+  const names={video:'Video',image:'Image',audio:'Voiceover'};
+  const per={video:'each',image:'each',audio:'each'};
   Object.entries(d.workCosts||{}).forEach(([k,v])=>{
     const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line,var(--panel-2));font-size:12.5px';
-    row.append(el('span',null,names[k]||k), el('b',null,'$'+Number(v).toFixed(2))); wc.append(row);
+    const buys=(d.buys||[]).find(b=>b.kind===k);
+    const left=el('span',null,(names[k]||k)+' '+(per[k]||''));
+    const right=el('b',null,'$'+Number(v).toFixed(2)+(buys?'  ·  '+buys.includedPerMonth+'/mo included':''));
+    row.append(left,right); wc.append(row);
   });
-  wc.append(el('p','appsub','Dashboards, metric pulls, pacing checks, alerts, and the funnel — always free. You are never charged for letting Miles watch the account.'));
+  wc.append(el('p','appsub','Everything else is unlimited — campaigns, skill runs, weekly readouts, AI copy, email automations, website audits, and all monitoring. Credits only ever buy media.'));
   box.append(wc);
   // Usage ledger
   const lc=el('div','mcard'); lc.style.marginTop='12px'; lc.append(el('div','sect-label','CREDIT USAGE'));
-  if(!(d.ledger||[]).length) lc.append(el('p','appsub','No credits used yet. Work items (builds, launches, skill runs, sends) will appear here with their cost.'));
+  if(!(d.ledger||[]).length) lc.append(el('p','appsub','No credits used yet. Videos, images, and voiceovers will appear here with their cost.'));
   (d.ledger||[]).forEach(e=>{
     const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line,var(--panel-2));font-size:12.5px';
     const l=el('div'); l.append(el('b',null,(names[e.item]||e.item))); if(e.note) l.append(el('span','appsub',' · '+e.note)); l.append(el('div','appsub',new Date(e.ts).toLocaleString()));
