@@ -261,6 +261,83 @@ export function unpricedWork(
     .sort((a, b) => Number(b.media) - Number(a.media) || b.runs - a.runs);
 }
 
+/**
+ * Cost-to-serve assumptions behind the plan margin guard.
+ *
+ * STATED, NOT MEASURED. Every figure here is an assumption about costs the
+ * app cannot see — the payment processor's cut, hosting amortised per
+ * account, and the human minutes a customer needs in a month. Support is the
+ * one that actually decides plan margin: at $149 it is worth roughly 30-45
+ * minutes before the floor breaks, and no pricing change substitutes for
+ * knowing the real number.
+ *
+ * Change these when the real numbers are known, and the guard recomputes.
+ */
+export const SERVE_ASSUMPTIONS = {
+  stripePct: 0.029,
+  stripeFixed: 0.3,
+  /** Hosting + database + connector, amortised per account at modest scale. */
+  infraPerAccount: 2.0,
+  /** ~20 minutes at a $40/hour loaded rate. */
+  supportPerAccount: 13.33,
+  /** Text work at every fair-use ceiling simultaneously. */
+  fairUseWorstCase: 2.75,
+};
+
+export interface PlanMargin {
+  band: string;
+  revenue: number;
+  cost: number;
+  margin: number;
+  /** Units of the worst-margin media kind the included credits buy. */
+  worstCaseUnits: number;
+  worstCaseKind: string;
+}
+
+/**
+ * Worst-case gross margin for one band.
+ *
+ * Worst case means: every included credit spent on the media kind with the
+ * thinnest margin (video), AND every fair-use ceiling hit, AND the full
+ * support and infra assumptions above. A real account does none of those,
+ * let alone all three, so the number this returns is a floor rather than a
+ * forecast.
+ *
+ * Auto top-ups are deliberately excluded: they are sold at the same per-unit
+ * margin, so they can only raise this figure. The ceiling on them exists to
+ * prevent bill shock, not to protect margin.
+ */
+export function planMargin(
+  band: { key: string; monthlyPrice: number; monthlyCredits: number },
+  retail: Record<string, number>,
+): PlanMargin {
+  // The kind that turns the most revenue into cost is the worst case.
+  let worstKind = '';
+  let worstRatio = 0;
+  for (const [kind, price] of Object.entries(retail)) {
+    if (!isMediaKind(kind) || price <= 0) continue;
+    const ratio = mediaCost(kind) / price;
+    if (ratio > worstRatio) { worstRatio = ratio; worstKind = kind; }
+  }
+  const mediaSpend = band.monthlyCredits * worstRatio;
+  const units = worstKind ? Math.floor(band.monthlyCredits / retail[worstKind]!) : 0;
+  const stripe = band.monthlyPrice * SERVE_ASSUMPTIONS.stripePct + SERVE_ASSUMPTIONS.stripeFixed;
+  const cost =
+    mediaSpend +
+    stripe +
+    SERVE_ASSUMPTIONS.infraPerAccount +
+    SERVE_ASSUMPTIONS.supportPerAccount +
+    SERVE_ASSUMPTIONS.fairUseWorstCase;
+  return {
+    band: band.key,
+    revenue: band.monthlyPrice,
+    cost: round2(cost),
+    margin: round6((band.monthlyPrice - cost) / band.monthlyPrice),
+    worstCaseUnits: units,
+    worstCaseKind: worstKind,
+  };
+}
+
 export interface MarginRollup {
   revenue: number;
   cost: number;
