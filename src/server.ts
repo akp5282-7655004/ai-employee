@@ -2146,9 +2146,20 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
    * projection read as a measurement is how a business talks itself into a
    * margin it does not have.
    */
+  /**
+   * Unit economics — OWNER ONLY.
+   *
+   * This endpoint reports what work costs to serve and the margin on every
+   * priced item. That is the operator's view of their own business, not
+   * something a customer is owed: a paying account seeing "cost/run $0.0006,
+   * margin 99.9%" learns exactly what markup they are paying, on a page they
+   * opened to check their balance. Gating the card in the UI is not enough —
+   * anyone could fetch this route directly.
+   */
   app.get('/api/economics', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
+    if (!(await isAdmin(u))) return reply.code(403).send({ error: 'owner only' });
     const data = await authStore.getUserData(u.id);
     // Bank anything this account has spent that has not been written yet.
     const drained = drainCosts(u.id);
