@@ -29,7 +29,10 @@ describe('the economics endpoint', () => {
     const c = await session(app);
     const d = (await get(app, '/api/economics', c)).json();
     expect(d.target).toBe(TARGET_MARGIN);
-    expect(d.items.length).toBeGreaterThan(4);
+    // One row per priced item. Only media is priced now — text work is
+    // unlimited, so it correctly has no line in the margin table.
+    expect(d.items.length).toBe(3);
+    expect(d.items.map((i: any) => i.item).sort()).toEqual(['audio', 'image', 'video']);
     for (const i of d.items) {
       expect(i).toHaveProperty('unitCost');
       expect(i).toHaveProperty('breakEvenPrice');
@@ -57,15 +60,29 @@ describe('the economics endpoint', () => {
     await app.close();
   });
 
-  it('names the actions that are metered but never billed', async () => {
+  /**
+   * This test used to assert that video and image WERE leaks — metered,
+   * expensive, and billed to nobody. They are now priced, so an empty list is
+   * the pass condition and a non-empty one means something spends money that
+   * nobody decided to charge for.
+   */
+  it('reports no metered-but-unbilled work — nothing is free by accident', async () => {
     const app = buildServer({ authStore: new MemoryStore() });
     const c = await session(app);
     const d = (await get(app, '/api/economics', c)).json();
-    const kinds = d.leaks.map((l: any) => l.kind);
-    expect(kinds).toContain('video');
-    expect(kinds).toContain('image');
-    // Media leaks sort first — they are the expensive ones.
-    expect(d.leaks[0].media).toBe(true);
+    expect(d.leaks.map((l: any) => l.kind)).toEqual([]);
+    await app.close();
+  });
+
+  it('prices every media kind above the target margin', async () => {
+    const app = buildServer({ authStore: new MemoryStore() });
+    const c = await session(app);
+    const d = (await get(app, '/api/economics', c)).json();
+    for (const i of d.items) {
+      expect(i.margin, `${i.item} @ $${i.price}`).toBeGreaterThanOrEqual(TARGET_MARGIN);
+      // And the cost must be the vendor's per-asset price, not a token estimate.
+      expect(i.unitCost, `${i.item} unit cost`).toBeGreaterThan(0);
+    }
     await app.close();
   });
 
@@ -78,12 +95,14 @@ describe('the economics endpoint', () => {
     await app.close();
   });
 
-  it('shows revenue once work has been charged for', async () => {
+  it('shows no revenue from unlimited work, because there is none', async () => {
     const app = buildServer({ authStore: new MemoryStore() });
     const c = await session(app);
     await app.inject({ method: 'POST', url: '/api/skills7/loser-pauser/run', headers: { cookie: c } });
     const d = (await get(app, '/api/economics', c)).json();
-    expect(d.totals.revenue).toBeGreaterThan(0);
+    // A skill run is free now. Reporting revenue for it would be a lie the
+    // margin table then compounds.
+    expect(d.totals.revenue).toBe(0);
     await app.close();
   });
 
