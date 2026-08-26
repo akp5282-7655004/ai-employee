@@ -45,7 +45,8 @@ import {
   pendingAccounts, setCostAccount, UNCLAIMED, withCostAccount,
 } from './billing/costsink.js';
 import { itemEconomics, PRICES_STAMPED, rollup, TARGET_MARGIN, THIN_MARGIN, unpricedWork } from './billing/cogs.js';
-import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS } from './billing/credits.js';
+import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS, canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS } from './billing/credits.js';
+import { isMediaKind, MEDIA_LABEL, MEDIA_KINDS, mediaCost } from './billing/media.js';
 import {
   bandForPriceId, createCheckoutSession, createPortalSession, priceIdForBand,
   stampCustomer, stripeReady, userIdForCustomer, userIdForSubscription, verifyWebhook, type PaidBand,
@@ -1223,10 +1224,38 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     data.usage = applyMeter(data.usage as Usage | undefined, kind, new Date(), n, credits);
   };
   // For endpoints that don't otherwise persist: load, meter, save.
+  /**
+   * Record one metered action, and charge credits for it when it costs money.
+   *
+   * Every media generation in the app funnels through here, which is why the
+   * credit charge lives here and not at the four call sites: the previous
+   * arrangement metered media in one table and billed from another, so video
+   * was free on every plan without anyone deciding that. One choke point, one
+   * place to get it wrong.
+   *
+   * Text and agent runs pass straight through — they are unlimited, and
+   * chargeCredits ignores anything absent from WORK_COSTS.
+   */
   const meterUser = async (userId: string, kind: MeterKind, n = 1, credits?: number): Promise<void> => {
     const d = await authStore.getUserData(userId);
     bumpMeter(d, kind, n, credits);
+    if (isMediaKind(kind)) {
+      for (let i = 0; i < n; i++) chargeCredits(d, kind, MEDIA_LABEL[kind]);
+    }
     await authStore.setUserData(userId, d);
+  };
+
+  /**
+   * Refuse a media generation the account cannot pay for — checked BEFORE the
+   * vendor call, so a refusal costs nothing and a failed render bills nothing.
+   * Returns true when the caller should stop; it has already sent the 402.
+   */
+  const mediaBlocked = async (userId: string, kind: MeterKind, reply: FastifyReply): Promise<boolean> => {
+    if (!isMediaKind(kind)) return false;
+    const gate = canAfford(await authStore.getUserData(userId), kind);
+    if (gate.ok) return false;
+    reply.code(402).send({ error: gate.reason, kind, upgrade: true });
+    return true;
   };
 
   app.get('/api/usage', async (req, reply) => {
@@ -1886,6 +1915,17 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       credits: { granted: credits.granted, spent: credits.spent, remaining: credits.remaining },
       ledger: credits.ledger.slice(0, 50),
       workCosts: WORK_COSTS,
+      // What credits actually buy, so nobody has to divide in their head.
+      buys: MEDIA_KINDS.map((k) => ({
+        kind: k,
+        label: MEDIA_LABEL[k],
+        price: WORK_COSTS[k]!,
+        includedPerMonth: Math.floor(bandForSpend(spend30).monthlyCredits / WORK_COSTS[k]!),
+      })),
+      unlimited: UNLIMITED_ITEMS,
+      autoTopUp: credits.autoTopUp,
+      topUp: bandForSpend(spend30).topUp,
+      topUps: credits.topUps,
       enforced: billingEnforced(),
       paymentsConnected,
       subscription: sub.status === 'none' ? null : sub,
@@ -1893,6 +1933,32 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         ? 'Monitoring is never metered — credits draw only on work items. Your card is held by Stripe; Miles never sees or stores it.'
         : 'Launch offer: $0/month with $100 in credits. Monitoring is never metered — credits draw only on work items. Payments are not connected yet, so nothing is charged and an empty balance does not pause work.',
     };
+  });
+
+  /**
+   * Turn automatic top-ups on or off.
+   *
+   * Off by default and opt-in only. A surprise charge costs more trust than a
+   * paused render costs time, so the default answer to "should we spend their
+   * money to keep going?" is no until they say otherwise.
+   */
+  app.post<{ Body: { on?: boolean } }>('/api/billing/auto-topup', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const on = req.body?.on === true;
+    const data = await authStore.getUserData(u.id);
+    const band = bandOf(data);
+    const state = setAutoTopUp(data, on);
+    appendApproval(data, {
+      id: newToken().slice(0, 10),
+      ts: new Date().toISOString(),
+      kind: 'approval',
+      actor: u.email,
+      source: 'billing',
+      title: on ? `Auto top-up ON — $${band.topUp.toFixed(2)} increments` : 'Auto top-up OFF',
+    });
+    await authStore.setUserData(u.id, data);
+    return { ok: true, autoTopUp: state.autoTopUp, topUp: band.topUp };
   });
 
   /** A Stripe-hosted checkout page for one paid band. The customer enters their
@@ -2080,9 +2146,20 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
    * projection read as a measurement is how a business talks itself into a
    * margin it does not have.
    */
+  /**
+   * Unit economics — OWNER ONLY.
+   *
+   * This endpoint reports what work costs to serve and the margin on every
+   * priced item. That is the operator's view of their own business, not
+   * something a customer is owed: a paying account seeing "cost/run $0.0006,
+   * margin 99.9%" learns exactly what markup they are paying, on a page they
+   * opened to check their balance. Gating the card in the UI is not enough —
+   * anyone could fetch this route directly.
+   */
   app.get('/api/economics', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
+    if (!(await isAdmin(u))) return reply.code(403).send({ error: 'owner only' });
     const data = await authStore.getUserData(u.id);
     // Bank anything this account has spent that has not been written yet.
     const drained = drainCosts(u.id);
@@ -3326,6 +3403,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       }
       // Resolve the chosen media model (registry id) or the reliable default for the kind.
       const mediaKind = spec.kind as MediaKind;
+      // Check affordability before spending a cent with the vendor.
+      if (await mediaBlocked(u.id, mediaKind, reply)) return;
       const picked = modelById(body.model);
       const chosen = picked && picked.kind === mediaKind ? picked : defaultModel(mediaKind);
       const def = defaultModel(mediaKind);
