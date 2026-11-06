@@ -4,6 +4,20 @@ import {
   detectRunningAds, detectServiceAreas, detectYearFounded, importSite, mergeFacts, parseSiteHtml, visibleText,
 } from '../src/research/site.js';
 
+/**
+ * importSite resolves each host before fetching it, to refuse private and
+ * link-local addresses (the SSRF guard in site.ts). Stubbing `fetch` alone
+ * left that lookup hitting real DNS, so these cases passed or failed on
+ * whether the sandbox happened to resolve a real domain — nothing to do with
+ * the importer. Resolve to a public address here so the crawl is exercised
+ * hermetically; the guard itself stays real and keeps its own coverage.
+ */
+const PUBLIC_ADDR = [{ address: '93.184.216.34', family: 4 }];
+vi.mock('node:dns/promises', () => ({
+  lookup: async () => PUBLIC_ADDR,
+  default: { lookup: async () => PUBLIC_ADDR },
+}));
+
 const HTML = `<!doctype html><html><head>
 <title>Rivera Plumbing &amp; AC | Phoenix's Trusted Plumbers</title>
 <meta property="og:site_name" content="Rivera Plumbing & AC">

@@ -642,6 +642,14 @@ export function chooseLinks(html: string, base: URL, cap = MAX_PAGES - 1): strin
 export async function importSite(input: string): Promise<SiteImport | null> {
   let url = (input || '').trim().replace(/^["'<]+|["'>]+$/g, '');
   if (!url) return null;
+  // An input that already names a scheme must name http(s). Blindly prefixing
+  // turned "file:///etc/passwd" into "https://file///etc/passwd" — a genuine
+  // fetch of a host called "file", which never reaches the file:// rejection
+  // in isPublicUrl because by then the scheme IS https. It returned null only
+  // because "file" happens not to resolve; on a resolver with a search domain
+  // or a wildcard, that is a live SSRF. Match on "scheme://" specifically so a
+  // bare "example.com:8080" still reads as host and port, not as a scheme.
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url) && !/^https?:\/\//i.test(url)) return null;
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
   // A bare domain that only answers on www is common enough to be worth one retry.

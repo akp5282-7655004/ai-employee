@@ -17,6 +17,46 @@ async function session(app: App, email = 'econ@example.com'): Promise<string> {
 }
 const get = (app: App, url: string, cookie: string) => app.inject({ method: 'GET', url, headers: { cookie } });
 
+/**
+ * Read /api/economics as `email`. The route is owner-only, and isAdmin honours
+ * ADMIN_EMAIL ahead of "first account created" — so this scopes ownership to
+ * whichever account an assertion needs to read as, without giving up the gate.
+ */
+async function economicsAs(app: App, email: string, cookie: string) {
+  process.env.ADMIN_EMAIL = email;
+  try {
+    return (await get(app, '/api/economics', cookie)).json();
+  } finally {
+    delete process.env.ADMIN_EMAIL;
+  }
+}
+
+/**
+ * Cost-to-serve and per-item margin are the operator's numbers. A paying
+ * customer reading "cost/run $0.0006, margin 99.9%" on their own billing page
+ * learns exactly what markup they pay — so this is owner-only at the route,
+ * not merely hidden in the UI.
+ *
+ * The first account created is the owner when ADMIN_EMAIL is unset, so the
+ * second signup is a plain customer.
+ */
+describe('unit economics is owner-only', () => {
+  it('serves the owner and refuses everyone else', async () => {
+    const app = buildServer({ authStore: new MemoryStore() });
+    const owner = await session(app, 'owner@example.com');
+    const customer = await session(app, 'customer@example.com');
+
+    expect((await get(app, '/api/economics', owner)).statusCode).toBe(200);
+
+    const refused = await get(app, '/api/economics', customer);
+    expect(refused.statusCode).toBe(403);
+    // And nothing about costs leaks in the refusal body.
+    const body = refused.body;
+    expect(body).not.toMatch(/unitCost|margin|cost/i);
+    await app.close();
+  });
+});
+
 describe('the economics endpoint', () => {
   it('needs a session', async () => {
     const app = buildServer({ authStore: new MemoryStore() });
@@ -29,7 +69,10 @@ describe('the economics endpoint', () => {
     const c = await session(app);
     const d = (await get(app, '/api/economics', c)).json();
     expect(d.target).toBe(TARGET_MARGIN);
-    expect(d.items.length).toBeGreaterThan(4);
+    // One row per priced item. Only media is priced now — text work is
+    // unlimited, so it correctly has no line in the margin table.
+    expect(d.items.length).toBe(3);
+    expect(d.items.map((i: any) => i.item).sort()).toEqual(['audio', 'image', 'video']);
     for (const i of d.items) {
       expect(i).toHaveProperty('unitCost');
       expect(i).toHaveProperty('breakEvenPrice');
@@ -57,15 +100,29 @@ describe('the economics endpoint', () => {
     await app.close();
   });
 
-  it('names the actions that are metered but never billed', async () => {
+  /**
+   * This test used to assert that video and image WERE leaks — metered,
+   * expensive, and billed to nobody. They are now priced, so an empty list is
+   * the pass condition and a non-empty one means something spends money that
+   * nobody decided to charge for.
+   */
+  it('reports no metered-but-unbilled work — nothing is free by accident', async () => {
     const app = buildServer({ authStore: new MemoryStore() });
     const c = await session(app);
     const d = (await get(app, '/api/economics', c)).json();
-    const kinds = d.leaks.map((l: any) => l.kind);
-    expect(kinds).toContain('video');
-    expect(kinds).toContain('image');
-    // Media leaks sort first — they are the expensive ones.
-    expect(d.leaks[0].media).toBe(true);
+    expect(d.leaks.map((l: any) => l.kind)).toEqual([]);
+    await app.close();
+  });
+
+  it('prices every media kind above the target margin', async () => {
+    const app = buildServer({ authStore: new MemoryStore() });
+    const c = await session(app);
+    const d = (await get(app, '/api/economics', c)).json();
+    for (const i of d.items) {
+      expect(i.margin, `${i.item} @ $${i.price}`).toBeGreaterThanOrEqual(TARGET_MARGIN);
+      // And the cost must be the vendor's per-asset price, not a token estimate.
+      expect(i.unitCost, `${i.item} unit cost`).toBeGreaterThan(0);
+    }
     await app.close();
   });
 
@@ -78,12 +135,14 @@ describe('the economics endpoint', () => {
     await app.close();
   });
 
-  it('shows revenue once work has been charged for', async () => {
+  it('shows no revenue from unlimited work, because there is none', async () => {
     const app = buildServer({ authStore: new MemoryStore() });
     const c = await session(app);
     await app.inject({ method: 'POST', url: '/api/skills7/loser-pauser/run', headers: { cookie: c } });
     const d = (await get(app, '/api/economics', c)).json();
-    expect(d.totals.revenue).toBeGreaterThan(0);
+    // A skill run is free now. Reporting revenue for it would be a lie the
+    // margin table then compounds.
+    expect(d.totals.revenue).toBe(0);
     await app.close();
   });
 
@@ -92,7 +151,7 @@ describe('the economics endpoint', () => {
     const a = await session(app, 'a@example.com');
     const b = await session(app, 'b@example.com');
     await app.inject({ method: 'POST', url: '/api/skills7/loser-pauser/run', headers: { cookie: a } });
-    expect((await get(app, '/api/economics', b)).json().totals.revenue).toBe(0);
+    expect((await economicsAs(app, 'b@example.com', b)).totals.revenue).toBe(0);
     await app.close();
   });
 });
@@ -144,8 +203,8 @@ describe('cost attribution through a real request', () => {
     const a = await session(app, 'a2@example.com');
     const b = await session(app, 'b2@example.com');
     await app.inject({ method: 'POST', url: '/api/skills/play', headers: { cookie: a }, payload: { skillId: 'google-ads', playId: 'rsa' } });
-    expect((await get(app, '/api/economics', b)).json().tokens.calls).toBe(0);
-    expect((await get(app, '/api/economics', a)).json().tokens.calls).toBe(1);
+    expect((await economicsAs(app, 'b2@example.com', b)).tokens.calls).toBe(0);
+    expect((await economicsAs(app, 'a2@example.com', a)).tokens.calls).toBe(1);
     await app.close();
   });
 });

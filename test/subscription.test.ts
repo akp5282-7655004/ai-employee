@@ -113,3 +113,43 @@ describe('updateBand', () => {
     expect(billingState(data).band).toBe('starter');
   });
 });
+
+describe('a renewal preserves the rest of the credit state', () => {
+  /**
+   * A renewal adds the month's bundle to `granted` and ends the launch offer.
+   * It must touch nothing else. Rebuilding data.credits by hand here used to
+   * reset `spent` to the ledger sum — which, because the ledger is capped,
+   * let a long-running account spend past its balance forever — and switched
+   * the customer's auto top-up back off every month.
+   */
+  const active = (): Record<string, unknown> => ({
+    billing: { status: 'active', stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1', grantedInvoices: [], band: 'starter' },
+    credits: {
+      granted: 150, spent: 87.5, ledger: [{ ts: 'x', item: 'video', cost: 1.5 }],
+      launchOffer: false, autoTopUp: true, topUps: 2,
+      period: creditState({}).period, toppedUpThisMonth: 50, usedThisMonth: { video: 12 },
+    },
+  });
+
+  it('adds the band bundle and leaves spend, top-ups and fair-use counters alone', () => {
+    const data = active();
+    const r = applyRenewal(data, invoice({ invoiceId: 'in_renew' }));
+    expect(r.applied).toBe(true);
+
+    const s = creditState(data);
+    expect(s.granted).toBe(200);       // 150 + Starter's 50
+    expect(s.spent).toBe(87.5);        // was being reset to the ledger sum (1.50)
+    expect(s.remaining).toBe(112.5);   // and so the balance was overstated
+    expect(s.autoTopUp).toBe(true);    // was being switched off every renewal
+    expect(s.topUps).toBe(2);
+    expect(s.toppedUpThisMonth).toBe(50);
+    expect(s.usedThisMonth).toEqual({ video: 12 });
+  });
+
+  it('still ends the launch offer', () => {
+    const data = active();
+    (data.credits as Record<string, unknown>).launchOffer = true;
+    applyRenewal(data, invoice({ invoiceId: 'in_offer' }));
+    expect(creditState(data).launchOffer).toBe(false);
+  });
+});

@@ -11,7 +11,7 @@
  * — a renewal is simply another grant, so `remaining = granted - spent` stays
  * correct without touching how spending is tracked.
  */
-import { BANDS, creditState, type Band } from './credits.js';
+import { BANDS, creditState, writeCredits, type Band } from './credits.js';
 
 export type SubStatus = 'none' | 'active' | 'past_due' | 'canceled';
 
@@ -98,10 +98,15 @@ export function applyRenewal(
   // Read the previous grant the same way the billing page does (creditState's
   // own default applies to a never-touched account) so a renewal can never
   // silently disagree with what the customer was already shown as granted.
+  //
+  // Through writeCredits, never by rebuilding data.credits here: a renewal
+  // touches `granted` and `launchOffer` and nothing else, and every other
+  // field — the running `spent` total above all — has to survive it intact.
   const before = creditState(data);
-  data.credits = { granted: before.granted, ledger: before.ledger, launchOffer: false };
-  const credits = data.credits as { granted: number; ledger: unknown[]; launchOffer: boolean };
-  credits.granted += band.monthlyCredits;
+  writeCredits(data, {
+    granted: Math.round((before.granted + band.monthlyCredits) * 100) / 100,
+    launchOffer: false,
+  });
 
   b.stripeCustomerId = args.customerId;
   b.stripeSubscriptionId = args.subscriptionId;

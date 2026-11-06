@@ -8,6 +8,7 @@ import {
   pendingAccounts, recordCost, resetCosts, setCostAccount, UNCLAIMED, withCostAccount,
 } from '../src/billing/costsink.js';
 import { WORK_COSTS } from '../src/billing/credits.js';
+import { CREDIT_COST, ACTION_LABEL } from '../src/usage/meter.js';
 
 beforeEach(() => { resetCosts(); resetPriceCache(); delete process.env.MODEL_PRICES_JSON; });
 afterEach(() => { resetCosts(); resetPriceCache(); delete process.env.MODEL_PRICES_JSON; });
@@ -86,7 +87,7 @@ describe('per-item economics', () => {
   it('flags an item that is underwater and says what it would have to cost', () => {
     const e = itemEconomics({ skill_run: 0.5 }, { skill_run: { costUsd: 6, runs: 4 } }, 'openai/gpt-4o-mini');
     expect(e[0]!.health).toBe('underwater');
-    expect(e[0]!.breakEvenPrice).toBeCloseTo(5, 2);
+    expect(e[0]!.breakEvenPrice).toBeCloseTo(6, 2); // $1.50 cost at a 75% target
   });
   it('sorts the worst margin first, where the attention is needed', () => {
     const e = itemEconomics(
@@ -240,15 +241,31 @@ describe('honesty guards', () => {
     const items = itemEconomics({ skill_run: 0.5 }, { skill_run: { costUsd: 0.05, runs: 1 } }, 'openai/gpt-4o-mini');
     expect(rollup(0.5, items).margin).toBeCloseTo(0.9, 6);
   });
-  it('does not call text generation unbilled when a work item bills it', () => {
-    const leaks = unpricedWork({ text: 1, video: 20, audit: 2 }, { text: 'Copy', video: 'Videos', audit: 'Audits' }, WORK_COSTS);
-    expect(leaks.map((l) => l.kind)).not.toContain('text');
-    expect(leaks.map((l) => l.kind)).toEqual(expect.arrayContaining(['video', 'audit']));
+  it('does not flag work that is free by decision', () => {
+    const leaks = unpricedWork(
+      { text: 1, video: 20, audit: 2 },
+      { text: 'Copy', video: 'Videos', audit: 'Audits' },
+      WORK_COSTS,
+    );
+    // text and audit are deliberately unlimited; video is now priced. A leak
+    // means "spends money and nobody chose that", so none of these qualify.
+    expect(leaks.map((l) => l.kind)).toEqual([]);
   });
-  it('puts the expensive media leaks first', () => {
-    const leaks = unpricedWork({ audit: 2, video: 20 }, { audit: 'Audits', video: 'Videos' }, WORK_COSTS);
-    expect(leaks[0]!.kind).toBe('video');
-    expect(leaks[0]!.media).toBe(true);
+
+  /**
+   * The guard that matters: every kind the meter knows about must be either
+   * priced or explicitly declared unlimited. Adding a new MeterKind and
+   * forgetting to price it is exactly how video became free on every plan.
+   */
+  it('leaves nothing metered-but-undecided across the whole meter', () => {
+    const everyKind = Object.fromEntries(Object.keys(CREDIT_COST).map((k) => [k, 1]));
+    const leaks = unpricedWork(everyKind, ACTION_LABEL, WORK_COSTS);
+    expect(leaks.map((l) => l.kind)).toEqual([]);
+  });
+
+  it('still flags a brand-new kind nobody has priced', () => {
+    const leaks = unpricedWork({ hologram: 99 }, { hologram: 'Holograms' }, WORK_COSTS);
+    expect(leaks.map((l) => l.kind)).toEqual(['hologram']);
   });
 });
 
