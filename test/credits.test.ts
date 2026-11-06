@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BANDS, bandForSpend, creditState, chargeCredits, WORK_COSTS, billingEnforced,
-  canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS,
+  canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS, writeCredits,
 } from '../src/billing/credits.js';
 import { MEDIA_KINDS, mediaCost } from '../src/billing/media.js';
 import { TARGET_MARGIN } from '../src/billing/cogs.js';
@@ -177,5 +177,61 @@ describe('affordability check (pure, no ledger write)', () => {
     const data: Record<string, unknown> = {};
     canAfford(data, 'video');
     expect(creditState(data).spent).toBe(0);
+  });
+});
+
+/**
+ * `data.credits` is a free-form blob, so any writer that rebuilds it by hand
+ * silently erases whatever fields its author forgot. That is not a theoretical
+ * risk: a subscription renewal and setAutoTopUp each rebuilt it from three or
+ * four fields, wiping the running `spent` total (which re-opens the
+ * spend-forever hole, since the ledger fallback is capped), the customer's
+ * auto top-up opt-in, and the month's fair-use counters.
+ *
+ * These lock the invariant rather than the two call sites: a write that means
+ * to change one field must leave the other eight exactly as they were.
+ */
+describe('credit writes never clobber neighbouring fields', () => {
+  const mid = (): Record<string, unknown> => ({
+    billing: { band: 'starter' },
+    credits: {
+      granted: 150, spent: 87.5, ledger: [{ ts: 'x', item: 'video', cost: 1.5 }],
+      launchOffer: false, autoTopUp: true, topUps: 2,
+      period: creditState({}).period, toppedUpThisMonth: 50, usedThisMonth: { video: 12 },
+    },
+  });
+
+  it('setAutoTopUp changes only the flag', () => {
+    const d = mid();
+    setAutoTopUp(d, false);
+    const s = creditState(d);
+    expect(s.autoTopUp).toBe(false);
+    expect(s.spent).toBe(87.5); // was reset to the ledger sum
+    expect(s.granted).toBe(150);
+    expect(s.topUps).toBe(2);
+    expect(s.toppedUpThisMonth).toBe(50);
+    expect(s.usedThisMonth).toEqual({ video: 12 });
+  });
+
+  it('writeCredits carries every field a patch does not name', () => {
+    const d = mid();
+    writeCredits(d, { granted: 200 });
+    const s = creditState(d);
+    expect(s.granted).toBe(200);
+    expect(s.spent).toBe(87.5);
+    expect(s.autoTopUp).toBe(true);
+    expect(s.topUps).toBe(2);
+    expect(s.toppedUpThisMonth).toBe(50);
+    expect(s.usedThisMonth).toEqual({ video: 12 });
+    expect(s.launchOffer).toBe(false);
+  });
+
+  it('patches falsy values rather than falling through to the old one', () => {
+    const d = mid();
+    writeCredits(d, { autoTopUp: false, spent: 0, topUps: 0 });
+    const s = creditState(d);
+    expect(s.autoTopUp).toBe(false); // `||` would have kept true
+    expect(s.spent).toBe(0);
+    expect(s.topUps).toBe(0);
   });
 });

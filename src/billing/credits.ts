@@ -200,6 +200,42 @@ export function creditState(data: Record<string, unknown>, now = new Date()): Cr
   };
 }
 
+/**
+ * The ONLY place that writes `data.credits`. Every field is carried forward
+ * from the current state unless the patch names it, so a caller that cares
+ * about one field cannot silently drop the other eight.
+ *
+ * That is not hypothetical. `data.credits` is a free-form blob, so a writer
+ * that rebuilt it by hand kept the fields its author had in mind and erased
+ * the rest. A subscription renewal rebuilt it with three, which reset `spent`
+ * to zero — and since `spent` falls back to the ledger sum, which is capped
+ * at LEDGER_CAP entries, that silently re-opened the spend-forever hole the
+ * running total exists to close. It also switched off the customer's auto
+ * top-up and cleared the month's fair-use counters.
+ *
+ * `??` rather than `||`: `false`, `0` and `''` are real values to patch in
+ * here and must not fall through to the previous one.
+ */
+export function writeCredits(
+  data: Record<string, unknown>,
+  patch: Partial<Omit<CreditState, 'remaining'>> = {},
+  now = new Date(),
+): CreditState {
+  const before = creditState(data, now);
+  data.credits = {
+    granted: patch.granted ?? before.granted,
+    spent: patch.spent ?? before.spent,
+    ledger: patch.ledger ?? before.ledger,
+    launchOffer: patch.launchOffer ?? before.launchOffer,
+    autoTopUp: patch.autoTopUp ?? before.autoTopUp,
+    topUps: patch.topUps ?? before.topUps,
+    period: patch.period ?? before.period,
+    toppedUpThisMonth: patch.toppedUpThisMonth ?? before.toppedUpThisMonth,
+    usedThisMonth: patch.usedThisMonth ?? before.usedThisMonth,
+  };
+  return creditState(data, now);
+}
+
 /** The band an account is on, read straight off the stored billing blob.
  *  Read as a plain field rather than imported, because subscription.ts already
  *  imports this module and the cycle is not worth the tidiness. */
@@ -210,15 +246,7 @@ export function bandOf(data: Record<string, unknown>): Band {
 
 /** Turn automatic top-ups on or off for an account. */
 export function setAutoTopUp(data: Record<string, unknown>, on: boolean): CreditState {
-  const before = creditState(data);
-  data.credits = {
-    granted: before.granted,
-    ledger: before.ledger,
-    launchOffer: before.launchOffer,
-    topUps: before.topUps,
-    autoTopUp: on,
-  };
-  return creditState(data);
+  return writeCredits(data, { autoTopUp: on });
 }
 
 /** Whether an empty balance actually pauses work (no processor → default off). */
@@ -251,18 +279,8 @@ export function chargeCredits(
   }
 
   const used = (before.usedThisMonth[item] ?? 0) + 1;
-  const persist = (patch: Partial<CreditState> & { ledger?: CreditLedgerEntry[] }) => {
-    data.credits = {
-      granted: patch.granted ?? before.granted,
-      spent: patch.spent ?? before.spent,
-      launchOffer: before.launchOffer,
-      autoTopUp: before.autoTopUp,
-      topUps: patch.topUps ?? before.topUps,
-      ledger: patch.ledger ?? before.ledger,
-      period: before.period,
-      toppedUpThisMonth: patch.toppedUpThisMonth ?? before.toppedUpThisMonth,
-      usedThisMonth: { ...before.usedThisMonth, [item]: used },
-    };
+  const persist = (patch: Partial<Omit<CreditState, 'remaining'>>) => {
+    writeCredits(data, { ...patch, usedThisMonth: { ...before.usedThisMonth, [item]: used } }, now);
   };
 
   // ── Unlimited work: free, but not infinite ──
