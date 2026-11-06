@@ -166,8 +166,11 @@ describe('affordability check (pure, no ledger write)', () => {
       const v = canAfford(broke, 'video');
       expect(v.ok).toBe(false);
       expect(v.reason).toMatch(/Growth/); // names the upgrade, not just the refusal
-      // Unlimited work is never refused, however empty the balance.
-      expect(canAfford(broke, 'skill_run').ok).toBe(true);
+      // Unpriced output is included in a plan, not owed to an exhausted one:
+      // generating it still costs tokens, so an empty balance stops it too.
+      expect(canAfford(broke, 'skill_run').ok).toBe(false);
+      // Monitoring is the one exception and is never gated.
+      expect(canAfford(broke, 'monitoring').ok).toBe(true);
     } finally {
       delete process.env.BILLING_ENFORCE;
     }
@@ -233,5 +236,68 @@ describe('credit writes never clobber neighbouring fields', () => {
     expect(s.autoTopUp).toBe(false); // `||` would have kept true
     expect(s.spent).toBe(0);
     expect(s.topUps).toBe(0);
+  });
+});
+
+/**
+ * An exhausted balance stops production, not observation.
+ *
+ * Unpriced output (campaigns, emails, skill runs, AI copy) is free as part of
+ * a paid plan because it costs a fraction of a cent — but it is not free to an
+ * account that has spent its credits and declined to top up: generating it
+ * still burns tokens. Monitoring is the deliberate exception: an account whose
+ * credits ran out still has ad spend running, and going quiet on someone's
+ * money is worse than pausing their work.
+ */
+describe('an empty balance stops output but never monitoring', () => {
+  const broke = (): Record<string, unknown> => ({ credits: { granted: 0, spent: 0, ledger: [] }, billing: { band: 'starter' } });
+  const funded = (): Record<string, unknown> => ({ credits: { granted: 50, spent: 0, ledger: [] }, billing: { band: 'starter' } });
+  const withEnforcement = (fn: () => void) => {
+    process.env.BILLING_ENFORCE = '1';
+    try { fn(); } finally { delete process.env.BILLING_ENFORCE; }
+  };
+
+  it('blocks every kind of output, priced or not, and names the top-up', () => {
+    withEnforcement(() => {
+      for (const item of [...Object.keys(WORK_COSTS), ...UNLIMITED_ITEMS]) {
+        const r = chargeCredits(broke(), item, 'x');
+        expect(r.blocked, `${item} should be blocked on an empty balance`).toBe(true);
+        expect(r.reason).toMatch(/Add \$25\.00/);
+      }
+    });
+  });
+
+  it('never blocks work that is not metered at all', () => {
+    withEnforcement(() => {
+      for (const item of ['monitoring', 'snapshot_refresh']) {
+        expect(chargeCredits(broke(), item, 'x').blocked, `${item} must never be gated`).toBe(false);
+        expect(canAfford(broke(), item).ok).toBe(true);
+      }
+    });
+  });
+
+  it('leaves everything running while there is a balance', () => {
+    withEnforcement(() => {
+      for (const item of [...Object.keys(WORK_COSTS), ...UNLIMITED_ITEMS, 'monitoring']) {
+        expect(chargeCredits(funded(), item, 'x').blocked, `${item} should run with credits`).toBe(false);
+      }
+    });
+  });
+
+  it('blocks nothing at all while enforcement is off', () => {
+    for (const item of [...Object.keys(WORK_COSTS), ...UNLIMITED_ITEMS, 'monitoring']) {
+      expect(chargeCredits(broke(), item, 'x').blocked, `${item} must run with the wall off`).toBe(false);
+    }
+  });
+
+  it('does not let auto top-up keep free output running, since it buys nothing', () => {
+    withEnforcement(() => {
+      const optedIn: Record<string, unknown> = {
+        credits: { granted: 0, spent: 0, ledger: [], autoTopUp: true },
+        billing: { band: 'starter' },
+      };
+      expect(canAfford(optedIn, 'video').ok).toBe(true);      // a purchase will cover it
+      expect(canAfford(optedIn, 'skill_run').ok).toBe(false); // nothing to trigger one
+    });
   });
 });

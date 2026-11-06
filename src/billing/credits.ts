@@ -91,6 +91,22 @@ export const UNLIMITED_ITEMS = [
 ] as const;
 
 /**
+ * Work that produces output, priced or not — everything in WORK_COSTS plus
+ * everything in UNLIMITED_ITEMS.
+ *
+ * This is the line an empty balance stops at. Unpriced output is still output:
+ * it costs tokens to generate, so it is free as part of a paid plan, not free
+ * to an account that has run its plan out and declined to top up.
+ *
+ * Monitoring is deliberately in neither table and so is never gated. An
+ * account whose credits ran out still has ad spend running, and the one thing
+ * worse than pausing their work is quietly stopping watching their money.
+ */
+export function isOutputWork(item: string): boolean {
+  return WORK_COSTS[item] !== undefined || (UNLIMITED_ITEMS as readonly string[]).includes(item);
+}
+
+/**
  * Fair-use ceilings on the unlimited work, per calendar month.
  *
  * "Unlimited" is the promise and stays the promise: these are set roughly ten
@@ -285,6 +301,20 @@ export function chargeCredits(
 
   // ── Unlimited work: free, but not infinite ──
   if (cost === undefined) {
+    // Included in a plan, not owed to an empty one. Unpriced output still
+    // burns tokens to produce, so an account that has spent its credits and
+    // not topped up stops producing — same wall as media, same message. Only
+    // monitoring carries on, and it never reaches this branch at all.
+    if (billingEnforced() && before.remaining <= 0) {
+      const b = bandOf(data);
+      const up = nextBandName(b);
+      return {
+        state: before,
+        blocked: true,
+        toppedUp: 0,
+        reason: `Out of credits. Add $${b.topUp.toFixed(2)}, turn on auto top-up${up ? `, or upgrade to ${up}` : ''}.`,
+      };
+    }
     if (billingEnforced() && used > fairUse!) {
       return {
         state: before,
@@ -364,13 +394,16 @@ export function chargeCredits(
  * pay fal.ai for work we then refuse to hand over.
  */
 export function canAfford(data: Record<string, unknown>, item: string): { ok: boolean; reason?: string } {
-  const cost = WORK_COSTS[item];
-  if (!cost) return { ok: true }; // unlimited
+  if (!isOutputWork(item)) return { ok: true }; // monitoring — never gated
   if (!billingEnforced()) return { ok: true }; // meter runs, wall is off
   const state = creditState(data);
   if (state.remaining > 0) return { ok: true }; // a positive balance always passes
   const band = bandOf(data);
-  if (state.autoTopUp && band.topUp > 0) return { ok: true }; // top-up will cover it
+  // Auto top-up only rescues work that actually buys one. Unpriced output
+  // charges nothing, so it can never trigger the purchase that would clear
+  // the balance — letting it through on the promise of a top-up would mean
+  // free output forever on an account that never pays again.
+  if (WORK_COSTS[item] !== undefined && state.autoTopUp && band.topUp > 0) return { ok: true };
   const upgrade = nextBandName(band);
   return {
     ok: false,
