@@ -5,7 +5,7 @@
  *
  * Sources checked 2026-11-07:
  * - https://pipedream.com/docs/pricing (action executions and tool calls use credits; listing accounts does not)
- * - https://pipedream.com/pricing?plan=Connect (Advanced does not include “Pipedream Connect in production”; the Connect plan does)
+ * - https://pipedream.com/pricing?plan=Connect (Free is development-only; Startup and Business include “Run in production”)
  * - https://pipedream.com/docs/connect/managed-auth/environments (development and production accounts are separate; production access is enabled on the pricing page)
  */
 
@@ -38,7 +38,7 @@ export function explainPipedreamError(err: unknown): PipedreamFailure {
       kind: 'connect_production_unavailable',
       providerMessage,
       message:
-        'Google sign-in is healthy, but Pipedream refused to run tools in the production environment. Listing the connection does not use a tool call; resolving the Google Ads customer id does (google_ads-list-account-id-options via actions.run), and so does creating a campaign. This is a Pipedream workspace entitlement, not a bad Google login and not a reason to use another user’s account. The Advanced plan does not include Connect in production. Enable “Pipedream Connect in production” on the workspace (Connect plan: https://pipedream.com/pricing?plan=Connect). Do not point Miles at the development environment — those accounts are different and must not be reused.',
+        'Google sign-in is healthy, but Pipedream refused to run tools in the production environment. Listing the connection does not use a tool call; resolving the Google Ads customer id does (google_ads-list-account-id-options via actions.run), and so does creating a campaign. This is a Pipedream production entitlement, not a bad Google login and not a reason to use another user’s account. On the current pricing page, Free is development-only and Startup or Business includes production (https://pipedream.com/pricing?plan=Connect). Enable production access for this workspace and keep Miles on production. Do not point Miles at the development environment — those accounts are different and must not be reused.',
     };
   }
   return { kind: providerMessage ? 'provider' : 'unknown', providerMessage, message: providerMessage };
