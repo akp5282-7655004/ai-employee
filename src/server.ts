@@ -29,6 +29,9 @@ import { buildMetaAssets, buildSearchAssets, checkMetaPack, checkSearchPack } fr
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
+import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, META_SHARED_ACCOUNT_NOTE, searchLaunchNote } from './agents/googlelaunch.js';
+import { buildLoopPlan, decideLead, ghlUpsertProps, GHL_UPSERT_ACTION, judgeActivation, normalizeLead, type ObservedAd } from './agents/plumberloop.js';
+import { PIPEDREAM_APPS, pipedreamConfigPresence, CATALOG_READ_ON } from './connectors/pipedreamCatalog.js';
 import { SPEC_PLATFORMS, loadSpec, searchSpecCheck, type SpecPlatform } from './specs/index.js';
 import { metricCatalog, dashboardDefaults } from './metrics/catalog.js';
 import { getMetrics } from './metrics/resolver.js';
@@ -480,18 +483,22 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   };
 
   // ── owner/admin: who runs this workspace ──
-  // Admin = the user whose email matches ADMIN_EMAIL, or (if unset) the very first
-  // account created. That owner can view/remove users and gate signups.
+  // Operator access is only the email in ADMIN_EMAIL. The oldest account is not
+  // an admin: on an open signup that would hand the first visitor (often the
+  // public demo) the ability to list and delete every customer.
   const adminEmail = () => (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
   const adminUserId = async (): Promise<string | null> => {
     const e = adminEmail();
-    if (e) return (await authStore.getUserByEmail(e))?.id ?? null;
-    return (await authStore.listUsers())[0]?.id ?? null;
+    if (!e || isDemoAccount(e)) return null;
+    const owner = await authStore.getUserByEmail(e);
+    if (!owner || isDemoAccount(owner.email)) return null;
+    return owner.id;
   };
   const isAdmin = async (u: User): Promise<boolean> => {
+    if (isDemoAccount(u.email)) return false;
     const e = adminEmail();
-    if (e) return u.email.toLowerCase() === e;
-    return u.id === (await adminUserId());
+    if (!e || isDemoAccount(e)) return false;
+    return u.email.toLowerCase() === e;
   };
   const getAdminSettings = async (): Promise<{ inviteOnly: boolean; allowed: string[] }> => {
     const id = await adminUserId();
@@ -587,6 +594,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // the visitor into a shared, isolated demo account seeded with sample data, so
   // anyone can look around Miles without signing up. No real customer data here. ──
   app.get('/demo', async (_req, reply) => {
+    // A live connector stores real OAuth grants on the external user id. The
+    // shared demo account must not be able to attach or read those.
+    if (connector.name !== 'mock') {
+      return reply.redirect('/login?error=demo_off');
+    }
     let demo = await authStore.getUserByEmail('demo@miles.local');
     if (!demo) {
       demo = { id: newUserId(), email: 'demo@miles.local', name: 'Demo', passwordHash: hashPassword(newToken()), createdAt: new Date().toISOString() };
@@ -2426,37 +2438,82 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   app.post<{ Body: { spec?: CampaignSpec; confirm?: boolean; target?: string } }>('/api/campaign/launch', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    const spec = req.body?.spec;
-    if (!spec || typeof spec !== 'object') return reply.code(400).send({ error: 'spec is required' });
-    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Explicit confirm required — nothing goes live without it.' });
+    const incoming = req.body?.spec;
+    if (!incoming || typeof incoming !== 'object') return reply.code(400).send({ error: 'spec is required' });
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Explicit confirm required — Miles will not create a campaign until you approve it.' });
+    // Client status is ignored. A Search campaign Miles creates is paused.
+    const spec = forcePausedSearchSpec(incoming);
     const problems = validateCampaignSpec(spec);
     if (problems.length) return reply.code(400).send({ error: 'Campaign not ready to launch', problems });
     if (!connector.launchCampaign) return reply.code(400).send({ error: 'This connector cannot launch campaigns.' });
+    if (isDemoAccount(u.email) && connector.name !== 'mock') {
+      return reply.code(403).send({ ok: false, live: false, status: 'PAUSED', activation: 'disabled', error: 'The public demo cannot create a campaign in a live ad account.' });
+    }
+    const digits = (id: string) => id.replace(/[^\d]/g, '');
+    let targets: { id: string; label: string }[] = [];
+    if (connector.listAdTargets) {
+      try { targets = await connector.listAdTargets(u.id); } catch { targets = []; }
+    }
+    if (!targets.length) {
+      return reply.code(409).send({
+        ok: false, live: false, status: 'PAUSED', activation: 'disabled', partial: false,
+        error: 'Google Ads is not connected for this account. Open Integrations, connect Google Ads, then pick the ad account. Nothing was created.',
+        steps: [{ step: 'Google Ads account', ok: false, error: 'Not connected' }],
+      });
+    }
+    const wanted = typeof req.body?.target === 'string' ? digits(req.body.target) : '';
+    let chosen = targets.length === 1 ? targets[0]! : undefined;
+    if (wanted) {
+      chosen = targets.find((t) => digits(t.id) === wanted);
+      if (!chosen) return reply.code(400).send({ ok: false, live: false, status: 'PAUSED', activation: 'disabled', error: 'That Google Ads account is not on your connection. Pick one of your own accounts. Nothing was created.' });
+    } else if (targets.length !== 1) {
+      return reply.code(400).send({ ok: false, live: false, status: 'PAUSED', activation: 'disabled', error: 'Pick which Google Ads account should receive this paused campaign. Nothing was created.', targets });
+    }
     if (billingEnforced() && creditState(await authStore.getUserData(u.id)).remaining <= 0)
       return reply.code(402).send({ error: 'Credits exhausted — work items are paused (monitoring continues). Top up or upgrade to keep building.' });
-    const result = await connector.launchCampaign(u.id, spec, typeof req.body?.target === 'string' ? req.body.target : undefined);
-    // Record the launch attempt in the deploy/change log with the full spec attached.
+    const result = await connector.launchCampaign(u.id, spec, chosen!.id);
+    const demoRun = connector.name === 'mock' || isDemoAccount(u.email);
+    const live = demoRun ? false : !!result.live;
+    const judged = judgeSearchLaunch(result.steps ?? []);
+    const ok = live ? judged.ok : false;
+    const note = demoRun
+      ? searchLaunchNote({ live: false, ok: false, partial: false, missing: [], name: spec.name })
+      : (result.note && !ok && !judged.partial && !judged.ok && !(result.steps ?? []).some((s) => s.ok && s.resource)
+        ? `${result.note} It is PAUSED. Miles does not enable campaigns and does not spend.`
+        : searchLaunchNote({ live, ok, partial: judged.partial, missing: judged.missing, customerLabel: chosen!.label, name: spec.name }));
     const data = await authStore.getUserData(u.id);
-    chargeCredits(data, 'campaign_launch', `Google Ads — ${spec.name}`);
-    // Approval Log: the explicit confirm above IS the approval; the launch is the action.
-    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'campaign-launcher', title: `Approved Google Ads launch — "${spec.name}" (${spec.status}, $${spec.dailyBudget}/day)` });
-    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'campaign-launcher', title: `${result.ok ? 'Launched' : 'Launch FAILED'} — "${spec.name}"`, detail: result.note });
+    if (live && ok) chargeCredits(data, 'campaign_launch', `Google Ads — ${spec.name} (PAUSED)`);
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'campaign-launcher', title: `Approved paused Google Ads create — "${spec.name}" ($${spec.dailyBudget}/day)` });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'campaign-launcher', title: `${ok ? 'Created PAUSED' : demoRun ? 'Demo preview only' : 'Create FAILED'} — "${spec.name}"`, detail: note });
     const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
     deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
     deploy.queue.unshift({
       id: newToken().slice(0, 10),
-      label: `Google Ads campaign — ${spec.name} (${spec.status})`,
+      label: `Google Ads campaign — ${spec.name} (PAUSED${demoRun ? ', demo — not created' : ''})`,
       type: 'ads',
-      status: result.ok ? (result.live ? 'live' : 'pending') : 'reverted',
+      status: ok ? 'pending' : 'reverted',
       ts: new Date().toISOString(),
-      link: result.link,
-      detail: campaignSummary(spec) + '\n\n' + result.steps.map((s) => `${s.ok ? '✓' : '✗'} ${s.step}${s.error ? ' — ' + s.error : ''}`).join('\n'),
+      link: live && ok ? result.link : undefined,
+      detail: campaignSummary(spec) + '\n\n' + (result.steps ?? []).map((s) => `${s.ok ? '✓' : '✗'} ${s.step}${s.error ? ' — ' + s.error : ''}`).join('\n') + '\n\n' + note,
     });
     deploy.queue = deploy.queue.slice(0, 300);
     data.deploy = deploy;
     await authStore.setUserData(u.id, data);
-    if (result.live && result.ok) await meterUser(u.id, 'agent_run');
-    return result;
+    if (live && ok) await meterUser(u.id, 'agent_run');
+    const code = ok || demoRun ? 200 : (judged.partial ? 409 : 502);
+    return reply.code(code).send({
+      ...result,
+      ok,
+      live,
+      partial: live && judged.partial,
+      status: 'PAUSED',
+      activation: 'disabled',
+      demo: demoRun,
+      note,
+      campaignResource: live && ok ? result.campaignResource : undefined,
+      link: live && ok ? result.link : undefined,
+      steps: demoRun ? [{ step: 'Demo connector', ok: false, error: 'No campaign was created in Google Ads.' }] : (result.steps ?? []),
+    });
   });
 
   // ── Launch on Facebook (Meta) — build a paused draft from business + offer ──
@@ -2464,8 +2521,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   app.get('/api/meta/status', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    const status = connector.metaLaunchReady ? connector.metaLaunchReady() : { ready: false, note: 'This connector cannot launch Meta campaigns.' };
-    return status;
+    return { ready: false, note: META_SHARED_ACCOUNT_NOTE };
   });
 
   // Build (but do not launch) the Meta campaign spec from profile + offer, so the
@@ -2479,41 +2535,150 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       { offer: req.body?.offer || p.currentOffers, website: req.body?.website || p.website, dailyBudget: Number(req.body?.dailyBudget) || undefined, ticket: Number(req.body?.ticket) || undefined, financing: !!req.body?.financing },
       { business: p.businessName, industry: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), serviceAreas: p.serviceAreas, services: p.services },
     );
-    const status = connector.metaLaunchReady ? connector.metaLaunchReady() : { ready: false, note: 'This connector cannot launch Meta campaigns.' };
-    return { ok: true, spec, issues: validateMetaCampaignSpec(spec), status };
+    return { ok: true, spec, issues: validateMetaCampaignSpec(spec), status: { ready: false, note: META_SHARED_ACCOUNT_NOTE } };
   });
 
-  // Launch — writes the PAUSED draft into the owner's Meta Ads Manager.
+  // Meta writes from META_* would land in one shared ad account for every
+  // tenant. This slice does not create them. The route refuses before any
+  // connector call so a confirm cannot spend or create.
   app.post<{ Body: { spec?: MetaCampaignSpec; confirm?: boolean } }>('/api/meta/launch', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
     const spec = req.body?.spec;
     if (!spec || typeof spec !== 'object') return reply.code(400).send({ error: 'spec is required' });
     if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Explicit confirm required — nothing is created without it.' });
-    if (!connector.launchMetaCampaign) return reply.code(400).send({ error: 'This connector cannot launch Meta campaigns.' });
-    if (billingEnforced() && creditState(await authStore.getUserData(u.id)).remaining <= 0)
-      return reply.code(402).send({ error: 'Credits exhausted — work items are paused (monitoring continues). Top up or upgrade to keep building.' });
-    const result = await connector.launchMetaCampaign(u.id, spec);
-    const data = await authStore.getUserData(u.id);
-    chargeCredits(data, 'campaign_launch', `Meta — ${spec.name}`);
-    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'meta-launcher', title: `Approved Meta launch — "${spec.name}" (PAUSED, $${spec.dailyBudget}/day)` });
-    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'meta-launcher', title: `${result.ok ? 'Created PAUSED draft' : 'Meta launch FAILED'} — "${spec.name}"`, detail: result.note });
-    const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
-    deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
-    deploy.queue.unshift({
-      id: newToken().slice(0, 10),
-      label: `Facebook campaign — ${spec.name} (PAUSED draft)`,
-      type: 'ads',
-      status: result.ok ? (result.live ? 'live' : 'pending') : 'reverted',
-      ts: new Date().toISOString(),
-      link: result.link,
-      detail: result.steps.map((s) => `${s.ok ? '✓' : '✗'} ${s.step}${s.error ? ' — ' + s.error : ''}`).join('\n'),
+    return reply.code(409).send({
+      ok: false,
+      live: false,
+      status: 'PAUSED',
+      activation: 'disabled',
+      error: META_SHARED_ACCOUNT_NOTE,
+      note: META_SHARED_ACCOUNT_NOTE,
+      steps: [{ step: 'Meta ad account', ok: false, error: META_SHARED_ACCOUNT_NOTE }],
     });
-    deploy.queue = deploy.queue.slice(0, 300);
-    data.deploy = deploy;
+  });
+
+  const loopContext = async (userId: string, observed?: ObservedAd[], totalDaily = 20) => {
+    const data = await authStore.getUserData(userId);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const kit = (data.brandKit ?? {}) as { logoUrl?: string };
+    const assets = (data.assets ?? {}) as { logo?: string };
+    let apps: string[] = [];
+    try { apps = (await connector.listAccounts(userId)).map((a) => a.app); } catch { apps = []; }
+    const plan = buildLoopPlan({
+      profile: {
+        businessName: p.businessName,
+        trade: p.industry || 'plumbing',
+        city: (p.serviceAreas || p.city || '').split(',')[0]?.trim(),
+        services: p.services,
+        website: p.website,
+        phone: p.phone,
+        logoUrl: kit.logoUrl || assets.logo || p.logo,
+      },
+      totalDaily,
+      googleAdsConnected: apps.includes('google_ads'),
+      metaConnected: apps.some((a) => a === 'facebook' || a === 'facebook_ads'),
+      observedAds: observed,
+    });
+    return { data, plan, apps };
+  };
+
+  app.get('/api/integrations/pipedream', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    return {
+      readOn: CATALOG_READ_ON,
+      config: pipedreamConfigPresence(process.env),
+      pendingPlaybook: 'Akhil will supply an operator playbook. It is not implemented or validated.',
+      apps: PIPEDREAM_APPS,
+    };
+  });
+
+  app.post<{ Body: { totalDaily?: number; observedAds?: ObservedAd[] } }>('/api/journey/plan', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const total = Number(req.body?.totalDaily);
+    const { plan } = await loopContext(u.id, req.body?.observedAds, Number.isFinite(total) && total > 0 ? total : 20);
+    return { ok: true, plan, activation: 'separate — creating paused is not running ads' };
+  });
+
+  app.post<{ Body: { confirm?: boolean; totalDaily?: number; target?: string; observedAds?: ObservedAd[] } }>('/api/journey/approve', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Explicit confirm required. Nothing was created.' });
+    if (isDemoAccount(u.email) && connector.name !== 'mock') {
+      return reply.code(403).send({ ok: false, live: false, error: 'The public demo cannot create a campaign.' });
+    }
+    const total = Number(req.body?.totalDaily);
+    const { data, plan } = await loopContext(u.id, req.body?.observedAds, Number.isFinite(total) && total > 0 ? total : 20);
+    const search = plan.channels.find((c) => c.channel === 'google_ads');
+    if (!search?.executable || !plan.searchSpec) {
+      data.plumberLoop = { ownerId: u.id, approvedDaily: 0, campaignResource: undefined, at: new Date().toISOString(), executed: false };
+      await authStore.setUserData(u.id, data);
+      return reply.code(409).send({ ok: false, live: false, plan, error: search?.reason || 'Search is not executable.', created: false });
+    }
+    const digits = (id: string) => id.replace(/[^\d]/g, '');
+    let targets: { id: string; label: string }[] = [];
+    if (connector.listAdTargets) {
+      try { targets = await connector.listAdTargets(u.id); } catch { targets = []; }
+    }
+    if (!targets.length) return reply.code(409).send({ ok: false, live: false, plan, error: 'Google Ads is not connected for this account. Nothing was created.' });
+    const wanted = typeof req.body?.target === 'string' ? digits(req.body.target) : '';
+    let chosen = targets.length === 1 ? targets[0] : undefined;
+    if (wanted) {
+      chosen = targets.find((t) => digits(t.id) === wanted);
+      if (!chosen) return reply.code(400).send({ ok: false, live: false, error: 'That Google Ads account is not on your connection.' });
+    } else if (targets.length !== 1) {
+      return reply.code(400).send({ ok: false, live: false, error: 'Pick which Google Ads account receives the paused Search campaign.', targets });
+    }
+    const spec = forcePausedSearchSpec(plan.searchSpec);
+    const result = connector.launchCampaign
+      ? await connector.launchCampaign(u.id, spec, chosen!.id)
+      : { ok: false, live: false, steps: [{ step: 'Google Ads', ok: false, error: 'This connector cannot create campaigns.' }], note: 'Not created.' };
+    const demoRun = connector.name === 'mock' || isDemoAccount(u.email);
+    const live = demoRun ? false : !!result.live;
+    const judged = judgeSearchLaunch(result.steps ?? []);
+    const created = live && judged.ok;
+    data.plumberLoop = {
+      ownerId: u.id,
+      approvedDaily: search.executedDaily,
+      campaignResource: created ? result.campaignResource : undefined,
+      at: new Date().toISOString(),
+      executed: created,
+    };
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'plumber-loop', title: `Approved paused Search create at $${search.executedDaily}/day of $${plan.totalDaily}/day total` });
     await authStore.setUserData(u.id, data);
-    if (result.live && result.ok) await meterUser(u.id, 'agent_run');
-    return result;
+    return {
+      ok: created,
+      live,
+      demo: demoRun,
+      created,
+      status: 'PAUSED',
+      activation: 'not run — approve activation separately; Miles will not send ENABLED',
+      plan,
+      steps: demoRun ? [{ step: 'Demo connector', ok: false, error: 'No campaign was created in Google Ads.' }] : (result.steps ?? []),
+      campaignResource: created ? result.campaignResource : undefined,
+      note: demoRun ? 'Demo mode. Nothing was created and nothing is spending.' : (created ? `Paused Search campaign created at $${search.executedDaily}/day. The rest of the $${plan.totalDaily} stays unspent here.` : 'The Search create did not finish. Nothing was enabled.'),
+    };
+  });
+
+  app.post<{ Body: { confirm?: boolean; campaignResource?: string; dailyBudget?: number } }>('/api/journey/activate', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const rec = (data.plumberLoop ?? {}) as { ownerId?: string; approvedDaily?: number; campaignResource?: string };
+    const decision = judgeActivation({
+      confirm: req.body?.confirm === true,
+      ownerId: u.id,
+      recordOwnerId: rec.ownerId,
+      campaignResource: req.body?.campaignResource || rec.campaignResource,
+      approvedDaily: rec.approvedDaily,
+      requestedDaily: Number(req.body?.dailyBudget ?? rec.approvedDaily),
+    });
+    if (!decision.allowed) return reply.code(403).send({ ...decision, executed: false });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'plumber-loop', title: 'Activation requested — not sent to Google' });
+    await authStore.setUserData(u.id, data);
+    return { ...decision, executed: false };
   });
 
   // Saved campaign drafts — build one, save it, come back to it in the builder.
@@ -3041,22 +3206,21 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // Honest integration status — the Integrations page reads this instead of
   // hard-coded "Connected" badges. Real apps connect through Pipedream, so their
   // status follows whether Pipedream itself is configured.
-  app.get<{ Querystring: { sessionId?: string } }>('/api/connections', async (req) => {
+  app.get('/api/connections', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
     const cfg = loadConfig();
     const pdReady = pipedreamReady(cfg);
-    // An app is "connected" only if the user has actually linked that account —
-    // we ask the connector for their real accounts, never assume.
+    // An app is "connected" only if THIS account has linked it. The id comes
+    // from the session cookie, never from a query parameter.
     let connectedApps: string[] = [];
-    const sessionId = req.query?.sessionId;
-    if (sessionId) {
-      try {
-        const accts = await connector.listAccounts(sessionId);
-        connectedApps = [...new Set(accts.map((a) => a.app))];
-      } catch {
-        /* leave empty on any error */
-      }
+    try {
+      const accts = await connector.listAccounts(u.id);
+      connectedApps = [...new Set(accts.map((a) => a.app))];
+    } catch {
+      /* leave empty on any error */
     }
-    return { connector: connector.name, hub: { ready: pdReady, env: cfg.pipedream.environment }, connectedApps };
+    return { connector: connector.name, hub: { ready: pdReady, env: cfg.pipedream.environment }, connectedApps, demo: isDemoAccount(u.email) };
   });
 
   // The concrete identity of every connected platform — account names, Google
@@ -3094,7 +3258,6 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const ghlApp = ghlSlugOf(apps);
     const ghl = !!ghlApp;
     const gads = apps.has('google_ads');
-    const meta = connector.metaLaunchReady ? connector.metaLaunchReady().ready : false;
 
     const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
     const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
@@ -3127,7 +3290,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const keys = [
       { name: 'GoHighLevel (CRM + SMS)', done: ghl, note: ghl ? `Connected as ${ghlApp}` : 'Connect in Integrations — powers every automation' },
       { name: 'Google Ads', done: gads, note: gads ? 'Connected' : 'Connect in Integrations — ad spend + ROI' },
-      { name: 'Meta ad account (Facebook launch)', done: meta, note: meta ? 'Connected' : 'Add META_ADS_ACCESS_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID on Render' },
+      { name: 'Meta ad account (Facebook launch)', done: false, note: 'Blocked — META_* would be one shared ad account for every customer. Per-customer Meta is not connected.' },
       { name: 'AI copywriting', done: textLlmReady(), note: textLlmReady() ? 'On (OpenRouter)' : 'Add OPENROUTER_API_KEY on Render for AI-written copy' },
       { name: 'Image generation', done: falReady(), note: falReady() ? 'On (FAL)' : 'Add FAL_KEY on Render for generated ad images' },
       { name: 'Census (Market Map)', done: !!process.env.CENSUS_API_KEY, note: process.env.CENSUS_API_KEY ? 'On' : 'Add CENSUS_API_KEY on Render for income targeting' },
@@ -3145,13 +3308,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   });
 
   // Closed-loop revenue attribution — ad spend correlated to CRM deals by UTM.
-  app.get<{ Querystring: { sessionId?: string } }>('/api/revenue', async (req) => {
-    const sessionId = req.query?.sessionId;
-    if (!sessionId) return { report: null, deals: [], connected: false };
+  app.get('/api/revenue', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (isDemoAccount(u.email) && connector.name !== 'mock') {
+      return reply.code(403).send({ error: 'The public demo cannot read a live ad account.', report: null, deals: [], connected: false });
+    }
     try {
-      const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(sessionId) : undefined, []);
-      const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(sessionId) : undefined, []);
-      return { report: attributeRevenue(spend, deals), deals, connected: spend.length > 0 || deals.length > 0 };
+      const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, []);
+      const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, []);
+      return { report: attributeRevenue(spend, deals), deals, connected: spend.length > 0 || deals.length > 0, demo: connector.name === 'mock' };
     } catch (err) {
       return { report: null, deals: [], connected: false, error: String((err as Error).message) };
     }
@@ -3159,15 +3325,18 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
 
   // Mint a Pipedream connect link the customer opens to connect an app account.
   // Pipedream requires the target app in the Connect URL, so we append it.
-  app.post<{ Body: { sessionId?: string; app?: string } }>('/api/connect-token', async (req, reply) => {
-    const sessionId = req.body?.sessionId;
-    const app = req.body?.app;
-    if (!sessionId) return reply.code(400).send({ error: 'sessionId required' });
+  app.post<{ Body: { app?: string } }>('/api/connect-token', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (isDemoAccount(u.email) && connector.name !== 'mock') {
+      return reply.code(403).send({ error: 'The public demo cannot connect a live ad account. Create your own login.' });
+    }
+    const appName = req.body?.app;
     try {
-      const token = await connector.createConnectToken(sessionId);
+      const token = await connector.createConnectToken(u.id);
       let connectUrl = token.connectUrl;
-      if (app && connectUrl) {
-        connectUrl += (connectUrl.includes('?') ? '&' : '?') + 'app=' + encodeURIComponent(app);
+      if (appName && connectUrl) {
+        connectUrl += (connectUrl.includes('?') ? '&' : '?') + 'app=' + encodeURIComponent(appName);
       }
       return { ...token, connectUrl };
     } catch (err) {
@@ -3959,6 +4128,59 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return { ok: true, sent, event, held: !sent, message: sms };
   });
 
+  // Lead ingest for the plumber loop. The URL secret maps the tenant. This does
+  // not verify a Google or Meta signature; those products are not given a
+  // signing secret here. GoHighLevel writes use only highlevel_oauth-upsert-contact.
+  app.post<{ Params: { token?: string }; Body: Record<string, unknown> }>('/api/journey/leads/:token', async (req, reply) => {
+    const raw = req.params?.token ?? '';
+    const dot = raw.indexOf('.');
+    if (dot < 1) return reply.code(401).send({ error: 'bad token' });
+    const uid = raw.slice(0, dot);
+    const secret = raw.slice(dot + 1);
+    const user = await authStore.getUserById(uid);
+    if (!user) return reply.code(401).send({ error: 'bad token' });
+    const data = await authStore.getUserData(uid);
+    const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
+    if (!st.webhookSecret || !sameToken(st.webhookSecret, secret)) return reply.code(401).send({ error: 'bad token' });
+    const parsed = normalizeLead((req.body ?? {}) as Record<string, unknown>);
+    if (!parsed.lead) return reply.code(400).send({ error: parsed.error });
+    const seen = Array.isArray(data.leadEventIds) ? (data.leadEventIds as string[]) : [];
+    const decision = decideLead(parsed.lead, seen, !!st.enabled);
+    if (!decision.valid) return reply.code(400).send({ error: decision.reason });
+    if (decision.duplicate) return { ok: true, duplicate: true, upserted: false, followedUp: false, reason: decision.reason };
+    let apps: string[] = [];
+    try { apps = (await connector.listAccounts(uid)).map((a) => a.app); } catch { apps = []; }
+    const ghl = apps.includes('highlevel_oauth');
+    let upserted = false;
+    if (decision.upsert && ghl) {
+      try {
+        const r = await connector.runAction({ externalUserId: uid, actionId: GHL_UPSERT_ACTION, configuredProps: ghlUpsertProps(parsed.lead) });
+        if (!r.ok) return reply.code(503).send({ error: r.note || 'GoHighLevel upsert failed. The event was not marked done, so it can be retried.', upserted: false });
+        upserted = true;
+      } catch (err) {
+        return reply.code(503).send({ error: String((err as Error).message), upserted: false });
+      }
+    }
+    data.leadEventIds = [parsed.lead.eventId, ...seen].slice(0, 500);
+    let followedUp = false;
+    if (decision.followUp && ghl && connector.runAppTask) {
+      try {
+        const sms = await connector.runAppTask({ externalUserId: uid, app: 'highlevel_oauth', query: 'Send SMS', params: { phone: parsed.lead.phone || '', name: parsed.lead.name || '', message: `Hi ${parsed.lead.name || 'there'} — ${((data.profile ?? {}) as { businessName?: string }).businessName || 'we'} got your request.` } });
+        followedUp = !!sms?.ok;
+      } catch { followedUp = false; }
+    }
+    await authStore.setUserData(uid, data);
+    return {
+      ok: true,
+      duplicate: false,
+      source: parsed.lead.source,
+      upserted,
+      crm: ghl ? 'highlevel_oauth' : 'blocked',
+      followedUp,
+      reason: ghl ? decision.reason : 'GoHighLevel (highlevel_oauth) is not connected for this account. No contact was written and no message was sent.',
+    };
+  });
+
   // ── Post-Job Review Request (recipe #14) — config + status ───────────────────
   app.get('/api/review-request', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -4467,23 +4689,22 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   );
 
   // One turn of the conversation.
-  app.post<{ Body: { sessionId?: string; text?: string } }>('/api/message', async (req, reply) => {
-    const { sessionId, text } = req.body ?? {};
-    if (!sessionId || typeof text !== 'string') return reply.code(400).send({ error: 'sessionId and text required' });
-    const session = store.getOrCreate(sessionId);
-    // Seed the conversation with the owner's business profile so anything Miles builds
-    // (email campaigns, content) is on-brand even if they didn't restate it in chat.
-    const u = await getUser(req);
-    if (u) {
-      const data = await authStore.getUserData(u.id);
-      const p = (data.profile ?? {}) as Record<string, string>;
-      if (!session.intake.businessName && p.businessName) session.intake.businessName = p.businessName;
-      if (!session.intake.category && p.industry) session.intake.category = p.industry;
-      if (!session.intake.services && p.services)
-        session.intake.services = String(p.services).split(',').map((x) => x.trim()).filter(Boolean);
-    }
+  app.post<{ Body: { text?: string } }>('/api/message', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const text = req.body?.text;
+    if (typeof text !== 'string') return reply.code(400).send({ error: 'text required' });
+    // The conversation id is the signed-in account. A body sessionId is ignored
+    // so one customer cannot approve or run actions as another.
+    const session = store.getOrCreate(u.id);
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    if (!session.intake.businessName && p.businessName) session.intake.businessName = p.businessName;
+    if (!session.intake.category && p.industry) session.intake.category = p.industry;
+    if (!session.intake.services && p.services)
+      session.intake.services = String(p.services).split(',').map((x) => x.trim()).filter(Boolean);
     const res = await agent.handle(session, text);
-    store.save(sessionId, res.session);
+    store.save(u.id, res.session);
     return res.reply;
   });
 
@@ -4579,27 +4800,30 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   });
 
   // Start a fresh conversation (clears the stored intake/pending for this user).
-  app.post<{ Body: { sessionId?: string } }>('/api/reset', async (req, reply) => {
-    const u = await getUser(req);
-    const id = u?.id ?? req.body?.sessionId;
-    if (!id) return reply.code(400).send({ error: 'no session' });
-    store.save(id, newSession(id));
+  app.post('/api/reset', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    store.save(u.id, newSession(u.id));
     return { ok: true };
   });
 
   // Connect one or more apps for the user, then run the actions that were blocked.
-  app.post<{ Body: { sessionId?: string; actions?: Array<{ actionId: string; app: string; label: string }> } }>(
+  app.post<{ Body: { actions?: Array<{ actionId: string; app: string; label: string }> } }>(
     '/api/connect-and-run',
     async (req, reply) => {
-      const { sessionId, actions } = req.body ?? {};
-      if (!sessionId || !Array.isArray(actions)) return reply.code(400).send({ error: 'sessionId and actions required' });
+      const u = await requireUser(req, reply);
+      if (!u) return;
+      if (isDemoAccount(u.email) && connector.name !== 'mock') {
+        return reply.code(403).send({ error: 'The public demo cannot run actions on a live connection.' });
+      }
+      const actions = req.body?.actions;
+      if (!Array.isArray(actions)) return reply.code(400).send({ error: 'actions required' });
       const launched: string[] = [];
       for (const a of actions) {
-        connector.connect?.(sessionId, a.app);
-        const r = await connector.runAction({ externalUserId: sessionId, actionId: a.actionId });
+        const r = await connector.runAction({ externalUserId: u.id, actionId: a.actionId });
         if (r.ok) launched.push(a.label);
       }
-      return { launched, apps: [...new Set(actions.map((a) => a.app))] };
+      return { launched, apps: [...new Set(actions.map((a) => a.app))], demo: connector.name === 'mock' };
     },
   );
 
