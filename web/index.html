@@ -3113,6 +3113,30 @@ function openLaunch(){
   const box=$('#launch-body'); if(!box) return; box.innerHTML='';
   const h=el('div','mcard'); h.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">🚀 Launch a Campaign</h3><span style="font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;background:#e8f0fe;color:#1a56db">🟢 GOOGLE ADS</span></div><p class="mdesc" style="margin:6px 0 0;max-width:640px">Miles builds a complete <b>Google Ads Search</b> campaign — budget, bidding, ad groups, keywords and ads — from your goal. You review every setting, then approve. <b>It’s created paused; nothing spends until you turn it on.</b><br><span class="appsub">Want Facebook/Instagram instead? Use <b>Launch on Facebook</b> in the Marketing menu.</span></p>';
   box.append(h);
+  const loop=el('div','mcard'); loop.style.marginTop='14px';
+  loop.append(el('div','sect-label','$20/DAY PLAN — GOOGLE, FACEBOOK, GOOGLE LEADS'));
+  loop.append(el('p','appsub','Uses your profile. The total is a Miles cap, not a promise the ad platform will stop there. Only a paused Google Search campaign can be created. Facebook ads and Local Services Ads stay blocked until Pipedream has a real action and this account has connected it.'));
+  const loopOut=el('div');
+  const loopBtn=el('button',null,'Show the $20/day plan'); loopBtn.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600';
+  loopBtn.onclick=async()=>{
+    loopBtn.disabled=true;
+    try{
+      const r=await(await fetch('/api/journey/plan',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({totalDaily:20})})).json();
+      loopOut.innerHTML='';
+      const p=r.plan||{};
+      loopOut.append(el('p','appsub',(p.summary||'')+' '+((p.budgetControl)||'')));
+      (p.channels||[]).forEach(c=>{
+        const row=el('div'); row.style.cssText='padding:6px 0;border-top:1px solid var(--line-soft);font-size:13px';
+        row.textContent=c.label+' — $'+c.recommendedDaily+'/day recommended, $'+c.executedDaily+' would be created paused. '+c.status+'. '+c.reason;
+        loopOut.append(row);
+      });
+      const asset=p.asset||{};
+      loopOut.append(el('p','appsub', asset.logoIncluded ? 'Logo on file is attached. No new image was generated.' : 'No logo on the profile. No image was generated.'));
+      if(p.market) loopOut.append(el('p','appsub', p.market.note||''));
+    }catch(e){ toast('Could not build the plan.'); }
+    loopBtn.disabled=false;
+  };
+  loop.append(loopBtn, loopOut); box.append(loop);
   const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','STEP 1 — TELL MILES THE GOAL'));
   const goal=lchField('What do you want the campaign to do?','e.g. Get more calls for emergency repairs');
   const budget=lchField('Daily budget (USD)','20','20','number');
