@@ -1,5 +1,6 @@
 import type { Config } from '../config.js';
 import { META_SHARED_ACCOUNT_NOTE as _META_NOTE } from '../agents/googlelaunch.js';
+import { explainPipedreamError, type PipedreamFailure } from './pipedreamErrors.js';
 import { summarizeTask } from './mock.js';
 import type {
   AppInfo,
@@ -52,6 +53,8 @@ export class PipedreamConnector implements Connector {
   private gadsCache = new Map<string, { key: string; appName: string; ids: string[]; targets?: { login: string; client?: string }[]; shape?: GadsShape; ts: number }>();
   /** customerId → descriptive name, harvested from list-customer-clients responses. */
   private gadsNames = new Map<string, string>();
+  /** Why customer-id resolution failed for this external user. Never another user's error. */
+  private gadsBlock = new Map<string, PipedreamFailure>();
   /** The ad account the owner last launched into — reads prefer it too, so an
    *  MCC with many clients reports the business the owner actually works in. */
   private gadsPreferred = new Map<string, string>();
@@ -358,14 +361,18 @@ export class PipedreamConnector implements Connector {
         const res = await pd.actions.run({ externalUserId, id: key, configuredProps: cp });
         collectCustomerIds(res?.ret ?? res?.exports ?? res, found);
         collectCustomerNames(res?.ret ?? res?.exports ?? res, this.gadsNames);
-      } catch {
-        /* skip */
+      } catch (err) {
+        const failure = explainPipedreamError(err);
+        this.gadsBlock.set(externalUserId, failure);
       }
       return found;
     };
+    if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return [];
     // 1) The login accounts the connected user can act as (for an MCC, the manager).
     const logins = await runList('google_ads-list-account-id-options');
+    if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return [];
     if (!logins.size) for (const x of await runList('google_ads-list-customer-clients')) logins.add(x);
+    if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return [];
     // 2) For each login, list the client accounts underneath it.
     const targets: { login: string; client?: string }[] = [];
     for (const login of [...logins].slice(0, 5)) {
@@ -385,6 +392,7 @@ export class PipedreamConnector implements Connector {
     const accts = await this.listAccounts(externalUserId, 'google_ads');
     const account = accts.find((a) => a.healthy) ?? accts[0];
     if (!account) return [];
+    if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return [];
     const cached = this.gadsCache.get(externalUserId);
     let targets = cached?.targets && Date.now() - cached.ts < 10 * 60_000 ? cached.targets : undefined;
     if (!targets) {
@@ -397,6 +405,11 @@ export class PipedreamConnector implements Connector {
       const name = this.gadsNames.get(id);
       return { id, login: t.login, name, label: name ? `${name} — ${fmt(id)}` : fmt(id) };
     });
+  }
+
+  /** Last tool-call failure for this external user only. */
+  googleAdsBlock(externalUserId: string): PipedreamFailure | null {
+    return this.gadsBlock.get(externalUserId) ?? null;
   }
 
   /**
@@ -467,6 +480,7 @@ export class PipedreamConnector implements Connector {
       const props = await this.componentProps(comp, key);
       const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
       const targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
+      if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return out;
       const t = this.preferTargets(externalUserId, targets)[0];
       const cp: Record<string, unknown> = { [appName]: { authProvisionId: account.id }, dateRange: 'LAST_30_DAYS' };
       if (t?.login && props.some((p: any) => p?.name === 'accountId')) cp.accountId = t.login;
@@ -506,6 +520,7 @@ export class PipedreamConnector implements Connector {
     const accts = await this.listAccounts(externalUserId, 'google_ads');
     const account = accts.find((a) => a.healthy) ?? accts[0];
     if (!account) return out;
+    if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return out;
 
     // Reuse cached discovery (component, {login,client} targets, and the metric/
     // field format Pipedream accepted) when fresh; only the report run per load.
@@ -521,6 +536,7 @@ export class PipedreamConnector implements Connector {
       const props = await this.componentProps(comp, key);
       appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
       targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
+      if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return out;
       if (!targets.length) targets = [{ login: '' }];
       this.gadsCache.set(externalUserId, { key, appName, ids: targets.map((t) => t.client ?? t.login), targets, ts: Date.now() });
     }
@@ -537,7 +553,12 @@ export class PipedreamConnector implements Connector {
         try {
           const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
           raw = res?.ret ?? res?.exports ?? res ?? null;
-        } catch {
+        } catch (err) {
+          const failure = explainPipedreamError(err);
+          if (failure.kind === 'connect_production_unavailable') {
+            this.gadsBlock.set(externalUserId, failure);
+            return out;
+          }
           continue; // bad account/format — try the next
         }
         const before = out.length;
@@ -675,7 +696,11 @@ export class PipedreamConnector implements Connector {
     const wanted = (targetCustomerId ?? '').replace(/[^\d]/g, '');
     const target = wanted ? targets.find((t) => (t.client ?? t.login) === wanted) : targets[0];
     if (!targets.length) {
-      return { ok: false, live: false, steps: [{ step: 'Google Ads account', ok: false, error: 'No Google Ads customer account was found on this connection.' }], note: 'Connect Google Ads in Integrations. Nothing was created.' };
+      const blocked = this.gadsBlock.get(externalUserId);
+      const note = blocked
+        ? `${blocked.message} Provider said: ${blocked.providerMessage} Nothing was created.`
+        : 'Connect Google Ads in Integrations. Nothing was created.';
+      return { ok: false, live: false, steps: [{ step: 'Google Ads account', ok: false, error: blocked?.providerMessage || 'No Google Ads customer account was found on this connection.' }], note };
     }
     if (!wanted && targets.length > 1) {
       return { ok: false, live: false, steps: [{ step: 'Choose an ad account', ok: false, error: 'This Google login manages more than one ad account. Pick one and approve again.' }], note: 'Pick the Google Ads account before Miles creates a paused campaign. Nothing was created.' };
@@ -936,16 +961,25 @@ export class PipedreamConnector implements Connector {
             ids = await this.googleAdsCustomerIds(externalUserId, primary.id, rows);
             if (ids.length) { const c = this.gadsCache.get(externalUserId); this.gadsCache.set(externalUserId, { key: c?.key ?? '', appName: c?.appName ?? 'googleAds', ids, shape: c?.shape, ts: Date.now() }); }
           } catch (e) {
-            errMsg = String((e as Error).message || '').slice(0, 120);
+            errMsg = explainPipedreamError(e).message;
           }
         }
-        if (ids.length) {
+        const blocked = this.gadsBlock.get(externalUserId);
+        if (ids.length && !blocked) {
+          detail.ready = true;
           detail.rows!.push({ k: 'Ad account (customer) ID', v: fmt(ids[0]!) });
           if (ids.length > 1) detail.rows!.push({ k: 'Other accessible accounts', v: ids.slice(1).map(fmt).join(', ') });
+          detail.note = 'OAuth is connected and a Google Ads customer id was resolved. A paused create still needs a separate approval.';
+        } else if (blocked) {
+          detail.ready = false;
+          detail.note = `${blocked.message} Provider said: ${blocked.providerMessage}`;
+          detail.rows!.push({ k: 'OAuth', v: 'Connected — this is not campaign readiness' });
+          detail.rows!.push({ k: 'Customer id', v: 'Not resolved' });
         } else {
+          detail.ready = false;
           detail.note = errMsg
-            ? `Connected. Couldn’t resolve the ad-account ID yet (${errMsg}). It usually appears after you open the Dashboard once — the data pull resolves it.`
-            : 'Connected. The ad-account (customer) ID shows here after you open the Dashboard once — that load resolves it. If it never appears, check this Google login has access to the ad account.';
+            ? `Google is signed in, but the customer id was not resolved. ${errMsg}`
+            : 'Google is signed in. The customer id is not resolved yet, so Miles cannot read spend or create a campaign.';
         }
       }
       details.push(detail);
@@ -983,7 +1017,12 @@ export class PipedreamConnector implements Connector {
     const account = accts.find((a) => a.healthy) ?? accts[0];
     if (!account) return { ok: false, live: true, uploaded: 0, failed: items.length, steps: items.map((i) => ({ dealId: i.dealId, ok: false, error: 'No connected Google Ads account.' })), note: 'Connect Google Ads first.' };
     const rows = await this.listComponents('google_ads');
-    const target = (await this.resolveGadsTargets(externalUserId, account.id, rows))[0];
+    const targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
+    const blocked = this.gadsBlock.get(externalUserId);
+    if (blocked?.kind === 'connect_production_unavailable') {
+      return { ok: false, live: false, uploaded: 0, failed: items.length, steps: items.map((i) => ({ dealId: i.dealId, ok: false, error: blocked.providerMessage })), note: `${blocked.message} Nothing was uploaded.` };
+    }
+    const target = targets[0];
     const acctVals: Record<string, string[]> = {};
     if (target?.login) acctVals.loginAccount = [target.login, 'use google ads as', 'use google ads', 'accountid'];
     if (target?.client) acctVals.managedAccount = [target.client, 'managed account', 'customer client', 'customerclient'];

@@ -19,12 +19,13 @@ Public catalog read 2026-11-07. See `GET /api/integrations/pipedream` and `src/c
 
 ## What Akhil still has to do (names only)
 
-1. Set `CONNECTOR=pipedream`, `PIPEDREAM_ENVIRONMENT=production` for customer connects, `PIPEDREAM_PROJECT_ID`, `PIPEDREAM_CLIENT_ID`, `PIPEDREAM_CLIENT_SECRET`, `DATABASE_URL`, `ADMIN_EMAIL`, `APP_URL`.
-2. In the Pipedream project, enable the Google Ads app. Miles does not store a Google developer token; Connect OAuth uses scopes `email`, `profile`, and `https://www.googleapis.com/auth/adwords`.
-3. Each contractor connects Google Ads in Miles. The Google user must be allowed to create campaigns on the client account they pick (`accountId` login customer, `customerClientId` managed account).
-4. Do not expect `META_ADS_ACCESS_TOKEN` to create a customer’s Facebook campaign. There is no verified Meta campaign action to enable.
-5. TikTok, if wanted later, is a separate Connect of `tiktok_ads_manager` plus an advertiser id. It is not wired.
-6. GoHighLevel follow-up needs the contractor’s `highlevel_oauth` connection (`contacts.write` is among the published scopes). Turning speed-to-lead on is a separate consent switch. This checklist does not send a message.
+1. Set `CONNECTOR=pipedream`, `PIPEDREAM_ENVIRONMENT=production` for customer connects, `PIPEDREAM_PROJECT_ID`, `PIPEDREAM_CLIENT_ID`, `PIPEDREAM_CLIENT_SECRET`, `DATABASE_URL`, `ADMIN_EMAIL`, `APP_URL`. Production is the right environment for customers. It is not a substitute for the Connect entitlement below, and development accounts must not be reused for a production user.
+2. On the Pipedream workspace, enable **Pipedream Connect in production**. The Advanced workflow plan does not include it. The Connect plan does: https://pipedream.com/pricing?plan=Connect. A healthy Google OAuth account can still list (GET accounts returns 200) while `actions.run` returns 400 `Tool calling via Pipedream Connect in production is not available`. Miles cannot resolve a Google customer id or create a paused campaign until that tool call is allowed. Do not point Miles at `development` to get around it.
+3. In the Pipedream project, enable the Google Ads app. Miles does not store a Google developer token; Connect OAuth uses scopes `email`, `profile`, and `https://www.googleapis.com/auth/adwords`.
+4. Each contractor connects Google Ads in Miles. The Google user must be allowed to create campaigns on the client account they pick (`accountId` login customer, `customerClientId` managed account). Another external user’s healthy connection must not be reused.
+5. Do not expect `META_ADS_ACCESS_TOKEN` to create a customer’s Facebook campaign. There is no verified Meta campaign action to enable.
+6. TikTok, if wanted later, is a separate Connect of `tiktok_ads_manager` plus an advertiser id. It is not wired.
+7. GoHighLevel follow-up needs the contractor’s `highlevel_oauth` connection (`contacts.write` is among the published scopes). Turning speed-to-lead on is a separate consent switch. This checklist does not send a message.
 
 ## Paused Search check (test account only)
 

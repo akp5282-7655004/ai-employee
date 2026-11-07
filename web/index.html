@@ -2801,8 +2801,9 @@ function renderOverview(d){
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px';
   const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<div class="sect-label" style="margin:0 0 10px">MARKETING PERFORMANCE</div>';
   if(mk.hasData){ const ss=el('div','stats'); ss.append(statCard('Ad spend','$'+(mk.spend||0).toLocaleString()), statCard('Cost / job', mk.cpa!=null?('$'+mk.cpa):'—'), statCard('Revenue','$'+(mk.revenue||0).toLocaleString())); mc.append(ss); mc.append(el('div','appsub','Showing '+mktRangeLabel(mk.range)+(mk.targetCpa&&mk.cpa!=null?' · target $'+mk.targetCpa+'/job · '+(mk.cpa<=mk.targetCpa?'✅ under target':'⚠︎ over target'):''))); }
-  else if(mk.connected){ mc.append(ovSync('✓ Google Ads / Meta connected — Miles reads it live, on demand (no daily sync wait). Nothing showing yet means there’s no spend in '+mktRangeLabel(mk.range)+' on the account, not a delay.')); const row=el('div'); row.style.cssText='display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap'; const rb=el('button',null,'↻ Refresh now'); rb.style.cssText='background:none;border:1px solid var(--line);border-radius:8px;color:var(--accent);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:5px 10px'; rb.onclick=async()=>{ rb.disabled=true; const o=rb.textContent; rb.textContent='Pulling live…'; await openOverview(); }; const tb=el('button',null,'Diagnose connection →'); tb.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:0'; tb.onclick=()=>diagProbe('google_ads',tb); row.append(rb,tb); mc.append(row); }
-  else mc.append(ovNudge('Connect Google Ads / Meta in Integrations to see real spend, cost-per-job & revenue.'));
+  else if(mk.platforms&&mk.platforms.googleAds&&mk.platforms.googleAds.oauth&&!mk.platforms.googleAds.ready){ mc.append(ovNudge(mk.platforms.googleAds.note||'Google is signed in. The ad customer id is not resolved, so this is not ready to read or create campaigns. Meta Ads is not connected.')); }
+  else if(mk.connected){ mc.append(ovSync('✓ Google Ads customer id is resolved. Meta Ads is not connected. Nothing showing yet means there’s no spend in '+mktRangeLabel(mk.range)+' on the resolved Google account.')); const row=el('div'); row.style.cssText='display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap'; const rb=el('button',null,'↻ Refresh now'); rb.style.cssText='background:none;border:1px solid var(--line);border-radius:8px;color:var(--accent);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:5px 10px'; rb.onclick=async()=>{ rb.disabled=true; const o=rb.textContent; rb.textContent='Pulling live…'; await openOverview(); }; const tb=el('button',null,'Diagnose connection →'); tb.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:0'; tb.onclick=()=>diagProbe('google_ads',tb); row.append(rb,tb); mc.append(row); }
+  else mc.append(ovNudge('Connect Google Ads in Integrations to see real spend, cost-per-job and revenue. Meta Ads is not connected.'));
   grid.append(mc);
   const lk=d.leads||{}, rk=d.reviews||{}; const lc=el('div','mcard'); lc.innerHTML='<div class="sect-label" style="margin:0 0 10px">LEADS & REPUTATION</div>';
   if(lk.hasData||rk.hasData){ const ss=el('div','stats'); ss.append(statCard('New leads',lk.count||0), statCard('Uncontacted',lk.uncontacted||0), statCard('Reviews',rk.count||0), statCard('Avg rating', rk.avg!=null?(rk.avg+'★'):'—')); lc.append(ss); }
@@ -3104,7 +3105,17 @@ const AD_TIERS=[
 let adTier='flux-schnell';
 function renderAdTiers(){ const box=$('#ad-tier'); if(!box)return; box.innerHTML=''; for(const t of AD_TIERS){ const b=el('button',t.id===adTier?'on':'',t.label+' · '+t.cr+' cr'); b.onclick=()=>{ adTier=t.id; renderAdTiers(); }; box.append(b); } const cur=AD_TIERS.find(t=>t.id===adTier); const h=$('#ad-tier-hint'); if(h) h.textContent=cur?cur.hint:''; }
 function renderAdVpick(){ const vp=$('#ad-vpick'); if(!vp)return; vp.innerHTML=''; for(const p of PACKMETA){ const b=el('button',p.id===adVert?'on':'',p.label); b.onclick=()=>{ adVert=p.id; renderAdVpick(); fillAdCats(); }; vp.append(b); } }
-function openAdStudio(){ if(!PACKMETA.length){ loadPacks().then(()=>{ renderAdVpick(); fillAdCats(); renderAdTiers(); }); return; } renderAdVpick(); fillAdCats(); renderAdTiers(); }
+function tradeCategory(industry){
+  const t=String(industry||'').toLowerCase();
+  if(t.includes('paint')) return 'painting';
+  if(t.includes('plumb')) return 'plumbing';
+  if(t.includes('hvac')||t.includes('air condition')) return 'hvac';
+  if(t.includes('electric')) return 'electrical';
+  if(t.includes('roof')) return 'roofing';
+  if(t.includes('landscap')||t.includes('lawn')) return 'landscaping';
+  return '';
+}
+function openAdStudio(){ const apply=()=>{ renderAdVpick(); fillAdCats(); renderAdTiers(); const cat=tradeCategory(PROFILE&&PROFILE.industry); const sel=$('#ad-cat'); if(cat&&sel&&[...sel.options].some(o=>o.value===cat)) sel.value=cat; }; if(!PACKMETA.length){ loadPacks().then(apply); return; } apply(); }
 
 // ── Launch a Campaign — build → review every setting → approve & go live ──
 let LAUNCH={spec:null,connected:false};
@@ -4163,8 +4174,10 @@ async function openAdsManager(){
   const launch=el('button','go','＋ Launch a campaign'); launch.style.flex='none'; launch.onclick=()=>setPage('launch');
   ctrl.append(sel,launch); head.append(ht,ctrl); box.append(head);
   if(!d.hasData){
-    if(d.connected) box.append(ovSync('✓ Google Ads / Meta connected — no campaign data in '+mktRangeLabel(d.range)+' yet. Launch a campaign, or check back once spend runs.'));
-    else box.append(ovNudge('Connect Google Ads / Meta in Integrations to see your campaigns here — then launch one from “Launch a Campaign”.'));
+    if(d.googleNote) box.append(ovNudge(d.googleNote+' Meta Ads is not connected.'));
+    else if(d.googleReady&&d.metaAds) box.append(ovSync('✓ Google Ads customer id is resolved and Meta Ads is connected — no campaign data in '+mktRangeLabel(d.range)+' yet.'));
+    else if(d.googleReady) box.append(ovSync('✓ Google Ads customer id is resolved. Meta Ads is not connected. No campaign rows in '+mktRangeLabel(d.range)+' yet.'));
+    else box.append(ovNudge('Connect Google Ads in Integrations to see your campaigns here. Meta Ads is not connected.'));
     renderConversionSync(box); return;
   }
   const t=d.totals||{}; const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(110px,1fr));margin-bottom:18px';
@@ -4231,8 +4244,9 @@ async function openGrowth(){
   const sel=el('select','f'); sel.style.cssText='width:auto;padding:5px 10px;font-size:13px;border-radius:8px'; for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===GROWTH_RANGE)o.selected=true; sel.append(o); } sel.onchange=()=>{ GROWTH_RANGE=sel.value; openGrowth(); };
   ctrl.append(sel); head.append(ht,ctrl); box.append(head);
   if(!d.hasData){
-    if(d.connected) box.append(ovSync('✓ Ads connected — no campaign data in '+mktRangeLabel(d.range)+' yet. Launch a campaign, then Growth Autopilot optimizes it here.'));
-    else box.append(ovNudge('Connect Google Ads / Meta so Growth Autopilot can analyze and optimize your campaigns.'));
+    if(d.googleNote) box.append(ovNudge(d.googleNote));
+    else if(d.googleReady) box.append(ovSync('✓ Google Ads customer id is resolved — no campaign data in '+mktRangeLabel(d.range)+' yet. Meta Ads is not connected.'));
+    else box.append(ovNudge('Connect Google Ads so Growth Autopilot can read this account. Meta Ads is not connected.'));
     return;
   }
   const t=d.totals||{}; const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(105px,1fr));margin-bottom:16px';
@@ -6477,7 +6491,7 @@ const STACK=[
     {slug:'calltrackingmetrics',name:'CallTrackingMetrics'},
   ]},
   {cat:'Ad Channels', apps:[
-    {slug:'google_ads',name:'Google Ads'},{slug:'facebook',name:'Meta Ads'},
+    {slug:'google_ads',name:'Google Ads'},
     {slug:'microsoft_ads',name:'Microsoft Ads'},{slug:'google_my_business',name:'Google Business Profile'},
   ]},
   {cat:'Booking & Conversion', apps:[
@@ -6502,11 +6516,12 @@ function renderStack(connected){
 }
 const CONN_EMOJI={google_ads:'🟢',meta_ads:'📘',google_my_business:'📍',gohighlevel:'🎯',facebook_pages:'📘',google_lsa:'🛡️'};
 function connDetailCard(d){
-  const c=el('div','mcard'); c.style.cssText='padding:14px;'+(d.connected?'border-left:3px solid var(--good,var(--good))':'border-left:3px solid var(--warn)');
+  const signedInOnly=d.connected&&d.ready===false;
+  const c=el('div','mcard'); c.style.cssText='padding:14px;'+((d.connected&&!signedInOnly)?'border-left:3px solid var(--good,var(--good))':'border-left:3px solid var(--warn)');
   const head=el('div'); head.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:8px';
   if(d.logo){ const im=el('img'); im.src=d.logo; im.style.cssText='width:34px;height:34px;border-radius:8px;object-fit:cover'; im.onerror=()=>{im.remove();}; head.append(im); }
   else { const av=el('div',null,CONN_EMOJI[d.app]||'🔌'); av.style.cssText='width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--panel2,var(--panel-2));font-size:18px'; head.append(av); }
-  const ht=el('div'); ht.style.flex='1'; ht.append(el('b',null,d.label)); const st=el('div',null,d.connected?'✓ Connected':'Not connected'); st.style.cssText='font-size:12px;font-weight:600;color:'+(d.connected?'var(--good,var(--good))':'#b45309'); ht.append(st); head.append(ht);
+  const ht=el('div'); ht.style.flex='1'; ht.append(el('b',null,d.label)); const status=signedInOnly?'Signed in — not ready to read or create':(d.connected?'✓ Connected':'Not connected'); const st=el('div',null,status); st.style.cssText='font-size:12px;font-weight:600;color:'+((d.connected&&!signedInOnly)?'var(--good,var(--good))':'#b45309'); ht.append(st); head.append(ht);
   c.append(head);
   if(d.connected){
     if(d.accountName){ const an=el('div',null,d.accountName); an.style.fontWeight='600'; c.append(an); }

@@ -170,6 +170,8 @@ export interface ConnectionDetail {
   app: string; // slug, e.g. 'google_ads'
   label: string; // 'Google Ads'
   connected: boolean;
+  /** OAuth alone is not enough. False means signed in but not ready to read or create. */
+  ready?: boolean;
   accountName?: string; // human name of the connected account / page
   accountId?: string; // the primary id (customer id, act id, page id)
   logo?: string; // logo/picture URL when the platform exposes one
@@ -202,6 +204,8 @@ export interface Connector {
   /** The Google Ads accounts a launch can write into (id + human label), so
    *  an MCC owner can pick the client account instead of Miles guessing. */
   listAdTargets?(externalUserId: string): Promise<{ id: string; login: string; name?: string; label: string }[]>;
+  /** Why Google customer-id resolution failed for this external user, if it did. */
+  googleAdsBlock?(externalUserId: string): { kind: string; message: string; providerMessage: string } | null;
   /** 30-day search terms with spend/conversions (Gold Miner). Empty when the
    *  connection doesn't expose a search-terms report. */
   getSearchTerms?(externalUserId: string): Promise<{ term: string; cost: number; clicks: number; conversions: number }[]>;

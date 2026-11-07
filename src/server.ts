@@ -1318,6 +1318,28 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return { status: deliveryStatus() };
   });
 
+  const googleReadiness = async (userId: string) => {
+    let oauth = false;
+    try { oauth = (await connector.listAccounts(userId)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
+    let customers = 0;
+    let block: { message: string; providerMessage?: string } | null = null;
+    if (oauth && connector.listAdTargets) {
+      try { customers = (await connector.listAdTargets(userId)).length; } catch { customers = 0; }
+      block = connector.googleAdsBlock?.(userId) ?? null;
+    }
+    const mock = connector.name === 'mock';
+    return {
+      oauth,
+      ready: !mock && oauth && customers > 0 && !block,
+      note: mock && oauth
+        ? 'Demo mode. A sample Google Ads link is not a resolved customer id, and nothing is created in Google Ads.'
+        : block
+          ? `${block.message} Provider said: ${block.providerMessage ?? ''}`.trim()
+          : (oauth && !customers ? 'Google is signed in. The ad customer id is not resolved, so Miles cannot read spend or create a campaign yet.' : ''),
+      metaAds: false as const,
+    };
+  };
+
   // Overview dashboard — everything at a glance, from real workspace data. Numbers
   // that need a connected tool say "connect" rather than showing a fake figure.
   app.get<{ Querystring: { range?: string } }>('/api/dashboard', async (req, reply) => {
@@ -1364,10 +1386,15 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       /* none */
     }
     const has = (...apps: string[]) => apps.some((a) => linked.has(a));
-    const adsLinked = has('google_ads', 'facebook', 'google_lsa');
-    const crmLinked = has('gohighlevel', 'hubspot', 'salesforce_rest_api', 'servicetitan', 'jobber', 'housecall_pro');
+    const google = await googleReadiness(u.id);
+    const googleOauth = google.oauth;
+    const platforms = {
+      googleAds: { oauth: google.oauth, customerResolved: google.ready, ready: google.ready, note: google.note },
+      metaAds: { oauth: false, ready: false, note: 'Meta Ads is not connected. A Facebook Page is not an ad account, and there is no verified Pipedream Meta campaign app.' },
+    };
+    const crmLinked = has('gohighlevel', 'highlevel_oauth', 'hubspot', 'salesforce_rest_api', 'servicetitan', 'jobber', 'housecall_pro');
     const gmbLinked = has('google_my_business', 'gmb');
-    const socialLinked = has('facebook', 'instagram', 'linkedin');
+    const socialLinked = has('facebook_pages', 'instagram', 'linkedin');
     return {
       business: p.businessName || '',
       range,
@@ -1381,7 +1408,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         creditsUsed: summarizeUsage(d.usage as Usage | undefined, new Date()).credits,
         weatherTriggers: ((d.weatherRules as Array<{ enabled?: boolean }>) ?? []).filter((r) => r.enabled).length,
       },
-      marketing: { connected: adsLinked || spend.length > 0, hasData: spend.length > 0, range, spend: Math.round(totalSpend), conversions: totalConv, cpa: totalConv ? Math.round((totalSpend / totalConv) * 100) / 100 : null, revenue: Math.round(revenue), targetCpa: Number(p.targetCpa) || null },
+      marketing: { connected: platforms.googleAds.ready, oauth: googleOauth, hasData: spend.length > 0, range, spend: Math.round(totalSpend), conversions: totalConv, cpa: totalConv ? Math.round((totalSpend / totalConv) * 100) / 100 : null, revenue: Math.round(revenue), targetCpa: Number(p.targetCpa) || null, platforms },
       leads: { connected: crmLinked || leads.length > 0, hasData: leadsWin.length > 0, count: leadsWin.length, uncontacted: leadsWin.filter((l) => !l.contacted).length },
       speedToLead: responderStats(d.speedToLead as SpeedToLeadState | undefined, new Date().toISOString()),
       reviews: { connected: gmbLinked || reviews.length > 0, hasData: reviews.length > 0, count: reviews.length, avg: reviews.length ? Math.round((reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length) * 10) / 10 : null },
@@ -1422,8 +1449,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       ? (snap?.campaigns ?? [])
       : await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id, range) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
     const deals = (snap?.deals ?? []) as import('./revenue/attribution.js').Deal[];
-    let connected = false;
-    try { connected = (await connector.listAccounts(u.id)).some((a) => ['google_ads', 'facebook', 'google_lsa'].includes(a.app)); } catch { /* none */ }
+    const google = await googleReadiness(u.id);
     const r2 = (n: number) => Math.round(n * 100) / 100;
     const revFor = (utm: string, name: string) => { const k = (utm || name || '').toLowerCase(); return deals.filter((d) => d.won && (d.value || 0) > 0 && String(d.utmCampaign || '').toLowerCase() === k).reduce((s, d) => s + (d.value || 0), 0); };
     const campaigns = spend
@@ -1437,7 +1463,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const totLeads = campaigns.reduce((a, c) => a + c.leads, 0);
     const totRev = campaigns.reduce((a, c) => a + c.revenue, 0);
     return {
-      connected, hasData: campaigns.length > 0, range,
+      connected: google.oauth, googleReady: google.ready, googleNote: google.note, metaAds: false, hasData: campaigns.length > 0, range,
       totals: { spend: totSpend, clicks: totClicks, leads: totLeads, revenue: totRev, roas: totSpend ? r2(totRev / totSpend) : null, roiPct: totSpend ? Math.round(((totRev - totSpend) / totSpend) * 100) : null, cpc: totClicks ? r2(totSpend / totClicks) : null, costPerLead: totLeads ? r2(totSpend / totLeads) : null },
       campaigns,
     };
@@ -1528,10 +1554,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const guardrails = { maxBudgetChangePct: 10, protectProven: true, ...(ap.guardrails ?? {}) };
     const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id, range) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
     const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
-    let connected = false;
-    try { connected = (await connector.listAccounts(u.id)).some((a) => ['google_ads', 'facebook', 'google_lsa'].includes(a.app)); } catch { /* none */ }
+    const google = await googleReadiness(u.id);
     const plan = buildGrowthPlan(spend, deals, { targetCpa: Number(p.targetCpa) || null, guardrailPct: Number(guardrails.maxBudgetChangePct) || 10, protectProven: !!guardrails.protectProven, autonomy: Number(ap.autonomy) || 50 });
-    return { connected, hasData: spend.length > 0, range, ...plan };
+    return { connected: google.oauth, googleReady: google.ready, googleNote: google.note, metaAds: false, hasData: spend.length > 0, range, ...plan };
   });
 
   app.post<{ Body: { confirm?: boolean; changes?: import('./connectors/types.js').BudgetChange[] } }>('/api/growth/apply', async (req, reply) => {
