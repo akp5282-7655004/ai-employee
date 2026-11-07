@@ -25,6 +25,16 @@ services:
       # To run on temporary storage on purpose, set ALLOW_EPHEMERAL_STORE=1.
       - key: DATABASE_URL
         sync: false
+      # Operator login. Required for /api/admin and /api/economics. There is
+      # no "oldest account is admin" fallback. Do not set this to the demo
+      # address. Value is supplied in the Render dashboard, not in git.
+      # - key: ADMIN_EMAIL
+      #   sync: false
+      # Live Google Ads creates also need CONNECTOR=pipedream plus
+      # PIPEDREAM_PROJECT_ID, PIPEDREAM_CLIENT_ID, PIPEDREAM_CLIENT_SECRET,
+      # and PIPEDREAM_ENVIRONMENT=production for customer connects.
+      # Campaigns Miles creates are paused. Do not set META_ADS_ACCESS_TOKEN
+      # expecting per-customer Meta campaigns — that write is refused.
       # Pipedream Connect environment. Defaults to "development" (only YOU, signed
       # into pipedream.com, can connect apps). Set to "production" so your real
       # customers can connect their own accounts. Also set PIPEDREAM_PROJECT_ID /

@@ -1,5 +1,5 @@
 import { buildServer } from './server.js';
-import { makeStore } from './db/index.js';
+import { isHostedDeploy, makeStore } from './db/index.js';
 
 const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? '0.0.0.0';
@@ -11,6 +11,9 @@ async function main() {
   await app.listen({ port, host });
   // eslint-disable-next-line no-console
   console.log(`Miles listening on http://${host}:${port} (store: ${authStore.name})`);
+  if (isHostedDeploy() && !(process.env.ADMIN_EMAIL || '').trim()) {
+    console.warn('ADMIN_EMAIL is unset. No account has operator access. The oldest signup is not an admin — set ADMIN_EMAIL to the operator email.');
+  }
 
   // Scheduled agents: tick every minute to run any due morning briefs / reports.
   const runDue = (app as unknown as { runDueSchedules?: () => Promise<void> }).runDueSchedules;

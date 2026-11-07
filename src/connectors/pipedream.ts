@@ -1,4 +1,5 @@
 import type { Config } from '../config.js';
+import { META_SHARED_ACCOUNT_NOTE as _META_NOTE } from '../agents/googlelaunch.js';
 import { summarizeTask } from './mock.js';
 import type {
   AppInfo,
@@ -673,8 +674,14 @@ export class PipedreamConnector implements Connector {
     // campaign. Honor an explicit pick; refuse a pick that doesn't resolve.
     const wanted = (targetCustomerId ?? '').replace(/[^\d]/g, '');
     const target = wanted ? targets.find((t) => (t.client ?? t.login) === wanted) : targets[0];
+    if (!targets.length) {
+      return { ok: false, live: false, steps: [{ step: 'Google Ads account', ok: false, error: 'No Google Ads customer account was found on this connection.' }], note: 'Connect Google Ads in Integrations. Nothing was created.' };
+    }
+    if (!wanted && targets.length > 1) {
+      return { ok: false, live: false, steps: [{ step: 'Choose an ad account', ok: false, error: 'This Google login manages more than one ad account. Pick one and approve again.' }], note: 'Pick the Google Ads account before Miles creates a paused campaign. Nothing was created.' };
+    }
     if (wanted && !target) {
-      return { ok: false, live: true, steps: [{ step: `Target account ${targetCustomerId}`, ok: false, error: 'That Google Ads account is not reachable from your connected login.' }], note: 'Pick one of the accounts Miles lists for your connection.' };
+      return { ok: false, live: false, steps: [{ step: `Target account ${targetCustomerId}`, ok: false, error: 'That Google Ads account is not reachable from your connected login.' }], note: 'Pick one of the accounts Miles lists for your connection. Nothing was created.' };
     }
     // Remember the pick — spend reads and search terms follow the same account.
     if (target) this.gadsPreferred.set(externalUserId, target.client ?? target.login);
@@ -722,12 +729,12 @@ export class PipedreamConnector implements Connector {
           name: spec.name,
           advertisingChannelType: 'SEARCH',
           campaignBudget: budget.resource,
-          status: spec.status,
+          status: 'PAUSED', // client status is ignored — Miles never enables a campaign
           biddingStrategyType: biddingEnum,
           containsEuPoliticalAdvertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING',
         })
       : { ok: false as const, resource: undefined, error: 'Skipped — Google requires a budget on every campaign and the budget step failed above.', detail: undefined };
-    steps.push({ step: `Create campaign "${spec.name}" (${spec.status})`, ok: campaign.ok && !!campaign.resource, resource: campaign.resource, error: campaign.error || (!campaign.resource ? `no campaign resource returned — Google said: ${campaign.detail ?? '(empty)'}` : undefined) });
+    steps.push({ step: `Create campaign "${spec.name}" (PAUSED)`, ok: campaign.ok && !!campaign.resource, resource: campaign.resource, error: campaign.error || (!campaign.resource ? `no campaign resource returned — Google said: ${campaign.detail ?? '(empty)'}` : undefined) });
 
     // 3) Ad groups + keywords + RSA — only if the campaign resource resolved.
     // These components take NUMERIC ids (campaignId/adGroupId) and build the
@@ -796,7 +803,7 @@ export class PipedreamConnector implements Connector {
           }
           const res = await pd.actions.run({ externalUserId, id: lkey, configuredProps: cp });
           const blob = JSON.stringify(res?.ret ?? res?.exports ?? res ?? '');
-          verified = blob.includes(spec.name) || (!!campaign.resource && blob.includes(campaign.resource.split('/').pop() ?? ' '));
+          verified = blob.includes(spec.name) || (!!campaign.resource && blob.includes(campaign.resource.split('/').pop() ?? ''));
         }
       } catch {
         /* verification unavailable — reported below */
@@ -813,7 +820,7 @@ export class PipedreamConnector implements Connector {
         ? 'Miles could not find this campaign in your Google Ads account afterward — treat it as NOT launched. See the per-step errors.'
         : !structureOk
           ? 'A campaign shell was created but the ad groups/ads did not — it would not serve. See the per-step errors.'
-          : `Verified: campaign created ${spec.status} in Google Ads account ${customerId ? `${customerId.slice(0, 3)}-${customerId.slice(3, 6)}-${customerId.slice(6)}` : ''}${verifyAttempted ? '' : ' (structure confirmed; independent verification unavailable)'}. Switch to that account in Google Ads to see it. Review it before enabling.`;
+          : `Paused Search campaign created in Google Ads account ${customerId ? `${customerId.slice(0, 3)}-${customerId.slice(3, 6)}-${customerId.slice(6)}` : ''}${verifyAttempted ? '' : ' (structure confirmed; independent verification unavailable)'}. It is PAUSED. Miles does not enable it and does not spend. Turn it on only in Google Ads after you review it.`;
     return { ok, live: true, campaignResource: campaign.resource, link, steps, note };
   }
 
@@ -825,15 +832,7 @@ export class PipedreamConnector implements Connector {
   // Everything is created PAUSED, so it lands as a draft the owner reviews and
   // flips live in Ads Manager. Nothing here can spend money.
   metaLaunchReady(): { ready: boolean; account?: string; note: string } {
-    const token = process.env.META_ADS_ACCESS_TOKEN;
-    const acct = process.env.META_AD_ACCOUNT_ID;
-    const page = process.env.META_PAGE_ID;
-    if (token && acct && page) {
-      const masked = 'act_' + acct.replace(/[^0-9]/g, '');
-      return { ready: true, account: masked, note: `Connected to Meta ad account ${masked}.` };
-    }
-    const missing = [!token && 'META_ADS_ACCESS_TOKEN', !acct && 'META_AD_ACCOUNT_ID', !page && 'META_PAGE_ID'].filter(Boolean);
-    return { ready: false, note: `Not connected — add ${missing.join(', ')} on Render (from your Meta ad account).` };
+    return { ready: false, note: _META_NOTE };
   }
 
   private async metaPost(path: string, params: Record<string, string>): Promise<{ id?: string; error?: string }> {
@@ -852,95 +851,11 @@ export class PipedreamConnector implements Connector {
 
   async launchMetaCampaign(_externalUserId: string, spec: import('../agents/metacampaign.js').MetaCampaignSpec): Promise<import('./types.js').CampaignLaunchResult> {
     const ready = this.metaLaunchReady();
-    const steps: import('./types.js').CampaignLaunchStep[] = [];
-    if (!ready.ready) return { ok: false, live: true, steps: [{ step: 'Meta ad account', ok: false, error: ready.note }], note: ready.note };
-    const acct = (process.env.META_AD_ACCOUNT_ID || '').replace(/[^0-9]/g, '');
-    const pageId = (process.env.META_PAGE_ID || '').replace(/[^0-9]/g, '');
-    const actPath = `act_${acct}`;
+    return { ok: false, live: false, steps: [{ step: 'Meta ad account', ok: false, error: ready.note }], note: ready.note };
 
-    // 1) Campaign — PAUSED, traffic objective (no pixel/lead-form dependency).
-    const camp = await this.metaPost(`${actPath}/campaigns`, {
-      name: spec.name,
-      objective: spec.objective,
-      status: 'PAUSED',
-      special_ad_categories: JSON.stringify([]),
-    });
-    steps.push({ step: `Create campaign "${spec.name}" (PAUSED)`, ok: !!camp.id, resource: camp.id, error: camp.error });
-    if (!camp.id) return { ok: false, live: true, steps, note: 'Campaign create failed — nothing else was created, no spend possible.' };
-
-    // 2) Ad set — daily budget (cents), local geo, age. Self-heal geo: try ZIPs,
-    //    fall back to broad US so a bad ZIP key never blocks the draft.
-    const cents = String(Math.max(100, Math.round(spec.dailyBudget * 100)));
-    const targetingWithZips = {
-      geo_locations: spec.geo.zips.length
-        ? { zips: spec.geo.zips.map((z) => ({ key: `US:${z}` })) }
-        : { countries: spec.geo.countries },
-      age_min: spec.ageMin,
-      age_max: spec.ageMax,
-    };
-    const adsetParams = (targeting: unknown) => ({
-      name: `${spec.name} — Ad set`.slice(0, 100),
-      campaign_id: camp.id!,
-      daily_budget: cents,
-      billing_event: spec.billingEvent,
-      optimization_goal: spec.optimizationGoal,
-      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
-      targeting: JSON.stringify(targeting),
-      status: 'PAUSED',
-    });
-    let adset = await this.metaPost(`${actPath}/adsets`, adsetParams(targetingWithZips));
-    if (!adset.id && spec.geo.zips.length) {
-      // ZIP targeting rejected — retry with broad US so the draft still lands.
-      adset = await this.metaPost(`${actPath}/adsets`, adsetParams({ geo_locations: { countries: spec.geo.countries }, age_min: spec.ageMin, age_max: spec.ageMax }));
-      steps.push({ step: `Create ad set (ZIP geo rejected → targeted US; refine in Ads Manager)`, ok: !!adset.id, resource: adset.id, error: adset.error });
-    } else {
-      steps.push({ step: `Create ad set ($${spec.dailyBudget}/day, ${spec.geo.zips.length ? spec.geo.zips.length + ' ZIPs' : 'US'})`, ok: !!adset.id, resource: adset.id, error: adset.error });
-    }
-    if (!adset.id) return { ok: false, live: true, campaignResource: camp.id, steps, note: 'Ad set create failed — campaign is PAUSED and empty, no spend possible.' };
-
-    // 3) Ad creative — the offer copy + link to the owner's website.
-    const storySpec = {
-      page_id: pageId,
-      link_data: {
-        message: spec.ad.primaryText,
-        link: spec.website || 'https://facebook.com',
-        name: spec.ad.headline,
-        description: spec.ad.description,
-        call_to_action: { type: spec.ad.cta, value: { link: spec.website || 'https://facebook.com' } },
-      },
-    };
-    const creative = await this.metaPost(`${actPath}/adcreatives`, {
-      name: `${spec.name} — Creative`.slice(0, 100),
-      object_story_spec: JSON.stringify(storySpec),
-    });
-    steps.push({ step: 'Create ad creative (offer copy + website link)', ok: !!creative.id, resource: creative.id, error: creative.error });
-    if (!creative.id) return { ok: false, live: true, campaignResource: camp.id, steps, note: 'Creative create failed — campaign & ad set are PAUSED, no spend possible.' };
-
-    // 4) Ad — PAUSED, ties creative to the ad set.
-    const ad = await this.metaPost(`${actPath}/ads`, {
-      name: `${spec.name} — Ad`.slice(0, 100),
-      adset_id: adset.id!,
-      creative: JSON.stringify({ creative_id: creative.id }),
-      status: 'PAUSED',
-    });
-    steps.push({ step: 'Create ad (PAUSED)', ok: !!ad.id, resource: ad.id, error: ad.error });
-
-    const ok = steps.every((s) => s.ok);
-    const link = `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${acct}&selected_campaign_ids=${camp.id}`;
-    return {
-      ok,
-      live: true,
-      campaignResource: camp.id,
-      link,
-      steps,
-      note: ok
-        ? 'Campaign built as a PAUSED draft in your Meta Ads Manager. Review every setting, then flip it live — nothing has spent.'
-        : 'Some steps failed — see per-step errors. Everything created is PAUSED, so no spend has occurred.',
-    };
   }
 
-  // Resolve the concrete identity of a Meta ad account + Page from env creds.
-  private async metaAccountDetails(): Promise<{ adAccount?: { id: string; name?: string; status?: string; currency?: string }; page?: { id: string; name?: string; logo?: string; link?: string } }> {
+    private async metaAccountDetails(): Promise<{ adAccount?: { id: string; name?: string; status?: string; currency?: string }; page?: { id: string; name?: string; logo?: string; link?: string } }> {
     const base = process.env.META_GRAPH_BASE || 'https://graph.facebook.com/v20.0';
     const token = process.env.META_ADS_ACCESS_TOKEN;
     const acct = (process.env.META_AD_ACCOUNT_ID || '').replace(/[^0-9]/g, '');

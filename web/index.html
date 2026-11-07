@@ -1390,7 +1390,7 @@ const $ = s => document.querySelector(s);
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e;};
 const money=n=>'$'+Number(n).toLocaleString('en-US');
 
-async function apiMessage(text){ if(REMOTE){const r=await fetch('/api/message',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId,text})});if(!r.ok)throw 0;return r.json();} return agent.handle(text); }
+async function apiMessage(text){ if(REMOTE){const r=await fetch('/api/message',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text})});if(!r.ok)throw 0;return r.json();} return agent.handle(text); }
 // Local (demo) mode only — in REMOTE the caller routes users to Integrations to
 // connect real accounts, so there's no server endpoint to hit here.
 async function apiConnectRun(actions){ const launched=[];for(const a of actions){connector.connect(USER,a.app);const rr=connector.runAction(USER,a.actionId);if(rr.ok)launched.push(a.label);}return{launched}; }
@@ -2525,7 +2525,7 @@ function dashRoi(){ return roiHtml(REV); }
 function dashCrm(){ return crmHtml(REV); }
 async function loadRevenue(tab){
   if(!REMOTE) return;
-  try{ const r=await fetch('/api/revenue?sessionId='+encodeURIComponent(sessionId)); REV=await r.json(); }catch(e){ return; }
+  try{ const r=await fetch('/api/revenue'); REV=await r.json(); }catch(e){ return; }
   if(aTab!==tab) return; // user switched away
   const body=$('#analytics-body'); body.innerHTML = tab==='roi'?roiHtml(REV):crmHtml(REV);
   body.querySelectorAll('[data-goint]').forEach(b=>b.onclick=()=>setPage('integrations'));
@@ -3182,8 +3182,8 @@ function renderLaunchReview(){
   const inp=(val,type)=>{ const i=el('input','f'); i.value=val; if(type)i.type=type; i.style.width='100%'; return i; };
   const c=el('div','mcard'); c.append(el('div','sect-label','STEP 2 — REVIEW EVERY SETTING'));
   const nameI=inp(s.name), budgetI=inp(s.dailyBudget,'number'), urlI=inp(s.finalUrl), locI=inp((s.locations||[]).join(', '));
-  const statusSel=el('select','f'); statusSel.style.width='100%'; [['PAUSED','Paused — safe, you turn it on later'],['ENABLED','Enabled — starts spending immediately']].forEach(([v,lab])=>{const o=el('option',null,lab);o.value=v;if(v===s.status)o.selected=true;statusSel.append(o);});
-  c.append(row('Campaign name',nameI),row('Daily budget (USD)',budgetI),row('Landing page URL',urlI),row('Locations',locI),row('Status when created',statusSel));
+  const pausedNote=el('div','appsub','Created paused. Miles cannot turn this campaign on or spend. You enable it later in Google Ads, after you review it there.');
+  c.append(row('Campaign name',nameI),row('Daily budget (USD)',budgetI),row('Landing page URL',urlI),row('Locations',locI),row('Status when created',pausedNote));
   c.append(el('div','appsub','Bidding: Maximize clicks · Networks: '+(s.networks||[]).join(', ')+' · Language: '+s.language));
   // Which Google Ads account gets this campaign — a manager (MCC) login can
   // hold many client accounts, and Miles must never guess.
@@ -3194,7 +3194,8 @@ function renderLaunchReview(){
   tc.append(acctSel);
   fetch('/api/gads/targets').then(r=>r.json()).then(d=>{
     const ts=(d&&d.targets)||[]; acctSel.innerHTML='';
-    if(!ts.length){ const o=el('option',null,LAUNCH.connected?'Could not list accounts — reconnect Google Ads in Integrations':'Google Ads not connected yet'); o.value=''; acctSel.append(o); return; }
+    if(!ts.length){ const o=el('option',null,'Google Ads is not connected — open Integrations and connect your account'); o.value=''; acctSel.append(o); go.disabled=true; go.textContent='Connect Google Ads to create a paused campaign'; return; }
+    go.disabled=false; go.textContent='Approve & create paused campaign';
     const saved=LAUNCH.target||localStorage.getItem('gadsTarget')||'';
     ts.forEach(t=>{ const o=el('option',null,t.label); o.value=t.id; if(t.id===saved)o.selected=true; acctSel.append(o); });
     if(!ts.some(t=>t.id===saved)) acctSel.selectedIndex=0;
@@ -3267,7 +3268,7 @@ function renderLaunchReview(){
   // Read the current (edited) settings back into the spec — shared by Save & Launch.
   const collect=()=>{
     s.name=nameI.value.trim(); s.dailyBudget=Number(budgetI.value)||s.dailyBudget; s.finalUrl=urlI.value.trim();
-    s.locations=locI.value.split(',').map(x=>x.trim()).filter(Boolean); s.status=statusSel.value;
+    s.locations=locI.value.split(',').map(x=>x.trim()).filter(Boolean); s.status='PAUSED';
     s.adGroups=agInputs.map(a=>({ name:a.g.name,
       keywords:a.kw.value.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{ const m=l.match(/\[(broad|phrase|exact)\]\s*$/i); const text=l.replace(/\[(broad|phrase|exact)\]\s*$/i,'').trim(); const orig=a.g.keywords.find(k=>k.text===text); return {text,match:(m?m[1].toLowerCase():(orig?orig.match:'phrase'))}; }),
       rsa:{headlines:a.hl.value.split('\n').map(x=>x.trim()).filter(Boolean),descriptions:a.de.value.split('\n').map(x=>x.trim()).filter(Boolean)} }));
@@ -3284,21 +3285,22 @@ function renderLaunchReview(){
   refill.onclick=()=>{ collect(); autofillCampaign(refill,{dailyBudget:s.dailyBudget,finalUrl:s.finalUrl,locations:s.locations}); };
   const save=el('button',null,'💾 Save draft'); save.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:9px 16px;cursor:pointer;font-weight:600;font-family:var(--sans)';
   save.onclick=async()=>{ collect(); save.disabled=true; const o=save.textContent; save.textContent='Saving…'; try{ await fetch('/api/campaign/drafts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:s})}); toast('✓ Draft saved — reopen it anytime under Launch a Campaign'); }catch(e){ toast('Could not save.'); } save.disabled=false; save.textContent=o; };
-  const go=el('button','go','🚀 Approve & Go Live'); go.style.flex='none';
+  const go=el('button','go','Approve & create paused campaign'); go.style.flex='none';
+  go.disabled=true; go.title='Connect Google Ads and pick an account first.';
   go.onclick=()=>confirmLaunch(()=>{ collect(); doLaunch(); });
   btnRow.append(refill,save,go); foot.append(btnRow); box.append(foot);
 }
 function confirmLaunch(onOk){
-  showModal('<h3 style="margin:0 0 8px">Launch to Google Ads?</h3><p class="mdesc" style="margin:0 0 12px">This creates the campaign in your live Google Ads account. Set to <b>Enabled</b>, it begins spending your daily budget immediately. Set to <b>Paused</b> (recommended), nothing spends until you switch it on in Google Ads.</p><div style="display:flex;gap:8px"><button class="go" id="cl-go" style="flex:1">Yes, launch it</button><button id="cl-no" style="flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;cursor:pointer">Cancel</button></div>');
+  showModal('<h3 style="margin:0 0 8px">Create this paused campaign?</h3><p class="mdesc" style="margin:0 0 12px">This creates the Search campaign, its budget, ad group, keywords, and ad in the Google Ads account you picked. <b>It is created paused.</b> Miles cannot enable it or spend. You turn it on later in Google Ads. If Google Ads is not connected, nothing is created.</p><div style="display:flex;gap:8px"><button class="go" id="cl-go" style="flex:1">Create paused campaign</button><button id="cl-no" style="flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;cursor:pointer">Cancel</button></div>');
   $('#cl-go').onclick=()=>{ closeModal(); onOk(); };
   $('#cl-no').onclick=closeModal;
 }
 async function doLaunch(){
-  const box=$('#launch-body'); box.innerHTML='<p class="appsub">Launching your campaign…</p>';
-  let r; try{ r=await(await fetch('/api/campaign/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:LAUNCH.spec,confirm:true,target:LAUNCH.target||undefined})})).json(); }catch(e){ box.innerHTML=''; box.append(ovNudge('Launch failed — try again in a moment.')); return; }
+  const box=$('#launch-body'); box.innerHTML='<p class="appsub">Creating the paused campaign…</p>';
+  let res, r; try{ res=await fetch('/api/campaign/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:LAUNCH.spec,confirm:true,target:LAUNCH.target||undefined})}); r=await res.json(); }catch(e){ box.innerHTML=''; box.append(ovNudge('Create failed — try again in a moment. Nothing was turned on.')); return; }
   box.innerHTML='';
-  if(r.error){ box.append(ovNudge('⚠️ '+r.error+(r.problems?': '+r.problems.join('; '):''))); const b=el('button','go','← Back to review'); b.style.marginTop='10px'; b.onclick=renderLaunchReview; box.append(b); return; }
-  const c=el('div','mcard'); c.append(el('h3',null,r.ok?(r.live?'✅ Campaign launched':'✅ Campaign built (demo connector)'):'⚠️ Launch hit an issue'));
+  if(!res.ok || r.error || r.ok===false){ box.append(ovNudge('⚠️ '+(r.error||r.note||'The campaign was not created.')+(r.problems?': '+r.problems.join('; '):''))); if(r.note && r.error && r.note!==r.error) box.append(el('p','appsub',r.note)); const ul=el('div'); (r.steps||[]).forEach(st=>{ const rr=el('div'); rr.style.cssText='padding:6px 0;font-size:13px'; rr.innerHTML=(st.ok?'✓ ':'✗ ')+esc(st.step)+(st.error?' <span style="color:#c0392b">— '+esc(st.error)+'</span>':''); ul.append(rr); }); box.append(ul); const b=el('button','go','← Back to review'); b.style.marginTop='10px'; b.onclick=renderLaunchReview; box.append(b); return; }
+  const c=el('div','mcard'); c.append(el('h3',null,r.live?'Paused campaign created in your Google Ads account':'Demo only — nothing was created in Google Ads'));
   if(r.note) c.append(el('div','appsub',r.note));
   const ul=el('div'); ul.style.marginTop='10px';
   (r.steps||[]).forEach(st=>{ const rr=el('div'); rr.style.cssText='padding:6px 0;border-bottom:1px solid var(--line-soft);font-size:13px'; rr.innerHTML=(st.ok?'✓ ':'✗ ')+esc(st.step)+(st.error?' <span style="color:#c0392b">— '+esc(st.error)+'</span>':''); ul.append(rr); });
@@ -6368,7 +6370,7 @@ function renderBenchmarks(){
 
 // ═══ integrations (honest, backend-driven) ═══
 let CONN = { hub:{ready:false}, connectedApps:[] };
-async function fetchConnections(){ if(REMOTE){ try{ CONN = await fetch('/api/connections?sessionId='+encodeURIComponent(sessionId)).then(r=>r.json()); }catch(e){} } }
+async function fetchConnections(){ if(REMOTE){ try{ CONN = await fetch('/api/connections').then(r=>r.json()); }catch(e){} } }
 // Offline/standalone fallback catalogue (the real list comes from /api/apps).
 const FALLBACK_APPS=[
   {slug:'google_ads',name:'Google Ads'},{slug:'facebook',name:'Meta Ads'},{slug:'google_my_business',name:'Google Business Profile'},
@@ -6397,7 +6399,7 @@ async function fetchApps(q, more){
 async function connectApp(slug){
   if(!(CONN.hub && CONN.hub.ready)){ setPage('chat'); chat.innerHTML=''; say('emp',"Connections aren't live in this preview yet. Once Miles is fully set up, clicking an app opens a secure link to connect your account."); return; }
   try{
-    const r = await fetch('/api/connect-token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId, app: slug})});
+    const r = await fetch('/api/connect-token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({app: slug})});
     const t = await r.json().catch(()=>({}));
     if(!r.ok || !t.connectUrl){ setPage('chat'); chat.innerHTML=''; say('emp','⚠️ Couldn’t start the connection right now. Please try again in a moment.'); return; }
     const w = window.open(t.connectUrl,'_blank','noopener');
@@ -6680,7 +6682,7 @@ async function milesEmailFlow(msg){
   bar.append(sendBtn,cancel); card.append(bar);
   b.append(card); logChat('emp','Drafted an email to '+(d.to||'')); chat.scrollTop=chat.scrollHeight;
 }
-async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId})}); }catch(e){} } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER); } }
+async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}); }catch(e){} } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER); } }
 let CHAT_LOG=[], CHAT_LOADED=false, chatSaveT;
 function logChat(role,text){ if(!text) return; CHAT_LOG.push({role,text}); if(REMOTE){ clearTimeout(chatSaveT); chatSaveT=setTimeout(saveChat,600); } }
 function saveChat(){ if(!REMOTE) return; try{ fetch('/api/chat',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-200)})}); }catch(e){} }

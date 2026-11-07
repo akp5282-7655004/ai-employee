@@ -135,7 +135,8 @@ describe('completing a reset', () => {
     const store = new MemoryStore();
     const { app } = await signedUp(store);
     const { uid, token } = await tokenFor(store, app, 'paul@example.com');
-    for (const bad of ['', 'short', token.slice(0, -1) + '0', token + 'x']) {
+    const flippedLast = token.slice(0, -1) + (token.endsWith('a') ? 'b' : 'a');
+    for (const bad of ['', 'short', flippedLast, token + 'x']) {
       const res = await app.inject({ method: 'POST', url: '/auth/reset', payload: { uid, token: bad, password: 'attempted-pw' } });
       expect(res.statusCode).toBe(400);
     }

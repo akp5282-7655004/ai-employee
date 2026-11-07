@@ -17,18 +17,22 @@ async function session(app: App, email = 'econ@example.com'): Promise<string> {
 }
 const get = (app: App, url: string, cookie: string) => app.inject({ method: 'GET', url, headers: { cookie } });
 
-/**
- * Read /api/economics as `email`. The route is owner-only, and isAdmin honours
- * ADMIN_EMAIL ahead of "first account created" — so this scopes ownership to
- * whichever account an assertion needs to read as, without giving up the gate.
- */
-async function economicsAs(app: App, email: string, cookie: string) {
+/** Operator routes require ADMIN_EMAIL. The oldest account is not an owner. */
+async function econ(app: App, cookie: string, email = 'econ@example.com') {
   process.env.ADMIN_EMAIL = email;
   try {
-    return (await get(app, '/api/economics', cookie)).json();
+    return await get(app, '/api/economics', cookie);
   } finally {
     delete process.env.ADMIN_EMAIL;
   }
+}
+
+/**
+ * Read /api/economics as `email`. The route is owner-only, and isAdmin honours
+ * ADMIN_EMAIL only — there is no first-account fallback.
+ */
+async function economicsAs(app: App, email: string, cookie: string) {
+  return (await econ(app, cookie, email)).json();
 }
 
 /**
@@ -37,18 +41,19 @@ async function economicsAs(app: App, email: string, cookie: string) {
  * learns exactly what markup they pay — so this is owner-only at the route,
  * not merely hidden in the UI.
  *
- * The first account created is the owner when ADMIN_EMAIL is unset, so the
- * second signup is a plain customer.
+ * ADMIN_EMAIL names the operator. With it unset, even the first signup is refused.
  */
 describe('unit economics is owner-only', () => {
-  it('serves the owner and refuses everyone else', async () => {
+  it('serves the configured operator and refuses everyone else', async () => {
     const app = buildServer({ authStore: new MemoryStore() });
     const owner = await session(app, 'owner@example.com');
     const customer = await session(app, 'customer@example.com');
 
-    expect((await get(app, '/api/economics', owner)).statusCode).toBe(200);
+    expect((await get(app, '/api/economics', owner)).statusCode).toBe(403);
 
-    const refused = await get(app, '/api/economics', customer);
+    expect((await econ(app, owner, 'owner@example.com')).statusCode).toBe(200);
+
+    const refused = await econ(app, customer, 'owner@example.com');
     expect(refused.statusCode).toBe(403);
     // And nothing about costs leaks in the refusal body.
     const body = refused.body;
@@ -67,7 +72,7 @@ describe('the economics endpoint', () => {
   it('reports a margin per work item against the target', async () => {
     const app = buildServer({ authStore: new MemoryStore() });
     const c = await session(app);
-    const d = (await get(app, '/api/economics', c)).json();
+    const d = (await econ(app, c)).json();
     expect(d.target).toBe(TARGET_MARGIN);
     // One row per priced item. Only media is priced now — text work is
     // unlimited, so it correctly has no line in the margin table.
@@ -84,7 +89,7 @@ describe('the economics endpoint', () => {
   it('labels everything as modelled before any call has been made', async () => {
     const app = buildServer({ authStore: new MemoryStore() });
     const c = await session(app);
-    const d = (await get(app, '/api/economics', c)).json();
+    const d = (await econ(app, c)).json();
     expect(d.items.every((i: any) => i.basis === 'modelled')).toBe(true);
     expect(d.measuredShare).toBe(0);
     expect(d.tokens.calls).toBe(0);
@@ -94,7 +99,7 @@ describe('the economics endpoint', () => {
   it('has no margin to report before anything has been charged', async () => {
     const app = buildServer({ authStore: new MemoryStore() });
     const c = await session(app);
-    const d = (await get(app, '/api/economics', c)).json();
+    const d = (await econ(app, c)).json();
     expect(d.totals.revenue).toBe(0);
     expect(d.totals.margin).toBeNull();
     await app.close();
@@ -109,7 +114,7 @@ describe('the economics endpoint', () => {
   it('reports no metered-but-unbilled work — nothing is free by accident', async () => {
     const app = buildServer({ authStore: new MemoryStore() });
     const c = await session(app);
-    const d = (await get(app, '/api/economics', c)).json();
+    const d = (await econ(app, c)).json();
     expect(d.leaks.map((l: any) => l.kind)).toEqual([]);
     await app.close();
   });
@@ -117,7 +122,7 @@ describe('the economics endpoint', () => {
   it('prices every media kind above the target margin', async () => {
     const app = buildServer({ authStore: new MemoryStore() });
     const c = await session(app);
-    const d = (await get(app, '/api/economics', c)).json();
+    const d = (await econ(app, c)).json();
     for (const i of d.items) {
       expect(i.margin, `${i.item} @ $${i.price}`).toBeGreaterThanOrEqual(TARGET_MARGIN);
       // And the cost must be the vendor's per-asset price, not a token estimate.
@@ -129,7 +134,7 @@ describe('the economics endpoint', () => {
   it('stamps when the price table was last checked, so a stale figure is visible', async () => {
     const app = buildServer({ authStore: new MemoryStore() });
     const c = await session(app);
-    const d = (await get(app, '/api/economics', c)).json();
+    const d = (await econ(app, c)).json();
     expect(d.pricesStamped).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(typeof d.model).toBe('string');
     await app.close();
@@ -139,7 +144,7 @@ describe('the economics endpoint', () => {
     const app = buildServer({ authStore: new MemoryStore() });
     const c = await session(app);
     await app.inject({ method: 'POST', url: '/api/skills7/loser-pauser/run', headers: { cookie: c } });
-    const d = (await get(app, '/api/economics', c)).json();
+    const d = (await econ(app, c)).json();
     // A skill run is free now. Reporting revenue for it would be a lie the
     // margin table then compounds.
     expect(d.totals.revenue).toBe(0);
@@ -189,7 +194,7 @@ describe('cost attribution through a real request', () => {
       payload: { skillId: 'google-ads', playId: 'rsa' },
     });
     expect(r.json().live).toBe(true);
-    const d = (await get(app, '/api/economics', c)).json();
+    const d = (await econ(app, c)).json();
     expect(d.tokens.calls).toBe(1);
     expect(d.tokens.input).toBe(1200);
     // The provider priced it, so this is measured rather than modelled.
