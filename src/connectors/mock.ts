@@ -1,3 +1,4 @@
+import { META_SHARED_ACCOUNT_NOTE } from '../agents/googlelaunch.js';
 import type {
   AppInfo,
   AppTaskRequest,
@@ -120,28 +121,29 @@ export class MockConnector implements Connector {
     return { apps: rows.slice(0, limit) };
   }
 
+  async listAdTargets(externalUserId: string): Promise<{ id: string; login: string; name?: string; label: string }[]> {
+    if (!this.acc(externalUserId).some((a) => a.app === 'google_ads')) return [];
+    return [{ id: '1234567890', login: '1234567890', name: 'Demo Google Ads account', label: 'Demo Google Ads account (123-456-7890) — not a real account' }];
+  }
+
   async launchCampaign(externalUserId: string, spec: import('../agents/campaign.js').CampaignSpec): Promise<import('./types.js').CampaignLaunchResult> {
     const connected = this.acc(externalUserId).some((a) => a.app === 'google_ads');
     if (!connected) {
-      return { ok: false, live: false, steps: [{ step: 'Google Ads account', ok: false, error: 'Connect Google Ads in Integrations first.' }], note: 'No Google Ads account connected.' };
+      return { ok: false, live: false, steps: [{ step: 'Google Ads account', ok: false, error: 'Connect Google Ads in Integrations first.' }], note: 'Demo mode — Google Ads is not connected, so no campaign was created.' };
     }
     const steps: import('./types.js').CampaignLaunchStep[] = [];
     steps.push({ step: 'Create daily budget ($' + spec.dailyBudget + ')', ok: true, resource: 'customers/DEMO/campaignBudgets/1' });
-    steps.push({ step: `Create campaign "${spec.name}" (${spec.status})`, ok: true, resource: 'customers/DEMO/campaigns/2' });
+    steps.push({ step: 'Create campaign "' + spec.name + '" (PAUSED)', ok: true, resource: 'customers/DEMO/campaigns/2' });
     spec.adGroups.forEach((g, i) => {
       steps.push({ step: `Create ad group "${g.name}"`, ok: true, resource: `customers/DEMO/adGroups/${10 + i}` });
       steps.push({ step: `Add ${g.keywords.length} keywords to "${g.name}"`, ok: true });
       steps.push({ step: `Create responsive search ad in "${g.name}"`, ok: true });
     });
-    return { ok: true, live: false, campaignResource: 'customers/DEMO/campaigns/2', steps, note: 'Demo connector — no real campaign was created. On Render with Google Ads connected + Pipedream in production, this runs the real write-chain.' };
+    return { ok: false, live: false, campaignResource: undefined, steps, note: 'Demo mode — no campaign was created in Google Ads and nothing was deployed. It is PAUSED. Miles does not enable campaigns and does not spend.' };
   }
 
   metaLaunchReady(): { ready: boolean; account?: string; note: string } {
-    const token = process.env.META_ADS_ACCESS_TOKEN;
-    const acct = process.env.META_AD_ACCOUNT_ID;
-    const page = process.env.META_PAGE_ID;
-    if (token && acct && page) return { ready: true, account: 'act_' + acct.replace(/[^0-9]/g, ''), note: 'Connected to Meta ad account.' };
-    return { ready: false, note: 'Not connected — add META_ADS_ACCESS_TOKEN, META_AD_ACCOUNT_ID, META_PAGE_ID on Render (from your Meta ad account).' };
+    return { ready: false, note: META_SHARED_ACCOUNT_NOTE };
   }
 
   async describeConnections(externalUserId: string): Promise<import('./types.js').ConnectionDetail[]> {
@@ -166,19 +168,12 @@ export class MockConnector implements Connector {
     return details;
   }
 
-  async launchMetaCampaign(_externalUserId: string, spec: import('../agents/metacampaign.js').MetaCampaignSpec): Promise<import('./types.js').CampaignLaunchResult> {
-    const steps: import('./types.js').CampaignLaunchStep[] = [];
-    steps.push({ step: `Create campaign "${spec.name}" (PAUSED)`, ok: true, resource: 'DEMO_CAMPAIGN_1' });
-    steps.push({ step: `Create ad set ($${spec.dailyBudget}/day, ${spec.geo.zips.length ? spec.geo.zips.length + ' ZIPs' : 'US'})`, ok: true, resource: 'DEMO_ADSET_1' });
-    steps.push({ step: 'Create ad creative (offer copy + website link)', ok: true, resource: 'DEMO_CREATIVE_1' });
-    steps.push({ step: 'Create ad (PAUSED)', ok: true, resource: 'DEMO_AD_1' });
+  async launchMetaCampaign(_externalUserId: string, _spec: import('../agents/metacampaign.js').MetaCampaignSpec): Promise<import('./types.js').CampaignLaunchResult> {
     return {
-      ok: true,
+      ok: false,
       live: false,
-      campaignResource: 'DEMO_CAMPAIGN_1',
-      link: 'https://adsmanager.facebook.com/adsmanager/manage/campaigns',
-      steps,
-      note: 'Demo connector — no real campaign was created. On Render with your Meta ad account connected (META_ADS_ACCESS_TOKEN, META_AD_ACCOUNT_ID, META_PAGE_ID), this builds it as a PAUSED draft in your Ads Manager.',
+      steps: [{ step: 'Meta ad account', ok: false, error: META_SHARED_ACCOUNT_NOTE }],
+      note: META_SHARED_ACCOUNT_NOTE,
     };
   }
 

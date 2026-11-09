@@ -1,4 +1,7 @@
 import type { Config } from '../config.js';
+import { META_SHARED_ACCOUNT_NOTE as _META_NOTE } from '../agents/googlelaunch.js';
+import { classifyGadsAccounts, extractCustomerNodes, type GadsAccess } from './gadsAccess.js';
+import { explainPipedreamError, type PipedreamFailure } from './pipedreamErrors.js';
 import { summarizeTask } from './mock.js';
 import type {
   AppInfo,
@@ -51,6 +54,10 @@ export class PipedreamConnector implements Connector {
   private gadsCache = new Map<string, { key: string; appName: string; ids: string[]; targets?: { login: string; client?: string }[]; shape?: GadsShape; ts: number }>();
   /** customerId → descriptive name, harvested from list-customer-clients responses. */
   private gadsNames = new Map<string, string>();
+  /** Why customer-id resolution failed for this external user. Never another user's error. */
+  private gadsBlock = new Map<string, PipedreamFailure>();
+  /** Last honest read of which customer ids this login can use. */
+  private gadsAccess = new Map<string, GadsAccess>();
   /** The ad account the owner last launched into — reads prefer it too, so an
    *  MCC with many clients reports the business the owner actually works in. */
   private gadsPreferred = new Map<string, string>();
@@ -344,36 +351,77 @@ export class PipedreamConnector implements Connector {
    */
   private async resolveGadsTargets(externalUserId: string, authId: string, rows: any[]): Promise<{ login: string; client?: string }[]> {
     const pd = await this.backend();
-    const runList = async (key: string, extra: Record<string, unknown> = {}): Promise<Set<string>> => {
+    const runList = async (key: string, extra: Record<string, unknown> = {}): Promise<{ ids: Set<string>; nodes: ReturnType<typeof extractCustomerNodes>; missing: boolean; error: string }> => {
       const found = new Set<string>();
       const comp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === key);
-      if (!comp) return found;
+      if (!comp) return { ids: found, nodes: [], missing: true, error: '' };
       try {
         const props = await this.componentProps(comp, key);
         const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
         const cp: Record<string, unknown> = { [appName]: { authProvisionId: authId } };
-        // Only send props the component actually exposes (e.g. accountId).
         for (const [k, v] of Object.entries(extra)) if (props.some((p: any) => p?.name === k)) cp[k] = v;
         const res = await pd.actions.run({ externalUserId, id: key, configuredProps: cp });
-        collectCustomerIds(res?.ret ?? res?.exports ?? res, found);
-        collectCustomerNames(res?.ret ?? res?.exports ?? res, this.gadsNames);
-      } catch {
-        /* skip */
+        const payload = res?.ret ?? res?.exports ?? res;
+        collectCustomerIds(payload, found);
+        collectCustomerNames(payload, this.gadsNames);
+        return { ids: found, nodes: extractCustomerNodes(payload), missing: false, error: '' };
+      } catch (err) {
+        const failure = explainPipedreamError(err);
+        this.gadsBlock.set(externalUserId, failure);
+        return { ids: found, nodes: [], missing: false, error: failure.message };
       }
-      return found;
     };
-    // 1) The login accounts the connected user can act as (for an MCC, the manager).
-    const logins = await runList('google_ads-list-account-id-options');
-    if (!logins.size) for (const x of await runList('google_ads-list-customer-clients')) logins.add(x);
-    // 2) For each login, list the client accounts underneath it.
-    const targets: { login: string; client?: string }[] = [];
-    for (const login of [...logins].slice(0, 5)) {
-      const clients = await runList('google_ads-list-customer-clients', { accountId: login, customerClientId: login });
-      clients.delete(login); // the manager itself runs no ads
-      if (clients.size) for (const client of clients) targets.push({ login, client });
-      else targets.push({ login });
+    const blocked = this.gadsBlock.get(externalUserId);
+    if (blocked?.kind === 'connect_production_unavailable') {
+      this.gadsAccess.set(externalUserId, { kind: 'error', reason: blocked.message, customers: [] });
+      return [];
     }
-    return targets;
+    const loginRes = await runList('google_ads-list-account-id-options');
+    if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') {
+      this.gadsAccess.set(externalUserId, { kind: 'error', reason: this.gadsBlock.get(externalUserId)!.message, customers: [] });
+      return [];
+    }
+    let loginIds = loginRes.ids;
+    let loginNodes = loginRes.nodes;
+    let missingAction = loginRes.missing ? 'google_ads-list-account-id-options' : '';
+    let error = loginRes.error;
+    if (!loginIds.size && !error) {
+      const fallback = await runList('google_ads-list-customer-clients');
+      loginIds = fallback.ids;
+      loginNodes = fallback.nodes;
+      if (fallback.error) error = fallback.error;
+      if (fallback.missing && missingAction) missingAction = 'google_ads-list-account-id-options and google_ads-list-customer-clients';
+    }
+    const clientsByLogin: Record<string, ReturnType<typeof extractCustomerNodes>> = {};
+    for (const login of [...loginIds].slice(0, 5)) {
+      const clients = await runList('google_ads-list-customer-clients', { accountId: login, customerClientId: login });
+      clientsByLogin[login] = clients.nodes.length ? clients.nodes : [...clients.ids].map((id) => ({ id }));
+      if (clients.error) error = error || clients.error;
+    }
+    const logins = loginNodes.length ? loginNodes : [...loginIds].map((id) => ({ id }));
+    const access = classifyGadsAccounts({
+      logins,
+      clientsByLogin,
+      missingAction: missingAction || undefined,
+      error: error || undefined,
+      selectedId: this.gadsPreferred.get(externalUserId),
+    });
+    this.gadsAccess.set(externalUserId, access);
+    if (access.kind === 'ready' && access.selectedId) {
+      const chosen = access.customers.find((c) => c.id === access.selectedId)!;
+      return [{ login: chosen.login, client: chosen.id === chosen.login ? undefined : chosen.id }];
+    }
+    if (access.kind === 'choose') return access.customers.map((c) => ({ login: c.login, client: c.id === c.login ? undefined : c.id }));
+    return [];
+  }
+
+  googleAdsAccess(externalUserId: string): GadsAccess | null {
+    return this.gadsAccess.get(externalUserId) ?? null;
+  }
+
+  rememberGoogleCustomer(externalUserId: string, customerId: string): void {
+    this.gadsPreferred.set(externalUserId, customerId.replace(/[^\d]/g, ''));
+    this.gadsCache.delete(externalUserId);
   }
 
   /**
@@ -384,6 +432,7 @@ export class PipedreamConnector implements Connector {
     const accts = await this.listAccounts(externalUserId, 'google_ads');
     const account = accts.find((a) => a.healthy) ?? accts[0];
     if (!account) return [];
+    if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return [];
     const cached = this.gadsCache.get(externalUserId);
     let targets = cached?.targets && Date.now() - cached.ts < 10 * 60_000 ? cached.targets : undefined;
     if (!targets) {
@@ -396,6 +445,11 @@ export class PipedreamConnector implements Connector {
       const name = this.gadsNames.get(id);
       return { id, login: t.login, name, label: name ? `${name} — ${fmt(id)}` : fmt(id) };
     });
+  }
+
+  /** Last tool-call failure for this external user only. */
+  googleAdsBlock(externalUserId: string): PipedreamFailure | null {
+    return this.gadsBlock.get(externalUserId) ?? null;
   }
 
   /**
@@ -466,6 +520,7 @@ export class PipedreamConnector implements Connector {
       const props = await this.componentProps(comp, key);
       const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
       const targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
+      if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return out;
       const t = this.preferTargets(externalUserId, targets)[0];
       const cp: Record<string, unknown> = { [appName]: { authProvisionId: account.id }, dateRange: 'LAST_30_DAYS' };
       if (t?.login && props.some((p: any) => p?.name === 'accountId')) cp.accountId = t.login;
@@ -505,6 +560,7 @@ export class PipedreamConnector implements Connector {
     const accts = await this.listAccounts(externalUserId, 'google_ads');
     const account = accts.find((a) => a.healthy) ?? accts[0];
     if (!account) return out;
+    if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return out;
 
     // Reuse cached discovery (component, {login,client} targets, and the metric/
     // field format Pipedream accepted) when fresh; only the report run per load.
@@ -520,8 +576,11 @@ export class PipedreamConnector implements Connector {
       const props = await this.componentProps(comp, key);
       appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
       targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
-      if (!targets.length) targets = [{ login: '' }];
-      this.gadsCache.set(externalUserId, { key, appName, ids: targets.map((t) => t.client ?? t.login), targets, ts: Date.now() });
+      if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return out;
+      targets = (targets ?? []).filter((t) => /^\d{10}$/.test(t.client || t.login));
+      const access = this.gadsAccess.get(externalUserId);
+      if (!targets.length || access?.kind === 'none' || access?.kind === 'manager_only' || access?.kind === 'error' || access?.kind === 'choose') return out;
+      this.gadsCache.set(externalUserId, { key, appName, ids: targets.map((t) => t.client ?? t.login).filter((id) => /^\d{10}$/.test(id)), targets, ts: Date.now() });
     }
     // Self-healing: try the known metric/field formats until one returns rows,
     // then remember it so later loads use just that one. If a format is already
@@ -536,7 +595,12 @@ export class PipedreamConnector implements Connector {
         try {
           const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
           raw = res?.ret ?? res?.exports ?? res ?? null;
-        } catch {
+        } catch (err) {
+          const failure = explainPipedreamError(err);
+          if (failure.kind === 'connect_production_unavailable') {
+            this.gadsBlock.set(externalUserId, failure);
+            return out;
+          }
           continue; // bad account/format — try the next
         }
         const before = out.length;
@@ -673,8 +737,18 @@ export class PipedreamConnector implements Connector {
     // campaign. Honor an explicit pick; refuse a pick that doesn't resolve.
     const wanted = (targetCustomerId ?? '').replace(/[^\d]/g, '');
     const target = wanted ? targets.find((t) => (t.client ?? t.login) === wanted) : targets[0];
+    if (!targets.length) {
+      const blocked = this.gadsBlock.get(externalUserId);
+      const note = blocked
+        ? `${blocked.message} Provider said: ${blocked.providerMessage} Nothing was created.`
+        : 'Connect Google Ads in Integrations. Nothing was created.';
+      return { ok: false, live: false, steps: [{ step: 'Google Ads account', ok: false, error: blocked?.providerMessage || 'No Google Ads customer account was found on this connection.' }], note };
+    }
+    if (!wanted && targets.length > 1) {
+      return { ok: false, live: false, steps: [{ step: 'Choose an ad account', ok: false, error: 'This Google login manages more than one ad account. Pick one and approve again.' }], note: 'Pick the Google Ads account before Miles creates a paused campaign. Nothing was created.' };
+    }
     if (wanted && !target) {
-      return { ok: false, live: true, steps: [{ step: `Target account ${targetCustomerId}`, ok: false, error: 'That Google Ads account is not reachable from your connected login.' }], note: 'Pick one of the accounts Miles lists for your connection.' };
+      return { ok: false, live: false, steps: [{ step: `Target account ${targetCustomerId}`, ok: false, error: 'That Google Ads account is not reachable from your connected login.' }], note: 'Pick one of the accounts Miles lists for your connection. Nothing was created.' };
     }
     // Remember the pick — spend reads and search terms follow the same account.
     if (target) this.gadsPreferred.set(externalUserId, target.client ?? target.login);
@@ -722,12 +796,12 @@ export class PipedreamConnector implements Connector {
           name: spec.name,
           advertisingChannelType: 'SEARCH',
           campaignBudget: budget.resource,
-          status: spec.status,
+          status: 'PAUSED', // client status is ignored — Miles never enables a campaign
           biddingStrategyType: biddingEnum,
           containsEuPoliticalAdvertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING',
         })
       : { ok: false as const, resource: undefined, error: 'Skipped — Google requires a budget on every campaign and the budget step failed above.', detail: undefined };
-    steps.push({ step: `Create campaign "${spec.name}" (${spec.status})`, ok: campaign.ok && !!campaign.resource, resource: campaign.resource, error: campaign.error || (!campaign.resource ? `no campaign resource returned — Google said: ${campaign.detail ?? '(empty)'}` : undefined) });
+    steps.push({ step: `Create campaign "${spec.name}" (PAUSED)`, ok: campaign.ok && !!campaign.resource, resource: campaign.resource, error: campaign.error || (!campaign.resource ? `no campaign resource returned — Google said: ${campaign.detail ?? '(empty)'}` : undefined) });
 
     // 3) Ad groups + keywords + RSA — only if the campaign resource resolved.
     // These components take NUMERIC ids (campaignId/adGroupId) and build the
@@ -796,7 +870,7 @@ export class PipedreamConnector implements Connector {
           }
           const res = await pd.actions.run({ externalUserId, id: lkey, configuredProps: cp });
           const blob = JSON.stringify(res?.ret ?? res?.exports ?? res ?? '');
-          verified = blob.includes(spec.name) || (!!campaign.resource && blob.includes(campaign.resource.split('/').pop() ?? ' '));
+          verified = blob.includes(spec.name) || (!!campaign.resource && blob.includes(campaign.resource.split('/').pop() ?? ''));
         }
       } catch {
         /* verification unavailable — reported below */
@@ -813,8 +887,45 @@ export class PipedreamConnector implements Connector {
         ? 'Miles could not find this campaign in your Google Ads account afterward — treat it as NOT launched. See the per-step errors.'
         : !structureOk
           ? 'A campaign shell was created but the ad groups/ads did not — it would not serve. See the per-step errors.'
-          : `Verified: campaign created ${spec.status} in Google Ads account ${customerId ? `${customerId.slice(0, 3)}-${customerId.slice(3, 6)}-${customerId.slice(6)}` : ''}${verifyAttempted ? '' : ' (structure confirmed; independent verification unavailable)'}. Switch to that account in Google Ads to see it. Review it before enabling.`;
+          : `Paused Search campaign created in Google Ads account ${customerId ? `${customerId.slice(0, 3)}-${customerId.slice(3, 6)}-${customerId.slice(6)}` : ''}${verifyAttempted ? '' : ' (structure confirmed; independent verification unavailable)'}. It is PAUSED. Miles does not enable it and does not spend. Turn it on only in Google Ads after you review it.`;
     return { ok, live: true, campaignResource: campaign.resource, link, steps, note };
+  }
+
+  /**
+   * Update one campaign's status through google_ads-create-or-update-campaign.
+   * Google Ads CampaignStatus values used here are ENABLED and PAUSED.
+   * A production tool-call block returns before any actions.run.
+   */
+  async setGoogleCampaignStatus(externalUserId: string, args: { campaignResource: string; status: 'ENABLED' | 'PAUSED' }): Promise<{ ok: boolean; live: boolean; called: boolean; note: string }> {
+    if (args.status !== 'ENABLED' && args.status !== 'PAUSED') {
+      return { ok: false, live: false, called: false, note: 'Only ENABLED or PAUSED are allowed.' };
+    }
+    const blocked = this.gadsBlock.get(externalUserId);
+    if (blocked?.kind === 'connect_production_unavailable') {
+      return { ok: false, live: false, called: false, note: blocked.message };
+    }
+    const campaignId = (args.campaignResource.match(/campaigns\/(\d+)/) || [])[1];
+    if (!campaignId) return { ok: false, live: false, called: false, note: 'That is not a Google campaign resource. Nothing was changed.' };
+    const accts = await this.listAccounts(externalUserId, 'google_ads');
+    const account = accts.find((a) => a.healthy) ?? accts[0];
+    if (!account) return { ok: false, live: false, called: false, note: 'Google Ads is not connected for this account. Nothing was changed.' };
+    const rows = await this.listComponents('google_ads');
+    const targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
+    if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') {
+      return { ok: false, live: false, called: false, note: this.gadsBlock.get(externalUserId)!.message };
+    }
+    const target = this.preferTargets(externalUserId, targets)[0];
+    const acct: Record<string, unknown> = {};
+    if (target?.login) acct.accountId = target.login;
+    if (target?.client) acct.customerClientId = target.client;
+    const result = await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign', account.id, {}, {
+      ...acct,
+      operationType: 'update',
+      campaignId,
+      updateMask: 'status',
+      status: args.status,
+    });
+    return { ok: result.ok, live: true, called: true, note: result.ok ? `Status set to ${args.status}.` : (result.error || 'Google did not accept the status change.') };
   }
 
   // ── Meta (Facebook/Instagram) campaign launch — direct Graph API ────────────
@@ -825,15 +936,7 @@ export class PipedreamConnector implements Connector {
   // Everything is created PAUSED, so it lands as a draft the owner reviews and
   // flips live in Ads Manager. Nothing here can spend money.
   metaLaunchReady(): { ready: boolean; account?: string; note: string } {
-    const token = process.env.META_ADS_ACCESS_TOKEN;
-    const acct = process.env.META_AD_ACCOUNT_ID;
-    const page = process.env.META_PAGE_ID;
-    if (token && acct && page) {
-      const masked = 'act_' + acct.replace(/[^0-9]/g, '');
-      return { ready: true, account: masked, note: `Connected to Meta ad account ${masked}.` };
-    }
-    const missing = [!token && 'META_ADS_ACCESS_TOKEN', !acct && 'META_AD_ACCOUNT_ID', !page && 'META_PAGE_ID'].filter(Boolean);
-    return { ready: false, note: `Not connected — add ${missing.join(', ')} on Render (from your Meta ad account).` };
+    return { ready: false, note: _META_NOTE };
   }
 
   private async metaPost(path: string, params: Record<string, string>): Promise<{ id?: string; error?: string }> {
@@ -852,95 +955,11 @@ export class PipedreamConnector implements Connector {
 
   async launchMetaCampaign(_externalUserId: string, spec: import('../agents/metacampaign.js').MetaCampaignSpec): Promise<import('./types.js').CampaignLaunchResult> {
     const ready = this.metaLaunchReady();
-    const steps: import('./types.js').CampaignLaunchStep[] = [];
-    if (!ready.ready) return { ok: false, live: true, steps: [{ step: 'Meta ad account', ok: false, error: ready.note }], note: ready.note };
-    const acct = (process.env.META_AD_ACCOUNT_ID || '').replace(/[^0-9]/g, '');
-    const pageId = (process.env.META_PAGE_ID || '').replace(/[^0-9]/g, '');
-    const actPath = `act_${acct}`;
+    return { ok: false, live: false, steps: [{ step: 'Meta ad account', ok: false, error: ready.note }], note: ready.note };
 
-    // 1) Campaign — PAUSED, traffic objective (no pixel/lead-form dependency).
-    const camp = await this.metaPost(`${actPath}/campaigns`, {
-      name: spec.name,
-      objective: spec.objective,
-      status: 'PAUSED',
-      special_ad_categories: JSON.stringify([]),
-    });
-    steps.push({ step: `Create campaign "${spec.name}" (PAUSED)`, ok: !!camp.id, resource: camp.id, error: camp.error });
-    if (!camp.id) return { ok: false, live: true, steps, note: 'Campaign create failed — nothing else was created, no spend possible.' };
-
-    // 2) Ad set — daily budget (cents), local geo, age. Self-heal geo: try ZIPs,
-    //    fall back to broad US so a bad ZIP key never blocks the draft.
-    const cents = String(Math.max(100, Math.round(spec.dailyBudget * 100)));
-    const targetingWithZips = {
-      geo_locations: spec.geo.zips.length
-        ? { zips: spec.geo.zips.map((z) => ({ key: `US:${z}` })) }
-        : { countries: spec.geo.countries },
-      age_min: spec.ageMin,
-      age_max: spec.ageMax,
-    };
-    const adsetParams = (targeting: unknown) => ({
-      name: `${spec.name} — Ad set`.slice(0, 100),
-      campaign_id: camp.id!,
-      daily_budget: cents,
-      billing_event: spec.billingEvent,
-      optimization_goal: spec.optimizationGoal,
-      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
-      targeting: JSON.stringify(targeting),
-      status: 'PAUSED',
-    });
-    let adset = await this.metaPost(`${actPath}/adsets`, adsetParams(targetingWithZips));
-    if (!adset.id && spec.geo.zips.length) {
-      // ZIP targeting rejected — retry with broad US so the draft still lands.
-      adset = await this.metaPost(`${actPath}/adsets`, adsetParams({ geo_locations: { countries: spec.geo.countries }, age_min: spec.ageMin, age_max: spec.ageMax }));
-      steps.push({ step: `Create ad set (ZIP geo rejected → targeted US; refine in Ads Manager)`, ok: !!adset.id, resource: adset.id, error: adset.error });
-    } else {
-      steps.push({ step: `Create ad set ($${spec.dailyBudget}/day, ${spec.geo.zips.length ? spec.geo.zips.length + ' ZIPs' : 'US'})`, ok: !!adset.id, resource: adset.id, error: adset.error });
-    }
-    if (!adset.id) return { ok: false, live: true, campaignResource: camp.id, steps, note: 'Ad set create failed — campaign is PAUSED and empty, no spend possible.' };
-
-    // 3) Ad creative — the offer copy + link to the owner's website.
-    const storySpec = {
-      page_id: pageId,
-      link_data: {
-        message: spec.ad.primaryText,
-        link: spec.website || 'https://facebook.com',
-        name: spec.ad.headline,
-        description: spec.ad.description,
-        call_to_action: { type: spec.ad.cta, value: { link: spec.website || 'https://facebook.com' } },
-      },
-    };
-    const creative = await this.metaPost(`${actPath}/adcreatives`, {
-      name: `${spec.name} — Creative`.slice(0, 100),
-      object_story_spec: JSON.stringify(storySpec),
-    });
-    steps.push({ step: 'Create ad creative (offer copy + website link)', ok: !!creative.id, resource: creative.id, error: creative.error });
-    if (!creative.id) return { ok: false, live: true, campaignResource: camp.id, steps, note: 'Creative create failed — campaign & ad set are PAUSED, no spend possible.' };
-
-    // 4) Ad — PAUSED, ties creative to the ad set.
-    const ad = await this.metaPost(`${actPath}/ads`, {
-      name: `${spec.name} — Ad`.slice(0, 100),
-      adset_id: adset.id!,
-      creative: JSON.stringify({ creative_id: creative.id }),
-      status: 'PAUSED',
-    });
-    steps.push({ step: 'Create ad (PAUSED)', ok: !!ad.id, resource: ad.id, error: ad.error });
-
-    const ok = steps.every((s) => s.ok);
-    const link = `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${acct}&selected_campaign_ids=${camp.id}`;
-    return {
-      ok,
-      live: true,
-      campaignResource: camp.id,
-      link,
-      steps,
-      note: ok
-        ? 'Campaign built as a PAUSED draft in your Meta Ads Manager. Review every setting, then flip it live — nothing has spent.'
-        : 'Some steps failed — see per-step errors. Everything created is PAUSED, so no spend has occurred.',
-    };
   }
 
-  // Resolve the concrete identity of a Meta ad account + Page from env creds.
-  private async metaAccountDetails(): Promise<{ adAccount?: { id: string; name?: string; status?: string; currency?: string }; page?: { id: string; name?: string; logo?: string; link?: string } }> {
+    private async metaAccountDetails(): Promise<{ adAccount?: { id: string; name?: string; status?: string; currency?: string }; page?: { id: string; name?: string; logo?: string; link?: string } }> {
     const base = process.env.META_GRAPH_BASE || 'https://graph.facebook.com/v20.0';
     const token = process.env.META_ADS_ACCESS_TOKEN;
     const acct = (process.env.META_AD_ACCOUNT_ID || '').replace(/[^0-9]/g, '');
@@ -1013,24 +1032,38 @@ export class PipedreamConnector implements Connector {
         const fmt = (i: string) => i.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
         // Reuse the IDs the spend pull already resolved (cached per user) before
         // re-running the lister components — that path is what actually works live.
-        let ids = this.gadsCache.get(externalUserId)?.ids ?? [];
         let errMsg = '';
-        if (!ids.length) {
-          try {
-            const rows = await this.listComponents('google_ads');
-            ids = await this.googleAdsCustomerIds(externalUserId, primary.id, rows);
-            if (ids.length) { const c = this.gadsCache.get(externalUserId); this.gadsCache.set(externalUserId, { key: c?.key ?? '', appName: c?.appName ?? 'googleAds', ids, shape: c?.shape, ts: Date.now() }); }
-          } catch (e) {
-            errMsg = String((e as Error).message || '').slice(0, 120);
-          }
+        try {
+          const rows = await this.listComponents('google_ads');
+          await this.googleAdsCustomerIds(externalUserId, primary.id, rows);
+        } catch (e) {
+          errMsg = explainPipedreamError(e).message;
         }
-        if (ids.length) {
-          detail.rows!.push({ k: 'Ad account (customer) ID', v: fmt(ids[0]!) });
-          if (ids.length > 1) detail.rows!.push({ k: 'Other accessible accounts', v: ids.slice(1).map(fmt).join(', ') });
+        const access = this.gadsAccess.get(externalUserId);
+        const blocked = this.gadsBlock.get(externalUserId);
+        detail.ready = access?.kind === 'ready' && !blocked;
+        if (blocked) {
+          detail.note = `${blocked.message} Provider said: ${blocked.providerMessage}`;
+          detail.rows!.push({ k: 'OAuth', v: 'Connected. This is not campaign readiness' });
+          detail.rows!.push({ k: 'Ad account (customer) ID', v: 'Not resolved' });
+        } else if (access?.kind === 'ready' && access.selectedId) {
+          detail.rows!.push({ k: 'Ad account (customer) ID', v: fmt(access.selectedId) });
+          if (access.loginCustomerId && access.loginCustomerId !== access.selectedId) detail.rows!.push({ k: 'Login customer id', v: fmt(access.loginCustomerId) });
+          detail.note = 'OAuth is connected and a Google Ads customer id is selected. A paused create still needs a separate approval.';
+        } else if (access?.kind === 'choose') {
+          detail.rows!.push({ k: 'Ad account (customer) ID', v: 'Choose one' });
+          detail.note = access.reason;
+          detail.choices = access.customers.map((c) => ({ id: c.id, label: c.label }));
+        } else if (access?.kind === 'manager_only') {
+          detail.rows!.push({ k: 'Ad account (customer) ID', v: 'None' });
+          if (access.loginCustomerId) detail.rows!.push({ k: 'Login customer id', v: fmt(access.loginCustomerId) });
+          detail.note = access.reason;
+        } else if (access?.kind === 'none' || access?.kind === 'error') {
+          detail.rows!.push({ k: 'Ad account (customer) ID', v: access.kind === 'none' ? 'None' : 'Not resolved' });
+          detail.note = access.reason;
         } else {
-          detail.note = errMsg
-            ? `Connected. Couldn’t resolve the ad-account ID yet (${errMsg}). It usually appears after you open the Dashboard once — the data pull resolves it.`
-            : 'Connected. The ad-account (customer) ID shows here after you open the Dashboard once — that load resolves it. If it never appears, check this Google login has access to the ad account.';
+          detail.rows!.push({ k: 'Ad account (customer) ID', v: 'Not resolved' });
+          detail.note = errMsg || 'Google is signed in. The customer id was not resolved, so Miles cannot read spend or create a campaign.';
         }
       }
       details.push(detail);
@@ -1068,7 +1101,12 @@ export class PipedreamConnector implements Connector {
     const account = accts.find((a) => a.healthy) ?? accts[0];
     if (!account) return { ok: false, live: true, uploaded: 0, failed: items.length, steps: items.map((i) => ({ dealId: i.dealId, ok: false, error: 'No connected Google Ads account.' })), note: 'Connect Google Ads first.' };
     const rows = await this.listComponents('google_ads');
-    const target = (await this.resolveGadsTargets(externalUserId, account.id, rows))[0];
+    const targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
+    const blocked = this.gadsBlock.get(externalUserId);
+    if (blocked?.kind === 'connect_production_unavailable') {
+      return { ok: false, live: false, uploaded: 0, failed: items.length, steps: items.map((i) => ({ dealId: i.dealId, ok: false, error: blocked.providerMessage })), note: `${blocked.message} Nothing was uploaded.` };
+    }
+    const target = targets[0];
     const acctVals: Record<string, string[]> = {};
     if (target?.login) acctVals.loginAccount = [target.login, 'use google ads as', 'use google ads', 'accountid'];
     if (target?.client) acctVals.managedAccount = [target.client, 'managed account', 'customer client', 'customerclient'];

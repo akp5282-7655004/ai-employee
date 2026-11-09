@@ -8,10 +8,10 @@
  *     pacing checks are free. Credits draw only on work items.
  *   - Credits denominated at retail dollars.
  *
- * What this deliberately does NOT do yet: charge a card. There is no
- * payment processor connected, so enforcement is OFF by default (set
- * BILLING_ENFORCE=1 to make an empty balance pause work items). Until
- * then the meter is real accounting, visible in-app, enforcing nothing.
+ * Enforcement is on for a production deploy unless BILLING_ENFORCE=0.
+ * Local tests and dev stay off unless BILLING_ENFORCE=1.
+ * Auto top-up records a pending charge. Credits are added only after
+ * settleTopUp sees a succeeded payment id.
  */
 
 import { claimCostItem } from './costsink.js';
@@ -160,6 +160,8 @@ export interface CreditState {
   toppedUpThisMonth: number;
   /** Per-item counts this month, for the fair-use ceilings. */
   usedThisMonth: Record<string, number>;
+  /** A card charge that has not granted credits yet. */
+  pendingTopUp?: { status: 'awaiting_payment' | 'failed' | 'succeeded' | 'declined'; amount: number; paymentId?: string; detail?: string } | null;
 }
 
 /** The calendar-month key for a date. Matches usage/meter.ts deliberately. */
@@ -167,7 +169,8 @@ export function creditPeriod(now: Date): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
-const LAUNCH_GRANT = 100;
+export const LAUNCH_GRANT = 100;
+export const LAUNCH_OFFER_ACCOUNTS = 100;
 const LEDGER_CAP = 200; // the page shows 50
 /** Ceiling on top-ups bought to satisfy ONE charge. A runaway loop here spends
  *  a customer's money, so it is bounded even though no single item costs
@@ -213,6 +216,7 @@ export function creditState(data: Record<string, unknown>, now = new Date()): Cr
     period,
     toppedUpThisMonth: fresh && typeof raw.toppedUpThisMonth === 'number' ? raw.toppedUpThisMonth : 0,
     usedThisMonth: fresh && raw.usedThisMonth && typeof raw.usedThisMonth === 'object' ? raw.usedThisMonth : {},
+    pendingTopUp: raw.pendingTopUp && typeof raw.pendingTopUp === 'object' ? raw.pendingTopUp : null,
   };
 }
 
@@ -238,6 +242,9 @@ export function writeCredits(
   now = new Date(),
 ): CreditState {
   const before = creditState(data, now);
+  const prev = (data.credits ?? {}) as CreditState & { baseGranted?: number; baseSpent?: number };
+  const baseGranted = typeof prev.baseGranted === 'number' ? prev.baseGranted : before.granted;
+  const baseSpent = typeof prev.baseSpent === 'number' ? prev.baseSpent : before.spent;
   data.credits = {
     granted: patch.granted ?? before.granted,
     spent: patch.spent ?? before.spent,
@@ -248,6 +255,9 @@ export function writeCredits(
     period: patch.period ?? before.period,
     toppedUpThisMonth: patch.toppedUpThisMonth ?? before.toppedUpThisMonth,
     usedThisMonth: patch.usedThisMonth ?? before.usedThisMonth,
+    pendingTopUp: patch.pendingTopUp !== undefined ? patch.pendingTopUp : before.pendingTopUp,
+    baseGranted,
+    baseSpent,
   };
   return creditState(data, now);
 }
@@ -265,9 +275,58 @@ export function setAutoTopUp(data: Record<string, unknown>, on: boolean): Credit
   return writeCredits(data, { autoTopUp: on });
 }
 
-/** Whether an empty balance actually pauses work (no processor → default off). */
+/**
+ * Production enforces an empty balance. Set BILLING_ENFORCE=0 to turn the
+ * wall off (a local demo). Set BILLING_ENFORCE=1 to enforce outside production.
+ * Render sets RENDER, which counts as production even if NODE_ENV is unset.
+ */
 export function billingEnforced(): boolean {
-  return process.env.BILLING_ENFORCE === '1';
+  const v = (process.env.BILLING_ENFORCE ?? '').trim().toLowerCase();
+  if (v === '0' || v === 'false' || v === 'off') return false;
+  if (v === '1' || v === 'true' || v === 'on') return true;
+  return process.env.NODE_ENV === 'production' || !!process.env.RENDER;
+}
+
+export interface TopUpSettlement {
+  grantedNow: number;
+  status: 'succeeded' | 'failed' | 'declined' | 'duplicate';
+  detail: string;
+}
+
+/** Add credits only after a payment id is confirmed. A repeat id grants nothing. */
+export function settleTopUp(
+  data: Record<string, unknown>,
+  args: { paymentId: string; amount: number; status: 'succeeded' | 'failed'; detail?: string },
+  now = new Date(),
+): TopUpSettlement {
+  const before = creditState(data, now);
+  const billing = (data.billing ?? {}) as { grantAmounts?: Record<string, number>; grantKeys?: string[]; baseInvoices?: string[] };
+  const amounts = billing.grantAmounts ?? {};
+  if (!billing.baseInvoices) billing.baseInvoices = [...((billing.grantKeys ?? []))];
+  if (amounts[args.paymentId] != null || (billing.grantKeys ?? []).includes(args.paymentId)) {
+    return { grantedNow: 0, status: 'duplicate', detail: 'This payment was already applied.' };
+  }
+  if (args.status !== 'succeeded') {
+    writeCredits(data, { pendingTopUp: { status: 'failed', amount: args.amount, paymentId: args.paymentId, detail: args.detail || 'The card charge failed. No credits were added.' } }, now);
+    data.billing = billing;
+    return { grantedNow: 0, status: 'failed', detail: 'The card charge failed. No credits were added.' };
+  }
+  const band = bandOf(data);
+  if (before.toppedUpThisMonth + args.amount > band.autoTopUpCeiling + 0.001) {
+    writeCredits(data, { pendingTopUp: { status: 'declined', amount: args.amount, paymentId: args.paymentId, detail: `This month's auto top-up ceiling is $${band.autoTopUpCeiling.toFixed(2)}.` } }, now);
+    data.billing = billing;
+    return { grantedNow: 0, status: 'declined', detail: `This month's auto top-up ceiling is $${band.autoTopUpCeiling.toFixed(2)}. No credits were added.` };
+  }
+  billing.grantAmounts = { ...amounts, [args.paymentId]: args.amount };
+  billing.grantKeys = [...(billing.grantKeys ?? []), args.paymentId].slice(-5000);
+  data.billing = billing;
+  writeCredits(data, {
+    granted: Math.round((before.granted + args.amount) * 100) / 100,
+    topUps: before.topUps + 1,
+    toppedUpThisMonth: Math.round((before.toppedUpThisMonth + args.amount) * 100) / 100,
+    pendingTopUp: { status: 'succeeded', amount: args.amount, paymentId: args.paymentId },
+  }, now);
+  return { grantedNow: args.amount, status: 'succeeded', detail: `Added $${args.amount.toFixed(2)} after payment ${args.paymentId}.` };
 }
 
 /**
@@ -338,19 +397,30 @@ export function chargeCredits(
   let granted = before.granted;
   let topUps = before.topUps;
   let toppedUpThisMonth = before.toppedUpThisMonth;
-  let toppedUp = 0;
+  const toppedUp = 0;
 
-  // Short of the price? Buy top-ups until the balance covers it — but only
-  // with the owner's standing consent, and never past the month's ceiling.
+  // Short of the price and the owner opted into auto top-up: do not invent
+  // credits. A later confirmed payment is the only thing that grants them.
   if (before.remaining < cost && before.autoTopUp && band.topUp > 0) {
-    while (Math.round((granted - before.spent) * 100) / 100 < cost) {
-      if (toppedUpThisMonth + band.topUp > band.autoTopUpCeiling) break; // month's ceiling
-      granted = Math.round((granted + band.topUp) * 100) / 100;
-      topUps += 1;
-      toppedUp = Math.round((toppedUp + band.topUp) * 100) / 100;
-      toppedUpThisMonth = Math.round((toppedUpThisMonth + band.topUp) * 100) / 100;
-      if (topUps - before.topUps >= MAX_AUTO_TOPUPS_PER_CHARGE) break; // per-charge ceiling
-    }
+    const amount = band.topUp;
+    const atCeiling = before.toppedUpThisMonth + amount > band.autoTopUpCeiling;
+    writeCredits(data, {
+      pendingTopUp: {
+        status: atCeiling ? 'declined' : 'awaiting_payment',
+        amount,
+        detail: atCeiling
+          ? `This month's auto top-up ceiling is $${band.autoTopUpCeiling.toFixed(2)}. No credits were added.`
+          : `Auto top-up of $${amount.toFixed(2)} is waiting for a successful card charge. No credits were added.`,
+      },
+    }, now);
+    return {
+      state: creditState(data, now),
+      blocked: true,
+      toppedUp: 0,
+      reason: atCeiling
+        ? `This month's auto top-up ceiling is $${band.autoTopUpCeiling.toFixed(2)}. No credits were added.`
+        : `Auto top-up of $${amount.toFixed(2)} is waiting for a successful card charge. No credits were added.`,
+    };
   }
 
   const remaining = Math.round((granted - before.spent) * 100) / 100;
@@ -399,11 +469,7 @@ export function canAfford(data: Record<string, unknown>, item: string): { ok: bo
   const state = creditState(data);
   if (state.remaining > 0) return { ok: true }; // a positive balance always passes
   const band = bandOf(data);
-  // Auto top-up only rescues work that actually buys one. Unpriced output
-  // charges nothing, so it can never trigger the purchase that would clear
-  // the balance — letting it through on the promise of a top-up would mean
-  // free output forever on an account that never pays again.
-  if (WORK_COSTS[item] !== undefined && state.autoTopUp && band.topUp > 0) return { ok: true };
+  // A pending card charge is not credits. Work waits until the payment succeeds.
   const upgrade = nextBandName(band);
   return {
     ok: false,

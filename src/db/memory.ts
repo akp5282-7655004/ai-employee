@@ -1,3 +1,4 @@
+import { mergeCredits, stripCreditBase } from '../billing/merge.js';
 import type { AuthSession, Store, User } from './store.js';
 
 /** In-memory store — works with zero setup, but data resets when the server
@@ -8,6 +9,8 @@ export class MemoryStore implements Store {
   private byEmail = new Map<string, string>();
   private sessions = new Map<string, AuthSession>();
   private data = new Map<string, Record<string, unknown>>();
+  private tails = new Map<string, Promise<void>>();
+  private launchSlots: string[] = [];
 
   async init(): Promise<void> {}
 
@@ -52,8 +55,35 @@ export class MemoryStore implements Store {
   async getUserData(userId: string): Promise<Record<string, unknown>> {
     return this.data.get(userId) ?? {};
   }
-  async setUserData(userId: string, data: Record<string, unknown>): Promise<void> {
-    this.data.set(userId, data);
+  async setUserData(userId: string, incoming: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.mutateUserData(userId, (current) => {
+      const merged = mergeCredits(current.credits, incoming.credits, current.billing, incoming.billing);
+      const next = { ...current, ...incoming, credits: merged.credits, billing: merged.billing };
+      stripCreditBase(next);
+      for (const k of Object.keys(current)) delete current[k];
+      Object.assign(current, next);
+    });
+  }
+  async mutateUserData(userId: string, fn: (data: Record<string, unknown>) => void | Promise<void>): Promise<Record<string, unknown>> {
+    const prev = this.tails.get(userId) ?? Promise.resolve();
+    let saved: Record<string, unknown> = {};
+    const run = prev.then(async () => {
+      const current = structuredClone(this.data.get(userId) ?? {});
+      await fn(current);
+      stripCreditBase(current);
+      this.data.set(userId, current);
+      saved = current;
+    });
+    const tail = run.then(() => undefined, () => undefined);
+    this.tails.set(userId, tail);
+    await run;
+    return saved;
+  }
+  async claimLaunchSlot(userId: string): Promise<boolean> {
+    if (this.launchSlots.includes(userId)) return true;
+    if (this.launchSlots.length >= 100) return false;
+    this.launchSlots.push(userId);
+    return true;
   }
   async listUserIds(): Promise<string[]> {
     return Array.from(this.data.keys());

@@ -1390,7 +1390,7 @@ const $ = s => document.querySelector(s);
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e;};
 const money=n=>'$'+Number(n).toLocaleString('en-US');
 
-async function apiMessage(text){ if(REMOTE){const r=await fetch('/api/message',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId,text})});if(!r.ok)throw 0;return r.json();} return agent.handle(text); }
+async function apiMessage(text){ if(REMOTE){const r=await fetch('/api/message',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text})});if(!r.ok)throw 0;return r.json();} return agent.handle(text); }
 // Local (demo) mode only — in REMOTE the caller routes users to Integrations to
 // connect real accounts, so there's no server endpoint to hit here.
 async function apiConnectRun(actions){ const launched=[];for(const a of actions){connector.connect(USER,a.app);const rr=connector.runAction(USER,a.actionId);if(rr.ok)launched.push(a.label);}return{launched}; }
@@ -2525,7 +2525,7 @@ function dashRoi(){ return roiHtml(REV); }
 function dashCrm(){ return crmHtml(REV); }
 async function loadRevenue(tab){
   if(!REMOTE) return;
-  try{ const r=await fetch('/api/revenue?sessionId='+encodeURIComponent(sessionId)); REV=await r.json(); }catch(e){ return; }
+  try{ const r=await fetch('/api/revenue'); REV=await r.json(); }catch(e){ return; }
   if(aTab!==tab) return; // user switched away
   const body=$('#analytics-body'); body.innerHTML = tab==='roi'?roiHtml(REV):crmHtml(REV);
   body.querySelectorAll('[data-goint]').forEach(b=>b.onclick=()=>setPage('integrations'));
@@ -2800,9 +2800,11 @@ function renderOverview(d){
   box.append(autoRow);
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px';
   const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<div class="sect-label" style="margin:0 0 10px">MARKETING PERFORMANCE</div>';
+  if(d.sample) mc.append(ovNudge(d.sampleLabel||'Sample data. These figures are not from a live ad account.'));
   if(mk.hasData){ const ss=el('div','stats'); ss.append(statCard('Ad spend','$'+(mk.spend||0).toLocaleString()), statCard('Cost / job', mk.cpa!=null?('$'+mk.cpa):'—'), statCard('Revenue','$'+(mk.revenue||0).toLocaleString())); mc.append(ss); mc.append(el('div','appsub','Showing '+mktRangeLabel(mk.range)+(mk.targetCpa&&mk.cpa!=null?' · target $'+mk.targetCpa+'/job · '+(mk.cpa<=mk.targetCpa?'✅ under target':'⚠︎ over target'):''))); }
-  else if(mk.connected){ mc.append(ovSync('✓ Google Ads / Meta connected — Miles reads it live, on demand (no daily sync wait). Nothing showing yet means there’s no spend in '+mktRangeLabel(mk.range)+' on the account, not a delay.')); const row=el('div'); row.style.cssText='display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap'; const rb=el('button',null,'↻ Refresh now'); rb.style.cssText='background:none;border:1px solid var(--line);border-radius:8px;color:var(--accent);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:5px 10px'; rb.onclick=async()=>{ rb.disabled=true; const o=rb.textContent; rb.textContent='Pulling live…'; await openOverview(); }; const tb=el('button',null,'Diagnose connection →'); tb.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:0'; tb.onclick=()=>diagProbe('google_ads',tb); row.append(rb,tb); mc.append(row); }
-  else mc.append(ovNudge('Connect Google Ads / Meta in Integrations to see real spend, cost-per-job & revenue.'));
+  else if(mk.platforms&&mk.platforms.googleAds&&mk.platforms.googleAds.oauth&&!mk.platforms.googleAds.ready){ mc.append(ovNudge(mk.platforms.googleAds.note||'Google is signed in. The ad customer id is not resolved, so this is not ready to read or create campaigns. Meta Ads is not connected.')); }
+  else if(mk.connected){ mc.append(ovSync('✓ Google Ads customer id is resolved. Meta Ads is not connected. Nothing showing yet means there’s no spend in '+mktRangeLabel(mk.range)+' on the resolved Google account.')); const row=el('div'); row.style.cssText='display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap'; const rb=el('button',null,'↻ Refresh now'); rb.style.cssText='background:none;border:1px solid var(--line);border-radius:8px;color:var(--accent);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:5px 10px'; rb.onclick=async()=>{ rb.disabled=true; const o=rb.textContent; rb.textContent='Pulling live…'; await openOverview(); }; const tb=el('button',null,'Diagnose connection →'); tb.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:0'; tb.onclick=()=>diagProbe('google_ads',tb); row.append(rb,tb); mc.append(row); }
+  else mc.append(ovNudge('Connect Google Ads in Integrations to see real spend, cost-per-job and revenue. Meta Ads is not connected.'));
   grid.append(mc);
   const lk=d.leads||{}, rk=d.reviews||{}; const lc=el('div','mcard'); lc.innerHTML='<div class="sect-label" style="margin:0 0 10px">LEADS & REPUTATION</div>';
   if(lk.hasData||rk.hasData){ const ss=el('div','stats'); ss.append(statCard('New leads',lk.count||0), statCard('Uncontacted',lk.uncontacted||0), statCard('Reviews',rk.count||0), statCard('Avg rating', rk.avg!=null?(rk.avg+'★'):'—')); lc.append(ss); }
@@ -3104,15 +3106,50 @@ const AD_TIERS=[
 let adTier='flux-schnell';
 function renderAdTiers(){ const box=$('#ad-tier'); if(!box)return; box.innerHTML=''; for(const t of AD_TIERS){ const b=el('button',t.id===adTier?'on':'',t.label+' · '+t.cr+' cr'); b.onclick=()=>{ adTier=t.id; renderAdTiers(); }; box.append(b); } const cur=AD_TIERS.find(t=>t.id===adTier); const h=$('#ad-tier-hint'); if(h) h.textContent=cur?cur.hint:''; }
 function renderAdVpick(){ const vp=$('#ad-vpick'); if(!vp)return; vp.innerHTML=''; for(const p of PACKMETA){ const b=el('button',p.id===adVert?'on':'',p.label); b.onclick=()=>{ adVert=p.id; renderAdVpick(); fillAdCats(); }; vp.append(b); } }
-function openAdStudio(){ if(!PACKMETA.length){ loadPacks().then(()=>{ renderAdVpick(); fillAdCats(); renderAdTiers(); }); return; } renderAdVpick(); fillAdCats(); renderAdTiers(); }
+function tradeCategory(industry){
+  const t=String(industry||'').toLowerCase();
+  if(t.includes('paint')) return 'painting';
+  if(t.includes('plumb')) return 'plumbing';
+  if(t.includes('hvac')||t.includes('air condition')) return 'hvac';
+  if(t.includes('electric')) return 'electrical';
+  if(t.includes('roof')) return 'roofing';
+  if(t.includes('landscap')||t.includes('lawn')) return 'landscaping';
+  return '';
+}
+function openAdStudio(){ const apply=()=>{ renderAdVpick(); fillAdCats(); renderAdTiers(); const cat=tradeCategory(PROFILE&&PROFILE.industry); const sel=$('#ad-cat'); if(cat&&sel&&[...sel.options].some(o=>o.value===cat)) sel.value=cat; }; if(!PACKMETA.length){ loadPacks().then(apply); return; } apply(); }
 
 // ── Launch a Campaign — build → review every setting → approve & go live ──
 let LAUNCH={spec:null,connected:false};
 function lchField(label,ph,val,type){ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.placeholder=ph||''; if(val!=null)i.value=val; if(type)i.type=type; i.style.width='100%'; w.append(i); return {w,i}; }
 function openLaunch(){
   const box=$('#launch-body'); if(!box) return; box.innerHTML='';
-  const h=el('div','mcard'); h.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">🚀 Launch a Campaign</h3><span style="font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;background:#e8f0fe;color:#1a56db">🟢 GOOGLE ADS</span></div><p class="mdesc" style="margin:6px 0 0;max-width:640px">Miles builds a complete <b>Google Ads Search</b> campaign — budget, bidding, ad groups, keywords and ads — from your goal. You review every setting, then approve. <b>It’s created paused; nothing spends until you turn it on.</b><br><span class="appsub">Want Facebook/Instagram instead? Use <b>Launch on Facebook</b> in the Marketing menu.</span></p>';
+  const h=el('div','mcard'); h.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">Launch a Campaign</h3><span style="font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;background:#e8f0fe;color:#1a56db">GOOGLE ADS</span></div><p class="mdesc" style="margin:6px 0 0;max-width:640px">Miles builds a complete <b>Google Ads Search</b> campaign (budget, bidding, ad groups, keywords, and ads) from your goal. You review every setting, then approve. <b>It is created paused. Nothing spends until you approve activation.</b><br><span class="appsub">Meta ads are not available from a verified Pipedream campaign action.</span></p>';
   box.append(h);
+  const loop=el('div','mcard'); loop.style.marginTop='14px';
+  loop.append(el('div','sect-label','PLAN FROM YOUR PROFILE'));
+  loop.append(el('p','appsub','Uses the trade, service area, budget, target cost per lead, average job value, and landing page on your profile. Miles does not fill those in. Only paused Google Search can be created. Meta and Local Services Ads stay unavailable.'));
+  const loopOut=el('div');
+  const loopBtn=el('button',null,'Show the plan from my profile'); loopBtn.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600';
+  loopBtn.onclick=async()=>{
+    loopBtn.disabled=true;
+    try{
+      const r=await(await fetch('/api/journey/plan',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({})})).json();
+      loopOut.innerHTML='';
+      const p=r.plan||{};
+      if(p.missing&&p.missing.length){ const miss=el('div'); miss.style.cssText='padding:8px 0;font-size:13px'; miss.textContent='Still needed: '+p.missing.map(m=>m.label).join(', ')+'.'; loopOut.append(miss); }
+      loopOut.append(el('p','appsub',(p.summary||'')+' '+((p.budgetControl)||'')));
+      (p.channels||[]).forEach(c=>{
+        const row=el('div'); row.style.cssText='padding:6px 0;border-top:1px solid var(--line-soft);font-size:13px';
+        row.textContent=c.label+': $'+c.recommendedDaily+'/day recommended, $'+c.executedDaily+' would be created paused. '+c.status+'. '+c.reason;
+        loopOut.append(row);
+      });
+      const asset=p.asset||{};
+      loopOut.append(el('p','appsub', asset.logoIncluded ? 'Logo on file is attached. No new image was generated.' : 'No logo on the profile. No image was generated.'));
+      if(p.market) loopOut.append(el('p','appsub', p.market.note||''));
+    }catch(e){ toast('Could not build the plan.'); }
+    loopBtn.disabled=false;
+  };
+  loop.append(loopBtn, loopOut); box.append(loop);
   const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','STEP 1 — TELL MILES THE GOAL'));
   const goal=lchField('What do you want the campaign to do?','e.g. Get more calls for emergency repairs');
   const budget=lchField('Daily budget (USD)','20','20','number');
@@ -3182,8 +3219,8 @@ function renderLaunchReview(){
   const inp=(val,type)=>{ const i=el('input','f'); i.value=val; if(type)i.type=type; i.style.width='100%'; return i; };
   const c=el('div','mcard'); c.append(el('div','sect-label','STEP 2 — REVIEW EVERY SETTING'));
   const nameI=inp(s.name), budgetI=inp(s.dailyBudget,'number'), urlI=inp(s.finalUrl), locI=inp((s.locations||[]).join(', '));
-  const statusSel=el('select','f'); statusSel.style.width='100%'; [['PAUSED','Paused — safe, you turn it on later'],['ENABLED','Enabled — starts spending immediately']].forEach(([v,lab])=>{const o=el('option',null,lab);o.value=v;if(v===s.status)o.selected=true;statusSel.append(o);});
-  c.append(row('Campaign name',nameI),row('Daily budget (USD)',budgetI),row('Landing page URL',urlI),row('Locations',locI),row('Status when created',statusSel));
+  const pausedNote=el('div','appsub','Created paused. Miles cannot turn this campaign on or spend. You enable it later in Google Ads, after you review it there.');
+  c.append(row('Campaign name',nameI),row('Daily budget (USD)',budgetI),row('Landing page URL',urlI),row('Locations',locI),row('Status when created',pausedNote));
   c.append(el('div','appsub','Bidding: Maximize clicks · Networks: '+(s.networks||[]).join(', ')+' · Language: '+s.language));
   // Which Google Ads account gets this campaign — a manager (MCC) login can
   // hold many client accounts, and Miles must never guess.
@@ -3194,7 +3231,8 @@ function renderLaunchReview(){
   tc.append(acctSel);
   fetch('/api/gads/targets').then(r=>r.json()).then(d=>{
     const ts=(d&&d.targets)||[]; acctSel.innerHTML='';
-    if(!ts.length){ const o=el('option',null,LAUNCH.connected?'Could not list accounts — reconnect Google Ads in Integrations':'Google Ads not connected yet'); o.value=''; acctSel.append(o); return; }
+    if(!ts.length){ const o=el('option',null,'Google Ads is not connected — open Integrations and connect your account'); o.value=''; acctSel.append(o); go.disabled=true; go.textContent='Connect Google Ads to create a paused campaign'; return; }
+    go.disabled=false; go.textContent='Approve & create paused campaign';
     const saved=LAUNCH.target||localStorage.getItem('gadsTarget')||'';
     ts.forEach(t=>{ const o=el('option',null,t.label); o.value=t.id; if(t.id===saved)o.selected=true; acctSel.append(o); });
     if(!ts.some(t=>t.id===saved)) acctSel.selectedIndex=0;
@@ -3267,7 +3305,7 @@ function renderLaunchReview(){
   // Read the current (edited) settings back into the spec — shared by Save & Launch.
   const collect=()=>{
     s.name=nameI.value.trim(); s.dailyBudget=Number(budgetI.value)||s.dailyBudget; s.finalUrl=urlI.value.trim();
-    s.locations=locI.value.split(',').map(x=>x.trim()).filter(Boolean); s.status=statusSel.value;
+    s.locations=locI.value.split(',').map(x=>x.trim()).filter(Boolean); s.status='PAUSED';
     s.adGroups=agInputs.map(a=>({ name:a.g.name,
       keywords:a.kw.value.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{ const m=l.match(/\[(broad|phrase|exact)\]\s*$/i); const text=l.replace(/\[(broad|phrase|exact)\]\s*$/i,'').trim(); const orig=a.g.keywords.find(k=>k.text===text); return {text,match:(m?m[1].toLowerCase():(orig?orig.match:'phrase'))}; }),
       rsa:{headlines:a.hl.value.split('\n').map(x=>x.trim()).filter(Boolean),descriptions:a.de.value.split('\n').map(x=>x.trim()).filter(Boolean)} }));
@@ -3284,21 +3322,22 @@ function renderLaunchReview(){
   refill.onclick=()=>{ collect(); autofillCampaign(refill,{dailyBudget:s.dailyBudget,finalUrl:s.finalUrl,locations:s.locations}); };
   const save=el('button',null,'💾 Save draft'); save.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:9px 16px;cursor:pointer;font-weight:600;font-family:var(--sans)';
   save.onclick=async()=>{ collect(); save.disabled=true; const o=save.textContent; save.textContent='Saving…'; try{ await fetch('/api/campaign/drafts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:s})}); toast('✓ Draft saved — reopen it anytime under Launch a Campaign'); }catch(e){ toast('Could not save.'); } save.disabled=false; save.textContent=o; };
-  const go=el('button','go','🚀 Approve & Go Live'); go.style.flex='none';
+  const go=el('button','go','Approve & create paused campaign'); go.style.flex='none';
+  go.disabled=true; go.title='Connect Google Ads and pick an account first.';
   go.onclick=()=>confirmLaunch(()=>{ collect(); doLaunch(); });
   btnRow.append(refill,save,go); foot.append(btnRow); box.append(foot);
 }
 function confirmLaunch(onOk){
-  showModal('<h3 style="margin:0 0 8px">Launch to Google Ads?</h3><p class="mdesc" style="margin:0 0 12px">This creates the campaign in your live Google Ads account. Set to <b>Enabled</b>, it begins spending your daily budget immediately. Set to <b>Paused</b> (recommended), nothing spends until you switch it on in Google Ads.</p><div style="display:flex;gap:8px"><button class="go" id="cl-go" style="flex:1">Yes, launch it</button><button id="cl-no" style="flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;cursor:pointer">Cancel</button></div>');
+  showModal('<h3 style="margin:0 0 8px">Create this paused campaign?</h3><p class="mdesc" style="margin:0 0 12px">This creates the Search campaign, its budget, ad group, keywords, and ad in the Google Ads account you picked. <b>It is created paused.</b> Miles cannot enable it or spend. You turn it on later in Google Ads. If Google Ads is not connected, nothing is created.</p><div style="display:flex;gap:8px"><button class="go" id="cl-go" style="flex:1">Create paused campaign</button><button id="cl-no" style="flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;cursor:pointer">Cancel</button></div>');
   $('#cl-go').onclick=()=>{ closeModal(); onOk(); };
   $('#cl-no').onclick=closeModal;
 }
 async function doLaunch(){
-  const box=$('#launch-body'); box.innerHTML='<p class="appsub">Launching your campaign…</p>';
-  let r; try{ r=await(await fetch('/api/campaign/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:LAUNCH.spec,confirm:true,target:LAUNCH.target||undefined})})).json(); }catch(e){ box.innerHTML=''; box.append(ovNudge('Launch failed — try again in a moment.')); return; }
+  const box=$('#launch-body'); box.innerHTML='<p class="appsub">Creating the paused campaign…</p>';
+  let res, r; try{ res=await fetch('/api/campaign/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:LAUNCH.spec,confirm:true,target:LAUNCH.target||undefined})}); r=await res.json(); }catch(e){ box.innerHTML=''; box.append(ovNudge('Create failed — try again in a moment. Nothing was turned on.')); return; }
   box.innerHTML='';
-  if(r.error){ box.append(ovNudge('⚠️ '+r.error+(r.problems?': '+r.problems.join('; '):''))); const b=el('button','go','← Back to review'); b.style.marginTop='10px'; b.onclick=renderLaunchReview; box.append(b); return; }
-  const c=el('div','mcard'); c.append(el('h3',null,r.ok?(r.live?'✅ Campaign launched':'✅ Campaign built (demo connector)'):'⚠️ Launch hit an issue'));
+  if(!res.ok || r.error || r.ok===false){ box.append(ovNudge('⚠️ '+(r.error||r.note||'The campaign was not created.')+(r.problems?': '+r.problems.join('; '):''))); if(r.note && r.error && r.note!==r.error) box.append(el('p','appsub',r.note)); const ul=el('div'); (r.steps||[]).forEach(st=>{ const rr=el('div'); rr.style.cssText='padding:6px 0;font-size:13px'; rr.innerHTML=(st.ok?'✓ ':'✗ ')+esc(st.step)+(st.error?' <span style="color:#c0392b">— '+esc(st.error)+'</span>':''); ul.append(rr); }); box.append(ul); const b=el('button','go','← Back to review'); b.style.marginTop='10px'; b.onclick=renderLaunchReview; box.append(b); return; }
+  const c=el('div','mcard'); c.append(el('h3',null,r.live?'Paused campaign created in your Google Ads account':'Demo only — nothing was created in Google Ads'));
   if(r.note) c.append(el('div','appsub',r.note));
   const ul=el('div'); ul.style.marginTop='10px';
   (r.steps||[]).forEach(st=>{ const rr=el('div'); rr.style.cssText='padding:6px 0;border-bottom:1px solid var(--line-soft);font-size:13px'; rr.innerHTML=(st.ok?'✓ ':'✗ ')+esc(st.step)+(st.error?' <span style="color:#c0392b">— '+esc(st.error)+'</span>':''); ul.append(rr); });
@@ -4137,8 +4176,10 @@ async function openAdsManager(){
   const launch=el('button','go','＋ Launch a campaign'); launch.style.flex='none'; launch.onclick=()=>setPage('launch');
   ctrl.append(sel,launch); head.append(ht,ctrl); box.append(head);
   if(!d.hasData){
-    if(d.connected) box.append(ovSync('✓ Google Ads / Meta connected — no campaign data in '+mktRangeLabel(d.range)+' yet. Launch a campaign, or check back once spend runs.'));
-    else box.append(ovNudge('Connect Google Ads / Meta in Integrations to see your campaigns here — then launch one from “Launch a Campaign”.'));
+    if(d.googleNote) box.append(ovNudge(d.googleNote+' Meta Ads is not connected.'));
+    else if(d.googleReady&&d.metaAds) box.append(ovSync('✓ Google Ads customer id is resolved and Meta Ads is connected — no campaign data in '+mktRangeLabel(d.range)+' yet.'));
+    else if(d.googleReady) box.append(ovSync('✓ Google Ads customer id is resolved. Meta Ads is not connected. No campaign rows in '+mktRangeLabel(d.range)+' yet.'));
+    else box.append(ovNudge('Connect Google Ads in Integrations to see your campaigns here. Meta Ads is not connected.'));
     renderConversionSync(box); return;
   }
   const t=d.totals||{}; const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(110px,1fr));margin-bottom:18px';
@@ -4205,8 +4246,9 @@ async function openGrowth(){
   const sel=el('select','f'); sel.style.cssText='width:auto;padding:5px 10px;font-size:13px;border-radius:8px'; for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===GROWTH_RANGE)o.selected=true; sel.append(o); } sel.onchange=()=>{ GROWTH_RANGE=sel.value; openGrowth(); };
   ctrl.append(sel); head.append(ht,ctrl); box.append(head);
   if(!d.hasData){
-    if(d.connected) box.append(ovSync('✓ Ads connected — no campaign data in '+mktRangeLabel(d.range)+' yet. Launch a campaign, then Growth Autopilot optimizes it here.'));
-    else box.append(ovNudge('Connect Google Ads / Meta so Growth Autopilot can analyze and optimize your campaigns.'));
+    if(d.googleNote) box.append(ovNudge(d.googleNote));
+    else if(d.googleReady) box.append(ovSync('✓ Google Ads customer id is resolved — no campaign data in '+mktRangeLabel(d.range)+' yet. Meta Ads is not connected.'));
+    else box.append(ovNudge('Connect Google Ads so Growth Autopilot can read this account. Meta Ads is not connected.'));
     return;
   }
   const t=d.totals||{}; const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(105px,1fr));margin-bottom:16px';
@@ -6368,7 +6410,7 @@ function renderBenchmarks(){
 
 // ═══ integrations (honest, backend-driven) ═══
 let CONN = { hub:{ready:false}, connectedApps:[] };
-async function fetchConnections(){ if(REMOTE){ try{ CONN = await fetch('/api/connections?sessionId='+encodeURIComponent(sessionId)).then(r=>r.json()); }catch(e){} } }
+async function fetchConnections(){ if(REMOTE){ try{ CONN = await fetch('/api/connections').then(r=>r.json()); }catch(e){} } }
 // Offline/standalone fallback catalogue (the real list comes from /api/apps).
 const FALLBACK_APPS=[
   {slug:'google_ads',name:'Google Ads'},{slug:'facebook',name:'Meta Ads'},{slug:'google_my_business',name:'Google Business Profile'},
@@ -6397,7 +6439,7 @@ async function fetchApps(q, more){
 async function connectApp(slug){
   if(!(CONN.hub && CONN.hub.ready)){ setPage('chat'); chat.innerHTML=''; say('emp',"Connections aren't live in this preview yet. Once Miles is fully set up, clicking an app opens a secure link to connect your account."); return; }
   try{
-    const r = await fetch('/api/connect-token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId, app: slug})});
+    const r = await fetch('/api/connect-token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({app: slug})});
     const t = await r.json().catch(()=>({}));
     if(!r.ok || !t.connectUrl){ setPage('chat'); chat.innerHTML=''; say('emp','⚠️ Couldn’t start the connection right now. Please try again in a moment.'); return; }
     const w = window.open(t.connectUrl,'_blank','noopener');
@@ -6451,7 +6493,7 @@ const STACK=[
     {slug:'calltrackingmetrics',name:'CallTrackingMetrics'},
   ]},
   {cat:'Ad Channels', apps:[
-    {slug:'google_ads',name:'Google Ads'},{slug:'facebook',name:'Meta Ads'},
+    {slug:'google_ads',name:'Google Ads'},
     {slug:'microsoft_ads',name:'Microsoft Ads'},{slug:'google_my_business',name:'Google Business Profile'},
   ]},
   {cat:'Booking & Conversion', apps:[
@@ -6476,11 +6518,12 @@ function renderStack(connected){
 }
 const CONN_EMOJI={google_ads:'🟢',meta_ads:'📘',google_my_business:'📍',gohighlevel:'🎯',facebook_pages:'📘',google_lsa:'🛡️'};
 function connDetailCard(d){
-  const c=el('div','mcard'); c.style.cssText='padding:14px;'+(d.connected?'border-left:3px solid var(--good,var(--good))':'border-left:3px solid var(--warn)');
+  const signedInOnly=d.connected&&d.ready===false;
+  const c=el('div','mcard'); c.style.cssText='padding:14px;'+((d.connected&&!signedInOnly)?'border-left:3px solid var(--good,var(--good))':'border-left:3px solid var(--warn)');
   const head=el('div'); head.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:8px';
   if(d.logo){ const im=el('img'); im.src=d.logo; im.style.cssText='width:34px;height:34px;border-radius:8px;object-fit:cover'; im.onerror=()=>{im.remove();}; head.append(im); }
   else { const av=el('div',null,CONN_EMOJI[d.app]||'🔌'); av.style.cssText='width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--panel2,var(--panel-2));font-size:18px'; head.append(av); }
-  const ht=el('div'); ht.style.flex='1'; ht.append(el('b',null,d.label)); const st=el('div',null,d.connected?'✓ Connected':'Not connected'); st.style.cssText='font-size:12px;font-weight:600;color:'+(d.connected?'var(--good,var(--good))':'#b45309'); ht.append(st); head.append(ht);
+  const ht=el('div'); ht.style.flex='1'; ht.append(el('b',null,d.label)); const status=signedInOnly?'Signed in — not ready to read or create':(d.connected?'✓ Connected':'Not connected'); const st=el('div',null,status); st.style.cssText='font-size:12px;font-weight:600;color:'+((d.connected&&!signedInOnly)?'var(--good,var(--good))':'#b45309'); ht.append(st); head.append(ht);
   c.append(head);
   if(d.connected){
     if(d.accountName){ const an=el('div',null,d.accountName); an.style.fontWeight='600'; c.append(an); }
@@ -6488,6 +6531,13 @@ function connDetailCard(d){
     if(d.rows&&d.rows.length){ const t=el('div'); t.style.cssText='margin-top:8px;display:flex;flex-direction:column;gap:4px'; for(const r of d.rows){ const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;gap:10px;font-size:13px'; row.append(el('span','appsub',r.k)); const v=el('span',null,r.v); v.style.cssText='font-weight:600;text-align:right;font-family:ui-monospace,monospace'; row.append(v); t.append(row); } c.append(t); }
   }
   if(d.note){ const n=el('div','appsub',d.note); n.style.marginTop='8px'; c.append(n); }
+  if(d.choices&&d.choices.length){
+    const sel=el('select','f'); sel.style.marginTop='8px';
+    for(const opt of d.choices){ const o=el('option',null,opt.label); o.value=opt.id; sel.append(o); }
+    const b=el('button','go','Use this ad account'); b.style.marginTop='8px';
+    b.onclick=async()=>{ b.disabled=true; try{ const r=await(await fetch('/api/google-ads/customer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({customerId:sel.value})})).json(); if(r.ok){ toast('Ad account saved'); loadIntegrations(); } else toast(r.error||'Could not save that ad account'); }catch(e){ toast('Could not save that ad account'); } b.disabled=false; };
+    c.append(sel,b);
+  }
   // Disconnect — only for real Pipedream-connected accounts (Meta is env-based).
   if(d.connected && d.accountId && d.app!=='meta_ads' && String(d.accountId).indexOf('act_')!==0){
     const dc=el('button','idel','Disconnect'); dc.style.marginTop='10px'; dc.onclick=()=>confirmDisconnect(d);
@@ -6680,7 +6730,7 @@ async function milesEmailFlow(msg){
   bar.append(sendBtn,cancel); card.append(bar);
   b.append(card); logChat('emp','Drafted an email to '+(d.to||'')); chat.scrollTop=chat.scrollHeight;
 }
-async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId})}); }catch(e){} } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER); } }
+async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}); }catch(e){} } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER); } }
 let CHAT_LOG=[], CHAT_LOADED=false, chatSaveT;
 function logChat(role,text){ if(!text) return; CHAT_LOG.push({role,text}); if(REMOTE){ clearTimeout(chatSaveT); chatSaveT=setTimeout(saveChat,600); } }
 function saveChat(){ if(!REMOTE) return; try{ fetch('/api/chat',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-200)})}); }catch(e){} }

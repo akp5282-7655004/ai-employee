@@ -38,7 +38,12 @@ export interface Store {
 
   /** Per-user blob (their intake, connected apps, saved research, …). */
   getUserData(userId: string): Promise<Record<string, unknown>>;
-  setUserData(userId: string, data: Record<string, unknown>): Promise<void>;
+  /** Persist the blob. Credit fields from a stale read are merged, not overwritten. Returns what was saved. */
+  setUserData(userId: string, data: Record<string, unknown>): Promise<Record<string, unknown>>;
+  /** Read and write one account's blob under a lock so two credit edits cannot pass each other. */
+  mutateUserData(userId: string, fn: (data: Record<string, unknown>) => void | Promise<void>): Promise<Record<string, unknown>>;
+  /** First 100 accounts get the $0 launch offer. Returns false once the cap is full. */
+  claimLaunchSlot(userId: string): Promise<boolean>;
   /** All user ids that have stored data — used by the scheduler to find due agents. */
   listUserIds(): Promise<string[]>;
   /** All accounts (for the owner's admin screen), oldest first. */

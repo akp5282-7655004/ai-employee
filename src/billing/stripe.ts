@@ -82,6 +82,29 @@ export async function createPortalSession(customerId: string, returnUrl: string)
   }
 }
 
+/**
+ * Start a top-up charge. Credits are not granted here. The webhook grants
+ * them only after payment_intent.succeeded for this id.
+ */
+export async function createTopUpPaymentIntent(args: {
+  userId: string; customerId?: string; amountDollars: number;
+}): Promise<{ paymentId: string } | { error: string }> {
+  if (!args.customerId) return { error: 'Add a card in billing before auto top-up can charge. No credits were added.' };
+  if (!(args.amountDollars > 0)) return { error: 'Top-up amount must be greater than zero.' };
+  try {
+    const stripe = await getClient();
+    const intent = await stripe.paymentIntents.create({
+      amount: Math.round(args.amountDollars * 100),
+      currency: 'usd',
+      customer: args.customerId,
+      metadata: { milesUserId: args.userId, purpose: 'topup', amountDollars: String(args.amountDollars) },
+    });
+    return { paymentId: intent.id };
+  } catch (err) {
+    return { error: `Couldn't reach Stripe: ${(err as Error).message}` };
+  }
+}
+
 /** Verify a webhook actually came from Stripe before trusting anything in it. */
 export async function verifyWebhook(rawBody: Buffer, signature: string): Promise<import('stripe').default.Event | { error: string }> {
   if (!process.env.STRIPE_WEBHOOK_SECRET) return { error: 'STRIPE_WEBHOOK_SECRET not set' };

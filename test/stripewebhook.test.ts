@@ -328,6 +328,30 @@ describe('the webhook, signed and posted over real HTTP', () => {
     await app.close();
   });
 
+  it('returns 500 when the grant cannot be saved so Stripe will retry', async () => {
+    const store = new MemoryStore();
+    store.mutateUserData = async () => { throw new Error('db down'); };
+    const app = buildServer({ authStore: store });
+    const uid = 'user_missing_save';
+    subMap.set('sub_down', uid);
+    const r = await send(app, 'invoice.paid', {
+      id: 'in_down', customer: 'cus_down', subscription: 'sub_down',
+      lines: { data: [{ pricing: { price_details: { price: 'price_starter' } }, period: { end: Math.floor(Date.now() / 1000) + 2_592_000 } }] },
+    });
+    expect(r.statusCode).toBe(500);
+    await app.close();
+  });
+
+  it('returns 500 when invoice.paid cannot find the account yet', async () => {
+    const app = buildServer({ authStore: new MemoryStore() });
+    const r = await send(app, 'invoice.paid', {
+      id: 'in_wait', customer: 'cus_wait', subscription: 'sub_wait',
+      lines: { data: [{ pricing: { price_details: { price: 'price_starter' } }, period: { end: Math.floor(Date.now() / 1000) + 2_592_000 } }] },
+    });
+    expect(r.statusCode).toBe(500);
+    await app.close();
+  });
+
   it('does not throw when the event references a customer with no linked account', async () => {
     const app = buildServer({ authStore: new MemoryStore() });
     const r = await send(app, 'invoice.payment_failed', { customer: 'cus_unknown', subscription: 'sub_x' });
@@ -350,7 +374,8 @@ describe('the webhook, signed and posted over real HTTP', () => {
     const a = (await get(app, '/api/billing', ca)).json();
     const b = (await get(app, '/api/billing', cb)).json();
     expect(a.subscription.band).toBe('scale');
-    expect(b.subscription).toBeNull();
+    expect(b.subscription?.band).not.toBe('scale');
+    expect(b.subscription?.stripeCustomerId).toBeUndefined();
     expect(uidB).toBeDefined();
     await app.close();
   });

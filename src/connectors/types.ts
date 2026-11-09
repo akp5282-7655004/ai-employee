@@ -170,11 +170,15 @@ export interface ConnectionDetail {
   app: string; // slug, e.g. 'google_ads'
   label: string; // 'Google Ads'
   connected: boolean;
+  /** OAuth alone is not enough. False means signed in but not ready to read or create. */
+  ready?: boolean;
   accountName?: string; // human name of the connected account / page
   accountId?: string; // the primary id (customer id, act id, page id)
   logo?: string; // logo/picture URL when the platform exposes one
   rows?: { k: string; v: string }[]; // extra identity lines (customer IDs, status…)
   note?: string; // honest status / how-to-connect message
+  /** Customer ids the owner can choose when more than one is accessible. */
+  choices?: { id: string; label: string }[];
 }
 
 export interface Connector {
@@ -199,9 +203,17 @@ export interface Connector {
    *  `targetCustomerId` picks WHICH Google Ads account gets the campaign when
    *  the connected login manages several (MCC). */
   launchCampaign?(externalUserId: string, spec: import('../agents/campaign.js').CampaignSpec, targetCustomerId?: string): Promise<CampaignLaunchResult>;
+  /** Set one Google campaign to ENABLED or PAUSED. Never any other status. */
+  setGoogleCampaignStatus?(externalUserId: string, args: { campaignResource: string; status: 'ENABLED' | 'PAUSED' }): Promise<{ ok: boolean; live: boolean; called: boolean; note: string }>;
   /** The Google Ads accounts a launch can write into (id + human label), so
    *  an MCC owner can pick the client account instead of Miles guessing. */
   listAdTargets?(externalUserId: string): Promise<{ id: string; login: string; name?: string; label: string }[]>;
+  /** Why Google customer-id resolution failed for this external user, if it did. */
+  googleAdsBlock?(externalUserId: string): { kind: string; message: string; providerMessage: string } | null;
+  /** Last customer-id resolution for this external user, after a list or describe. */
+  googleAdsAccess?(externalUserId: string): { kind: string; reason: string; customers: { id: string; login: string; label: string }[]; selectedId?: string; loginCustomerId?: string } | null;
+  /** Remember which customer id this tenant picked. Does not call Google. */
+  rememberGoogleCustomer?(externalUserId: string, customerId: string): void;
   /** 30-day search terms with spend/conversions (Gold Miner). Empty when the
    *  connection doesn't expose a search-terms report. */
   getSearchTerms?(externalUserId: string): Promise<{ term: string; cost: number; clicks: number; conversions: number }[]>;
