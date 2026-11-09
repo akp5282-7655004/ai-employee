@@ -116,9 +116,10 @@ describe('recordContact + responderStats', () => {
     expect(stats.total).toBe(3);
     expect(stats.held).toBe(1); // B was held
     expect(stats.avgResponse).toBe('90s'); // (60+180+30)/3 = 90
+    expect(stats.withinMinute).toBe(2);
   });
   it('is honest and empty by default', () => {
     const stats = responderStats(undefined, '2026-08-12T12:00:00Z');
-    expect(stats).toEqual({ enabled: false, today: 0, total: 0, avgResponse: null, held: 0 });
+    expect(stats).toEqual({ enabled: false, today: 0, total: 0, avgResponse: null, held: 0, withinMinute: 0 });
   });
 });

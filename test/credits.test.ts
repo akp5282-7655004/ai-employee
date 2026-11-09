@@ -184,10 +184,7 @@ describe('affordability check (pure, no ledger write)', () => {
       const v = canAfford(broke, 'video');
       expect(v.ok).toBe(false);
       expect(v.reason).toMatch(/Growth/); // names the upgrade, not just the refusal
-      // Unpriced output is included in a plan, not owed to an exhausted one:
-      // generating it still costs tokens, so an empty balance stops it too.
-      expect(canAfford(broke, 'skill_run').ok).toBe(false);
-      // Monitoring is the one exception and is never gated.
+      expect(canAfford(broke, 'skill_run').ok).toBe(true);
       expect(canAfford(broke, 'monitoring').ok).toBe(true);
     } finally {
       delete process.env.BILLING_ENFORCE;
@@ -275,12 +272,15 @@ describe('an empty balance stops output but never monitoring', () => {
     try { fn(); } finally { delete process.env.BILLING_ENFORCE; }
   };
 
-  it('blocks every kind of output, priced or not, and names the top-up', () => {
+  it('blocks media on an empty balance and leaves campaigns and skills running', () => {
     withEnforcement(() => {
-      for (const item of [...Object.keys(WORK_COSTS), ...UNLIMITED_ITEMS]) {
+      for (const item of Object.keys(WORK_COSTS)) {
         const r = chargeCredits(broke(), item, 'x');
         expect(r.blocked, `${item} should be blocked on an empty balance`).toBe(true);
         expect(r.reason).toMatch(/Add \$25\.00/);
+      }
+      for (const item of UNLIMITED_ITEMS) {
+        expect(chargeCredits(broke(), item, 'x').blocked, `${item} is not metered`).toBe(false);
       }
     });
   });
@@ -315,7 +315,7 @@ describe('an empty balance stops output but never monitoring', () => {
         billing: { band: 'starter' },
       };
       expect(canAfford(optedIn, 'video').ok).toBe(false); // a pending charge is not credits
-      expect(canAfford(optedIn, 'skill_run').ok).toBe(false); // nothing to trigger one
+      expect(canAfford(optedIn, 'skill_run').ok).toBe(true);
     });
   });
 });

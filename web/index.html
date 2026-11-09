@@ -605,13 +605,13 @@
         </div>
       </div>
     </nav>
-    <div class="glabel">PROJECTS</div>
-    <div class="pill newproj"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New project</div>
-    <div class="glabel">ACTIVE PLAYBOOKS</div>
-    <div class="pill playbook">Home Services</div>
-    <div class="pill playbook">Roofing Restoration</div>
-    <div class="pill playbook">Dental Practice</div>
-    <div class="pill playbook">Solar Energy</div>
+    <div class="glabel" style="display:none">PROJECTS</div>
+    <div class="pill newproj" style="display:none"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New project</div>
+    <div class="glabel" style="display:none">ACTIVE PLAYBOOKS</div>
+    <div class="pill playbook" style="display:none">Home Services</div>
+    <div class="pill playbook" style="display:none">Roofing Restoration</div>
+    <div class="pill playbook" style="display:none">Dental Practice</div>
+    <div class="pill playbook" style="display:none">Solar Energy</div>
     <div class="grow"></div>
     <div class="ws acct"><span class="sq" id="user-av">·</span><div style="min-width:0;flex:1"><b id="user-email" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</b></div><button class="cx" id="logout" title="Log out" type="button" style="cursor:pointer;display:flex;align-items:center;gap:5px;background:none;border:none;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--muted);padding:4px 6px;border-radius:8px;white-space:nowrap;flex:none" onmouseover="this.style.background='var(--panel-2)';this.style.color='var(--ink)'" onmouseout="this.style.background='none';this.style.color='var(--muted)'"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button></div>
   </aside>
@@ -642,9 +642,9 @@
 
     <section class="page" id="page-home">
       <div class="stats" style="grid-template-columns:repeat(3,1fr)">
-        <div class="stat"><div class="lab">Miles's active skills <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/></svg></div><div class="val">4 Running</div></div>
+        <div class="stat"><div class="lab">Miles's active skills <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/></svg></div><div class="val">None until you start</div></div>
         <div class="stat"><div class="lab">Connected integrations <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div><div class="val" id="stat-conn">—</div></div>
-        <div class="stat"><div class="lab">Verified market CPA <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 16 0"/></svg></div><div class="val" id="stat-cpa">$110 Market Median</div></div>
+        <div class="stat"><div class="lab">Verified market CPA <svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 16 0"/></svg></div><div class="val" id="stat-cpa">Not a measured number</div></div>
       </div>
       <div class="hero">
         <div class="orb"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 1.9 4.8L19 9l-4 3.5L16 18l-4-2.4L8 18l1-5.5L5 9l5.1-1.2Z"/></svg></div>
@@ -2584,7 +2584,67 @@ let aTab='overview';
 let MKT_RANGE='LAST_30_DAYS';
 const MKT_RANGES=[['LAST_7_DAYS','Last 7 days'],['LAST_14_DAYS','Last 14 days'],['LAST_30_DAYS','Last 30 days'],['THIS_MONTH','This month'],['LAST_MONTH','Last month']];
 const mktRangeLabel=(r)=>{ const f=MKT_RANGES.find(x=>x[0]===(r||MKT_RANGE)); return f?f[1].toLowerCase():'the last 30 days'; };
-async function openOverview(){ const box=$('#overview-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading your dashboard…</p>'; let d={}; if(REMOTE){ try{ d=await(await fetch('/api/dashboard?range='+encodeURIComponent(MKT_RANGE))).json(); ANDASH=d; }catch(e){} } renderOverview(d); openCmdCenter(); }
+async function openOverview(){ const box=$('#overview-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading...</p>'; let d={}; try{ d=await(await fetch('/api/miles/home')).json(); }catch(e){ box.innerHTML=''; box.append(ovNudge('Could not load the home.')); return; } renderMilesHome(box, d); }
+function renderMilesHome(box, d){
+  box.innerHTML='';
+  const h=el('div','mcard');
+  h.innerHTML='<h3 style="margin:0">Miles</h3><p class="mdesc" style="margin:6px 0 0;max-width:680px">A marketing employee for your painting business. Google Ads only in this version. Meta, TikTok, and Local Services Ads are coming later.</p>';
+  box.append(h);
+  const modes=el('div'); modes.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin:12px 0';
+  for(const [id,label,desc] of [['automate','Automate everything','Your budget and caps are the standing yes. Miles runs Google inside them.'],['hybrid','Hybrid','Miles builds the work and waits for your approval.'],['manual','Manual','Miles does not act. You use the tools.']]){
+    const b=el('button',null,label); b.title=desc; const on=d.mode===id;
+    b.style.cssText='border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:700;border:1px solid '+(on?'var(--ink)':'var(--line)')+';background:'+(on?'var(--ink)':'var(--panel)')+';color:'+(on?'var(--panel)':'var(--ink)');
+    b.onclick=async()=>{ if(!d.bundle){ toast('Save the questions first, then pick a mode.'); return; } await fetch('/api/miles/mode',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:id})}); openOverview(); };
+    modes.append(b);
+  }
+  box.append(modes);
+  if(d.playbook){ const p=el('div','mcard'); p.style.marginTop='12px'; p.innerHTML='<b>'+esc(d.playbook.title)+'</b><p class="appsub" style="margin:6px 0 0">'+esc(d.playbook.season)+'</p><p class="appsub">'+esc(d.playbook.benchmarkNote)+'</p><p class="appsub">'+esc(d.playbook.splitNote)+'</p>'; box.append(p); }
+  if(d.bundle&&d.bundle.feasibility){ const f=el('div','mcard'); f.style.marginTop='12px'; f.append(el('div','appsub', d.bundle.feasibility.message)); box.append(f); }
+  const audits=d.audits||[];
+  if(audits.length){ const a=el('div','mcard'); a.style.marginTop='12px'; a.append(el('div','sect-label','AUDITS')); audits.forEach(x=>{ const row=el('div'); row.style.cssText='padding:8px 0;border-top:1px solid var(--line)'; row.innerHTML='<b>'+esc(x.title)+'</b><div class="appsub">'+esc(x.summary)+'</div><div class="appsub">Source: '+esc(x.source)+'</div>'; a.append(row); }); box.append(a); }
+  if(!d.bundle){
+    const form=el('div','mcard'); form.style.marginTop='12px'; form.append(el('div','sect-label','1. CRAWL'));
+    const field=(label,id,val)=>{ const w=el('div'); w.style.margin='8px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.id=id; i.value=val||''; i.style.width='100%'; w.append(i); return w; };
+    form.append(field('Business name','m-name',''), field('Location','m-loc','Philadelphia, PA'), field('Email','m-email',''), field('Website','m-web',''), field('Google Business Profile link','m-gbp',''), field('Competitor websites, comma separated','m-comp',''));
+    const go=el('button','go','Crawl'); go.style.marginTop='8px';
+    go.onclick=async()=>{ go.disabled=true; const body={businessName:$('#m-name').value, location:$('#m-loc').value, email:$('#m-email').value, website:$('#m-web').value, gbpUrl:$('#m-gbp').value, competitors:($('#m-comp').value||'').split(',').map(s=>s.trim()).filter(Boolean)}; const r=await(await fetch('/api/miles/crawl',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})).json(); go.disabled=false; if(r.error){ toast(r.error); return; } toast('Crawl saved'); openOverview(); };
+    form.append(go); box.append(form);
+    const q=el('div','mcard'); q.style.marginTop='12px'; q.append(el('div','sect-label','2. THREE QUESTIONS'));
+    q.append(field('Goal','m-goal','get me painting leads'), field('Daily budget','m-budget','20'), field('Leads wanted per day','m-leads','1'));
+    const start=el('button','go','Save and show the Google plan'); start.style.marginTop='8px';
+    start.onclick=async()=>{ const body={goal:$('#m-goal').value, dailyBudget:Number($('#m-budget').value)||20, leadsPerDay:Number($('#m-leads').value)||1, googleShare:1, mode:d.mode||'hybrid'}; const r=await(await fetch('/api/miles/questions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})).json(); if(r.error){ toast(r.error); return; } openOverview(); };
+    q.append(start); box.append(q);
+  } else {
+    const plan=el('div','mcard'); plan.style.marginTop='12px';
+    const spec=d.bundle.spec||{};
+    plan.append(el('div','sect-label','GOOGLE PLAN'));
+    plan.append(el('p','appsub',(spec.name||'Search')+' · $'+(spec.dailyBudget||0)+'/day · status '+(d.activation||'not created')));
+    (spec.adGroups||[]).forEach(g=>{ const row=el('div','appsub', g.name+': '+(g.keywords||[]).map(k=>k.text).join(', ')); plan.append(row); });
+    const row=el('div'); row.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-top:10px';
+    const start=el('button','go', d.mode==='automate'?'Start inside my caps':d.mode==='manual'?'Manual mode does not create':'Queue for my approval');
+    start.onclick=async()=>{ start.disabled=true; const r=await(await fetch('/api/miles/go',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:true})})).json(); start.disabled=false; toast(r.demo?'Preview only. Nothing was created in Google.':(r.enabled?'Enabled inside your caps.':(r.created?'Created paused.':'Waiting on you.'))); openOverview(); };
+    const kill=el('button',null, d.caps&&d.caps.paused?'Resume':'Pause all'); kill.style.cssText='border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;background:var(--panel)';
+    kill.onclick=async()=>{ await fetch('/api/miles/kill',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({paused:!(d.caps&&d.caps.paused)})}); openOverview(); };
+    const back=el('button',null,'Revert to paused'); back.style.cssText=kill.style.cssText;
+    back.onclick=async()=>{ await fetch('/api/miles/revert',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:true})}); openOverview(); };
+    row.append(start, kill, back); plan.append(row); box.append(plan);
+  }
+  const g=d.ghl||{};
+  const lead=el('div','mcard'); lead.style.marginTop='12px';
+  lead.innerHTML='<div class="sect-label">LEADS</div><p class="appsub">'+esc(g.setup||'')+'</p><p class="appsub">Speed to lead '+(g.enabled?'on':'off')+'. Today '+(g.today||0)+'. Answered in under a minute: '+(g.withinMinute||0)+'. Average: '+(g.avgResponse||'no timed replies yet')+'.</p><p class="appsub">Booked jobs on file: '+((d.jobs&&d.jobs.booked)||0)+'.</p>';
+  box.append(lead);
+  const brief=el('div','mcard'); brief.style.marginTop='12px';
+  brief.innerHTML='<div class="sect-label">MORNING BRIEF</div><p class="appsub">'+esc(d.brief||'')+'</p>';
+  (d.events||[]).slice(0,6).forEach(e=>{ brief.append(el('div','appsub', e.text)); });
+  box.append(brief);
+  const inbox=d.inbox||[];
+  if(inbox.length){ const ib=el('div','mcard'); ib.style.marginTop='12px'; ib.append(el('div','sect-label','WAITING ON YOU'));
+    inbox.filter(i=>i.status==='queued').forEach(i=>{ const row=el('div'); row.style.cssText='padding:8px 0;border-top:1px solid var(--line)'; row.append(el('b',null,i.title), el('div','appsub', i.reason)); const yes=el('button','go','Approve'); yes.style.marginTop='6px'; yes.onclick=async()=>{ await fetch('/api/miles/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:i.id, confirm:true})}); openOverview(); }; row.append(yes); ib.append(row); });
+    box.append(ib);
+  }
+  (d.channels||[]).forEach(c=>{ if(c.id==='google') return; const n=el('div','appsub', c.label+': coming later. '+c.note); box.append(n); });
+  if(d.mode==='manual'){ const m=el('div','mcard'); m.style.marginTop='12px'; m.innerHTML='<b>Manual tools</b><p class="appsub">Launch, Studio, Ads Manager, Skills, and Settings are in the left nav. Miles will not push them for you.</p>'; box.append(m); }
+}
 function ovNudge(t){ return el('div','verdict tight',t); }
 function ovSync(t){ return el('div','verdict ok',t); }
 // Diagnostic: run the live read and show a plain-English report + a Copy button,
@@ -3029,6 +3089,7 @@ function renderAnalytics(){
 function anOverview(){
   const r=anRange(), city=anCity(), m=(ANDASH&&ANDASH.marketing)||{}, ld=(ANDASH&&ANDASH.leads)||{};
   const live=!!(m.hasData||ld.hasData);
+  if(!live) return '<div class="an-notice"><p><b>No live numbers yet.</b> Connect Google Ads and your CRM. Miles will not show sample dollars on this page.</p><button data-goint>Connect your accounts</button></div>';
   const cpl=m.cpa!=null?m.cpa:r.cpl[1];
   const leads=ld.count||r.leads[1];
   const booked=(ANDASH&&ANDASH.revenue&&ANDASH.revenue.bookedRate)||r.booked[1];
@@ -3630,8 +3691,8 @@ async function openBilling(){
   // Current plan card
   const pc=el('div','mcard'); pc.append(el('div','sect-label','YOUR PLAN'));
   if(d.launchOffer){
-    const h=el('div'); h.innerHTML='<b style="font-size:16px">Launch offer — $0/month</b>'; pc.append(h);
-    pc.append(el('p','appsub','First-100 accounts: $100 in credits, no expiry, hard cap. When the credits run out, accounts enroll in the band their ad spend implies (first paid month always at Starter, with 14 days notice).'));
+    const h=el('div'); h.innerHTML='<b style="font-size:16px">Launch offer: $0 a month</b>'; pc.append(h);
+    pc.append(el('p','appsub','First 100 accounts. $'+(d.launchGrant||100)+' in media credits, $'+Number((d.credits&&d.credits.remaining)||0).toFixed(2)+' left. Images $0.10, voiceover $0.50, video $1.50. Monitoring, campaigns, and skill runs do not use these credits. This is not a performance guarantee.'));
   }
   const spendLine=el('p','appsub',(d.spendKnown?('Trailing-30-day ad spend under management: $'+Math.round(d.spend30).toLocaleString()):'Ad spend not readable yet — connect Google Ads for band assignment.')+(d.impliedBand?' → implied band: '+d.impliedBand.name+' ($'+d.impliedBand.monthlyPrice+'/mo)':''));
   pc.append(spendLine);
@@ -3640,7 +3701,7 @@ async function openBilling(){
     const statusLabel={active:['Active','var(--good-tint);color:var(--good)'],past_due:['Payment failed — update your card','var(--warn-tint);color:var(--warn)'],canceled:['Canceled','var(--panel-2);color:var(--muted)']}[s.status]||['—','var(--panel-2);color:var(--muted)'];
     const row=el('div'); row.style.cssText='display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px';
     const chip=el('span',null,statusLabel[0]); chip.style.cssText='font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;background:'+statusLabel[1];
-    const bandName=((d.bands||[]).find(b=>b.key===s.band)||{}).name||s.band;
+    const bandName=s.band==='launch'?'Launch offer':(((d.bands||[]).find(b=>b.key===s.band)||{}).name||s.band);
     row.append(el('b',null,bandName+' plan'),chip);
     if(s.currentPeriodEnd) row.append(el('span','appsub','renews '+new Date(s.currentPeriodEnd).toLocaleDateString()));
     const portal=el('button','ghost','Manage Billing →');
@@ -3952,7 +4013,7 @@ async function openGhl(){
   box.innerHTML='';
   const pb=d.playbook; if(!pb){ box.append(el('div','verdict tight','Could not load the automation library — try again.')); return; }
   // Header
-  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">⚡ GoHighLevel Automations</h3><p class="mdesc" style="margin:6px 0 0;max-width:660px">A veteran operator’s 32-workflow library, tailored to '+esc(pb.business)+' ('+esc(pb.trade)+') and ordered by ROI. Each recipe is ready to build in GHL — trigger, steps, and timing. The ones Miles can run for you through your connected tools are flagged <b>Miles runs this</b>.</p>';
+  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">⚡ GoHighLevel Automations</h3><p class="mdesc" style="margin:6px 0 0;max-width:660px">32 build-ready GoHighLevel recipes for '+esc(pb.business)+'. Miles runs instant lead response and missed-call text-back when that account is connected and consent is on. Review requests are partial. Everything else is a recipe you build in GoHighLevel. Miles does not run those yet.</p>';
   box.append(h);
   // Honest scope note
   const note=el('div','mcard'); note.style.borderLeft='3px solid var(--ink)'; note.append(el('div','verdict tight','Heads up: GoHighLevel’s workflow builder isn’t fully open to automation, so Miles can’t silently create these 32 workflows inside your GHL account. What it does: hand you each recipe tailored & ready to paste, run the flagged ones natively, and order the build by what recovers revenue fastest.')); box.append(note);
@@ -3984,7 +4045,9 @@ function ghlRecipeRow(r){
   const nb=el('span',null,'#'+r.n); nb.style.cssText='font-size:12px;font-weight:700;color:var(--muted);min-width:26px';
   const t=el('b',null,r.title); t.style.flex='1';
   head.append(nb,t);
-  if(r.milesRuns){ const badge=el('span',null,'✓ Miles runs this'); badge.style.cssText='font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;color:var(--good);background:var(--good-tint)'; head.append(badge); }
+  const delivery=r.n===1||r.n===2?'runs':(r.milesRuns?'partial':'recipe');
+  const badgeText=delivery==='runs'?'Miles runs this when GoHighLevel is connected':delivery==='partial'?'Partial. Miles can draft this. It does not run the full workflow.':'Build-ready recipe. Miles does not run this yet.';
+  const badge=el('span',null,badgeText); badge.style.cssText='font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;color:'+(delivery==='runs'?'var(--good)':'var(--muted)')+';background:var(--panel-2)'; head.append(badge);
   const chev=el('span',null,'▸'); chev.style.cssText='color:var(--muted);transition:transform .15s'; head.append(chev);
   row.append(head);
   const body=el('div'); body.style.cssText='display:none;margin:8px 0 4px 26px';
@@ -4014,8 +4077,9 @@ async function openFbLaunch(){
   let status={ready:false,note:''};
   if(REMOTE){ try{ status=await(await fetch('/api/meta/status')).json(); }catch(e){} }
   box.innerHTML='';
-  const h=el('div','mcard'); h.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">📘 Launch on Facebook</h3><span style="font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;background:#e7f0ff;color:#1877f2">🔵 META · FACEBOOK + INSTAGRAM</span></div><p class="mdesc" style="margin:6px 0 0;max-width:640px">Tell Miles your offer. Miles builds a complete Facebook &amp; Instagram campaign — budget, local targeting, and the ad copy — from your Campaign Playbook, then pushes it into your Meta Ads Manager as a <b>paused draft</b>. You review every setting and flip it live. Nothing spends until you do.</p>';
+  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">Facebook</h3><p class="mdesc" style="margin:6px 0 0">Coming later. This version runs Google Ads only. Miles will not create a Meta campaign.</p>';
   box.append(h);
+  return;
   box.append(fbConnBanner(status));
   const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','TELL MILES THE BASICS'));
   const mk=(label,ph,val,type)=>{ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.placeholder=ph||''; if(val!=null)i.value=val; if(type)i.type=type; i.style.width='100%'; w.append(i); return i; };
@@ -5997,8 +6061,8 @@ let AUTOPILOT={autonomy:50,guardrails:{maxBudgetChangePct:10,protectProven:true,
 const AUTONOMY=[
   {v:10,label:'10% · Assist',desc:'Miles drafts everything; you approve every change before anything goes live. Maximum control.'},
   {v:20,label:'20% · Guided',desc:'Miles proposes campaigns and edits; you approve the important ones. Small tweaks are batched for review.'},
-  {v:50,label:'50% · Co-pilot',desc:'Miles runs day-to-day optimization on its own and asks before budget or strategy changes. Recommended starting point.'},
-  {v:100,label:'100% · Autopilot',desc:'Miles deploys and optimizes fully on its own to hit your targets. You accept responsibility for the risk.'},
+  {v:50,label:'50% · Co-pilot',desc:'Use Hybrid on the home screen if you want a queue. This older dial does not spend by itself.'},
+  {v:100,label:'100% · Autopilot',desc:'Use Automate everything on the home screen. That mode stays inside the daily budget, monthly ceiling, and max percent you set.'},
 ];
 async function loadAutopilot(){ if(!REMOTE){ AP_LOADED=true; return; } try{ const r=await fetch('/api/autopilot'); const d=await r.json(); AUTOPILOT=d.autopilot||AUTOPILOT; }catch(e){} if(!AUTOPILOT.guardrails) AUTOPILOT.guardrails={maxBudgetChangePct:10,protectProven:true,approveHighImpact:true}; AP_LOADED=true; }
 function guardToggle(title,desc,on,cb){
