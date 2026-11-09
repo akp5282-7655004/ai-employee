@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BANDS, bandForSpend, creditState, chargeCredits, WORK_COSTS, billingEnforced,
-  canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS, writeCredits,
+  canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS, writeCredits, settleTopUp,
 } from '../src/billing/credits.js';
 import { MEDIA_KINDS, mediaCost } from '../src/billing/media.js';
 import { TARGET_MARGIN } from '../src/billing/cogs.js';
@@ -78,8 +78,15 @@ describe('credit metering', () => {
     }
   });
 
-  it('enforcement is OFF by default (ships off, flipped when there are customers)', () => {
+  it('enforcement is off in test, on in production, and BILLING_ENFORCE=0 always disables it', () => {
     expect(billingEnforced()).toBe(false);
+    const prev = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    expect(billingEnforced()).toBe(true);
+    process.env.BILLING_ENFORCE = '0';
+    expect(billingEnforced()).toBe(false);
+    delete process.env.BILLING_ENFORCE;
+    process.env.NODE_ENV = prev;
     const data: Record<string, unknown> = { credits: { granted: 0.1, ledger: [] } };
     chargeCredits(data, 'video'); // overdraws
     const after = chargeCredits(data, 'video');
@@ -124,15 +131,23 @@ describe('auto top-up', () => {
     }
   });
 
-  it('buys one increment and lets the work through once opted in', () => {
+  it('does not grant a top-up until the payment succeeds, and a failure grants nothing', () => {
     process.env.BILLING_ENFORCE = '1';
     try {
       const data: Record<string, unknown> = { credits: { granted: 0, ledger: [], autoTopUp: true } };
       const r = chargeCredits(data, 'video');
-      expect(r.blocked).toBe(false);
-      expect(r.toppedUp).toBe(25); // Starter increment
-      expect(creditState(data).topUps).toBe(1);
-      expect(creditState(data).remaining).toBe(25 - WORK_COSTS.video!);
+      expect(r.blocked).toBe(true);
+      expect(r.toppedUp).toBe(0);
+      expect(creditState(data).granted).toBe(0);
+      expect(r.reason).toMatch(/waiting for a successful card charge/);
+      const failed = settleTopUp(data, { paymentId: 'pi_fail', amount: 25, status: 'failed' });
+      expect(failed.grantedNow).toBe(0);
+      expect(creditState(data).granted).toBe(0);
+      const paid = settleTopUp(data, { paymentId: 'pi_ok', amount: 25, status: 'succeeded' });
+      expect(paid.grantedNow).toBe(25);
+      expect(creditState(data).granted).toBe(25);
+      expect(settleTopUp(data, { paymentId: 'pi_ok', amount: 25, status: 'succeeded' }).status).toBe('duplicate');
+      expect(creditState(data).granted).toBe(25);
     } finally {
       delete process.env.BILLING_ENFORCE;
     }
@@ -146,7 +161,10 @@ describe('auto top-up', () => {
         billing: { band: 'scale' },
       };
       expect(bandOf(data).topUp).toBe(100);
-      expect(chargeCredits(data, 'video').toppedUp).toBe(100);
+      const staged = chargeCredits(data, 'video');
+      expect(staged.toppedUp).toBe(0);
+      expect(staged.reason).toMatch(/\$100\.00/);
+      expect(creditState(data).granted).toBe(0);
     } finally {
       delete process.env.BILLING_ENFORCE;
     }
@@ -296,7 +314,7 @@ describe('an empty balance stops output but never monitoring', () => {
         credits: { granted: 0, spent: 0, ledger: [], autoTopUp: true },
         billing: { band: 'starter' },
       };
-      expect(canAfford(optedIn, 'video').ok).toBe(true);      // a purchase will cover it
+      expect(canAfford(optedIn, 'video').ok).toBe(false); // a pending charge is not credits
       expect(canAfford(optedIn, 'skill_run').ok).toBe(false); // nothing to trigger one
     });
   });

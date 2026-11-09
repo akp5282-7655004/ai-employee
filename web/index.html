@@ -6531,6 +6531,13 @@ function connDetailCard(d){
     if(d.rows&&d.rows.length){ const t=el('div'); t.style.cssText='margin-top:8px;display:flex;flex-direction:column;gap:4px'; for(const r of d.rows){ const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;gap:10px;font-size:13px'; row.append(el('span','appsub',r.k)); const v=el('span',null,r.v); v.style.cssText='font-weight:600;text-align:right;font-family:ui-monospace,monospace'; row.append(v); t.append(row); } c.append(t); }
   }
   if(d.note){ const n=el('div','appsub',d.note); n.style.marginTop='8px'; c.append(n); }
+  if(d.choices&&d.choices.length){
+    const sel=el('select','f'); sel.style.marginTop='8px';
+    for(const opt of d.choices){ const o=el('option',null,opt.label); o.value=opt.id; sel.append(o); }
+    const b=el('button','go','Use this ad account'); b.style.marginTop='8px';
+    b.onclick=async()=>{ b.disabled=true; try{ const r=await(await fetch('/api/google-ads/customer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({customerId:sel.value})})).json(); if(r.ok){ toast('Ad account saved'); loadIntegrations(); } else toast(r.error||'Could not save that ad account'); }catch(e){ toast('Could not save that ad account'); } b.disabled=false; };
+    c.append(sel,b);
+  }
   // Disconnect — only for real Pipedream-connected accounts (Meta is env-based).
   if(d.connected && d.accountId && d.app!=='meta_ads' && String(d.accountId).indexOf('act_')!==0){
     const dc=el('button','idel','Disconnect'); dc.style.marginTop='10px'; dc.onclick=()=>confirmDisconnect(d);

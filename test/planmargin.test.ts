@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BANDS, WORK_COSTS, FAIR_USE, UNLIMITED_ITEMS, chargeCredits, creditState } from '../src/billing/credits.js';
+import { BANDS, WORK_COSTS, FAIR_USE, UNLIMITED_ITEMS, chargeCredits, creditState, settleTopUp } from '../src/billing/credits.js';
 import { planMargin, SERVE_ASSUMPTIONS, TARGET_MARGIN } from '../src/billing/cogs.js';
 import { MEDIA_KINDS, mediaCost } from '../src/billing/media.js';
 import { CREDIT_COST } from '../src/usage/meter.js';
@@ -148,18 +148,16 @@ describe('auto top-up ceiling', () => {
     process.env.BILLING_ENFORCE = '1';
     try {
       const band = BANDS[0]!;
-      const data: Record<string, unknown> = { credits: { granted: 0, ledger: [], autoTopUp: true } };
+      const data: Record<string, unknown> = { credits: { granted: 0, ledger: [], autoTopUp: true, spent: 0 }, billing: { band: 'starter', grantKeys: [], grantAmounts: {} } };
       let toppedUp = 0;
-      let blocked = false;
-      // Far more video than any ceiling allows.
-      for (let i = 0; i < 2000 && !blocked; i++) {
-        const r = chargeCredits(data, 'video');
-        toppedUp += r.toppedUp;
-        blocked = r.blocked;
+      for (let i = 0; i < 40; i++) {
+        const settled = settleTopUp(data, { paymentId: `pi_${i}`, amount: band.topUp, status: 'succeeded' });
+        toppedUp += settled.grantedNow;
+        if (settled.status === 'declined') break;
       }
-      expect(blocked, 'must eventually stop').toBe(true);
       expect(toppedUp).toBeLessThanOrEqual(band.autoTopUpCeiling);
       expect(creditState(data).toppedUpThisMonth).toBeLessThanOrEqual(band.autoTopUpCeiling);
+      expect(settleTopUp(data, { paymentId: 'pi_over', amount: band.topUp, status: 'succeeded' }).status).toBe('declined');
     } finally {
       delete process.env.BILLING_ENFORCE;
     }

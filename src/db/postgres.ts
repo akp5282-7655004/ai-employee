@@ -1,3 +1,4 @@
+import { mergeCredits, stripCreditBase } from '../billing/merge.js';
 import type { AuthSession, Store, User } from './store.js';
 
 /**
@@ -26,6 +27,10 @@ export class PostgresStore implements Store {
       );
       CREATE TABLE IF NOT EXISTS user_data (
         user_id TEXT PRIMARY KEY REFERENCES users(id), data JSONB NOT NULL DEFAULT '{}'::jsonb
+      );
+      CREATE TABLE IF NOT EXISTS launch_offers (
+        user_id TEXT PRIMARY KEY,
+        claimed_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
     `);
   }
@@ -81,11 +86,61 @@ export class PostgresStore implements Store {
     const r = await this.pool.query('SELECT data FROM user_data WHERE user_id=$1', [userId]);
     return r.rows[0]?.data ?? {};
   }
-  async setUserData(userId: string, data: Record<string, unknown>): Promise<void> {
-    await this.pool.query(
-      'INSERT INTO user_data(user_id,data) VALUES($1,$2) ON CONFLICT(user_id) DO UPDATE SET data=$2',
-      [userId, JSON.stringify(data)],
-    );
+  async setUserData(userId: string, incoming: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.mutateUserData(userId, (current) => {
+      const merged = mergeCredits(current.credits, incoming.credits, current.billing, incoming.billing);
+      const next = { ...current, ...incoming, credits: merged.credits, billing: merged.billing };
+      stripCreditBase(next);
+      for (const k of Object.keys(current)) delete current[k];
+      Object.assign(current, next);
+    });
+  }
+  async mutateUserData(userId: string, fn: (data: Record<string, unknown>) => void | Promise<void>): Promise<Record<string, unknown>> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO user_data(user_id, data) VALUES ($1, '{}'::jsonb) ON CONFLICT (user_id) DO NOTHING`,
+        [userId],
+      );
+      const r = await client.query('SELECT data FROM user_data WHERE user_id=$1 FOR UPDATE', [userId]);
+      const current = (r.rows[0]?.data ?? {}) as Record<string, unknown>;
+      await fn(current);
+      stripCreditBase(current);
+      await client.query('UPDATE user_data SET data=$2::jsonb WHERE user_id=$1', [userId, JSON.stringify(current)]);
+      await client.query('COMMIT');
+      return current;
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* already closed */ }
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+  async claimLaunchSlot(userId: string): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('LOCK TABLE launch_offers IN EXCLUSIVE MODE');
+      const existing = await client.query('SELECT 1 FROM launch_offers WHERE user_id=$1', [userId]);
+      if (existing.rowCount) {
+        await client.query('COMMIT');
+        return true;
+      }
+      const count = await client.query('SELECT count(*)::int AS n FROM launch_offers');
+      if ((count.rows[0]?.n ?? 0) >= 100) {
+        await client.query('COMMIT');
+        return false;
+      }
+      await client.query('INSERT INTO launch_offers(user_id) VALUES ($1)', [userId]);
+      await client.query('COMMIT');
+      return true;
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* already closed */ }
+      throw err;
+    } finally {
+      client.release();
+    }
   }
   async listUserIds(): Promise<string[]> {
     const r = await this.pool.query('SELECT user_id FROM user_data');

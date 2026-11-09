@@ -25,6 +25,24 @@ services:
       # To run on temporary storage on purpose, set ALLOW_EPHEMERAL_STORE=1.
       - key: DATABASE_URL
         sync: false
+      # Credit enforcement. Production (NODE_ENV=production or RENDER) enforces
+      # an empty balance unless this is 0. Set 1 to enforce on any host. Set 0
+      # only for a deliberate demo. Stripe webhook must include invoice.paid,
+      # invoice.payment_failed, checkout.session.completed,
+      # customer.subscription.updated, customer.subscription.deleted,
+      # payment_intent.succeeded, and payment_intent.payment_failed.
+      # - key: BILLING_ENFORCE
+      #   value: '1'
+      # - key: STRIPE_SECRET_KEY
+      #   sync: false
+      # - key: STRIPE_WEBHOOK_SECRET
+      #   sync: false
+      # - key: STRIPE_PRICE_STARTER
+      #   sync: false
+      # - key: STRIPE_PRICE_GROWTH
+      #   sync: false
+      # - key: STRIPE_PRICE_SCALE
+      #   sync: false
       # Operator login. Required for /api/admin and /api/economics. There is
       # no "oldest account is admin" fallback. Do not set this to the demo
       # address. Value is supplied in the Render dashboard, not in git.

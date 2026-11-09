@@ -59,11 +59,22 @@ export function withUserDataCache(store: Store, ttlMs = TTL_MS): Store & { cache
     stats.writes++;
     inflight.delete(userId); // a read in flight must not overwrite this write
     // Write through: persist first, then refresh the cache so a failed write
-    // never leaves a phantom value behind.
-    await store.setUserData(userId, data);
-    cache.set(userId, { ts: Date.now(), data });
+    // never leaves a phantom value behind. The store may merge credits, so
+    // cache the saved blob rather than the caller's copy.
+    const saved = await store.setUserData(userId, data);
+    cache.set(userId, { ts: Date.now(), data: saved });
     prune();
+    return saved;
   };
+
+  wrapped.mutateUserData = async (userId, fn) => {
+    inflight.delete(userId);
+    const saved = await store.mutateUserData(userId, fn);
+    cache.set(userId, { ts: Date.now(), data: saved });
+    return saved;
+  };
+
+  wrapped.claimLaunchSlot = (userId) => store.claimLaunchSlot(userId);
 
   wrapped.deleteUser = async (id: string) => {
     cache.delete(id); inflight.delete(id);

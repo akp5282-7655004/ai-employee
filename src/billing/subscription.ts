@@ -24,6 +24,12 @@ export interface BillingState {
   /** Stripe invoice ids already granted for — a webhook can arrive more than
    *  once for the same invoice, and this is what stops a double grant. */
   grantedInvoices: string[];
+  /** Invoice and payment ids that have granted money. Kept longer than the display list. */
+  grantKeys?: string[];
+  /** Dollars granted per invoice or payment id, so a replay cannot be added twice. */
+  grantAmounts?: Record<string, number>;
+  /** Invoice ids present when this in-memory edit started. Not stored. */
+  baseInvoices?: string[];
   updatedAt?: string;
 }
 
@@ -38,7 +44,7 @@ export function billingState(data: Record<string, unknown>): BillingState {
   const raw = (data.billing ?? {}) as Partial<BillingState>;
   const status: SubStatus = ['none', 'active', 'past_due', 'canceled'].includes(raw.status as string)
     ? (raw.status as SubStatus) : 'none';
-  const band = BANDS.some((b) => b.key === raw.band) ? (raw.band as Band['key']) : undefined;
+  const band = raw.band === 'launch' || BANDS.some((b) => b.key === raw.band) ? (raw.band as Band['key']) : undefined;
   return {
     stripeCustomerId: typeof raw.stripeCustomerId === 'string' ? raw.stripeCustomerId : undefined,
     stripeSubscriptionId: typeof raw.stripeSubscriptionId === 'string' ? raw.stripeSubscriptionId : undefined,
@@ -46,6 +52,8 @@ export function billingState(data: Record<string, unknown>): BillingState {
     status,
     currentPeriodEnd: typeof raw.currentPeriodEnd === 'string' ? raw.currentPeriodEnd : undefined,
     grantedInvoices: Array.isArray(raw.grantedInvoices) ? raw.grantedInvoices.filter((x) => typeof x === 'string').slice(-MAX_GRANTED_INVOICES) : [],
+    grantKeys: Array.isArray(raw.grantKeys) ? raw.grantKeys.filter((x) => typeof x === 'string').slice(-5000) : undefined,
+    grantAmounts: raw.grantAmounts && typeof raw.grantAmounts === 'object' ? raw.grantAmounts : undefined,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
   };
 }
@@ -89,7 +97,8 @@ export function applyRenewal(
   args: { invoiceId: string; customerId: string; subscriptionId: string; bandKey: Band['key']; periodEnd: string },
 ): RenewalResult {
   const b = billingState(data);
-  if (b.grantedInvoices.includes(args.invoiceId)) {
+  const seen = new Set([...(b.grantKeys ?? []), ...b.grantedInvoices]);
+  if (seen.has(args.invoiceId)) {
     return { applied: false, reason: 'already granted for this invoice' };
   }
   const band = BANDS.find((x) => x.key === args.bandKey);
@@ -103,6 +112,8 @@ export function applyRenewal(
   // touches `granted` and `launchOffer` and nothing else, and every other
   // field — the running `spent` total above all — has to survive it intact.
   const before = creditState(data);
+  const prior = (data.billing ?? {}) as BillingState;
+  if (!prior.baseInvoices) prior.baseInvoices = [...(prior.grantKeys ?? prior.grantedInvoices ?? [])];
   writeCredits(data, {
     granted: Math.round((before.granted + band.monthlyCredits) * 100) / 100,
     launchOffer: false,
@@ -113,7 +124,10 @@ export function applyRenewal(
   b.band = band.key;
   b.status = 'active';
   b.currentPeriodEnd = args.periodEnd;
-  b.grantedInvoices = [...b.grantedInvoices, args.invoiceId].slice(-MAX_GRANTED_INVOICES);
+  b.grantKeys = [...(b.grantKeys ?? b.grantedInvoices), args.invoiceId].slice(-5000);
+  b.grantedInvoices = b.grantKeys.slice(-MAX_GRANTED_INVOICES);
+  b.grantAmounts = { ...(b.grantAmounts ?? {}), [args.invoiceId]: band.monthlyCredits };
+  b.baseInvoices = prior.baseInvoices;
   saveBilling(data, b);
   return { applied: true, band: band.key, granted: band.monthlyCredits };
 }

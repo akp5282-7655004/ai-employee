@@ -49,10 +49,11 @@ import {
   pendingAccounts, setCostAccount, UNCLAIMED, withCostAccount,
 } from './billing/costsink.js';
 import { itemEconomics, PRICES_STAMPED, rollup, TARGET_MARGIN, THIN_MARGIN, unpricedWork } from './billing/cogs.js';
-import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS, canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS } from './billing/credits.js';
+import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS, canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS, writeCredits, LAUNCH_GRANT, settleTopUp } from './billing/credits.js';
+import { adSpendAllowed } from './billing/gate.js';
 import { isMediaKind, MEDIA_LABEL, MEDIA_KINDS, mediaCost } from './billing/media.js';
 import {
-  bandForPriceId, createCheckoutSession, createPortalSession, priceIdForBand,
+  bandForPriceId, createCheckoutSession, createPortalSession, createTopUpPaymentIntent, priceIdForBand,
   stampCustomer, stripeReady, userIdForCustomer, userIdForSubscription, verifyWebhook, type PaidBand,
 } from './billing/stripe.js';
 import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, updateBand } from './billing/subscription.js';
@@ -390,6 +391,29 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   // calls that each read the same per-user blob.
   const authStore = withUserDataCache(deps.authStore ?? new MemoryStore());
 
+  const seedAccountPlan = async (userId: string, extra: Record<string, unknown>) => {
+    const claimed = await authStore.claimLaunchSlot(userId);
+    const data = await authStore.getUserData(userId);
+    Object.assign(data, extra);
+    if (claimed) {
+      writeCredits(data, { granted: LAUNCH_GRANT, launchOffer: true, spent: 0 });
+      data.billing = { status: 'active', band: 'launch', grantedInvoices: [], grantKeys: [] };
+    } else {
+      writeCredits(data, { granted: 0, launchOffer: false, spent: 0 });
+      data.billing = { status: 'none', grantedInvoices: [], grantKeys: [] };
+    }
+    await authStore.setUserData(userId, data);
+  };
+
+  const denyAdSpend = async (userId: string, reply: { code: (n: number) => { send: (b: unknown) => unknown } }): Promise<boolean> => {
+    if (!billingEnforced()) return false;
+    const data = await authStore.getUserData(userId);
+    const gate = adSpendAllowed(data);
+    if (gate.ok) return false;
+    reply.code(402).send({ ok: false, live: false, error: gate.reason });
+    return true;
+  };
+
   // GoHighLevel ships under several Pipedream app slugs (gohighlevel, the OAuth
   // variant highlevel_oauth, the LeadConnector white-label). Treat them as one CRM
   // so a connection under any slug drives the automations. `ghlAppFor` returns the
@@ -714,9 +738,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       createdAt: new Date().toISOString(),
     };
     await authStore.createUser(user);
-    const udata = await authStore.getUserData(user.id);
-    udata.tosAccepted = { version: TOS_VERSION, at: new Date().toISOString(), email };
-    await authStore.setUserData(user.id, udata);
+    await seedAccountPlan(user.id, { tosAccepted: { version: TOS_VERSION, at: new Date().toISOString(), email } });
     if (invite && inviteCheck.ok) await markInviteUsed(invite);
     await startSession(reply, user.id);
     return { ok: true, user: { id: user.id, email: user.email, name: user.name } };
@@ -790,10 +812,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         createdAt: new Date().toISOString(),
       };
       await authStore.createUser(user);
-      const udata = await authStore.getUserData(user.id);
-      udata.tosAccepted = { version: TOS_VERSION, at: new Date().toISOString(), email, via: 'google' };
-      udata.google = { sub: who.sub, picture: who.picture, linkedAt: new Date().toISOString() };
-      await authStore.setUserData(user.id, udata);
+      await seedAccountPlan(user.id, {
+        tosAccepted: { version: TOS_VERSION, at: new Date().toISOString(), email, via: 'google' },
+        google: { sub: who.sub, picture: who.picture, linkedAt: new Date().toISOString() },
+      });
       if (invite && inviteCheck.ok) await markInviteUsed(invite);
     } else {
       // Existing account — link the Google identity to it. Safe only because
@@ -2001,6 +2023,20 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return { ok: true, autoTopUp: state.autoTopUp, topUp: band.topUp };
   });
 
+  /** Ask Stripe to charge a pending top-up. The grant waits for the webhook. */
+  app.post('/api/billing/topup', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const pending = creditState(data).pendingTopUp;
+    if (!pending || pending.status !== 'awaiting_payment') return reply.code(400).send({ error: 'No top-up is waiting on a card charge.' });
+    if (!stripeReady()) return reply.code(503).send({ error: 'Payments are not connected yet. No credits were added.', status: pending.status });
+    const sub = billingState(data);
+    const res = await createTopUpPaymentIntent({ userId: u.id, customerId: sub.stripeCustomerId, amountDollars: pending.amount });
+    if ('error' in res) return reply.code(502).send({ error: res.error, status: 'awaiting_payment' });
+    return { ok: true, status: 'awaiting_payment', paymentId: res.paymentId, detail: 'Credits are added only after Stripe confirms this payment.' };
+  });
+
   /** A Stripe-hosted checkout page for one paid band. The customer enters their
    *  card on Stripe's own page — it never touches this server. */
   app.post<{ Body: { band?: string } }>('/api/billing/checkout', async (req, reply) => {
@@ -2091,10 +2127,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           const customerId = typeof s.customer === 'string' ? s.customer : s.customer?.id;
           const subId = typeof s.subscription === 'string' ? s.subscription : s.subscription?.id;
           if (uid && customerId && subId) {
-            const data = await authStore.getUserData(uid);
-            linkCheckout(data, customerId, subId);
-            appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: 'stripe', source: 'billing', title: 'Checkout completed — subscription linked' });
-            await authStore.setUserData(uid, data);
+            await authStore.mutateUserData(uid, (data) => {
+              linkCheckout(data, customerId, subId);
+              appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: 'stripe', source: 'billing', title: 'Checkout completed. Subscription linked.' });
+            });
             // Every later webhook keys off the customer, not this session — without
             // this stamp, invoice.paid and friends have no way back to this account.
             await stampCustomer(customerId, uid);
@@ -2111,15 +2147,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           const user = await findUser(customerId, subId);
           if (!(user && subId && bandKey && inv.id)) {
             console.warn(`invoice.paid: skipped — missing a required field ${JSON.stringify({ eventType: event.type, hasUser: !!user, subId, priceId, bandKey, invoiceId: inv.id })}`);
+            if (inv.id && bandKey && !user) {
+              return reply.code(500).send({ error: 'Account is not linked yet. Stripe should retry.' });
+            }
           }
           if (user && subId && bandKey && inv.id) {
-            const data = await authStore.getUserData(user.id);
             const periodEnd = new Date(((inv.lines?.data?.[0]?.period?.end) ?? Math.floor(Date.now() / 1000) + 2_592_000) * 1000).toISOString();
-            const r = applyRenewal(data, { invoiceId: inv.id, customerId: customerId!, subscriptionId: subId, bandKey, periodEnd });
-            if (r.applied) {
-              appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: 'stripe', source: 'billing', title: `Subscription renewed — ${r.band}, +$${r.granted} credits` });
-              await authStore.setUserData(user.id, data);
-            }
+            await authStore.mutateUserData(user.id, (data) => {
+              const r = applyRenewal(data, { invoiceId: inv.id!, customerId: customerId!, subscriptionId: subId, bandKey, periodEnd });
+              if (r.applied) appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: 'stripe', source: 'billing', title: `Subscription renewed. ${r.band}, plus $${r.granted} credits` });
+            });
           }
           break;
         }
@@ -2129,9 +2166,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           const subId = invoiceSubscriptionId(inv);
           const user = await findUser(customerId, subId);
           if (user && subId) {
-            const data = await authStore.getUserData(user.id);
-            markPastDue(data, subId);
-            await authStore.setUserData(user.id, data);
+            await authStore.mutateUserData(user.id, (data) => { markPastDue(data, subId); });
           }
           break;
         }
@@ -2140,9 +2175,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           const customerId = typeof s.customer === 'string' ? s.customer : s.customer?.id ?? null;
           const user = await findUser(customerId, s.id);
           if (user) {
-            const data = await authStore.getUserData(user.id);
-            markCanceled(data, s.id);
-            await authStore.setUserData(user.id, data);
+            await authStore.mutateUserData(user.id, (data) => { markCanceled(data, s.id); });
           }
           break;
         }
@@ -2153,21 +2186,33 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           const bandKey = bandForPriceId(priceId);
           const user = await findUser(customerId, s.id);
           if (user && bandKey) {
-            const data = await authStore.getUserData(user.id);
-            updateBand(data, s.id, bandKey);
-            await authStore.setUserData(user.id, data);
+            await authStore.mutateUserData(user.id, (data) => { updateBand(data, s.id, bandKey); });
           }
+          break;
+        }
+        case 'payment_intent.succeeded':
+        case 'payment_intent.payment_failed': {
+          const pi = event.data.object as import('stripe').default.PaymentIntent;
+          if (pi.metadata?.purpose !== 'topup' || !pi.metadata?.milesUserId) break;
+          const dollars = Number(pi.metadata.amountDollars ?? (pi.amount_received || pi.amount || 0) / 100);
+          await authStore.mutateUserData(pi.metadata.milesUserId, (data) => {
+            settleTopUp(data, {
+              paymentId: pi.id,
+              amount: dollars,
+              status: event.type === 'payment_intent.succeeded' ? 'succeeded' : 'failed',
+              detail: pi.last_payment_error?.message,
+            });
+          });
           break;
         }
         default:
           break; // acknowledged, no action needed
       }
     } catch (err) {
-      // A malformed event, or a Stripe lookup that failed transiently, never
-      // fails the webhook back to Stripe — it would just retry forever. Still
-      // logged, so a real bug here shows up in the server logs instead of
-      // vanishing behind the 200 Stripe always sees.
+      // Persistence or a lookup failed. A 2xx would tell Stripe the grant is
+      // saved. Return 500 so Stripe retries.
       console.error(`stripe webhook handler failed ${JSON.stringify({ eventType: event.type, err: (err as Error).message })}`);
+      return reply.code(500).send({ error: 'Could not save this Stripe event. Stripe should retry.' });
     }
     return { received: true };
   });
@@ -2477,16 +2522,20 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (isDemoAccount(u.email) && connector.name !== 'mock') {
       return reply.code(403).send({ ok: false, live: false, status: 'PAUSED', activation: 'disabled', error: 'The public demo cannot create a campaign in a live ad account.' });
     }
+    if (await denyAdSpend(u.id, reply)) return;
     const digits = (id: string) => id.replace(/[^\d]/g, '');
     let targets: { id: string; label: string }[] = [];
+    const savedGoogle = await authStore.getUserData(u.id);
+    if (typeof savedGoogle.googleAdsCustomerId === 'string') connector.rememberGoogleCustomer?.(u.id, savedGoogle.googleAdsCustomerId);
     if (connector.listAdTargets) {
       try { targets = await connector.listAdTargets(u.id); } catch { targets = []; }
     }
     if (!targets.length) {
+      const why = connector.googleAdsAccess?.(u.id)?.reason;
       return reply.code(409).send({
         ok: false, live: false, status: 'PAUSED', activation: 'disabled', partial: false,
-        error: 'Google Ads is not connected for this account. Open Integrations, connect Google Ads, then pick the ad account. Nothing was created.',
-        steps: [{ step: 'Google Ads account', ok: false, error: 'Not connected' }],
+        error: why || 'Google Ads is not connected for this account. Open Integrations, connect Google Ads, then pick the ad account. Nothing was created.',
+        steps: [{ step: 'Google Ads account', ok: false, error: why || 'Not connected' }],
       });
     }
     const wanted = typeof req.body?.target === 'string' ? digits(req.body.target) : '';
@@ -2649,6 +2698,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (isDemoAccount(u.email) && connector.name !== 'mock') {
       return reply.code(403).send({ ok: false, live: false, error: 'The public demo cannot create a campaign.' });
     }
+    if (await denyAdSpend(u.id, reply)) return;
     const total = Number(req.body?.totalDaily);
     const explicit = Number.isFinite(total) && total > 0 ? total : undefined;
     const { data, plan } = await loopContext(u.id, req.body?.observedAds, explicit);
@@ -2663,10 +2713,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }
     const digits = (id: string) => id.replace(/[^\d]/g, '');
     let targets: { id: string; label: string }[] = [];
+    const savedGoogle = await authStore.getUserData(u.id);
+    if (typeof savedGoogle.googleAdsCustomerId === 'string') connector.rememberGoogleCustomer?.(u.id, savedGoogle.googleAdsCustomerId);
     if (connector.listAdTargets) {
       try { targets = await connector.listAdTargets(u.id); } catch { targets = []; }
     }
-    if (!targets.length) return reply.code(409).send({ ok: false, live: false, plan, error: 'Google Ads is not connected for this account. Nothing was created.' });
+    if (!targets.length) return reply.code(409).send({ ok: false, live: false, plan, error: connector.googleAdsAccess?.(u.id)?.reason || 'Google Ads is not connected for this account. Nothing was created.' });
     const wanted = typeof req.body?.target === 'string' ? digits(req.body.target) : '';
     let chosen = targets.length === 1 ? targets[0] : undefined;
     if (wanted) {
@@ -2723,6 +2775,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   app.post<{ Body: { confirm?: boolean; campaignResource?: string; dailyBudget?: number } }>('/api/journey/activate', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
+    if (await denyAdSpend(u.id, reply)) return;
     const data = await authStore.getUserData(u.id);
     const rec = (data.plumberLoop ?? {}) as { ownerId?: string; approvedDaily?: number; campaignResource?: string; campaigns?: { resource?: string; daily?: number; status?: string }[] };
     const resource = req.body?.campaignResource || (rec.campaigns?.length === 1 ? rec.campaigns[0]?.resource : rec.campaignResource);
@@ -3326,11 +3379,33 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const cfg = loadConfig();
+    const savedChoice = await authStore.getUserData(u.id);
+    if (typeof savedChoice.googleAdsCustomerId === 'string') connector.rememberGoogleCustomer?.(u.id, savedChoice.googleAdsCustomerId);
     const details = connector.describeConnections ? await connector.describeConnections(u.id) : [];
     return { connector: connector.name, hub: { ready: pipedreamReady(cfg), env: cfg.pipedream.environment }, details };
   });
 
   // Disconnect a connected account by id.
+  app.post<{ Body: { customerId?: string } }>('/api/google-ads/customer', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const customerId = String(req.body?.customerId ?? '').replace(/[^\d]/g, '');
+    if (!/^\d{10}$/.test(customerId)) return reply.code(400).send({ error: 'A Google Ads customer id is 10 digits.' });
+    const saved = await authStore.getUserData(u.id);
+    if (typeof saved.googleAdsCustomerId === 'string') connector.rememberGoogleCustomer?.(u.id, saved.googleAdsCustomerId);
+    if (connector.listAdTargets) {
+      try { await connector.listAdTargets(u.id); } catch { /* access stays empty */ }
+    }
+    const access = connector.googleAdsAccess?.(u.id);
+    if (!access?.customers.some((c) => c.id === customerId)) {
+      return reply.code(400).send({ error: access?.reason || 'That customer id is not accessible from this Google login.' });
+    }
+    saved.googleAdsCustomerId = customerId;
+    await authStore.setUserData(u.id, saved);
+    connector.rememberGoogleCustomer?.(u.id, customerId);
+    return { ok: true, customerId };
+  });
+
   app.post<{ Body: { accountId?: string } }>('/api/connections/disconnect', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
@@ -4350,6 +4425,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   app.post<{ Body: { confirm?: boolean; advertiserId?: string; campaignName?: string; dailyBudget?: number } }>('/api/tiktok/launch', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
+    if (await denyAdSpend(u.id, reply)) return;
     let connected = false;
     let authId = '';
     try {

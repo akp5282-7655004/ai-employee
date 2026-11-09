@@ -1,5 +1,6 @@
 import type { Config } from '../config.js';
 import { META_SHARED_ACCOUNT_NOTE as _META_NOTE } from '../agents/googlelaunch.js';
+import { classifyGadsAccounts, extractCustomerNodes, type GadsAccess } from './gadsAccess.js';
 import { explainPipedreamError, type PipedreamFailure } from './pipedreamErrors.js';
 import { summarizeTask } from './mock.js';
 import type {
@@ -55,6 +56,8 @@ export class PipedreamConnector implements Connector {
   private gadsNames = new Map<string, string>();
   /** Why customer-id resolution failed for this external user. Never another user's error. */
   private gadsBlock = new Map<string, PipedreamFailure>();
+  /** Last honest read of which customer ids this login can use. */
+  private gadsAccess = new Map<string, GadsAccess>();
   /** The ad account the owner last launched into — reads prefer it too, so an
    *  MCC with many clients reports the business the owner actually works in. */
   private gadsPreferred = new Map<string, string>();
@@ -348,40 +351,77 @@ export class PipedreamConnector implements Connector {
    */
   private async resolveGadsTargets(externalUserId: string, authId: string, rows: any[]): Promise<{ login: string; client?: string }[]> {
     const pd = await this.backend();
-    const runList = async (key: string, extra: Record<string, unknown> = {}): Promise<Set<string>> => {
+    const runList = async (key: string, extra: Record<string, unknown> = {}): Promise<{ ids: Set<string>; nodes: ReturnType<typeof extractCustomerNodes>; missing: boolean; error: string }> => {
       const found = new Set<string>();
       const comp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === key);
-      if (!comp) return found;
+      if (!comp) return { ids: found, nodes: [], missing: true, error: '' };
       try {
         const props = await this.componentProps(comp, key);
         const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
         const cp: Record<string, unknown> = { [appName]: { authProvisionId: authId } };
-        // Only send props the component actually exposes (e.g. accountId).
         for (const [k, v] of Object.entries(extra)) if (props.some((p: any) => p?.name === k)) cp[k] = v;
         const res = await pd.actions.run({ externalUserId, id: key, configuredProps: cp });
-        collectCustomerIds(res?.ret ?? res?.exports ?? res, found);
-        collectCustomerNames(res?.ret ?? res?.exports ?? res, this.gadsNames);
+        const payload = res?.ret ?? res?.exports ?? res;
+        collectCustomerIds(payload, found);
+        collectCustomerNames(payload, this.gadsNames);
+        return { ids: found, nodes: extractCustomerNodes(payload), missing: false, error: '' };
       } catch (err) {
         const failure = explainPipedreamError(err);
         this.gadsBlock.set(externalUserId, failure);
+        return { ids: found, nodes: [], missing: false, error: failure.message };
       }
-      return found;
     };
-    if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return [];
-    // 1) The login accounts the connected user can act as (for an MCC, the manager).
-    const logins = await runList('google_ads-list-account-id-options');
-    if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return [];
-    if (!logins.size) for (const x of await runList('google_ads-list-customer-clients')) logins.add(x);
-    if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return [];
-    // 2) For each login, list the client accounts underneath it.
-    const targets: { login: string; client?: string }[] = [];
-    for (const login of [...logins].slice(0, 5)) {
-      const clients = await runList('google_ads-list-customer-clients', { accountId: login, customerClientId: login });
-      clients.delete(login); // the manager itself runs no ads
-      if (clients.size) for (const client of clients) targets.push({ login, client });
-      else targets.push({ login });
+    const blocked = this.gadsBlock.get(externalUserId);
+    if (blocked?.kind === 'connect_production_unavailable') {
+      this.gadsAccess.set(externalUserId, { kind: 'error', reason: blocked.message, customers: [] });
+      return [];
     }
-    return targets;
+    const loginRes = await runList('google_ads-list-account-id-options');
+    if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') {
+      this.gadsAccess.set(externalUserId, { kind: 'error', reason: this.gadsBlock.get(externalUserId)!.message, customers: [] });
+      return [];
+    }
+    let loginIds = loginRes.ids;
+    let loginNodes = loginRes.nodes;
+    let missingAction = loginRes.missing ? 'google_ads-list-account-id-options' : '';
+    let error = loginRes.error;
+    if (!loginIds.size && !error) {
+      const fallback = await runList('google_ads-list-customer-clients');
+      loginIds = fallback.ids;
+      loginNodes = fallback.nodes;
+      if (fallback.error) error = fallback.error;
+      if (fallback.missing && missingAction) missingAction = 'google_ads-list-account-id-options and google_ads-list-customer-clients';
+    }
+    const clientsByLogin: Record<string, ReturnType<typeof extractCustomerNodes>> = {};
+    for (const login of [...loginIds].slice(0, 5)) {
+      const clients = await runList('google_ads-list-customer-clients', { accountId: login, customerClientId: login });
+      clientsByLogin[login] = clients.nodes.length ? clients.nodes : [...clients.ids].map((id) => ({ id }));
+      if (clients.error) error = error || clients.error;
+    }
+    const logins = loginNodes.length ? loginNodes : [...loginIds].map((id) => ({ id }));
+    const access = classifyGadsAccounts({
+      logins,
+      clientsByLogin,
+      missingAction: missingAction || undefined,
+      error: error || undefined,
+      selectedId: this.gadsPreferred.get(externalUserId),
+    });
+    this.gadsAccess.set(externalUserId, access);
+    if (access.kind === 'ready' && access.selectedId) {
+      const chosen = access.customers.find((c) => c.id === access.selectedId)!;
+      return [{ login: chosen.login, client: chosen.id === chosen.login ? undefined : chosen.id }];
+    }
+    if (access.kind === 'choose') return access.customers.map((c) => ({ login: c.login, client: c.id === c.login ? undefined : c.id }));
+    return [];
+  }
+
+  googleAdsAccess(externalUserId: string): GadsAccess | null {
+    return this.gadsAccess.get(externalUserId) ?? null;
+  }
+
+  rememberGoogleCustomer(externalUserId: string, customerId: string): void {
+    this.gadsPreferred.set(externalUserId, customerId.replace(/[^\d]/g, ''));
+    this.gadsCache.delete(externalUserId);
   }
 
   /**
@@ -537,8 +577,10 @@ export class PipedreamConnector implements Connector {
       appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
       targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
       if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return out;
-      if (!targets.length) targets = [{ login: '' }];
-      this.gadsCache.set(externalUserId, { key, appName, ids: targets.map((t) => t.client ?? t.login), targets, ts: Date.now() });
+      targets = (targets ?? []).filter((t) => /^\d{10}$/.test(t.client || t.login));
+      const access = this.gadsAccess.get(externalUserId);
+      if (!targets.length || access?.kind === 'none' || access?.kind === 'manager_only' || access?.kind === 'error' || access?.kind === 'choose') return out;
+      this.gadsCache.set(externalUserId, { key, appName, ids: targets.map((t) => t.client ?? t.login).filter((id) => /^\d{10}$/.test(id)), targets, ts: Date.now() });
     }
     // Self-healing: try the known metric/field formats until one returns rows,
     // then remember it so later loads use just that one. If a format is already
@@ -990,33 +1032,38 @@ export class PipedreamConnector implements Connector {
         const fmt = (i: string) => i.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
         // Reuse the IDs the spend pull already resolved (cached per user) before
         // re-running the lister components — that path is what actually works live.
-        let ids = this.gadsCache.get(externalUserId)?.ids ?? [];
         let errMsg = '';
-        if (!ids.length) {
-          try {
-            const rows = await this.listComponents('google_ads');
-            ids = await this.googleAdsCustomerIds(externalUserId, primary.id, rows);
-            if (ids.length) { const c = this.gadsCache.get(externalUserId); this.gadsCache.set(externalUserId, { key: c?.key ?? '', appName: c?.appName ?? 'googleAds', ids, shape: c?.shape, ts: Date.now() }); }
-          } catch (e) {
-            errMsg = explainPipedreamError(e).message;
-          }
+        try {
+          const rows = await this.listComponents('google_ads');
+          await this.googleAdsCustomerIds(externalUserId, primary.id, rows);
+        } catch (e) {
+          errMsg = explainPipedreamError(e).message;
         }
+        const access = this.gadsAccess.get(externalUserId);
         const blocked = this.gadsBlock.get(externalUserId);
-        if (ids.length && !blocked) {
-          detail.ready = true;
-          detail.rows!.push({ k: 'Ad account (customer) ID', v: fmt(ids[0]!) });
-          if (ids.length > 1) detail.rows!.push({ k: 'Other accessible accounts', v: ids.slice(1).map(fmt).join(', ') });
-          detail.note = 'OAuth is connected and a Google Ads customer id was resolved. A paused create still needs a separate approval.';
-        } else if (blocked) {
-          detail.ready = false;
+        detail.ready = access?.kind === 'ready' && !blocked;
+        if (blocked) {
           detail.note = `${blocked.message} Provider said: ${blocked.providerMessage}`;
-          detail.rows!.push({ k: 'OAuth', v: 'Connected — this is not campaign readiness' });
-          detail.rows!.push({ k: 'Customer id', v: 'Not resolved' });
+          detail.rows!.push({ k: 'OAuth', v: 'Connected. This is not campaign readiness' });
+          detail.rows!.push({ k: 'Ad account (customer) ID', v: 'Not resolved' });
+        } else if (access?.kind === 'ready' && access.selectedId) {
+          detail.rows!.push({ k: 'Ad account (customer) ID', v: fmt(access.selectedId) });
+          if (access.loginCustomerId && access.loginCustomerId !== access.selectedId) detail.rows!.push({ k: 'Login customer id', v: fmt(access.loginCustomerId) });
+          detail.note = 'OAuth is connected and a Google Ads customer id is selected. A paused create still needs a separate approval.';
+        } else if (access?.kind === 'choose') {
+          detail.rows!.push({ k: 'Ad account (customer) ID', v: 'Choose one' });
+          detail.note = access.reason;
+          detail.choices = access.customers.map((c) => ({ id: c.id, label: c.label }));
+        } else if (access?.kind === 'manager_only') {
+          detail.rows!.push({ k: 'Ad account (customer) ID', v: 'None' });
+          if (access.loginCustomerId) detail.rows!.push({ k: 'Login customer id', v: fmt(access.loginCustomerId) });
+          detail.note = access.reason;
+        } else if (access?.kind === 'none' || access?.kind === 'error') {
+          detail.rows!.push({ k: 'Ad account (customer) ID', v: access.kind === 'none' ? 'None' : 'Not resolved' });
+          detail.note = access.reason;
         } else {
-          detail.ready = false;
-          detail.note = errMsg
-            ? `Google is signed in, but the customer id was not resolved. ${errMsg}`
-            : 'Google is signed in. The customer id is not resolved yet, so Miles cannot read spend or create a campaign.';
+          detail.rows!.push({ k: 'Ad account (customer) ID', v: 'Not resolved' });
+          detail.note = errMsg || 'Google is signed in. The customer id was not resolved, so Miles cannot read spend or create a campaign.';
         }
       }
       details.push(detail);

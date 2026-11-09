@@ -95,7 +95,7 @@ Checked 2026-11-09. Automated tests do not call Pipedream, Google, TikTok, Meta,
 - Until that entitlement is on, customer-id resolution, paused create, enable, and revert stay blocked in production.
 - GoHighLevel opportunity stages need a published Pipedream action. There is not one in the six actions listed.
 - Meta ads need a published campaign or lead-form action. There is not one.
-- Billing is unchanged: credit writes are last-write-wins, a Stripe webhook can acknowledge a grant before it is stored, auto top-up increases the credit balance without a card charge, and `BILLING_ENFORCE` stays off unless it is set to `1`.
+- Billing enforcement is on for a production deploy (`NODE_ENV=production` or `RENDER` set) unless `BILLING_ENFORCE=0`. Set `BILLING_ENFORCE=1` if the host is production but neither of those is set. Auto top-up grants credits only after `payment_intent.succeeded`. A failed payment grants nothing. The webhook returns 500 when a grant cannot be saved so Stripe retries. Credit writes merge under a row lock. The launch offer is the first 100 accounts at $0 with $100 in credits. Starter is $149, Growth is $397, Scale is $797.
 
 ## What this does not prove
 
