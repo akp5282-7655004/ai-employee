@@ -12,6 +12,8 @@ const plumber = {
   services: 'drain cleaning, leak repair',
   website: 'https://rivera.example',
   logoUrl: 'https://rivera.example/logo.png',
+  targetCpl: 40,
+  averageJobValue: 450,
 };
 
 describe('Pipedream catalog is quoted, not assumed connected', () => {
@@ -19,7 +21,8 @@ describe('Pipedream catalog is quoted, not assumed connected', () => {
     expect(appByProduct('Google Ads')?.campaign.actionKey).toBe('google_ads-create-or-update-campaign');
     expect(appByProduct('TikTok Ads')?.slug).toBe('tiktok_ads_manager');
     expect(appByProduct('TikTok Ads')?.campaign.actionKey).toBe('tiktok_ads_manager-create-or-update-campaign');
-    expect(appByProduct('TikTok Ads')?.repoWiring).toMatch(/Not wired/);
+    expect(appByProduct('TikTok Ads')?.campaign.pausedValue).toBe('DISABLE');
+    expect(appByProduct('TikTok Ads')?.repoWiring).toMatch(/DISABLE/);
     const meta = appByProduct('Meta Ads (Facebook and Instagram campaigns)');
     expect(meta?.catalog).toBe('not_found');
     expect(meta?.campaign.available).toBe(false);
@@ -42,7 +45,10 @@ describe('a $20 plumber plan', () => {
     expect(plan.channels.find((c) => c.channel === 'google_leads')?.executable).toBe(false);
     expect(plan.channels.find((c) => c.channel === 'google_leads')?.reason).toMatch(/Local Services Ads/);
     expect(plan.searchSpec?.status).toBe('PAUSED');
-    expect(plan.searchSpec?.dailyBudget).toBe(plan.executedDaily);
+    expect(plan.searchCampaigns.every((c) => c.spec.status === 'PAUSED')).toBe(true);
+    expect(plan.searchCampaigns.reduce((sum, c) => sum + c.spec.dailyBudget, 0)).toBeCloseTo(plan.executedDaily, 2);
+    expect(plan.geo.join(' ')).not.toMatch(/United States/);
+    expect(plan.searchCampaigns.length).toBe(2);
     expect(plan.asset.logoIncluded).toBe(true);
     expect(plan.asset.headlines.join(' ')).toMatch(/Rivera Plumbing/);
     expect(plan.asset.image.status).toBe('uses_uploaded_logo');
@@ -144,7 +150,7 @@ describe('journey routes', () => {
     const id = signup.json().user.id as string;
     await app.inject({
       method: 'PUT', url: '/api/profile', headers: { cookie },
-      payload: { businessName: 'Rivera Plumbing', industry: 'plumbing', serviceAreas: 'Philadelphia', services: 'drain cleaning, leak repair', website: 'https://rivera.example' },
+      payload: { businessName: 'Rivera Plumbing', industry: 'plumbing', serviceAreas: 'Philadelphia', services: 'drain cleaning, leak repair', website: 'https://rivera.example', targetCpl: '40', averageJobValue: '450', dailyBudget: '20' },
     });
     await app.inject({ method: 'PUT', url: '/api/brand', headers: { cookie }, payload: { kit: { logoUrl: 'https://rivera.example/logo.png', colors: ['#0c5aa6'], keywords: [] } } });
     return { h, app, cookie, id, store };
@@ -177,7 +183,8 @@ describe('journey routes', () => {
     expect(yes.statusCode).toBe(200);
     expect(yes.json().status).toBe('PAUSED');
     expect(yes.json().live).toBe(true);
-    expect(a.h.calls.find((c) => c.op === 'launch')).toMatchObject({ id: a.id, status: 'PAUSED' });
+    expect(a.h.calls.filter((c) => c.op === 'launch').every((c) => c.id === a.id && c.status === 'PAUSED')).toBe(true);
+    expect(a.h.calls.filter((c) => c.op === 'launch').length).toBeGreaterThan(0);
 
     const act = await a.app.inject({
       method: 'POST', url: '/api/journey/activate', headers: { cookie: a.cookie },
@@ -185,7 +192,7 @@ describe('journey routes', () => {
     });
     expect(act.statusCode).toBe(403);
     expect(act.json().providerCalled).toBe(false);
-    expect(a.h.calls.filter((c) => c.op === 'launch')).toHaveLength(1);
+    expect(a.h.calls.filter((c) => c.op === 'launch').every((c) => c.status === 'PAUSED')).toBe(true);
 
     const other = await b.app.inject({
       method: 'POST', url: '/api/journey/activate', headers: { cookie: b.cookie },

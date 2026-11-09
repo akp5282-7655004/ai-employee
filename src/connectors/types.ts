@@ -201,6 +201,8 @@ export interface Connector {
    *  `targetCustomerId` picks WHICH Google Ads account gets the campaign when
    *  the connected login manages several (MCC). */
   launchCampaign?(externalUserId: string, spec: import('../agents/campaign.js').CampaignSpec, targetCustomerId?: string): Promise<CampaignLaunchResult>;
+  /** Set one Google campaign to ENABLED or PAUSED. Never any other status. */
+  setGoogleCampaignStatus?(externalUserId: string, args: { campaignResource: string; status: 'ENABLED' | 'PAUSED' }): Promise<{ ok: boolean; live: boolean; called: boolean; note: string }>;
   /** The Google Ads accounts a launch can write into (id + human label), so
    *  an MCC owner can pick the client account instead of Miles guessing. */
   listAdTargets?(externalUserId: string): Promise<{ id: string; login: string; name?: string; label: string }[]>;

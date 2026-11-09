@@ -2800,6 +2800,7 @@ function renderOverview(d){
   box.append(autoRow);
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px';
   const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<div class="sect-label" style="margin:0 0 10px">MARKETING PERFORMANCE</div>';
+  if(d.sample) mc.append(ovNudge(d.sampleLabel||'Sample data. These figures are not from a live ad account.'));
   if(mk.hasData){ const ss=el('div','stats'); ss.append(statCard('Ad spend','$'+(mk.spend||0).toLocaleString()), statCard('Cost / job', mk.cpa!=null?('$'+mk.cpa):'—'), statCard('Revenue','$'+(mk.revenue||0).toLocaleString())); mc.append(ss); mc.append(el('div','appsub','Showing '+mktRangeLabel(mk.range)+(mk.targetCpa&&mk.cpa!=null?' · target $'+mk.targetCpa+'/job · '+(mk.cpa<=mk.targetCpa?'✅ under target':'⚠︎ over target'):''))); }
   else if(mk.platforms&&mk.platforms.googleAds&&mk.platforms.googleAds.oauth&&!mk.platforms.googleAds.ready){ mc.append(ovNudge(mk.platforms.googleAds.note||'Google is signed in. The ad customer id is not resolved, so this is not ready to read or create campaigns. Meta Ads is not connected.')); }
   else if(mk.connected){ mc.append(ovSync('✓ Google Ads customer id is resolved. Meta Ads is not connected. Nothing showing yet means there’s no spend in '+mktRangeLabel(mk.range)+' on the resolved Google account.')); const row=el('div'); row.style.cssText='display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap'; const rb=el('button',null,'↻ Refresh now'); rb.style.cssText='background:none;border:1px solid var(--line);border-radius:8px;color:var(--accent);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:5px 10px'; rb.onclick=async()=>{ rb.disabled=true; const o=rb.textContent; rb.textContent='Pulling live…'; await openOverview(); }; const tb=el('button',null,'Diagnose connection →'); tb.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:0'; tb.onclick=()=>diagProbe('google_ads',tb); row.append(rb,tb); mc.append(row); }
@@ -3122,23 +3123,24 @@ let LAUNCH={spec:null,connected:false};
 function lchField(label,ph,val,type){ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.placeholder=ph||''; if(val!=null)i.value=val; if(type)i.type=type; i.style.width='100%'; w.append(i); return {w,i}; }
 function openLaunch(){
   const box=$('#launch-body'); if(!box) return; box.innerHTML='';
-  const h=el('div','mcard'); h.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">🚀 Launch a Campaign</h3><span style="font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;background:#e8f0fe;color:#1a56db">🟢 GOOGLE ADS</span></div><p class="mdesc" style="margin:6px 0 0;max-width:640px">Miles builds a complete <b>Google Ads Search</b> campaign — budget, bidding, ad groups, keywords and ads — from your goal. You review every setting, then approve. <b>It’s created paused; nothing spends until you turn it on.</b><br><span class="appsub">Want Facebook/Instagram instead? Use <b>Launch on Facebook</b> in the Marketing menu.</span></p>';
+  const h=el('div','mcard'); h.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">Launch a Campaign</h3><span style="font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;background:#e8f0fe;color:#1a56db">GOOGLE ADS</span></div><p class="mdesc" style="margin:6px 0 0;max-width:640px">Miles builds a complete <b>Google Ads Search</b> campaign (budget, bidding, ad groups, keywords, and ads) from your goal. You review every setting, then approve. <b>It is created paused. Nothing spends until you approve activation.</b><br><span class="appsub">Meta ads are not available from a verified Pipedream campaign action.</span></p>';
   box.append(h);
   const loop=el('div','mcard'); loop.style.marginTop='14px';
-  loop.append(el('div','sect-label','$20/DAY PLAN — GOOGLE, FACEBOOK, GOOGLE LEADS'));
-  loop.append(el('p','appsub','Uses your profile. The total is a Miles cap, not a promise the ad platform will stop there. Only a paused Google Search campaign can be created. Facebook ads and Local Services Ads stay blocked until Pipedream has a real action and this account has connected it.'));
+  loop.append(el('div','sect-label','PLAN FROM YOUR PROFILE'));
+  loop.append(el('p','appsub','Uses the trade, service area, budget, target cost per lead, average job value, and landing page on your profile. Miles does not fill those in. Only paused Google Search can be created. Meta and Local Services Ads stay unavailable.'));
   const loopOut=el('div');
-  const loopBtn=el('button',null,'Show the $20/day plan'); loopBtn.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600';
+  const loopBtn=el('button',null,'Show the plan from my profile'); loopBtn.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600';
   loopBtn.onclick=async()=>{
     loopBtn.disabled=true;
     try{
-      const r=await(await fetch('/api/journey/plan',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({totalDaily:20})})).json();
+      const r=await(await fetch('/api/journey/plan',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({})})).json();
       loopOut.innerHTML='';
       const p=r.plan||{};
+      if(p.missing&&p.missing.length){ const miss=el('div'); miss.style.cssText='padding:8px 0;font-size:13px'; miss.textContent='Still needed: '+p.missing.map(m=>m.label).join(', ')+'.'; loopOut.append(miss); }
       loopOut.append(el('p','appsub',(p.summary||'')+' '+((p.budgetControl)||'')));
       (p.channels||[]).forEach(c=>{
         const row=el('div'); row.style.cssText='padding:6px 0;border-top:1px solid var(--line-soft);font-size:13px';
-        row.textContent=c.label+' — $'+c.recommendedDaily+'/day recommended, $'+c.executedDaily+' would be created paused. '+c.status+'. '+c.reason;
+        row.textContent=c.label+': $'+c.recommendedDaily+'/day recommended, $'+c.executedDaily+' would be created paused. '+c.status+'. '+c.reason;
         loopOut.append(row);
       });
       const asset=p.asset||{};

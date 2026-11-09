@@ -57,16 +57,17 @@ export const PIPEDREAM_APPS: PipedreamAppRecord[] = [
     campaign: {
       available: true,
       actionKey: 'tiktok_ads_manager-create-or-update-campaign',
-      note: 'Create requires advertiserId, and on create also campaignName, objectiveType, budgetMode, and budget. operationStatus is optional and the campaign schema page did not name the paused value (the ad schema says DISABLE means paused). A campaign alone has no ad. Miles does not call this action.',
+      pausedValue: 'DISABLE',
+      note: 'Pipedream prop operationStatus is the status when created. TikTok campaign create docs (https://business-api.tiktok.com/portal/docs/create-a-campaign/v1.3) name DISABLE as disabled when created and ENABLE as enabled. Miles sends DISABLE only after a separate approval, and only for the signed-in user.',
     },
-    repoWiring: 'Not wired. No TikTok call site.',
+    repoWiring: 'POST /api/tiktok/launch calls tiktok_ads_manager-create-or-update-campaign with operationStatus DISABLE. It is not added to a $20 Search plan.',
     ownerProject: 'unknown',
   },
   {
     product: 'Meta Ads (Facebook and Instagram campaigns)',
     slug: null,
     catalog: 'not_found',
-    source: 'https://pipedream.com/apps/facebook-ads.md returned 404. https://pipedream.com/apps/facebook-graph-api.md lists zero actions.',
+    source: 'Rechecked 2026-11-09. https://pipedream.com/apps/facebook-ads returned 404. https://pipedream.com/apps/facebook-graph-api lists zero actions. facebook_pages creates Page posts, not ads.',
     auth: 'No campaign app verified.',
     campaign: {
       available: false,

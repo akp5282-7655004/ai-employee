@@ -1,7 +1,5 @@
-import { buildCampaignSpec, type CampaignSpec } from './campaign.js';
-import { parseIntake } from '../intake.js';
-import { planCampaign } from '../plan/planner.js';
-import type { Channel } from '../packs/index.js';
+import type { CampaignSpec } from './campaign.js';
+import { assessProfile, buildSearchCampaigns, seasonFocus, type PlannedSearch, type ProfileGap } from './contractorloop.js';
 
 /**
  * One contractor loop: research what we can actually see, size a plan inside
@@ -31,10 +29,15 @@ export interface LoopProfile {
   businessName?: string;
   trade?: string;
   city?: string;
+  serviceAreas?: string;
   services?: string;
   website?: string;
   phone?: string;
   logoUrl?: string;
+  dailyBudget?: number;
+  monthlyBudget?: number;
+  targetCpl?: number;
+  averageJobValue?: number;
 }
 
 export interface ObservedAd {
@@ -87,6 +90,11 @@ export interface LoopPlan {
   market: MarketRead;
   /** Search spec Miles would create paused, present only when that channel is executable. */
   searchSpec?: CampaignSpec;
+  searchCampaigns: PlannedSearch[];
+  complete: boolean;
+  missing: ProfileGap[];
+  geo: string[];
+  seasonNote: string;
 }
 
 export interface ActivationDecision {
@@ -157,16 +165,16 @@ export function brandedAsset(profile: LoopProfile): BrandedAsset {
     };
   }
   const city = (profile.city || '').trim();
-  const service = (profile.services || 'plumbing').split(',')[0]!.trim();
+  const service = (profile.services || profile.trade || 'local service').split(',')[0]!.trim();
   const logo = (profile.logoUrl || '').trim();
   const headline = clip(city ? `${name} in ${city}` : name, 30);
   const headlines = [
     headline,
-    clip(service ? `${service} help` : 'Local plumber', 30),
+    clip(service ? `${service} help` : 'Local service', 30),
     clip(city ? `Serving ${city}` : 'Call today', 30),
   ];
   const descriptions = [
-    clip(`${name}${city ? ` in ${city}` : ''} — ${service}. Call for a visit.`, 90),
+    clip(`${name}${city ? ` in ${city}` : ''}. ${service}. Call for a visit.`, 90),
     clip('Licensed local crew. You approve every campaign before it is created paused.', 90),
   ];
   return {
@@ -183,132 +191,101 @@ export function brandedAsset(profile: LoopProfile): BrandedAsset {
   };
 }
 
-function dailyOf(monthly: number): number {
-  return Math.round((monthly / 30) * 100) / 100;
-}
-
 export function buildLoopPlan(args: {
   profile: LoopProfile;
-  totalDaily: number;
+  totalDaily?: number;
   googleAdsConnected: boolean;
   metaConnected: boolean;
+  googleBlocked?: boolean;
   observedAds?: ObservedAd[];
+  now?: Date;
 }): LoopPlan {
-  const totalDaily = Math.round(Math.max(0, args.totalDaily) * 100) / 100;
-  const asset = brandedAsset(args.profile);
+  const explicit = typeof args.totalDaily === 'number' && args.totalDaily > 0 ? args.totalDaily : undefined;
+  const assessed = assessProfile({
+    businessName: args.profile.businessName,
+    trade: args.profile.trade,
+    serviceArea: [args.profile.serviceAreas, args.profile.city].filter(Boolean).join(', '),
+    services: args.profile.services,
+    dailyBudget: args.profile.dailyBudget,
+    monthlyBudget: args.profile.monthlyBudget,
+    targetCpl: args.profile.targetCpl,
+    averageJobValue: args.profile.averageJobValue,
+    landingPage: args.profile.website,
+    logoUrl: args.profile.logoUrl,
+  }, explicit);
+  const now = args.now ?? new Date();
+  const season = seasonFocus(assessed.trade, now.getMonth());
+  const asset = brandedAsset({ ...args.profile, services: assessed.services.join(', ') || args.profile.services, city: assessed.locations.find((loc) => !/^\d{5}$/.test(loc)) || args.profile.city });
   const market = readMarket(args.observedAds);
-  const name = (args.profile.businessName || '').trim();
-  const services = (args.profile.services || 'drain cleaning, leak repair')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const city = (args.profile.city || '').trim();
-
-  let searchMonthly = 0;
-  let socialMonthly = 0;
-  let lsaMonthly = 0;
-  let summary = 'Add a business name, a trade, and a city before Miles sizes a plan.';
-  if (name && city && services.length && totalDaily > 0) {
-    const planned = planCampaign(parseIntake({
-      businessName: name,
-      vertical: 'home_services',
-      category: mapTrade(args.profile.trade),
-      services,
-      serviceArea: { cities: [city] },
-      monthlyBudget: Math.round(totalDaily * 30),
-      goal: 'more_calls',
-      emergency: /plumb|hvac|electric/i.test(args.profile.trade || 'plumbing'),
-    }));
-    summary = planned.summary;
-    const dollars = (ch: Channel) => planned.allocations.find((a) => a.channel === ch)?.monthlyBudget ?? 0;
-    searchMonthly = dollars('search');
-    socialMonthly = dollars('social');
-    lsaMonthly = dollars('lsa');
-  }
-
-  const searchDaily = dailyOf(searchMonthly);
-  const socialDaily = dailyOf(socialMonthly);
-  const lsaDaily = dailyOf(lsaMonthly);
-
+  const totalDaily = assessed.dailyBudget ?? 0;
+  const searches = assessed.complete ? buildSearchCampaigns(assessed, now) : [];
+  const searchDaily = moneySum(searches.map((s) => s.spec.dailyBudget));
+  const otherDaily = totalDaily >= 50 ? 0 : 0;
   const channels: ChannelDecision[] = [
     {
       channel: 'google_ads',
       label: 'Google Ads Search',
-      recommendedDaily: searchDaily,
-      executedDaily: args.googleAdsConnected && searchDaily > 0 ? searchDaily : 0,
-      status: searchDaily <= 0 ? 'not_in_mix' : args.googleAdsConnected ? 'ready_paused' : 'blocked',
-      executable: args.googleAdsConnected && searchDaily > 0,
-      reason: searchDaily <= 0
-        ? 'This budget’s trade mix assigns no Search dollars.'
-        : args.googleAdsConnected
-          ? 'Miles can create this Search campaign paused. Creating it does not run ads.'
-          : 'Google Ads is not connected for this account. Nothing will be created.',
+      recommendedDaily: assessed.complete ? searchDaily : 0,
+      executedDaily: assessed.complete && args.googleAdsConnected && !args.googleBlocked ? searchDaily : 0,
+      status: !assessed.complete ? 'blocked' : args.googleBlocked ? 'blocked' : args.googleAdsConnected ? 'ready_paused' : 'blocked',
+      executable: assessed.complete && args.googleAdsConnected && !args.googleBlocked && searchDaily > 0,
+      reason: !assessed.complete
+        ? `Profile is incomplete: ${assessed.missing.map((m) => m.label).join(', ')}. Nothing will be created.`
+        : args.googleBlocked
+          ? 'Google sign-in is healthy, but Pipedream is blocking production tool calls. Nothing will be created.'
+          : args.googleAdsConnected
+            ? (assessed.emergency && searches.length > 1
+              ? 'Miles can create separate paused emergency and planned Search campaigns inside the approved total.'
+              : 'Miles can create this Search campaign paused. Creating it does not run ads.')
+            : 'Google Ads is not connected for this account. Nothing will be created.',
     },
     {
       channel: 'meta',
       label: 'Facebook Ads',
-      recommendedDaily: socialDaily,
+      recommendedDaily: 0,
       executedDaily: 0,
-      status: socialDaily <= 0 ? 'not_in_mix' : 'blocked',
+      status: totalDaily >= 50 ? 'blocked' : 'not_in_mix',
       executable: false,
-      reason: socialDaily <= 0
-        ? `At $${totalDaily}/day the trade mix assigns $0 to Facebook. ${META_BLOCKED}`
-        : META_BLOCKED + (args.metaConnected ? ' A Facebook account is connected; the create is still not run.' : ' No per-tenant Facebook ad account is connected.'),
+      reason: totalDaily >= 50
+        ? META_BLOCKED
+        : `At $${totalDaily}/day Meta is not added. ${META_BLOCKED}`,
     },
     {
       channel: 'google_leads',
       label: 'Google Leads (Local Services Ads)',
-      recommendedDaily: lsaDaily,
+      recommendedDaily: 0,
       executedDaily: 0,
       status: 'blocked',
       executable: false,
-      reason: LSA_BLOCKED,
+      reason: totalDaily >= 50 ? LSA_BLOCKED : `At $${totalDaily}/day Local Services Ads are not added. ${LSA_BLOCKED}`,
     },
   ];
-
-  const executedDaily = Math.round(channels.reduce((s, c) => s + c.executedDaily, 0) * 100) / 100;
-  const heldDaily = Math.round((totalDaily - executedDaily) * 100) / 100;
-  let searchSpec: CampaignSpec | undefined;
-  const search = channels.find((c) => c.channel === 'google_ads');
-  if (search?.executable && asset.ok) {
-    searchSpec = buildCampaignSpec(
-      {
-        goal: `${name} ${services[0]}`,
-        dailyBudget: search.executedDaily,
-        finalUrl: args.profile.website || 'https://example.com',
-        locations: city ? [city] : undefined,
-      },
-      { business: name, trade: args.profile.trade || 'plumbing', city, services: services.join(', ') },
-    );
-    const group = searchSpec.adGroups[0];
-    if (group) {
-      group.rsa.headlines = asset.headlines;
-      group.rsa.descriptions = asset.descriptions;
-    }
-    searchSpec.status = 'PAUSED';
-  }
-
+  const executedDaily = channels.find((c) => c.channel === 'google_ads')?.executedDaily ?? 0;
+  const heldDaily = moneySum([totalDaily - executedDaily, otherDaily]);
+  const summary = !assessed.complete
+    ? `Still needed: ${assessed.missing.map((m) => m.label).join(', ')}.`
+    : `${assessed.businessName} ${assessed.tradeLabel || assessed.trade}: $${totalDaily}/day on Google Search inside ${assessed.locations.join(', ')}. ${season.note} ${asset.image.note}`;
   return {
     totalDaily,
     executedDaily,
-    heldDaily,
+    heldDaily: Math.max(0, Math.round(heldDaily * 100) / 100),
     budgetControl: BUDGET_CONTROL,
-    feasible: executedDaily > 0 && executedDaily <= totalDaily + 0.001,
+    feasible: assessed.complete && executedDaily > 0 && executedDaily <= totalDaily + 0.001,
     summary,
     channels,
     asset,
     market,
-    searchSpec,
+    searchSpec: channels.find((c) => c.channel === 'google_ads')?.executable ? searches[0]?.spec : undefined,
+    searchCampaigns: channels.find((c) => c.channel === 'google_ads')?.executable ? searches : [],
+    complete: assessed.complete,
+    missing: assessed.missing,
+    geo: assessed.locations,
+    seasonNote: season.note,
   };
 }
 
-function mapTrade(trade?: string): string {
-  const t = (trade || 'plumbing').toLowerCase();
-  if (t.includes('hvac')) return 'hvac';
-  if (t.includes('electric')) return 'electrical';
-  if (t.includes('roof')) return 'roofing';
-  if (t.includes('paint')) return 'painting';
-  return 'plumbing';
+function moneySum(values: number[]): number {
+  return Math.round(values.reduce((sum, n) => sum + n, 0) * 100) / 100;
 }
 
 export function judgeActivation(args: {
@@ -318,8 +295,10 @@ export function judgeActivation(args: {
   campaignResource?: string;
   approvedDaily?: number;
   requestedDaily?: number;
+  productionBlocked?: boolean;
 }): ActivationDecision {
   if (!args.confirm) return { allowed: false, providerCalled: false, reason: 'Activation needs its own explicit approval. Creating a paused campaign did not approve this.' };
+  if (args.productionBlocked) return { allowed: false, providerCalled: false, reason: 'Pipedream is blocking production tool calls for this account. Nothing was enabled.' };
   if (!args.recordOwnerId || args.recordOwnerId !== args.ownerId) return { allowed: false, providerCalled: false, reason: 'That campaign is not on this account.' };
   if (!args.campaignResource) return { allowed: false, providerCalled: false, reason: 'There is no paused campaign to activate.' };
   if (typeof args.approvedDaily !== 'number' || typeof args.requestedDaily !== 'number' || args.requestedDaily > args.approvedDaily + 0.001) {
@@ -328,7 +307,7 @@ export function judgeActivation(args: {
   return {
     allowed: true,
     providerCalled: false,
-    reason: 'Approval is recorded. Miles will not send ENABLED to Google. Turn the paused campaign on in Google Ads if you want it to spend.',
+    reason: 'Approval is recorded. Miles will set this campaign to ENABLED.',
   };
 }
 

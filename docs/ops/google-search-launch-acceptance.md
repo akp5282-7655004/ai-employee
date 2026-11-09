@@ -75,6 +75,28 @@ The Google account used in the test needs permission, in Google Ads, to create c
 7. Disconnect Google Ads and approve again. Miles must say the account is not connected and must not report a created campaign.
 8. Approve a Meta campaign. Miles must refuse and must not create an ad in any Meta account.
 
+## Full contractor loop (code)
+
+Checked 2026-11-09. Automated tests do not call Pipedream, Google, TikTok, Meta, or GoHighLevel.
+
+1. Profile. Launch uses the profile trade, service area, daily or monthly budget, target cost per lead, average job value, and landing page. A missing field is listed. Miles does not substitute $20 or a national location. Logo is optional and the plan says when none is attached. A painting company stays on painting.
+2. Plan. Google Search is the only channel created. At $20/day Meta, Local Services Ads, Performance Max, and TikTok are not given budget. A trade with emergency demand and at least $10/day gets two paused Search campaigns (emergency and planned), each with its own keywords and a schedule note. The schedule is on the plan. The Google create chain has no verified ad-schedule action, so hours are not sent to Google. Locations come from the profile ZIPs, cities, and radius. Seasonal notes shift which service line leads (air conditioning in summer, furnace in fall, exterior painting in spring and fall). The executed daily total does not exceed the approved total.
+3. Create. Approval creates those campaigns paused. A separate approval sets status ENABLED through `google_ads-create-or-update-campaign` (`operationType` update, `updateMask` status). One-click revert sets PAUSED. Both record who and when. A production tool-call block, a demo connector, a budget over the cap, or another tenant stops the call before it is sent.
+4. Leads. `highlevel_oauth-upsert-contact` still runs only for the signed-in user's own GoHighLevel connection. Pipeline stages are stored on the account. Pipedream's HighLevel page lists six actions and none upsert an opportunity, so Miles does not call one. https://pipedream.com/apps/highlevel-oauth
+5. Follow-up. Speed-to-lead and missed-call texts send only when GoHighLevel is connected, speed-to-lead is on, and the person has not opted out. Otherwise the text is a draft or it is skipped. Forwarded Local Services notices are not texted.
+6. Jobs. Mark a lead qualified, booked, or won with a job value. The performance rollup reports CPL, cost per qualified lead, cost per booked job, CAC, and ROI from those marks and recorded spend. The dashboard labels mock figures as sample data. A live connector with no rows shows no sample numbers.
+7. Optimization. Pause, budget-shift, channel comparison, and missed-call dollar estimates are proposals. Missed-call dollars use this account's own booked rate and average job value. They are not a guarantee. Applying a proposal is a later approval. The proposal endpoint itself does not change Google.
+8. TikTok. `tiktok_ads_manager-create-or-update-campaign` can be approved with `operationStatus` DISABLE. TikTok's campaign create doc names DISABLE as disabled when created: https://business-api.tiktok.com/portal/docs/create-a-campaign/v1.3. Pipedream's prop is `operationStatus`, "Status when created". This creates a paused campaign shell. It does not create an ad group or an ad, and it is not part of the $20 Search plan.
+9. Meta. Rechecked 2026-11-09. https://pipedream.com/apps/facebook-ads returned 404. Facebook Graph API lists zero actions. Facebook Pages posts are not ads. The Meta launch route still refuses. The shared `META_*` env path is not used.
+
+## Still owner or provider setup
+
+- Enable Connect production access (Startup or Business on https://pipedream.com/pricing?plan=Connect). Keep `PIPEDREAM_ENVIRONMENT=production`. Do not point customer traffic at development and do not reuse another external user's accounts.
+- Until that entitlement is on, customer-id resolution, paused create, enable, and revert stay blocked in production.
+- GoHighLevel opportunity stages need a published Pipedream action. There is not one in the six actions listed.
+- Meta ads need a published campaign or lead-form action. There is not one.
+- Billing is unchanged: credit writes are last-write-wins, a Stripe webhook can acknowledge a grant before it is stored, auto top-up increases the credit balance without a card charge, and `BILLING_ENFORCE` stays off unless it is set to `1`.
+
 ## What this does not prove
 
-A green automated suite does not prove step 6. Only the operator, on a test account, can confirm Google accepted the write.
+A green automated suite does not prove a paused campaign exists in Google, that enable or revert was accepted, or that a TikTok campaign was created. Only the operator, on a test account, after Connect production access is on, can confirm those writes. Do not enable a customer campaign during that check unless the owner has approved that specific test.

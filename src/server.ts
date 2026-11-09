@@ -31,6 +31,7 @@ import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt,
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
 import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, META_SHARED_ACCOUNT_NOTE, searchLaunchNote } from './agents/googlelaunch.js';
 import { buildLoopPlan, decideLead, ghlUpsertProps, GHL_UPSERT_ACTION, judgeActivation, normalizeLead, type ObservedAd } from './agents/plumberloop.js';
+import { judgeTikTokCreate, planFollowUp, proposeOptimizations, rollupJobs, stageOpportunity, TIKTOK_CREATE_ACTION, type JobMark } from './agents/contractorloop.js';
 import { PIPEDREAM_APPS, pipedreamConfigPresence, CATALOG_READ_ON } from './connectors/pipedreamCatalog.js';
 import { SPEC_PLATFORMS, loadSpec, searchSpecCheck, type SpecPlatform } from './specs/index.js';
 import { metricCatalog, dashboardDefaults } from './metrics/catalog.js';
@@ -1408,7 +1409,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         creditsUsed: summarizeUsage(d.usage as Usage | undefined, new Date()).credits,
         weatherTriggers: ((d.weatherRules as Array<{ enabled?: boolean }>) ?? []).filter((r) => r.enabled).length,
       },
-      marketing: { connected: platforms.googleAds.ready, oauth: googleOauth, hasData: spend.length > 0, range, spend: Math.round(totalSpend), conversions: totalConv, cpa: totalConv ? Math.round((totalSpend / totalConv) * 100) / 100 : null, revenue: Math.round(revenue), targetCpa: Number(p.targetCpa) || null, platforms },
+      sample: connector.name === 'mock',
+      sampleLabel: connector.name === 'mock' ? 'Sample data. These figures are not from a live ad account.' : '',
+      marketing: { connected: platforms.googleAds.ready, oauth: googleOauth, hasData: spend.length > 0, range, spend: Math.round(totalSpend), conversions: totalConv, cpa: totalConv ? Math.round((totalSpend / totalConv) * 100) / 100 : null, revenue: Math.round(revenue), targetCpa: Number(p.targetCpa) || null, platforms, sample: connector.name === 'mock' },
       leads: { connected: crmLinked || leads.length > 0, hasData: leadsWin.length > 0, count: leadsWin.length, uncontacted: leadsWin.filter((l) => !l.contacted).length },
       speedToLead: responderStats(d.speedToLead as SpeedToLeadState | undefined, new Date().toISOString()),
       reviews: { connected: gmbLinked || reviews.length > 0, hasData: reviews.length > 0, count: reviews.length, avg: reviews.length ? Math.round((reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length) * 10) / 10 : null },
@@ -2583,26 +2586,37 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     });
   });
 
-  const loopContext = async (userId: string, observed?: ObservedAd[], totalDaily = 20) => {
+  const loopContext = async (userId: string, observed?: ObservedAd[], totalDaily?: number) => {
     const data = await authStore.getUserData(userId);
     const p = (data.profile ?? {}) as Record<string, string>;
     const kit = (data.brandKit ?? {}) as { logoUrl?: string };
     const assets = (data.assets ?? {}) as { logo?: string };
     let apps: string[] = [];
     try { apps = (await connector.listAccounts(userId)).map((a) => a.app); } catch { apps = []; }
+    const googleOn = apps.includes('google_ads');
+    if (googleOn && connector.listAdTargets) {
+      try { await connector.listAdTargets(userId); } catch { /* readiness stays unresolved */ }
+    }
+    const num = (v?: string) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : undefined; };
     const plan = buildLoopPlan({
       profile: {
         businessName: p.businessName,
-        trade: p.industry || 'plumbing',
+        trade: p.industry,
         city: (p.serviceAreas || p.city || '').split(',')[0]?.trim(),
+        serviceAreas: p.serviceAreas || p.city,
         services: p.services,
         website: p.website,
         phone: p.phone,
         logoUrl: kit.logoUrl || assets.logo || p.logo,
+        dailyBudget: num(p.dailyBudget),
+        monthlyBudget: num(p.monthlyBudget),
+        targetCpl: num(p.targetCpl) || num(p.targetCpa),
+        averageJobValue: num(p.averageJobValue) || num(p.avgTicket),
       },
       totalDaily,
-      googleAdsConnected: apps.includes('google_ads'),
-      metaConnected: apps.some((a) => a === 'facebook' || a === 'facebook_ads'),
+      googleAdsConnected: googleOn,
+      googleBlocked: connector.googleAdsBlock?.(userId)?.kind === 'connect_production_unavailable',
+      metaConnected: false,
       observedAds: observed,
     });
     return { data, plan, apps };
@@ -2623,8 +2637,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const total = Number(req.body?.totalDaily);
-    const { plan } = await loopContext(u.id, req.body?.observedAds, Number.isFinite(total) && total > 0 ? total : 20);
-    return { ok: true, plan, activation: 'separate — creating paused is not running ads' };
+    const explicit = Number.isFinite(total) && total > 0 ? total : undefined;
+    const { plan } = await loopContext(u.id, req.body?.observedAds, explicit);
+    return { ok: true, plan, complete: plan.complete, missing: plan.missing, activation: 'separate. Creating paused is not running ads.' };
   });
 
   app.post<{ Body: { confirm?: boolean; totalDaily?: number; target?: string; observedAds?: ObservedAd[] } }>('/api/journey/approve', async (req, reply) => {
@@ -2635,9 +2650,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       return reply.code(403).send({ ok: false, live: false, error: 'The public demo cannot create a campaign.' });
     }
     const total = Number(req.body?.totalDaily);
-    const { data, plan } = await loopContext(u.id, req.body?.observedAds, Number.isFinite(total) && total > 0 ? total : 20);
+    const explicit = Number.isFinite(total) && total > 0 ? total : undefined;
+    const { data, plan } = await loopContext(u.id, req.body?.observedAds, explicit);
     const search = plan.channels.find((c) => c.channel === 'google_ads');
-    if (!search?.executable || !plan.searchSpec) {
+    if (!plan.complete) {
+      return reply.code(409).send({ ok: false, live: false, plan, missing: plan.missing, error: plan.summary, created: false });
+    }
+    if (!search?.executable || !plan.searchCampaigns.length) {
       data.plumberLoop = { ownerId: u.id, approvedDaily: 0, campaignResource: undefined, at: new Date().toISOString(), executed: false };
       await authStore.setUserData(u.id, data);
       return reply.code(409).send({ ok: false, live: false, plan, error: search?.reason || 'Search is not executable.', created: false });
@@ -2656,34 +2675,48 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     } else if (targets.length !== 1) {
       return reply.code(400).send({ ok: false, live: false, error: 'Pick which Google Ads account receives the paused Search campaign.', targets });
     }
-    const spec = forcePausedSearchSpec(plan.searchSpec);
-    const result = connector.launchCampaign
-      ? await connector.launchCampaign(u.id, spec, chosen!.id)
-      : { ok: false, live: false, steps: [{ step: 'Google Ads', ok: false, error: 'This connector cannot create campaigns.' }], note: 'Not created.' };
     const demoRun = connector.name === 'mock' || isDemoAccount(u.email);
-    const live = demoRun ? false : !!result.live;
-    const judged = judgeSearchLaunch(result.steps ?? []);
-    const created = live && judged.ok;
+    const createdRows: { resource?: string; name: string; daily: number; role: string; status: 'PAUSED' }[] = [];
+    const steps: { step: string; ok: boolean; error?: string; resource?: string }[] = [];
+    for (const planned of plan.searchCampaigns) {
+      const spec = forcePausedSearchSpec(planned.spec);
+      if (spec.locations.some((loc) => /united states/i.test(loc))) {
+        return reply.code(409).send({ ok: false, live: false, error: 'The plan included a location outside the service area. Nothing was created.' });
+      }
+      const result = connector.launchCampaign
+        ? await connector.launchCampaign(u.id, spec, chosen!.id)
+        : { ok: false, live: false, steps: [{ step: 'Google Ads', ok: false, error: 'This connector cannot create campaigns.' }], note: 'Not created.' };
+      const liveOne = demoRun ? false : !!result.live;
+      const judged = judgeSearchLaunch(result.steps ?? []);
+      const created = liveOne && judged.ok;
+      steps.push(...(demoRun ? [{ step: 'Demo connector', ok: false, error: 'No campaign was created in Google Ads.' }] : (result.steps ?? [])));
+      if (created && result.campaignResource) createdRows.push({ resource: result.campaignResource, name: spec.name, daily: spec.dailyBudget, role: planned.role, status: 'PAUSED' });
+    }
+    const created = createdRows.length === plan.searchCampaigns.length && createdRows.length > 0;
     data.plumberLoop = {
       ownerId: u.id,
-      approvedDaily: search.executedDaily,
-      campaignResource: created ? result.campaignResource : undefined,
+      approvedDaily: plan.totalDaily,
+      campaignResource: createdRows[0]?.resource,
+      campaigns: createdRows,
       at: new Date().toISOString(),
+      approvedBy: u.email,
       executed: created,
+      status: 'PAUSED',
     };
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'plumber-loop', title: `Approved paused Search create at $${search.executedDaily}/day of $${plan.totalDaily}/day total` });
     await authStore.setUserData(u.id, data);
     return {
       ok: created,
-      live,
+      live: created,
       demo: demoRun,
       created,
       status: 'PAUSED',
-      activation: 'not run — approve activation separately; Miles will not send ENABLED',
+      activation: 'not run. Approve activation separately before Miles sets ENABLED.',
       plan,
-      steps: demoRun ? [{ step: 'Demo connector', ok: false, error: 'No campaign was created in Google Ads.' }] : (result.steps ?? []),
-      campaignResource: created ? result.campaignResource : undefined,
-      note: demoRun ? 'Demo mode. Nothing was created and nothing is spending.' : (created ? `Paused Search campaign created at $${search.executedDaily}/day. The rest of the $${plan.totalDaily} stays unspent here.` : 'The Search create did not finish. Nothing was enabled.'),
+      campaigns: createdRows,
+      steps,
+      campaignResource: createdRows[0]?.resource,
+      note: demoRun ? 'Demo mode. Nothing was created and nothing is spending.' : (created ? `Paused Search created at $${search.executedDaily}/day. Nothing is enabled.` : 'The Search create did not finish. Nothing was enabled.'),
     };
   });
 
@@ -2691,19 +2724,57 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    const rec = (data.plumberLoop ?? {}) as { ownerId?: string; approvedDaily?: number; campaignResource?: string };
+    const rec = (data.plumberLoop ?? {}) as { ownerId?: string; approvedDaily?: number; campaignResource?: string; campaigns?: { resource?: string; daily?: number; status?: string }[] };
+    const resource = req.body?.campaignResource || (rec.campaigns?.length === 1 ? rec.campaigns[0]?.resource : rec.campaignResource);
+    const owned = (rec.campaigns ?? []).find((c) => c.resource === resource);
+    const requested = Number(req.body?.dailyBudget ?? owned?.daily ?? rec.approvedDaily);
     const decision = judgeActivation({
       confirm: req.body?.confirm === true,
       ownerId: u.id,
       recordOwnerId: rec.ownerId,
-      campaignResource: req.body?.campaignResource || rec.campaignResource,
+      campaignResource: resource,
       approvedDaily: rec.approvedDaily,
-      requestedDaily: Number(req.body?.dailyBudget ?? rec.approvedDaily),
+      requestedDaily: requested,
+      productionBlocked: connector.googleAdsBlock?.(u.id)?.kind === 'connect_production_unavailable',
     });
     if (!decision.allowed) return reply.code(403).send({ ...decision, executed: false });
-    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'plumber-loop', title: 'Activation requested — not sent to Google' });
+    if (connector.name === 'mock' || isDemoAccount(u.email)) {
+      return reply.code(403).send({ allowed: false, providerCalled: false, executed: false, reason: 'Demo mode does not enable a live campaign.' });
+    }
+    if (!connector.setGoogleCampaignStatus) {
+      return reply.code(409).send({ allowed: false, providerCalled: false, executed: false, reason: 'This connector cannot change a Google campaign status.' });
+    }
+    const result = await connector.setGoogleCampaignStatus(u.id, { campaignResource: resource!, status: 'ENABLED' });
+    if (!result.called) return reply.code(409).send({ allowed: false, providerCalled: false, executed: false, reason: result.note });
+    if (!result.ok) return reply.code(502).send({ allowed: true, providerCalled: true, executed: false, reason: result.note });
+    const when = new Date().toISOString();
+    data.plumberLoop = { ...rec, status: 'ENABLED', activatedAt: when, activatedBy: u.email, campaignResource: resource };
+    appendApproval(data, { id: newToken().slice(0, 10), ts: when, kind: 'approval', actor: u.email, source: 'plumber-loop', title: `Enabled Google campaign ${resource}` });
     await authStore.setUserData(u.id, data);
-    return { ...decision, executed: false };
+    return { allowed: true, providerCalled: true, executed: true, status: 'ENABLED', activatedBy: u.email, activatedAt: when, reason: result.note };
+  });
+
+  app.post<{ Body: { confirm?: boolean; campaignResource?: string } }>('/api/journey/revert', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Explicit confirm required. Nothing was paused.' });
+    const data = await authStore.getUserData(u.id);
+    const rec = (data.plumberLoop ?? {}) as { ownerId?: string; campaignResource?: string; status?: string };
+    if (rec.ownerId !== u.id || !rec.campaignResource) return reply.code(403).send({ ok: false, providerCalled: false, reason: 'That campaign is not on this account.' });
+    const resource = req.body?.campaignResource || rec.campaignResource;
+    if (resource !== rec.campaignResource) return reply.code(403).send({ ok: false, providerCalled: false, reason: 'That campaign is not the one this account enabled.' });
+    if (connector.name === 'mock' || isDemoAccount(u.email)) return reply.code(403).send({ ok: false, providerCalled: false, reason: 'Demo mode does not change a live campaign.' });
+    if (connector.googleAdsBlock?.(u.id)?.kind === 'connect_production_unavailable') {
+      return reply.code(409).send({ ok: false, providerCalled: false, reason: 'Pipedream is blocking production tool calls for this account. Nothing was paused.' });
+    }
+    if (!connector.setGoogleCampaignStatus) return reply.code(409).send({ ok: false, providerCalled: false, reason: 'This connector cannot change a Google campaign status.' });
+    const result = await connector.setGoogleCampaignStatus(u.id, { campaignResource: resource, status: 'PAUSED' });
+    if (!result.called || !result.ok) return reply.code(result.called ? 502 : 409).send({ ok: false, providerCalled: result.called, reason: result.note });
+    const when = new Date().toISOString();
+    data.plumberLoop = { ...rec, status: 'PAUSED', revertedAt: when, revertedBy: u.email };
+    appendApproval(data, { id: newToken().slice(0, 10), ts: when, kind: 'action', actor: u.email, source: 'plumber-loop', title: `Paused Google campaign ${resource}` });
+    await authStore.setUserData(u.id, data);
+    return { ok: true, providerCalled: true, status: 'PAUSED', revertedBy: u.email, revertedAt: when };
   });
 
   // Saved campaign drafts — build one, save it, come back to it in the builder.
@@ -4169,6 +4240,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!st.webhookSecret || !sameToken(st.webhookSecret, secret)) return reply.code(401).send({ error: 'bad token' });
     const parsed = normalizeLead((req.body ?? {}) as Record<string, unknown>);
     if (!parsed.lead) return reply.code(400).send({ error: parsed.error });
+    const lead = parsed.lead;
     const seen = Array.isArray(data.leadEventIds) ? (data.leadEventIds as string[]) : [];
     const decision = decideLead(parsed.lead, seen, !!st.enabled);
     if (!decision.valid) return reply.code(400).send({ error: decision.reason });
@@ -4179,18 +4251,36 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     let upserted = false;
     if (decision.upsert && ghl) {
       try {
-        const r = await connector.runAction({ externalUserId: uid, actionId: GHL_UPSERT_ACTION, configuredProps: ghlUpsertProps(parsed.lead) });
+        const r = await connector.runAction({ externalUserId: uid, actionId: GHL_UPSERT_ACTION, configuredProps: ghlUpsertProps(lead) });
         if (!r.ok) return reply.code(503).send({ error: r.note || 'GoHighLevel upsert failed. The event was not marked done, so it can be retried.', upserted: false });
         upserted = true;
       } catch (err) {
         return reply.code(503).send({ error: String((err as Error).message), upserted: false });
       }
     }
-    data.leadEventIds = [parsed.lead.eventId, ...seen].slice(0, 500);
+    data.leadEventIds = [lead.eventId, ...seen].slice(0, 500);
+    const profile = (data.profile ?? {}) as { businessName?: string };
+    const follow = planFollowUp({
+      name: lead.name,
+      phone: lead.phone,
+      consent: lead.consent,
+      optOut: lead.optOut,
+      source: lead.source,
+      missedCall: (req.body ?? {}).missedCall === true,
+      ghlConnected: ghl,
+      automationEnabled: !!st.enabled && decision.followUp,
+      businessName: profile.businessName,
+    });
+    const opportunity = stageOpportunity();
+    const jobs = Array.isArray(data.jobMarks) ? (data.jobMarks as JobMark[]) : [];
+    data.jobMarks = [{ eventId: lead.eventId, stage: 'new', channel: lead.source, serviceLine: (data.profile as { industry?: string } | undefined)?.industry }, ...jobs.filter((j) => j.eventId !== lead.eventId)].slice(0, 500);
     let followedUp = false;
-    if (decision.followUp && ghl && connector.runAppTask) {
+    if (follow.disposition === 'draft') {
+      const drafts = Array.isArray(data.followUpDrafts) ? data.followUpDrafts as unknown[] : [];
+      data.followUpDrafts = [{ at: new Date().toISOString(), eventId: lead.eventId, kind: follow.kind, body: follow.body, reason: follow.reason }, ...drafts].slice(0, 100);
+    } else if (follow.disposition === 'send' && ghl && connector.runAppTask) {
       try {
-        const sms = await connector.runAppTask({ externalUserId: uid, app: 'highlevel_oauth', query: 'Send SMS', params: { phone: parsed.lead.phone || '', name: parsed.lead.name || '', message: `Hi ${parsed.lead.name || 'there'} — ${((data.profile ?? {}) as { businessName?: string }).businessName || 'we'} got your request.` } });
+        const sms = await connector.runAppTask({ externalUserId: uid, app: 'highlevel_oauth', query: 'Send SMS', params: { phone: lead.phone || '', name: lead.name || '', message: follow.body } });
         followedUp = !!sms?.ok;
       } catch { followedUp = false; }
     }
@@ -4198,12 +4288,91 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return {
       ok: true,
       duplicate: false,
-      source: parsed.lead.source,
+      source: lead.source,
       upserted,
       crm: ghl ? 'highlevel_oauth' : 'blocked',
       followedUp,
+      followUp: follow.disposition,
+      opportunity,
       reason: ghl ? decision.reason : 'GoHighLevel (highlevel_oauth) is not connected for this account. No contact was written and no message was sent.',
     };
+  });
+
+  app.post<{ Body: { eventId?: string; stage?: JobMark['stage']; jobValue?: number; serviceLine?: string; channel?: string } }>('/api/jobs/mark', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const eventId = (req.body?.eventId || '').trim();
+    const stage = req.body?.stage;
+    if (!eventId || (stage !== 'qualified' && stage !== 'booked' && stage !== 'won' && stage !== 'new')) {
+      return reply.code(400).send({ error: 'eventId and a stage of new, qualified, booked, or won are required.' });
+    }
+    const data = await authStore.getUserData(u.id);
+    const jobs = Array.isArray(data.jobMarks) ? (data.jobMarks as JobMark[]) : [];
+    const prior = jobs.find((j) => j.eventId === eventId);
+    const next: JobMark = { eventId, stage, jobValue: Number(req.body?.jobValue) || prior?.jobValue, serviceLine: req.body?.serviceLine || prior?.serviceLine, channel: req.body?.channel || prior?.channel || 'unknown' };
+    data.jobMarks = [next, ...jobs.filter((j) => j.eventId !== eventId)].slice(0, 500);
+    await authStore.setUserData(u.id, data);
+    return { ok: true, job: next, opportunity: stageOpportunity() };
+  });
+
+  app.get('/api/performance', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const jobs = Array.isArray(data.jobMarks) ? (data.jobMarks as JobMark[]) : [];
+    const sample = connector.name === 'mock';
+    const snap = await getSnapshot(u.id);
+    const spend = (snap?.campaigns ?? []).map((c) => ({ channel: c.platform || 'unknown', amount: c.spend || 0 }));
+    return rollupJobs({ spend: sample ? [] : spend, jobs: sample ? [] : jobs, sample });
+  });
+
+  app.post('/api/optimize/proposals', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const jobs = Array.isArray(data.jobMarks) ? (data.jobMarks as JobMark[]) : [];
+    const body = (req.body ?? {}) as { rows?: { campaign: string; channel: string; spend: number; leads: number; booked: number; won: number; jobValue: number; dailyBudget: number }[]; missedCalls?: number; spendThreshold?: number };
+    const rows = Array.isArray(body.rows) ? body.rows : [];
+    const booked = jobs.filter((j) => j.stage === 'booked' || j.stage === 'won').length;
+    return proposeOptimizations({
+      rows,
+      targetCpl: Number(p.targetCpl || p.targetCpa) || 0,
+      spendThreshold: Number(body.spendThreshold) > 0 ? Number(body.spendThreshold) : 50,
+      approvedDailyCap: Number(p.dailyBudget) || Number((data.plumberLoop as { approvedDaily?: number } | undefined)?.approvedDaily) || 0,
+      missedCalls: body.missedCalls,
+      averageJobValue: Number(p.averageJobValue || p.avgTicket) || undefined,
+      leadsForRate: jobs.length,
+      bookedForRate: booked,
+    });
+  });
+
+  app.post<{ Body: { confirm?: boolean; advertiserId?: string; campaignName?: string; dailyBudget?: number } }>('/api/tiktok/launch', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    let connected = false;
+    let authId = '';
+    try {
+      const accounts = await connector.listAccounts(u.id, 'tiktok_ads_manager');
+      const mine = accounts.find((a) => a.app === 'tiktok_ads_manager' && a.externalUserId === u.id && a.healthy);
+      connected = !!mine;
+      authId = mine?.id ?? '';
+    } catch { connected = false; }
+    const saved = await authStore.getUserData(u.id);
+    const cap = Number((saved.plumberLoop as { approvedDaily?: number } | undefined)?.approvedDaily) || Number((saved.profile as { dailyBudget?: string } | undefined)?.dailyBudget) || 0;
+    const judged = judgeTikTokCreate({
+      confirm: req.body?.confirm === true,
+      advertiserId: req.body?.advertiserId,
+      campaignName: req.body?.campaignName,
+      dailyBudget: req.body?.dailyBudget,
+      approvedDailyCap: cap,
+      connected,
+    });
+    if (!judged.allowed || !judged.configuredProps) return reply.code(409).send({ ok: false, live: false, created: false, reason: judged.reason });
+    if (judged.configuredProps.operationStatus !== 'DISABLE') return reply.code(409).send({ ok: false, live: false, created: false, reason: 'TikTok creates stay disabled. Nothing was created.' });
+    const props = { ...judged.configuredProps, tiktok_ads_manager: { authProvisionId: authId } };
+    const result = await connector.runAction({ externalUserId: u.id, actionId: TIKTOK_CREATE_ACTION, configuredProps: props });
+    return { ok: result.ok, live: connector.name !== 'mock' && result.ok, created: result.ok, status: 'DISABLE', actionId: TIKTOK_CREATE_ACTION, reason: result.note || judged.reason };
   });
 
   // ── Post-Job Review Request (recipe #14) — config + status ───────────────────

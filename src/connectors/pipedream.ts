@@ -849,6 +849,43 @@ export class PipedreamConnector implements Connector {
     return { ok, live: true, campaignResource: campaign.resource, link, steps, note };
   }
 
+  /**
+   * Update one campaign's status through google_ads-create-or-update-campaign.
+   * Google Ads CampaignStatus values used here are ENABLED and PAUSED.
+   * A production tool-call block returns before any actions.run.
+   */
+  async setGoogleCampaignStatus(externalUserId: string, args: { campaignResource: string; status: 'ENABLED' | 'PAUSED' }): Promise<{ ok: boolean; live: boolean; called: boolean; note: string }> {
+    if (args.status !== 'ENABLED' && args.status !== 'PAUSED') {
+      return { ok: false, live: false, called: false, note: 'Only ENABLED or PAUSED are allowed.' };
+    }
+    const blocked = this.gadsBlock.get(externalUserId);
+    if (blocked?.kind === 'connect_production_unavailable') {
+      return { ok: false, live: false, called: false, note: blocked.message };
+    }
+    const campaignId = (args.campaignResource.match(/campaigns\/(\d+)/) || [])[1];
+    if (!campaignId) return { ok: false, live: false, called: false, note: 'That is not a Google campaign resource. Nothing was changed.' };
+    const accts = await this.listAccounts(externalUserId, 'google_ads');
+    const account = accts.find((a) => a.healthy) ?? accts[0];
+    if (!account) return { ok: false, live: false, called: false, note: 'Google Ads is not connected for this account. Nothing was changed.' };
+    const rows = await this.listComponents('google_ads');
+    const targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
+    if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') {
+      return { ok: false, live: false, called: false, note: this.gadsBlock.get(externalUserId)!.message };
+    }
+    const target = this.preferTargets(externalUserId, targets)[0];
+    const acct: Record<string, unknown> = {};
+    if (target?.login) acct.accountId = target.login;
+    if (target?.client) acct.customerClientId = target.client;
+    const result = await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign', account.id, {}, {
+      ...acct,
+      operationType: 'update',
+      campaignId,
+      updateMask: 'status',
+      status: args.status,
+    });
+    return { ok: result.ok, live: true, called: true, note: result.ok ? `Status set to ${args.status}.` : (result.error || 'Google did not accept the status change.') };
+  }
+
   // ── Meta (Facebook/Instagram) campaign launch — direct Graph API ────────────
   // Connected via three Render env vars from the owner's Meta ad account:
   //   META_ADS_ACCESS_TOKEN  — a token with ads_management on the ad account
