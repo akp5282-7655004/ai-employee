@@ -58,6 +58,8 @@ import {
 } from './billing/stripe.js';
 import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, updateBand } from './billing/subscription.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
+import { buildMilesPlan, readSite } from './agents/autoplan.js';
+import { checklist, healthAlerts, morningBrief, skillCards, DEFAULT_RULES } from './agents/autopilot.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
 import { emptyReviewState, reviewAskText, parseRating, routeRating, promoterText, detractorText, recoveryTask, type ReviewRequestState } from './agents/reviewrequest.js';
@@ -1969,7 +1971,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const sub = billingState(data);
     const paymentsConnected = stripeReady();
     return {
-      launchOffer: credits.launchOffer,
+      launchOffer: credits.launchOffer && sub.band !== 'starter' && sub.band !== 'growth' && sub.band !== 'scale',
+      launchGrant: LAUNCH_GRANT,
+      launchCap: 100,
       spend30,
       spendKnown,
       impliedBand: bandForSpend(spend30),
@@ -1991,9 +1995,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       enforced: billingEnforced(),
       paymentsConnected,
       subscription: sub.status === 'none' ? null : sub,
-      note: paymentsConnected
-        ? 'Monitoring is never metered — credits draw only on work items. Your card is held by Stripe; Miles never sees or stores it.'
-        : 'Launch offer: $0/month with $100 in credits. Monitoring is never metered — credits draw only on work items. Payments are not connected yet, so nothing is charged and an empty balance does not pause work.',
+      note: (credits.launchOffer && sub.band !== 'starter' && sub.band !== 'growth' && sub.band !== 'scale'
+        ? `Launch offer: $0 a month and $${LAUNCH_GRANT} in media credits for the first 100 accounts. $${credits.remaining.toFixed(2)} remaining. Images are $0.10, voiceover is $0.50, video is $1.50. Monitoring is not metered. `
+        : '') + (paymentsConnected
+        ? 'Your card is held by Stripe. Miles never sees or stores it.'
+        : 'Payments are not connected yet, so nothing is charged.'),
     };
   });
 
@@ -2583,6 +2589,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       ok,
       live,
       partial: live && judged.partial,
+      adsMissing: judged.adsMissing ?? [],
       status: 'PAUSED',
       activation: 'disabled',
       demo: demoRun,

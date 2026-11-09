@@ -25,7 +25,7 @@ export function forcePausedSearchSpec<T extends { status?: string }>(spec: T): T
  * its keywords, and a responsive search ad all succeeded. A later verify step,
  * when present, must also succeed. Anything else is a partial or a miss.
  */
-export function judgeSearchLaunch(steps: CampaignLaunchStep[]): { ok: boolean; partial: boolean; missing: string[] } {
+export function judgeSearchLaunch(steps: CampaignLaunchStep[]): { ok: boolean; partial: boolean; missing: string[]; adsMissing: { name: string; adGroupResource?: string; error?: string }[] } {
   const succeeded = (re: RegExp) => steps.some((s) => re.test(s.step) && s.ok);
   const missing: string[] = [];
   if (!succeeded(/budget/i)) missing.push('daily budget');
@@ -33,12 +33,19 @@ export function judgeSearchLaunch(steps: CampaignLaunchStep[]): { ok: boolean; p
   if (!succeeded(/ad group/i)) missing.push('ad group');
   const keywords = steps.filter((s) => /keyword/i.test(s.step));
   if (!keywords.length || keywords.some((s) => !s.ok)) missing.push('keywords');
-  if (!succeeded(/responsive search ad/i)) missing.push('responsive search ad');
+  const rsaSteps = steps.filter((s) => /responsive search ad/i.test(s.step));
+  const rsaFails = rsaSteps.filter((s) => !s.ok);
+  if (!rsaSteps.length || rsaFails.length) missing.push('responsive search ad');
   const verify = steps.find((s) => /verify campaign/i.test(s.step));
   if (verify && !verify.ok) missing.push('verification');
   const created = steps.some((s) => s.ok && !!s.resource);
   const ok = missing.length === 0;
-  return { ok, partial: created && !ok, missing };
+  const adsMissing = rsaFails.map((s) => {
+    const name = s.step.match(/in "([^"]+)"/)?.[1] || 'ad';
+    const adGroup = steps.find((step) => step.ok && step.resource && new RegExp(`ad group "${name}"`, 'i').test(step.step));
+    return { name, adGroupResource: adGroup?.resource, error: s.error };
+  });
+  return { ok, partial: created && !ok, missing, adsMissing };
 }
 
 export function searchLaunchNote(args: {

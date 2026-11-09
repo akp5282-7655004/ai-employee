@@ -73,65 +73,193 @@ const clampBudget = (n: unknown): number => {
   const v = Number(n);
   return Number.isFinite(v) && v > 0 ? Math.min(Math.max(Math.round(v * 100) / 100, 1), 10_000) : 20;
 };
-const titleCase = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase());
-const clip = (s: string, n: number) => (s.length <= n ? s : s.slice(0, n).replace(/\s+\S*$/, '').trim());
 
-/** Split a services string ("Interior & exterior repaints, cabinets") into themes. */
-function serviceThemes(ctx: CampaignCtx): string[] {
-  const raw = (ctx.services || ctx.trade || 'services').split(/[,;/&]|\band\b/i).map((s) => s.trim()).filter(Boolean);
-  const themes = raw.length ? raw : [ctx.trade || 'services'];
-  return themes.slice(0, 3).map((t) => titleCase(t));
+const ACRONYMS = new Set(['HVAC', 'AC', 'LLC', 'PA', 'USA']);
+
+/** Title case, with short acronyms left in caps. All-caps marketing words become title case. */
+export function normalizeAdCase(input: string): string {
+  return input
+    .replace(/#\s*1\b/gi, '')
+    .replace(/\b(best|number one|top-rated|top rated)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => {
+      const letters = word.replace(/[^A-Za-z]/g, '');
+      if (letters.length <= 3 && ACRONYMS.has(letters.toUpperCase())) {
+        return word.replace(letters, letters.toUpperCase());
+      }
+      if (letters.length >= 3 && letters === letters.toUpperCase()) {
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+      }
+      if (word === word.toLowerCase()) return word.charAt(0).toUpperCase() + word.slice(1);
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-/** High-intent keyword set for a service theme in a city. */
-function keywordsFor(theme: string, ctx: CampaignCtx): KeywordSpec[] {
+/** Use the first complete variant that fits. Never cut a sentence in the middle. */
+export function fitCopy(variants: string[], max: number): string {
+  for (const raw of variants) {
+    const text = normalizeAdCase(raw);
+    if (text && text.length <= max) return text;
+  }
+  return '';
+}
+
+const OFFER_WORD = /\b(free|quote|quotes|custom|estimate|estimates|discount|discounts|best|cheap|guaranteed|sale|special|deal|deals|today|call|now|offer|offers)\b/gi;
+
+export function stripOfferWords(input: string): string {
+  return normalizeAdCase(input.replace(/#\s*\d+/g, ' ').replace(OFFER_WORD, ' ')).replace(/\s+/g, ' ').trim();
+}
+
+const SERVICE_BOOK: Record<string, { test: RegExp; label: string }[]> = {
+  painting: [
+    { test: /interior/i, label: 'Interior painting' },
+    { test: /exterior/i, label: 'Exterior painting' },
+    { test: /cabinet/i, label: 'Cabinet painting' },
+    { test: /commercial/i, label: 'Commercial painting' },
+    { test: /\bhouse\b/i, label: 'House painting' },
+  ],
+  plumbing: [
+    { test: /drain/i, label: 'Drain cleaning' },
+    { test: /water heater/i, label: 'Water heater' },
+    { test: /leak/i, label: 'Leak repair' },
+    { test: /sewer/i, label: 'Sewer line' },
+  ],
+  hvac: [
+    { test: /air condition|\bac\b/i, label: 'Air conditioning' },
+    { test: /furnace/i, label: 'Furnace' },
+    { test: /heat pump/i, label: 'Heat pump' },
+  ],
+  electrical: [
+    { test: /panel/i, label: 'Panel upgrade' },
+    { test: /rewir|wiring/i, label: 'Wiring' },
+    { test: /charger/i, label: 'EV charger' },
+  ],
+  roofing: [
+    { test: /leak/i, label: 'Leak repair' },
+    { test: /replacement/i, label: 'Roof replacement' },
+    { test: /repair/i, label: 'Roof repair' },
+  ],
+};
+
+function tradeKey(trade?: string): string {
+  const t = (trade || '').toLowerCase();
+  if (t.includes('paint')) return 'painting';
+  if (t.includes('plumb')) return 'plumbing';
+  if (t.includes('hvac') || t.includes('air condition')) return 'hvac';
+  if (t.includes('electric')) return 'electrical';
+  if (t.includes('roof')) return 'roofing';
+  return '';
+}
+
+/** Ad groups come from real service lines, never from offers or taglines. */
+export function deriveServiceLines(services: string | undefined, trade: string | undefined): string[] {
+  const blob = `${services || ''} ${trade || ''}`;
+  const key = tradeKey(trade);
+  const book = SERVICE_BOOK[key];
+  if (book) {
+    const found = book.filter((row) => row.test.test(blob)).map((row) => row.label);
+    if (found.length) return found.slice(0, 4);
+    return book.slice(0, 3).map((row) => row.label);
+  }
+  const parts = (services || '').split(/[,;/|]/).map((part) => stripOfferWords(part)).filter((part) => part.length > 2);
+  if (parts.length) return parts.slice(0, 3);
+  const cleaned = stripOfferWords(trade || '');
+  return [cleaned || 'Local service'];
+}
+
+export function shortBrand(business: string | undefined, trade: string | undefined, city: string | undefined): string {
+  const parts = (business || '').split(/[,|]/).map((part) => part.trim()).filter(Boolean);
+  const clean = parts.map((part) => stripOfferWords(part)).filter((part) => part.length > 2 && !/#/.test(part));
+  const pick = clean[clean.length - 1] || clean[0] || normalizeAdCase(trade || 'Local service');
+  const withCity = pick.length <= 25 ? pick : normalizeAdCase(city ? `${trade || 'Local'} ${city}` : pick);
+  return fitCopy([withCity, normalizeAdCase(trade || 'Local service'), 'Local service'], 25) || 'Local service';
+}
+
+export function budgetCaution(daily: number, targetCpl: number | null): { warn: boolean; daysPerLead: number | null; message: string } {
+  if (!targetCpl || targetCpl <= 0 || !(daily > 0)) return { warn: false, daysPerLead: null, message: '' };
+  const days = Math.ceil(targetCpl / daily);
+  if (days < 14) return { warn: false, daysPerLead: days, message: '' };
+  return {
+    warn: true,
+    daysPerLead: days,
+    message: `At $${daily}/day and a $${targetCpl} target cost per lead, one lead at that cost takes about ${days} days of spend. This is arithmetic, not a promise of leads. You can still create the paused campaign if you acknowledge it.`,
+  };
+}
+
+const NEGATIVES = ['jobs', 'careers', 'salary', 'hiring', 'diy', 'how to', 'free', 'training', 'course', 'cheap', 'used', 'wholesale'];
+
+function keywordAllowed(text: string, negatives: string[]): boolean {
+  const lower = text.toLowerCase();
+  if (/\b(\w+)\s+\1\b/.test(lower)) return false;
+  if (/^best\b/.test(lower)) return false;
+  return !negatives.some((neg) => lower.includes(neg.toLowerCase()));
+}
+
+function keywordsFor(theme: string, ctx: CampaignCtx, negatives: string[]): KeywordSpec[] {
   const t = theme.toLowerCase();
-  const city = (ctx.city || '').toLowerCase();
-  const out: KeywordSpec[] = [
+  const city = (ctx.city || '').split(',')[0]?.trim().toLowerCase() || '';
+  const drafts: KeywordSpec[] = [
     { text: `${t} near me`, match: 'phrase' },
-    { text: `${t} services`, match: 'phrase' },
-    { text: city ? `${t} ${city}` : `local ${t}`, match: 'phrase' },
-    { text: `${t} cost`, match: 'broad' },
-    { text: `${t} quote`, match: 'broad' },
-    { text: `best ${t}`, match: 'exact' },
+    { text: city ? `${t} ${city}` : `${t} near me`, match: 'phrase' },
+    { text: t, match: 'exact' },
   ];
-  // de-dupe by text
   const seen = new Set<string>();
-  return out.filter((k) => (seen.has(k.text) ? false : (seen.add(k.text), true)));
+  return drafts.filter((row) => {
+    const text = row.text.replace(/\s+/g, ' ').trim();
+    if (!text || seen.has(text) || !keywordAllowed(text, negatives)) return false;
+    seen.add(text);
+    row.text = text;
+    return true;
+  });
 }
 
-/** Deterministic responsive-search-ad copy for a theme (within Google's limits). */
-function rsaFor(theme: string, ctx: CampaignCtx): RsaSpec {
-  const biz = ctx.business || 'Us';
-  const city = ctx.city ? ` in ${ctx.city}` : '';
-  const offer = ctx.offers ? clip(ctx.offers, 30) : '';
-  // Google serves best with ALL 15 headline slots filled (master spec:
-  // "recommendation: max out 15/4") — vary lengths, include the theme in ≥2.
+function rsaFor(theme: string, ctx: CampaignCtx, brand: string): RsaSpec {
+  const city = (ctx.city || '').split(',')[0]?.trim() || '';
+  const themeTitle = normalizeAdCase(theme);
+  const cityTitle = city ? normalizeAdCase(city) : '';
   const headlines = [
-    clip(`${theme}${city}`, 30),
-    clip(`${biz} — ${theme}`, 30),
-    clip(`${theme} Done Right`, 30),
-    'Fast, Reliable Service',
-    'Free Quote Today',
-    'Licensed & Insured',
-    'Book Online in Minutes',
-    offer ? clip(offer, 30) : 'Trusted Local Pros',
-    'Same-Day Availability',
-    clip(`Top-Rated ${theme}`, 30),
-    clip(`Local ${theme} Experts`, 30),
-    ctx.city ? clip(`${ctx.city}'s Trusted Choice`, 30) : 'Your Trusted Local Choice',
-    'Upfront, Honest Pricing',
-    '100% Satisfaction Focus',
-    clip(`Call Now — ${theme}`, 30),
-  ].filter(Boolean);
+    fitCopy([themeTitle, 'Local service'], 30),
+    fitCopy([cityTitle ? `${themeTitle} in ${cityTitle}` : themeTitle, themeTitle], 30),
+    fitCopy([cityTitle ? `Serving ${cityTitle}` : 'Serving your area'], 30),
+    fitCopy([brand, themeTitle], 30),
+    fitCopy([`${themeTitle} help`, themeTitle], 30),
+    'Licensed And Insured',
+    'Book A Visit',
+    'Local Crew',
+    'Call For A Visit',
+    'Clear Pricing',
+    fitCopy([cityTitle ? `${cityTitle} ${themeTitle}` : themeTitle, themeTitle], 30),
+    'Schedule A Visit',
+    'Ask About Timing',
+    'Request A Visit',
+    'Talk To The Crew',
+  ].map((line) => normalizeAdCase(line)).filter((line, i, all) => line && line.length <= 30 && all.indexOf(line) === i);
+  while (headlines.length < 15) {
+    const extra = fitCopy([`${themeTitle} ${headlines.length + 1}`], 30);
+    if (!extra || headlines.includes(extra)) break;
+    headlines.push(extra);
+  }
   const descriptions = [
-    clip(`${biz} offers ${theme.toLowerCase()}${city}. Fast response, upfront pricing, quality work.`, 90),
-    clip(`${offer ? offer + '. ' : ''}Get your free quote today and see why locals choose us.`, 90),
-    clip(`Licensed, insured, and reliable. Call or book online for ${theme.toLowerCase()}.`, 90),
-    'Trusted by your neighbors. Honest pricing, on-time service, guaranteed work.',
-  ];
-  const dedup = [...new Set(headlines)];
-  return { headlines: dedup.slice(0, 15), descriptions: descriptions.slice(0, 4) };
+    fitCopy([
+      cityTitle ? `${themeTitle} in ${cityTitle}. Call to schedule a visit.` : `${themeTitle}. Call to schedule a visit.`,
+      `${themeTitle}. Call to schedule a visit.`,
+      'Call to schedule a visit.',
+    ], 90),
+    fitCopy([
+      `${brand} handles ${themeTitle.toLowerCase()}.`,
+      `${themeTitle}. Ask about timing.`,
+      'Ask about timing.',
+    ], 90),
+    fitCopy([`Schedule ${themeTitle.toLowerCase()} with a local crew.`, 'Schedule a visit with a local crew.'], 90),
+    'Honest pricing. You approve the campaign before it is created paused.',
+  ].filter((line, i, all) => line && line.length <= 90 && all.indexOf(line) === i);
+  return { headlines: headlines.slice(0, 15), descriptions: descriptions.slice(0, 4) };
 }
 
 /** Negative keywords that stop wasted spend for local-service search. */
@@ -147,65 +275,89 @@ function urlWith(base: string, seg: string): string {
 
 /** Business name asset (≤25, must match brand). */
 function businessNameOf(ctx: CampaignCtx): string {
-  return clip(ctx.business || ctx.trade || 'Our Business', 25);
+  return shortBrand(ctx.business, ctx.trade, ctx.city);
 }
 
-/** Two ≤15-char display-path segments (alphanumeric, hyphen for spaces). */
 function displayPathsOf(themes: string[]): string[] {
-  const seg = (s: string) => clip(s.replace(/[^a-z0-9 ]/gi, '').trim().replace(/\s+/g, '-'), 15);
-  return [seg(themes[0] || 'Services'), 'Free-Quote'].filter(Boolean);
+  const seg = (s: string) => {
+    const clean = normalizeAdCase(s).replace(/[^a-z0-9 ]/gi, '').trim().replace(/\s+/g, '-');
+    return fitCopy([clean, clean.split('-')[0] || '', 'Services'], 15) || 'Services';
+  };
+  return [seg(themes[0] || 'Services'), 'Visit'].filter(Boolean);
 }
 
 /** 4+ sitelinks derived from the services, each with its own final URL + descriptions. */
 function sitelinksOf(themes: string[], ctx: CampaignCtx, finalUrl: string): Sitelink[] {
   const base: { text: string; desc1: string; desc2: string; seg: string }[] = [
-    { text: clip(themes[0] || 'Our Services', 25), desc1: clip(`Professional ${(themes[0] || 'service').toLowerCase()}`, 35), desc2: 'Fast, reliable, done right', seg: 'services' },
-    { text: 'Get a Free Quote', desc1: 'No-obligation estimate', desc2: 'Upfront, honest pricing', seg: 'quote' },
-    { text: 'About Us', desc1: clip(`Trusted ${ctx.city ? 'in ' + ctx.city : 'local'} team`, 35), desc2: 'Licensed & insured', seg: 'about' },
-    { text: 'Contact Us', desc1: 'Call or message anytime', desc2: 'We respond fast', seg: 'contact' },
+    { text: fitCopy([themes[0] || 'Our Services', 'Services'], 25), desc1: fitCopy([`Local ${(themes[0] || 'service').toLowerCase()}`, 'Local service'], 35), desc2: 'Clear timing', seg: 'services' },
+    { text: 'Request A Visit', desc1: 'Talk through the work', desc2: 'No pressure', seg: 'visit' },
+    { text: 'About Us', desc1: fitCopy([ctx.city ? `Team in ${normalizeAdCase(ctx.city.split(',')[0] || '')}` : 'Local team', 'Local team'], 35), desc2: 'Licensed and insured', seg: 'about' },
+    { text: 'Contact Us', desc1: 'Call or message', desc2: 'We reply', seg: 'contact' },
   ];
-  if (themes[1]) base.splice(1, 0, { text: clip(themes[1], 25), desc1: clip(`${themes[1]} services`, 35), desc2: 'Ask about our options', seg: 'services-2' });
+  if (themes[1]) base.splice(1, 0, { text: fitCopy([themes[1], 'Services'], 25), desc1: fitCopy([`${themes[1]}`, 'More services'], 35), desc2: 'Ask about options', seg: 'services-2' });
   return base.slice(0, 6).map((s) => ({ text: s.text, desc1: s.desc1, desc2: s.desc2, url: urlWith(finalUrl, s.seg) }));
 }
 
 /** 4–6 callout assets (≤25 each), no punctuation-heavy text. */
 function calloutsOf(ctx: CampaignCtx): string[] {
-  const outs = ['Licensed & Insured', 'Free Estimates', 'Locally Owned', 'Satisfaction Guaranteed', 'Fast Response Times', 'Experienced Professionals'];
-  if (ctx.offers) outs.unshift(clip(ctx.offers.replace(/[.!]+$/, ''), 25));
-  return [...new Set(outs.map((c) => clip(c, 25)))].slice(0, 6);
+  const outs = ['Licensed And Insured', 'Locally Owned', 'Clear Pricing', 'Fast Response', 'Experienced Crew', 'Schedule A Visit'];
+  return [...new Set(outs.map((line) => fitCopy([line], 25)).filter(Boolean))].slice(0, 6);
 }
 
 /** Structured snippet — header "Service catalog" + the service themes as values (≥3). */
 function snippetOf(themes: string[]): StructuredSnippet {
-  const vals = [...new Set(themes.map((t) => clip(titleCase(t), 25)))];
-  while (vals.length < 3) vals.push(['Free Estimates', 'Emergency Service', 'Quality Guaranteed'][vals.length] || 'Service');
+  const vals = [...new Set(themes.map((t) => fitCopy([t, 'Service'], 25)).filter(Boolean))];
+  while (vals.length < 3) vals.push(['Local Service', 'Scheduled Work', 'Repair Work'][vals.length] || 'Service');
   return { header: 'Service catalog', values: vals.slice(0, 10) };
 }
 
 /** Build a complete, launch-ready campaign spec. Always full; never partial. */
-export function buildCampaignSpec(input: CampaignInput, ctx: CampaignCtx): CampaignSpec {
-  const themes = serviceThemes(ctx);
+export function repairAdCopy(spec: CampaignSpec): CampaignSpec {
+  const negatives = spec.negatives?.length ? spec.negatives : NEGATIVES;
+  spec.name = normalizeAdCase(spec.name);
+  if (spec.businessName) spec.businessName = fitCopy([normalizeAdCase(spec.businessName), 'Local service'], 25) || 'Local service';
+  spec.displayPaths = (spec.displayPaths ?? []).map((path) => fitCopy([normalizeAdCase(path).replace(/\s+/g, '-'), 'Visit'], 15)).filter(Boolean);
+  spec.adGroups = spec.adGroups.map((group) => ({
+    ...group,
+    name: normalizeAdCase(group.name),
+    keywords: group.keywords
+      .map((row) => ({ text: row.text.toLowerCase().replace(/\s+/g, ' ').trim(), match: row.match === 'broad' ? 'phrase' as const : row.match }))
+      .filter((row) => keywordAllowed(row.text, negatives)),
+    rsa: {
+      headlines: group.rsa.headlines.map((line) => fitCopy([normalizeAdCase(line)], 30)).filter(Boolean).slice(0, 15),
+      descriptions: group.rsa.descriptions.map((line) => fitCopy([normalizeAdCase(line)], 90)).filter(Boolean).slice(0, 4),
+    },
+  }));
+  return spec;
+}
+
+export function buildCampaignSpec(input: CampaignInput, ctx: CampaignCtx, role: 'Planned' | 'Emergency' = 'Planned'): CampaignSpec {
+  const themes = deriveServiceLines(ctx.services, ctx.trade);
   const budget = clampBudget(input.dailyBudget);
-  const name = clip(`${ctx.business || ctx.trade || 'New'} — ${themes[0] ?? 'Search'} ${new Date().getFullYear()}`, 120);
-  const locations = input.locations && input.locations.length ? input.locations : ctx.city ? [ctx.city] : ['United States'];
+  const city = (ctx.city || input.locations?.[0] || 'Your area').split(',')[0]?.trim() || 'Your area';
+  const tradeLabel = normalizeAdCase(tradeKey(ctx.trade) || ctx.trade || themes[0] || 'Search');
+  const name = `${tradeLabel} | ${normalizeAdCase(city)} | Search | ${role}`.slice(0, 120);
+  const locations = input.locations && input.locations.length ? input.locations : ctx.city ? [ctx.city] : [city];
   const finalUrl = (input.finalUrl || '').trim() || 'https://example.com';
-  return {
+  const brand = businessNameOf({ ...ctx, city });
+  const spec: CampaignSpec = {
     name,
     dailyBudget: budget,
     biddingStrategy: 'MAXIMIZE_CLICKS',
-    networks: ['Google Search', 'Search partners'],
+    networks: ['Google Search'],
     locations,
     language: 'English',
     finalUrl,
-    adGroups: themes.map((theme) => ({ name: theme, keywords: keywordsFor(theme, ctx), rsa: rsaFor(theme, ctx) })),
-    negatives: defaultNegatives(),
+    adGroups: themes.map((theme) => ({ name: theme, keywords: keywordsFor(theme, { ...ctx, city }, NEGATIVES), rsa: rsaFor(theme, { ...ctx, city }, brand) })),
+    negatives: NEGATIVES,
     status: 'PAUSED',
-    businessName: businessNameOf(ctx),
+    businessName: brand,
     displayPaths: displayPathsOf(themes),
-    sitelinks: sitelinksOf(themes, ctx, finalUrl),
+    sitelinks: sitelinksOf(themes, { ...ctx, city }, finalUrl),
     callouts: calloutsOf(ctx),
     structuredSnippet: snippetOf(themes),
   };
+  return repairAdCopy(spec);
 }
 
 /** Human summary line for the launch confirmation. */

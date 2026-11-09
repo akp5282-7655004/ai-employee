@@ -120,13 +120,15 @@ export async function runSevenSkill(key: string, ctx: SkillCtx): Promise<Omit<Sk
       if (liveSpend && !losers.length) {
         return { skill: key, name: def.name, status: 'read_only', approvable: false, source, summary: 'No campaigns meet the pause rule (≥$50 spend, zero conversions, 30-day window). Nothing to cut.', details: [] };
       }
-      const rows = liveSpend ? losers : [{ campaign: 'Example — Display Remarketing', cost: 96, conversions: 0 }];
-      const saved = rows.reduce((a, r) => a + r.cost, 0);
+      if (!liveSpend) {
+        return { skill: key, name: def.name, status: 'read_only', approvable: false, source: 'live', summary: 'No campaign spend is on file. Miles will not invent a pause list.', details: [] };
+      }
+      const saved = losers.reduce((a, r) => a + r.cost, 0);
       return {
         skill: key, name: def.name, status: 'needs_approval', approvable: true, source,
         approve_disabled_reason: noWrite,
-        summary: `${rows.length} campaign${rows.length === 1 ? '' : 's'} spending with zero conversions — pausing saves ~${fmt$(saved)}/mo.`,
-        details: rows.map((r) => `Pause "${r.campaign}" — ${fmt$(r.cost)} spent, 0 conversions in 30 days. Revert: re-enable in one click.`),
+        summary: `${losers.length} campaign${losers.length === 1 ? '' : 's'} spending with zero conversions. Pausing is a proposal until you approve it. About ${fmt$(saved)} is on those rows.`,
+        details: losers.map((r) => `Pause "${r.campaign}": ${fmt$(r.cost)} spent, 0 conversions in 30 days. Revert: re-enable in one click.`),
       };
     }
     case 'budget-shifter': {
@@ -137,8 +139,8 @@ export async function runSevenSkill(key: string, ctx: SkillCtx): Promise<Omit<Sk
         skill: key, name: def.name, status: 'needs_approval', approvable: true, source,
         approve_disabled_reason: noWrite,
         summary: liveSpend
-          ? `Shift 20% of daily budget from "${loser}" to "${winner}" (caps: max 20%/day move, $5/day floor).`
-          : 'Sample proposal: shift 20% of daily budget from the worst CPL campaign to the best (caps: max 20%/day, $5/day floor).',
+          ? `Shift up to 20% of daily budget from "${loser}" to "${winner}". Caps: max 20% a day, and never above the approved total.`
+          : 'No campaign spend is on file, so there is no budget move to propose.',
         details: [
           'Why: winners are budget-limited while losers burn the same dollars at worse cost per booked job.',
           'Guardrails: never below the floor, never more than the daily cap, monthly ceiling respected.',
@@ -163,12 +165,14 @@ export async function runSevenSkill(key: string, ctx: SkillCtx): Promise<Omit<Sk
     case 'search-term-gold-miner': {
       const terms = ctx.searchTerms ?? [];
       const liveTerms = terms.length > 0;
-      const rows = liveTerms ? terms : [
-        { term: `${(ctx.trade || 'painter').toLowerCase()} jobs near me`, cost: 42, clicks: 18, conversions: 0 },
-        { term: `diy ${(ctx.trade || 'painting').toLowerCase()} tips`, cost: 27, clicks: 14, conversions: 0 },
-        { term: `${(ctx.trade || 'painting').toLowerCase()} cost calculator free`, cost: 19, clicks: 9, conversions: 0 },
-        { term: `emergency ${(ctx.services || 'repair').split(',')[0]?.toLowerCase().trim() ?? 'repair'} near me`, cost: 38, clicks: 11, conversions: 4 },
-      ];
+      const rows = liveTerms ? terms : [];
+      if (!liveTerms) {
+        return {
+          skill: key, name: 'Search Term Gold Miner', status: 'read_only', approvable: false, source: 'live',
+          summary: 'No search terms are on file. Miles will not invent wasted-spend figures.',
+          details: [],
+        };
+      }
       const waste = rows.filter((t) => t.cost >= 10 && t.conversions === 0).sort((a, b) => b.cost - a.cost);
       const gold = rows.filter((t) => t.conversions > 0 && t.cost / Math.max(t.conversions, 1) < 25).sort((a, b) => b.conversions - a.conversions);
       const wasted = waste.reduce((a, t) => a + t.cost, 0);
@@ -188,8 +192,11 @@ export async function runSevenSkill(key: string, ctx: SkillCtx): Promise<Omit<Sk
     case 'negative-keyword-implementer': {
       const terms = (ctx.searchTerms ?? []).filter((t) => t.cost >= 10 && t.conversions === 0);
       const liveTerms = terms.length > 0;
-      const negs = liveTerms ? terms.map((t) => t.term) : ['jobs', 'diy', 'free', 'calculator', 'how to', 'salary'];
-      const saved = liveTerms ? terms.reduce((a, t) => a + t.cost, 0) : 86;
+      if (!liveTerms) {
+        return { skill: key, name: 'Negative Keyword Implementer', status: 'read_only', approvable: false, source: 'live', summary: 'No wasted search terms are on file. Miles will not invent a negative list.', details: [] };
+      }
+      const negs = terms.map((t) => t.term);
+      const saved = terms.reduce((a, t) => a + t.cost, 0);
       return {
         skill: key, name: 'Negative Keyword Implementer', status: 'needs_approval', approvable: true,
         source: liveTerms ? 'live' : 'sample',
