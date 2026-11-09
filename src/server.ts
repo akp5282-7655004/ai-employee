@@ -1268,9 +1268,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       dailySpend: daily,
       explicitCreate,
     });
-    if (decisions.create.effect !== 'apply') {
+    if (decisions.create.effect === 'queue') {
       miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'create', title: 'Create paused Google Search', reason: decisions.create.reason, status: 'queued' });
       miles.phase = 'ready';
+      rememberMiles(data, miles, decisions.create.reason);
+      await authStore.setUserData(uid, data);
+      return { ok: true, decisions, created: false };
+    }
+    if (decisions.create.effect !== 'apply') {
       rememberMiles(data, miles, decisions.create.reason);
       await authStore.setUserData(uid, data);
       return { ok: true, decisions, created: false };

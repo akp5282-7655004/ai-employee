@@ -89,5 +89,7 @@ describe('Google path at $20 a day', () => {
     const started = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
     expect(started.json().created).toBe(false);
     expect(calls).not.toContain('launch');
+    const home = await app.inject({ method: 'GET', url: '/api/miles/home', headers });
+    expect(home.json().inbox.filter((i: { status: string }) => i.status === 'queued')).toEqual([]);
   });
 });

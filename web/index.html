@@ -2621,7 +2621,7 @@ function renderMilesHome(box, d){
     plan.append(el('p','appsub',(spec.name||'Search')+' · $'+(spec.dailyBudget||0)+'/day · status '+(d.activation||'not created')));
     (spec.adGroups||[]).forEach(g=>{ const row=el('div','appsub', g.name+': '+(g.keywords||[]).map(k=>k.text).join(', ')); plan.append(row); });
     const row=el('div'); row.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-top:10px';
-    const start=el('button','go', d.mode==='automate'?'Start inside my caps':'Queue for my approval');
+    const start=el('button','go', d.mode==='automate'?'Start inside my caps':d.mode==='manual'?'Manual mode does not create':'Queue for my approval');
     start.onclick=async()=>{ start.disabled=true; const r=await(await fetch('/api/miles/go',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:true})})).json(); start.disabled=false; toast(r.demo?'Preview only. Nothing was created in Google.':(r.enabled?'Enabled inside your caps.':(r.created?'Created paused.':'Waiting on you.'))); openOverview(); };
     const kill=el('button',null, d.caps&&d.caps.paused?'Resume':'Pause all'); kill.style.cssText='border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;background:var(--panel)';
     kill.onclick=async()=>{ await fetch('/api/miles/kill',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({paused:!(d.caps&&d.caps.paused)})}); openOverview(); };
