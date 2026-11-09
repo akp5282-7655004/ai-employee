@@ -173,7 +173,7 @@ function fmtDuration(sec: number): string {
 export function responderStats(
   state: SpeedToLeadState | undefined,
   nowISO: string,
-): { enabled: boolean; today: number; total: number; avgResponse: string | null; held: number } {
+): { enabled: boolean; today: number; total: number; avgResponse: string | null; held: number; withinMinute: number } {
   const s = state ?? emptyState();
   const today = nowISO.slice(0, 10);
   const todays = s.log.filter((e) => e.at.slice(0, 10) === today);
@@ -185,5 +185,6 @@ export function responderStats(
     total: s.log.length,
     avgResponse: avgSec != null ? fmtDuration(avgSec) : null,
     held: todays.filter((e) => e.held).length,
+    withinMinute: timed.filter((e) => (e.responseSec ?? 999) <= 60).length,
   };
 }

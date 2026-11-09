@@ -1,13 +1,38 @@
 # Miles autopilot plan
 
-For the owner. Implementation is paused. This file is the plan, not a claim that the new journey is built.
+## Current build (Google only)
+
+The path to test on a painting business at $20 a day:
+
+1. Crawl the website. Save a Google Business Profile link. Name competitor sites. Places listings are read only when `GOOGLE_PLACES_KEY` is set. Competitor ad spend is not available.
+2. Three questions: goal, daily budget, leads per day. The math is budget divided by leads, compared with Searchlight when that trade has a row. Painting has no Google Ads row. Miles does not invent one.
+3. One Google Search plan from the home-services playbook.
+4. **Automate everything:** the saved daily budget, monthly ceiling, and max percent change are the standing approval. Miles may create and enable inside those caps, logs it, and can revert or pause all.
+5. **Hybrid:** the same plan waits in a queue. Nothing is pushed until you approve that item.
+6. **Manual:** Miles does not act.
+7. The 11 skills run on their own clocks. A move inside the caps can apply when a real Google action exists (pause). A larger budget move waits. Empty accounts do not get invented spend.
+8. New leads and missed calls get a GoHighLevel text when that account is connected and speed-to-lead is on. Otherwise the reply stays a draft. The home shows how many were answered in under a minute.
+9. Booked jobs are the ones you mark. The morning brief uses that count.
+
+Meta, TikTok, and Local Services Ads show as **coming later**. They are not built in this version.
+
+## Follow-up: Meta, TikTok, and Local Services Ads
+
+Do this only after the Google path is live for the painting account.
+
+- Meta: Pipedream still has no verified campaign create. Replicate the Google flow (plan, paused create, enable inside caps, revert) when a real action exists. Until then the screen stays "coming later".
+- TikTok: a paused campaign shell action exists and was left out of this build on purpose. A shell is not an ad. Add it as its own later phase, still paused until the policy says enable.
+- Local Services Ads: the playbook prefers them at a small budget. There is no create action. Keep the playbook note. Do not spend on LSA until a verified create exists.
+
+## Three modes
+
+- **Automate everything.** About $149 a month instead of a $5,000 agency. Setup is the standing approval: budget, Google share, caps. Miles creates, enables, and optimizes inside the daily budget, monthly ceiling, and max percent change per day. Everything is logged. One-click revert. Kill switch pauses all. Morning brief says what happened. Default caps are $20 a day, $600 a month, 10% a day.
+- **Hybrid.** Miles builds campaigns, ads, SEO drafts, posts, and GoHighLevel replies, and queues them. You approve before anything is pushed.
+- **Manual.** You use the tools. Miles does not act.
+
+Per-area overrides are stored (for example automate PPC, hybrid for social). A channel with no push stays held in every mode.
 
 Miles replaces a marketing agency. The owner answers calls, books jobs, and finishes jobs.
-
-Two modes:
-
-- **Automate everything.** Business info, connected accounts, and three answers (goal, daily budget, leads per day). Miles does the work. The owner only approves spend, or sets caps in advance. Default.
-- **Manual.** The same tools, visible and editable, for an owner who wants to run a piece themselves.
 
 Nothing spends or turns on without an approval, unless the owner has already set a cap and the move is inside it. Every automatic move is logged and reversible. Numbers come from the account or from the Searchlight benchmark file. If a number is not there, Miles says so.
 
@@ -190,6 +215,8 @@ Connections: `/api/connections`, `/api/connect-token`, `/api/apps`, `/api/integr
 
 ## 3. Proposed shape
 
+The current build at the top of this file replaces the older two-step approval for Automate mode. In that mode the caps are the standing yes, including enable, as long as the move stays inside them. Hybrid still queues each push. Meta, TikTok, and Local Services Ads are coming later.
+
 ### Automate everything (the home)
 
 After signup the owner sees one path:
@@ -320,4 +347,26 @@ Checks run on this branch before the plan was committed:
 
 Those tests are the existing suite. There is no new test yet for the painting copy rules, the failed-ad case, or the billing-page wording. The old campaign tests still passed, which means the generator did not break their assertions. It does not prove the live painting bugs are covered.
 
-Do not merge this draft. Phase 1 should be reviewed from this document first.
+Section 5 above describes the earlier WIP, before the Google-only path was wired. The home, the three modes, and the policy tests are in this branch now. Meta, TikTok, and Local Services Ads were not built.
+
+## Go-live checklist (painting, $20 a day, Google + GoHighLevel)
+
+Do this on Render after you choose to deploy. This draft does not deploy itself.
+
+1. `DATABASE_URL` set to Postgres. Do not set `ALLOW_EPHEMERAL_STORE` on Render.
+2. `CONNECTOR=pipedream`
+3. `PIPEDREAM_ENVIRONMENT=production`
+4. `PIPEDREAM_PROJECT_ID`, `PIPEDREAM_CLIENT_ID`, `PIPEDREAM_CLIENT_SECRET` for the Connect project that has Google Ads and GoHighLevel (`highlevel_oauth`).
+5. In the app, Integrations: connect Google Ads, then pick the customer id for the painting account. A manager login with no client selected will not create anything.
+6. In Google Ads itself: billing is on for that customer id, and the landing page is the final URL Miles will use. Miles does not turn on Google billing.
+7. Connect GoHighLevel with the `highlevel_oauth` app, not a shared API key.
+8. On the home screen, choose Automate everything, set $20 a day (monthly ceiling defaults to about $600, max change 10% a day), then Start. Hybrid will only queue. Manual will not create.
+9. Copy the speed-to-lead webhook from Automations into GoHighLevel: new lead posts to `/api/hooks/lead/<token>?event=new_lead`, missed call posts to the same URL with `?event=missed_call`. The lead payload needs a phone. Without GoHighLevel connected, Miles keeps a draft and does not text.
+10. The website form or call tracking must hit that webhook. Miles does not see a lead that never arrives.
+11. Mark a job booked with the jobs control (or `POST /api/jobs/mark`) so cost per booked job is yours, not a guess.
+12. Optional: `GOOGLE_PLACES_KEY` so Crawl can list public Places results. Without it, the profile link is saved and ratings are not read.
+13. Optional: `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` so lead texts are written by the model. Without a key, Miles uses the built-in draft.
+14. Optional, only if you charge the $149 plan: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER` ($149). The first 100 accounts stay on the $0 launch offer with $100 of media credits. Credits are for images, voice, and video. Campaigns and skill runs do not use them.
+15. Do not add Meta, TikTok, or Local Services Ads keys for this test. Those channels are coming later.
+
+Pause all is the kill switch. Revert sets the Google campaign back to paused when a real campaign resource is on file.

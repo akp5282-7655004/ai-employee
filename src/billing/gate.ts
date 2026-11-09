@@ -15,11 +15,8 @@ export function adSpendAllowed(data: Record<string, unknown>): { ok: boolean; re
   if (!launch && !paid) {
     return {
       ok: false,
-      reason: 'No active plan. The launch offer is the first 100 accounts at $0 a month with $100 in credits. After that, Starter is $149, Growth is $397, and Scale is $797. Creating or enabling ads stays off. Reads stay available.',
+      reason: 'No active plan. The launch offer is the first 100 accounts at $0 a month with $100 in media credits. After that, Starter is $149, Growth is $397, and Scale is $797. Creating ads stays off until there is a plan. Reads stay available.',
     };
-  }
-  if (credits.remaining <= 0) {
-    return { ok: false, reason: 'This plan has no credits left. Creating or enabling ads is paused. Reads stay available.' };
   }
   return { ok: true };
 }

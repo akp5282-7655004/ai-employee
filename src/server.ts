@@ -58,8 +58,10 @@ import {
 } from './billing/stripe.js';
 import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, updateBand } from './billing/subscription.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
-import { buildMilesPlan, readSite } from './agents/autoplan.js';
-import { checklist, healthAlerts, morningBrief, skillCards, DEFAULT_RULES } from './agents/autopilot.js';
+import { buildBundle, competitorAudit, crawlFacts, performanceAudit, websiteAudit } from './agents/journey.js';
+import { planGo } from './agents/milesrun.js';
+import { decidePolicy } from './agents/policy.js';
+import { dueSkills, periodKey } from './agents/skillclock.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
 import { emptyReviewState, reviewAskText, parseRating, routeRating, promoterText, detractorText, recoveryTask, type ReviewRequestState } from './agents/reviewrequest.js';
@@ -1095,6 +1097,320 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return { ok: true, profile: data.profile };
   });
 
+  type MilesInbox = { id: string; kind: 'create' | 'enable' | 'skill'; title: string; reason: string; status: 'queued' | 'applied' | 'reverted'; skill?: string };
+  type MilesFile = {
+    phase: 'crawl' | 'questions' | 'ready' | 'running';
+    bundle: ReturnType<typeof buildBundle> | null;
+    crawl: ReturnType<typeof crawlFacts> | null;
+    campaignResource?: string;
+    activation: 'none' | 'paused' | 'enabled';
+    inbox: MilesInbox[];
+    skillClock: Record<string, string>;
+    events: { ts: string; text: string }[];
+    audits: { id: string; title: string; source: string; summary: string; score?: number; grade?: string }[];
+  };
+  const milesOf = (data: Record<string, unknown>): MilesFile => {
+    const raw = (data.miles as Partial<MilesFile>) ?? {};
+    return {
+      phase: raw.phase ?? 'crawl',
+      bundle: raw.bundle ?? null,
+      crawl: raw.crawl ?? null,
+      campaignResource: raw.campaignResource,
+      activation: raw.activation ?? 'none',
+      inbox: Array.isArray(raw.inbox) ? raw.inbox : [],
+      skillClock: raw.skillClock ?? {},
+      events: Array.isArray(raw.events) ? raw.events : [],
+      audits: Array.isArray(raw.audits) ? raw.audits : [],
+    };
+  };
+  const rememberMiles = (data: Record<string, unknown>, miles: MilesFile, text: string) => {
+    miles.events = [{ ts: new Date().toISOString(), text }, ...miles.events].slice(0, 40);
+    data.miles = miles;
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'miles', title: text.slice(0, 180) });
+  };
+
+  app.post<{ Body: { businessName?: string; location?: string; email?: string; website?: string; gbpUrl?: string; competitors?: string[]; html?: string } }>('/api/miles/crawl', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const body = req.body ?? {};
+    let html = typeof body.html === 'string' ? body.html : '';
+    if (!html && body.website) {
+      try {
+        const res = await fetch(body.website.startsWith('http') ? body.website : `https://${body.website}`, { signal: AbortSignal.timeout(4000) });
+        if (res.ok) html = (await res.text()).slice(0, 200_000);
+      } catch { html = ''; }
+    }
+    const facts = crawlFacts({ ...body, html, competitors: body.competitors });
+    let placesNote = 'Google Places is not configured, so nearby listings were not read.';
+    if (process.env.GOOGLE_PLACES_KEY && (facts.profile.businessName || body.location)) {
+      try {
+        const rows = await searchCompetitors(`${facts.profile.businessName || body.businessName || 'painter'} ${body.location || ''}`.trim());
+        placesNote = rows?.length ? `Google Places returned ${rows.length} public listing${rows.length === 1 ? '' : 's'}. Ratings are from Places, not invented.` : 'Google Places returned no listings.';
+      } catch { placesNote = 'Google Places could not be read.'; }
+    }
+    const data = await authStore.getUserData(u.id);
+    data.profile = { ...((data.profile as object) ?? {}), ...facts.profile, updatedAt: new Date().toISOString() };
+    const miles = milesOf(data);
+    miles.crawl = facts;
+    miles.phase = 'questions';
+    miles.audits = [websiteAudit(html, body.website || ''), competitorAudit(body.competitors ?? [])];
+    miles.events = [{ ts: new Date().toISOString(), text: `Crawl saved. ${facts.gbpNote} ${placesNote}` }, ...miles.events].slice(0, 40);
+    data.miles = miles;
+    await authStore.setUserData(u.id, data);
+    return { ok: true, profile: data.profile, hours: facts.hours, license: facts.license, gbpNote: facts.gbpNote, placesNote, audits: miles.audits };
+  });
+
+  app.post<{ Body: { goal?: string; dailyBudget?: number; leadsPerDay?: number; googleShare?: number; mode?: 'automate' | 'hybrid' | 'manual'; areaModes?: Record<string, 'automate' | 'hybrid' | 'manual'> } }>('/api/miles/questions', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const miles = milesOf(data);
+    const crawl = miles.crawl;
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const body = req.body ?? {};
+    const bundle = buildBundle({
+      businessName: p.businessName || crawl?.profile.businessName,
+      location: p.serviceAreas || crawl?.profile.serviceAreas,
+      email: body && p.email,
+      website: p.website,
+      gbpUrl: crawl ? '' : '',
+      competitors: [],
+      html: '',
+      goal: body.goal || 'get me leads',
+      dailyBudget: Number(body.dailyBudget) || 20,
+      leadsPerDay: Number(body.leadsPerDay) || 1,
+      googleShare: body.googleShare == null ? 1 : Number(body.googleShare),
+      mode: body.mode || miles.bundle?.setup.mode || 'hybrid',
+    });
+    if (crawl?.profile) bundle.profile = { ...bundle.profile, ...crawl.profile, ...p };
+    bundle.setup.mode = body.mode || 'hybrid';
+    const allowed = ['automate', 'hybrid', 'manual'] as const;
+    const areas = ['ppc', 'seo', 'social', 'ghl', 'organic', 'chat'] as const;
+    if (body.areaModes) {
+      for (const area of areas) {
+        const value = body.areaModes[area];
+        if (value && (allowed as readonly string[]).includes(value)) bundle.setup.areaModes[area] = value;
+      }
+    }
+    bundle.audits = [
+      ...miles.audits.filter((a) => a.id === 'website' || a.id === 'competitor'),
+      performanceAudit({ trade: bundle.profile.industry || bundle.playbook.trade, hasSpend: false, demo: connector.name === 'mock' }),
+    ] as typeof bundle.audits;
+    if (crawl) {
+      bundle.setup.gbpNote = crawl.gbpNote;
+      bundle.hours = crawl.hours;
+      bundle.license = crawl.license;
+    }
+    miles.bundle = bundle;
+    miles.phase = 'ready';
+    if (bundle.setup.mode === 'automate') {
+      const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
+      st.enabled = true;
+      if (!st.webhookSecret) st.webhookSecret = newToken().slice(0, 24);
+      data.speedToLead = st;
+    }
+    rememberMiles(data, miles, `Setup saved. ${bundle.playbook.title}. Mode ${bundle.setup.mode}.`);
+    await authStore.setUserData(u.id, data);
+    return { ok: true, bundle };
+  });
+
+  app.post<{ Body: { mode?: 'automate' | 'hybrid' | 'manual'; areaModes?: Record<string, 'automate' | 'hybrid' | 'manual'>; maxChangePct?: number; monthlyCeiling?: number; dailyBudget?: number } }>('/api/miles/mode', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const miles = milesOf(data);
+    if (!miles.bundle) return reply.code(400).send({ error: 'Save the three questions first.' });
+    const body = req.body ?? {};
+    if (body.mode === 'automate' || body.mode === 'hybrid' || body.mode === 'manual') miles.bundle.setup.mode = body.mode;
+    const areas = ['ppc', 'seo', 'social', 'ghl', 'organic', 'chat'] as const;
+    if (body.areaModes) {
+      for (const area of areas) {
+        const value = body.areaModes[area];
+        if (value === 'automate' || value === 'hybrid' || value === 'manual') miles.bundle.setup.areaModes[area] = value;
+      }
+    }
+    if (body.dailyBudget) miles.bundle.setup.caps.dailyBudget = Number(body.dailyBudget);
+    if (body.monthlyCeiling) miles.bundle.setup.caps.monthlyCeiling = Number(body.monthlyCeiling);
+    if (body.maxChangePct) miles.bundle.setup.caps.maxChangePct = Number(body.maxChangePct);
+    rememberMiles(data, miles, `Mode is ${miles.bundle.setup.mode}. Daily cap $${miles.bundle.setup.caps.dailyBudget}. Max change ${miles.bundle.setup.caps.maxChangePct}% a day.`);
+    await authStore.setUserData(u.id, data);
+    return { ok: true, setup: miles.bundle.setup };
+  });
+
+  app.post<{ Body: { paused?: boolean } }>('/api/miles/kill', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const miles = milesOf(data);
+    if (!miles.bundle) return reply.code(400).send({ error: 'Nothing to pause yet.' });
+    const paused = req.body?.paused !== false;
+    miles.bundle.setup.caps.paused = paused;
+    if (paused && miles.campaignResource && connector.setGoogleCampaignStatus && connector.name !== 'mock') {
+      await connector.setGoogleCampaignStatus(u.id, { campaignResource: miles.campaignResource, status: 'PAUSED' });
+      miles.activation = 'paused';
+    }
+    rememberMiles(data, miles, paused ? 'Kill switch on. Miles is paused.' : 'Kill switch off. Miles can run inside your caps again.');
+    await authStore.setUserData(u.id, data);
+    return { ok: true, paused };
+  });
+
+  const runMilesGo = async (uid: string, email: string, explicitCreate: boolean) => {
+    const data = await authStore.getUserData(uid);
+    const miles = milesOf(data);
+    if (!miles.bundle) return { error: 'Save the three questions first.', code: 400 as const };
+    const daily = miles.bundle.channels.find((c) => c.id === 'google')?.daily || miles.bundle.setup.caps.dailyBudget;
+    const decisions = planGo({
+      mode: miles.bundle.setup.mode,
+      areaModes: miles.bundle.setup.areaModes,
+      caps: miles.bundle.setup.caps,
+      spentToday: 0,
+      spentMonth: 0,
+      dailySpend: daily,
+      explicitCreate,
+    });
+    if (decisions.create.effect !== 'apply') {
+      miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'create', title: 'Create paused Google Search', reason: decisions.create.reason, status: 'queued' });
+      miles.phase = 'ready';
+      rememberMiles(data, miles, decisions.create.reason);
+      await authStore.setUserData(uid, data);
+      return { ok: true, decisions, created: false };
+    }
+    if (!connector.launchCampaign || connector.name === 'mock') {
+      rememberMiles(data, miles, 'Preview connector. The Google plan is saved. Nothing was created in Google Ads.');
+      await authStore.setUserData(uid, data);
+      return { ok: true, decisions, created: false, demo: true };
+    }
+    const spec = forcePausedSearchSpec(miles.bundle.spec);
+    const problems = validateCampaignSpec(spec);
+    if (problems.length) return { error: problems.join(' '), code: 400 as const };
+    let targets: { id: string; label: string }[] = [];
+    if (connector.listAdTargets) {
+      try { targets = await connector.listAdTargets(uid); } catch { targets = []; }
+    }
+    if (!targets.length) {
+      miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'create', title: 'Connect Google Ads', reason: 'Google Ads is not connected, so nothing was created.', status: 'queued' });
+      rememberMiles(data, miles, 'Google Ads is not connected. Nothing was created.');
+      await authStore.setUserData(uid, data);
+      return { ok: false, error: 'Google Ads is not connected. Nothing was created.', decisions };
+    }
+    const result = await connector.launchCampaign(uid, spec, targets[0]!.id);
+    const judged = judgeSearchLaunch(result.steps ?? []);
+    const live = connector.name !== 'mock' && !!result.live;
+    if (!(live && judged.ok && result.campaignResource)) {
+      rememberMiles(data, miles, result.note || 'Google did not create the campaign. It was not enabled.');
+      await authStore.setUserData(uid, data);
+      return { ok: false, created: false, decisions, note: result.note, steps: result.steps, adsMissing: judged.adsMissing };
+    }
+    miles.campaignResource = result.campaignResource;
+    miles.activation = 'paused';
+    miles.phase = 'running';
+    let enabled = false;
+    if (decisions.enable.effect === 'apply' && connector.setGoogleCampaignStatus) {
+      const turned = await connector.setGoogleCampaignStatus(uid, { campaignResource: result.campaignResource, status: 'ENABLED' });
+      enabled = !!turned.ok;
+      miles.activation = enabled ? 'enabled' : 'paused';
+      rememberMiles(data, miles, enabled ? `Created and enabled inside the $${daily}/day cap. Logged.` : `Created paused. Enable did not stick: ${turned.note}`);
+    } else {
+      miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'enable', title: 'Enable the Google campaign', reason: decisions.enable.reason, status: 'queued' });
+      rememberMiles(data, miles, `Created paused. ${decisions.enable.reason}`);
+    }
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: email, source: 'miles', title: enabled ? 'Standing approval enabled Google Search inside caps' : 'Google Search created paused' });
+    await authStore.setUserData(uid, data);
+    return { ok: true, created: true, enabled, decisions, campaignResource: result.campaignResource };
+  };
+
+  app.post<{ Body: { confirm?: boolean } }>('/api/miles/go', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Confirm the caps before Miles starts. Nothing was created.' });
+    const result = await runMilesGo(u.id, u.email, false);
+    if ('code' in result && result.code) return reply.code(result.code).send(result);
+    return result;
+  });
+
+  app.post<{ Body: { id?: string; confirm?: boolean } }>('/api/miles/approve', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Confirm required.' });
+    const data = await authStore.getUserData(u.id);
+    const miles = milesOf(data);
+    const item = miles.inbox.find((row) => row.id === req.body?.id && row.status === 'queued');
+    if (!item) return reply.code(404).send({ error: 'That item is not waiting.' });
+    item.status = 'applied';
+    data.miles = miles;
+    await authStore.setUserData(u.id, data);
+    if (item.kind === 'enable' && miles.campaignResource && connector.setGoogleCampaignStatus && connector.name !== 'mock') {
+      const turned = await connector.setGoogleCampaignStatus(u.id, { campaignResource: miles.campaignResource, status: 'ENABLED' });
+      miles.activation = turned.ok ? 'enabled' : miles.activation;
+      rememberMiles(data, miles, turned.ok ? 'You approved enable. The campaign is on, inside the cap you set.' : turned.note);
+      await authStore.setUserData(u.id, data);
+      return { ok: turned.ok, enabled: turned.ok, note: turned.note };
+    }
+    if (item.kind === 'create') return runMilesGo(u.id, u.email, true);
+    return { ok: true, item };
+  });
+
+  app.post<{ Body: { confirm?: boolean } }>('/api/miles/revert', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Confirm required. Nothing was paused.' });
+    const data = await authStore.getUserData(u.id);
+    const miles = milesOf(data);
+    if (!miles.campaignResource) return reply.code(400).send({ error: 'No Google campaign is on file to pause.' });
+    if (connector.name === 'mock' || !connector.setGoogleCampaignStatus) {
+      miles.activation = 'paused';
+      rememberMiles(data, miles, 'Preview only. Nothing in Google Ads was changed.');
+      await authStore.setUserData(u.id, data);
+      return { ok: true, demo: true, activation: 'paused' };
+    }
+    const turned = await connector.setGoogleCampaignStatus(u.id, { campaignResource: miles.campaignResource, status: 'PAUSED' });
+    miles.activation = turned.ok ? 'paused' : miles.activation;
+    rememberMiles(data, miles, turned.ok ? 'Reverted to paused. Spend stops when Google accepts the pause.' : turned.note);
+    await authStore.setUserData(u.id, data);
+    return { ok: turned.ok, note: turned.note, activation: miles.activation };
+  });
+
+  app.get('/api/miles/home', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const miles = milesOf(data);
+    const jobs = Array.isArray(data.jobMarks) ? (data.jobMarks as JobMark[]) : [];
+    const booked = jobs.filter((j) => j.stage === 'booked' || j.stage === 'won').length;
+    const ghl = !!(await ghlAppFor(u.id));
+    const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
+    const stats = responderStats(st, new Date().toISOString());
+    const demo = connector.name === 'mock';
+    const brief = demo || (!booked && miles.events.length === 0)
+      ? 'Nothing has run on a live ad account yet.'
+      : `On file: ${booked} booked job${booked === 1 ? '' : 's'}. ${miles.inbox.filter((i) => i.status === 'queued').length} decision${miles.inbox.filter((i) => i.status === 'queued').length === 1 ? '' : 's'} waiting.`;
+    return {
+      demo,
+      phase: miles.phase,
+      bundle: miles.bundle,
+      audits: miles.bundle?.audits?.length ? miles.bundle.audits : miles.audits,
+      activation: miles.activation,
+      inbox: miles.inbox.slice(0, 20),
+      events: miles.events.slice(0, 12),
+      caps: miles.bundle?.setup.caps ?? null,
+      mode: miles.bundle?.setup.mode ?? null,
+      playbook: miles.bundle?.playbook ?? null,
+      channels: miles.bundle?.channels ?? [
+        { id: 'google', label: 'Google Search', status: 'runnable', note: 'The only channel in this build.' },
+        { id: 'meta', label: 'Meta', status: 'coming_later', note: 'Coming later.' },
+        { id: 'tiktok', label: 'TikTok', status: 'coming_later', note: 'Coming later.' },
+        { id: 'lsa', label: 'Local Services Ads', status: 'coming_later', note: 'Coming later.' },
+      ],
+      ghl: {
+        connected: ghl,
+        ...stats,
+        setup: ghl ? 'GoHighLevel is connected. Speed to lead sends when it is on and the lead has a phone.' : 'GoHighLevel is not connected. Replies stay drafts. Connect it under Integrations.',
+      },
+      jobs: { leads: jobs.length, booked },
+      brief,
+    };
+  });
+
   // Autopilot — graduated control (autonomy %) + operating settings, per workspace.
   const DEFAULT_GUARDRAILS = { maxBudgetChangePct: 10, protectProven: true, approveHighImpact: true };
   app.get('/api/autopilot', async (req, reply) => {
@@ -1996,7 +2312,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       paymentsConnected,
       subscription: sub.status === 'none' ? null : sub,
       note: (credits.launchOffer && sub.band !== 'starter' && sub.band !== 'growth' && sub.band !== 'scale'
-        ? `Launch offer: $0 a month and $${LAUNCH_GRANT} in media credits for the first 100 accounts. $${credits.remaining.toFixed(2)} remaining. Images are $0.10, voiceover is $0.50, video is $1.50. Monitoring is not metered. `
+        ? `Launch offer: $0 a month and $${LAUNCH_GRANT} in media credits for the first 100 accounts. $${credits.remaining.toFixed(2)} remaining. Images are $0.10, voiceover is $0.50, video is $1.50. Monitoring, campaigns, and skill runs do not use these credits. `
         : '') + (paymentsConnected
         ? 'Your card is held by Stripe. Miles never sees or stores it.'
         : 'Payments are not connected yet, so nothing is charged.'),
@@ -2552,8 +2868,6 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     } else if (targets.length !== 1) {
       return reply.code(400).send({ ok: false, live: false, status: 'PAUSED', activation: 'disabled', error: 'Pick which Google Ads account should receive this paused campaign. Nothing was created.', targets });
     }
-    if (billingEnforced() && creditState(await authStore.getUserData(u.id)).remaining <= 0)
-      return reply.code(402).send({ error: 'Credits exhausted — work items are paused (monitoring continues). Top up or upgrade to keep building.' });
     const result = await connector.launchCampaign(u.id, spec, chosen!.id);
     const demoRun = connector.name === 'mock' || isDemoAccount(u.email);
     const live = demoRun ? false : !!result.live;
@@ -4902,6 +5216,39 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           if (!postDue(post, now)) continue;
           await publishPost(uid, post);
           changed = true;
+        }
+        const milesTick = milesOf(data);
+        if (milesTick.bundle && !milesTick.bundle.setup.caps.paused) {
+          for (const key of dueSkills(milesTick.skillClock, now)) {
+            const ctx = await buildSkillCtx(uid, data);
+            if (connector.name === 'mock') { ctx.spendRows = []; ctx.searchTerms = []; }
+            let run: Awaited<ReturnType<typeof runSevenSkill>>;
+            try { run = await runSevenSkill(key, ctx); } catch { continue; }
+            milesTick.skillClock[key] = periodKey(key, now);
+            const decision = decidePolicy({
+              mode: milesTick.bundle.setup.mode,
+              areaModes: milesTick.bundle.setup.areaModes,
+              caps: milesTick.bundle.setup.caps,
+              spentToday: 0,
+              spentMonth: 0,
+              action: {
+                area: 'ppc',
+                kind: 'optimize',
+                spend: 0,
+                changePct: key === 'budget-shifter' ? 20 : 0,
+                canPush: key === 'loser-pauser' && !!milesTick.campaignResource && connector.name !== 'mock',
+              },
+            });
+            if (decision.effect === 'apply' && key === 'loser-pauser' && milesTick.campaignResource && connector.setGoogleCampaignStatus) {
+              const turned = await connector.setGoogleCampaignStatus(uid, { campaignResource: milesTick.campaignResource, status: 'PAUSED' });
+              if (turned.ok) milesTick.activation = 'paused';
+              milesTick.events.unshift({ ts: new Date().toISOString(), text: turned.note });
+            } else if (decision.effect === 'queue') {
+              milesTick.inbox.unshift({ id: newToken().slice(0, 10), kind: 'skill', title: run.name, reason: `${decision.reason} ${run.summary}`.slice(0, 240), status: 'queued', skill: key });
+            }
+            changed = true;
+          }
+          data.miles = milesTick;
         }
         // Speed-to-Lead — answer brand-new leads on this tick (near real-time).
         const stl = await runSpeedToLead(uid, data);

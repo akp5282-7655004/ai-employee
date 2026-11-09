@@ -134,7 +134,7 @@ describe('ad spend gate', () => {
     try {
       expect(adSpendAllowed({ credits: { granted: 0, spent: 0, launchOffer: false }, billing: { status: 'none', grantedInvoices: [] } }).ok).toBe(false);
       expect(adSpendAllowed({ credits: { granted: 100, spent: 0, launchOffer: true }, billing: { status: 'active', band: 'launch', grantedInvoices: [] } }).ok).toBe(true);
-      expect(adSpendAllowed({ credits: { granted: 100, spent: 100, launchOffer: true }, billing: { status: 'active', band: 'launch', grantedInvoices: [] } }).ok).toBe(false);
+      expect(adSpendAllowed({ credits: { granted: 100, spent: 100, launchOffer: true }, billing: { status: 'active', band: 'launch', grantedInvoices: [] } }).ok).toBe(true);
     } finally {
       delete process.env.BILLING_ENFORCE;
     }

@@ -360,20 +360,8 @@ export function chargeCredits(
 
   // ── Unlimited work: free, but not infinite ──
   if (cost === undefined) {
-    // Included in a plan, not owed to an empty one. Unpriced output still
-    // burns tokens to produce, so an account that has spent its credits and
-    // not topped up stops producing — same wall as media, same message. Only
-    // monitoring carries on, and it never reaches this branch at all.
-    if (billingEnforced() && before.remaining <= 0) {
-      const b = bandOf(data);
-      const up = nextBandName(b);
-      return {
-        state: before,
-        blocked: true,
-        toppedUp: 0,
-        reason: `Out of credits. Add $${b.topUp.toFixed(2)}, turn on auto top-up${up ? `, or upgrade to ${up}` : ''}.`,
-      };
-    }
+    // Campaigns, skill runs, and the rest of UNLIMITED_ITEMS stay free at a
+    // zero balance. Credits are only for media. Fair-use is an abuse ceiling.
     if (billingEnforced() && used > fairUse!) {
       return {
         state: before,
@@ -465,6 +453,7 @@ export function chargeCredits(
  */
 export function canAfford(data: Record<string, unknown>, item: string): { ok: boolean; reason?: string } {
   if (!isOutputWork(item)) return { ok: true }; // monitoring — never gated
+  if ((UNLIMITED_ITEMS as readonly string[]).includes(item)) return { ok: true };
   if (!billingEnforced()) return { ok: true }; // meter runs, wall is off
   const state = creditState(data);
   if (state.remaining > 0) return { ok: true }; // a positive balance always passes
