@@ -58,7 +58,7 @@ import {
 } from './billing/stripe.js';
 import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, updateBand } from './billing/subscription.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
-import { buildBundle, competitorAudit, crawlFacts, performanceAudit, readPublicPage, websiteAudit } from './agents/journey.js';
+import { buildBundle, competitorAudit, crawlFacts, performanceAudit, readPublicPage, setupPlacement, websiteAudit } from './agents/journey.js';
 import { planGo } from './agents/milesrun.js';
 import { decidePolicy } from './agents/policy.js';
 import { dueSkills, periodKey } from './agents/skillclock.js';
@@ -1109,6 +1109,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     events: { ts: string; text: string }[];
     audits: { id: string; title: string; source: string; summary: string; score?: number; grade?: string }[];
     found: { pagesRead: number; businessName: string; phone: string; services: string; website: string; fetchNote: string; auditSummary: string } | null;
+    pendingMode?: 'automate' | 'hybrid' | 'manual';
   };
   const milesOf = (data: Record<string, unknown>): MilesFile => {
     const raw = (data.miles as Partial<MilesFile>) ?? {};
@@ -1123,6 +1124,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       events: Array.isArray(raw.events) ? raw.events : [],
       audits: Array.isArray(raw.audits) ? raw.audits : [],
       found: raw.found ?? null,
+      pendingMode: raw.pendingMode,
     };
   };
   const rememberMiles = (data: Record<string, unknown>, miles: MilesFile, text: string) => {
@@ -1206,10 +1208,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       dailyBudget: Number(body.dailyBudget) || 20,
       leadsPerDay: Number(body.leadsPerDay) || 1,
       googleShare: body.googleShare == null ? 1 : Number(body.googleShare),
-      mode: body.mode || miles.bundle?.setup.mode || 'hybrid',
+      mode: body.mode || miles.pendingMode || miles.bundle?.setup.mode || 'hybrid',
     });
     if (crawl?.profile) bundle.profile = { ...bundle.profile, ...crawl.profile, ...p };
-    bundle.setup.mode = body.mode || 'hybrid';
+    const chosenMode = body.mode || miles.pendingMode || miles.bundle?.setup.mode || 'hybrid';
+    bundle.setup.mode = chosenMode === 'automate' || chosenMode === 'manual' || chosenMode === 'hybrid' ? chosenMode : 'hybrid';
+    miles.pendingMode = bundle.setup.mode;
     const allowed = ['automate', 'hybrid', 'manual'] as const;
     const areas = ['ppc', 'seo', 'social', 'ghl', 'organic', 'chat'] as const;
     if (body.areaModes) {
@@ -1245,9 +1249,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const miles = milesOf(data);
-    if (!miles.bundle) return reply.code(400).send({ error: 'Save the three questions first.' });
     const body = req.body ?? {};
-    if (body.mode === 'automate' || body.mode === 'hybrid' || body.mode === 'manual') miles.bundle.setup.mode = body.mode;
+    const nextMode = body.mode === 'automate' || body.mode === 'hybrid' || body.mode === 'manual' ? body.mode : undefined;
+    if (!nextMode && !miles.bundle) return reply.code(400).send({ error: 'Pick automate, hybrid, or manual. Nothing was created.' });
+    if (nextMode) miles.pendingMode = nextMode;
+    if (!miles.bundle) {
+      rememberMiles(data, miles, `Mode set to ${miles.pendingMode}. Nothing was created or enabled.`);
+      await authStore.setUserData(u.id, data);
+      return { ok: true, mode: miles.pendingMode, created: false, enabled: false };
+    }
+    if (nextMode) miles.bundle.setup.mode = nextMode;
     const areas = ['ppc', 'seo', 'social', 'ghl', 'organic', 'chat'] as const;
     if (body.areaModes) {
       for (const area of areas) {
@@ -1258,9 +1269,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (body.dailyBudget) miles.bundle.setup.caps.dailyBudget = Number(body.dailyBudget);
     if (body.monthlyCeiling) miles.bundle.setup.caps.monthlyCeiling = Number(body.monthlyCeiling);
     if (body.maxChangePct) miles.bundle.setup.caps.maxChangePct = Number(body.maxChangePct);
-    rememberMiles(data, miles, `Mode is ${miles.bundle.setup.mode}. Daily cap $${miles.bundle.setup.caps.dailyBudget}. Max change ${miles.bundle.setup.caps.maxChangePct}% a day.`);
+    rememberMiles(data, miles, `Mode is ${miles.bundle.setup.mode}. Nothing was created by this change. Daily cap $${miles.bundle.setup.caps.dailyBudget}. Max change ${miles.bundle.setup.caps.maxChangePct}% a day.`);
     await authStore.setUserData(u.id, data);
-    return { ok: true, setup: miles.bundle.setup };
+    return { ok: true, mode: miles.bundle.setup.mode, created: false, enabled: false, setup: miles.bundle.setup };
   });
 
   app.post<{ Body: { paused?: boolean } }>('/api/miles/kill', async (req, reply) => {
@@ -1424,7 +1435,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       inbox: miles.inbox.slice(0, 20),
       events: miles.events.slice(0, 12),
       caps: miles.bundle?.setup.caps ?? null,
-      mode: miles.bundle?.setup.mode ?? null,
+      mode: miles.bundle?.setup.mode || miles.pendingMode || null,
       playbook: miles.bundle?.playbook ?? null,
       channels: miles.bundle?.channels ?? [
         { id: 'google', label: 'Google Search', status: 'runnable', note: 'The only channel in this build.' },
@@ -1440,6 +1451,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       jobs: { leads: jobs.length, booked },
       profile: (data.profile ?? {}) as Record<string, string>,
       found: miles.found,
+      placement: setupPlacement({ pagesRead: miles.found?.pagesRead ?? 0, hasBundle: !!miles.bundle }),
       brief,
     };
   });

@@ -981,6 +981,7 @@
 
     <!-- BUSINESS PROFILE -->
     <section class="page" id="page-profile">
+      <div id="miles-profile" style="max-width:760px;margin-bottom:16px"></div>
       <div class="mcard" style="max-width:760px">
         <h3>Business Profile</h3>
         <p class="mdesc">Everything Miles needs to run marketing for you. Update anytime — plans, ads, and content use these details.</p>
@@ -2595,22 +2596,80 @@ async function openOverview(){
   const flow=document.createElement('div'); flow.id='miles-flow';
   const head=box.firstElementChild;
   if(head) head.insertAdjacentElement('afterend', flow); else box.append(flow);
-  renderMilesHome(flow, miles);
+  renderMilesHome(flow, miles, 'dashboard');
   openCmdCenter();
 }
-function renderMilesHome(box, d){
+async function refreshMilesSurface(){
+  const onProfile=$('#page-profile')&&$('#page-profile').classList.contains('on');
+  if(onProfile){ await loadProfile(); return; }
+  await openOverview();
+}
+function modeBlurb(mode, caps){
+  const daily=(caps&&caps.dailyBudget)||20, month=(caps&&caps.monthlyCeiling)||600, pct=(caps&&caps.maxChangePct)!=null?caps.maxChangePct:10;
+  if(mode==='automate') return 'Automate everything is on. Miles will create and run Google Search inside $'+daily+'/day, $'+month+'/month, '+pct+'% max daily change once your plan is saved. Choosing a mode does not create or enable anything by itself.';
+  if(mode==='manual') return 'Manual is on. Miles will not create or change a campaign. Choosing a mode does not create or enable anything by itself.';
+  if(mode==='hybrid') return 'Hybrid is on. Miles will build the Google plan and wait for your approval. Choosing a mode does not create or enable anything by itself.';
+  return 'Pick a mode. Nothing is created until you start the Google plan.';
+}
+async function milesPost(btn, statusEl, working, url, payload){
+  if(btn){ btn.disabled=true; btn.dataset.prev=btn.textContent; btn.textContent=working; }
+  if(statusEl) statusEl.textContent=working;
+  try{
+    const res=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload||{})});
+    const text=await res.text();
+    let r={};
+    try{ r=text?JSON.parse(text):{}; }catch(e){ throw new Error('The server did not return a result. Try again.'); }
+    if(!res.ok||r.error) throw new Error(r.error||('Request failed ('+res.status+').'));
+    return r;
+  }catch(err){
+    if(btn){ btn.disabled=false; btn.textContent=btn.dataset.prev||btn.textContent; }
+    const msg=(err&&err.message)?err.message:'That did not work. Try again.';
+    if(statusEl) statusEl.textContent=msg;
+    toast(msg);
+    return null;
+  }
+}
+function renderMilesCompact(box, d){
+  box.innerHTML='';
+  const wrap=el('div','mcard'); wrap.id='miles-compact';
+  const bar=el('div'); bar.style.cssText='display:flex;flex-wrap:wrap;gap:8px;align-items:center';
+  const note=el('div','appsub', modeBlurb(d.mode, d.caps)); note.id='miles-mode-note'; note.style.marginTop='8px';
+  for(const [id,label] of [['automate','Automate everything'],['hybrid','Hybrid'],['manual','Manual']]){
+    const b=el('button',null,label); const on=d.mode===id;
+    b.style.cssText='border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:700;border:1px solid '+(on?'var(--ink)':'var(--line)')+';background:'+(on?'var(--ink)':'var(--panel)')+';color:'+(on?'var(--panel)':'var(--ink)');
+    b.onclick=async()=>{ const r=await milesPost(b, note, 'Saving...', '/api/miles/mode', {mode:id}); if(r) await refreshMilesSurface(); };
+    bar.append(b);
+  }
+  const spec=(d.bundle&&d.bundle.spec)||{};
+  const status=el('span','appsub',(spec.name||'Google plan')+' · $'+(spec.dailyBudget||0)+'/day · '+(d.activation||'not created'));
+  bar.append(status);
+  const kill=el('button',null, d.caps&&d.caps.paused?'Resume':'Pause all'); kill.style.cssText='border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;background:var(--panel)';
+  const back=el('button',null,'Revert to paused'); back.style.cssText=kill.style.cssText;
+  const edit=el('a',null,'Edit setup in Profile'); edit.href='#'; edit.style.cssText='font-size:13px;font-weight:700'; edit.onclick=(e)=>{ e.preventDefault(); setPage('profile'); };
+  bar.append(kill, back, edit);
+  kill.onclick=async()=>{ const r=await milesPost(kill, note, 'Pausing...', '/api/miles/kill', {paused:!(d.caps&&d.caps.paused)}); if(r) await refreshMilesSurface(); };
+  back.onclick=async()=>{ const r=await milesPost(back, note, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) await refreshMilesSurface(); };
+  wrap.append(bar, note);
+  box.append(wrap);
+}
+function renderMilesHome(box, d, place){
+  place=place||'dashboard';
+  if(place==='profile' && !(d.placement&&d.placement.profile)){ box.innerHTML=''; return; }
+  if(place==='dashboard' && d.placement&&d.placement.dashboard==='compact'){ renderMilesCompact(box, d); return; }
+  const pre=place==='profile'?'pfm-':'m-';
   box.innerHTML='';
   const h=el('div','mcard');
   h.innerHTML='<h3 style="margin:0">Miles</h3><p class="mdesc" style="margin:6px 0 0;max-width:680px">A marketing employee for your painting business. Google Ads only in this version. Meta, TikTok, and Local Services Ads are coming later.</p>';
   box.append(h);
   const modes=el('div'); modes.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin:12px 0';
-  for(const [id,label,desc] of [['automate','Automate everything','Your budget and caps are the standing yes. Miles runs Google inside them.'],['hybrid','Hybrid','Miles builds the work and waits for your approval.'],['manual','Manual','Miles does not act. You use the tools.']]){
-    const b=el('button',null,label); b.title=desc; const on=d.mode===id;
+  const modeNote=el('div','appsub', modeBlurb(d.mode, d.caps)); modeNote.id=pre+'mode-note';
+  for(const [id,label] of [['automate','Automate everything'],['hybrid','Hybrid'],['manual','Manual']]){
+    const b=el('button',null,label); const on=d.mode===id;
     b.style.cssText='border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:700;border:1px solid '+(on?'var(--ink)':'var(--line)')+';background:'+(on?'var(--ink)':'var(--panel)')+';color:'+(on?'var(--panel)':'var(--ink)');
-    b.onclick=async()=>{ if(!d.bundle){ toast('Save the questions first, then pick a mode.'); return; } await fetch('/api/miles/mode',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:id})}); openOverview(); };
+    b.onclick=async()=>{ const r=await milesPost(b, modeNote, 'Saving...', '/api/miles/mode', {mode:id}); if(r) await refreshMilesSurface(); };
     modes.append(b);
   }
-  box.append(modes);
+  box.append(modes, modeNote);
   if(d.playbook){ const p=el('div','mcard'); p.style.marginTop='12px'; p.innerHTML='<b>'+esc(d.playbook.title)+'</b><p class="appsub" style="margin:6px 0 0">'+esc(d.playbook.season)+'</p><p class="appsub">'+esc(d.playbook.benchmarkNote)+'</p><p class="appsub">'+esc(d.playbook.splitNote)+'</p>'; box.append(p); }
   if(d.bundle&&d.bundle.feasibility){ const f=el('div','mcard'); f.style.marginTop='12px'; f.append(el('div','appsub', d.bundle.feasibility.message)); box.append(f); }
   const audits=d.audits||[];
@@ -2627,23 +2686,23 @@ function renderMilesHome(box, d){
       +(fnd.fetchNote?'<p class="appsub">'+esc(fnd.fetchNote)+'</p>':'');
     box.append(found);
   }
-  if(!d.bundle){
+  {
     const p=d.profile||{};
     const form=el('div','mcard'); form.style.marginTop='12px'; form.append(el('div','sect-label','1. CRAWL'));
     const field=(label,id,val)=>{ const w=el('div'); w.style.margin='8px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.id=id; i.value=val||''; i.style.width='100%'; w.append(i); return w; };
-    form.append(field('Business name','m-name',p.businessName||''), field('Location','m-loc',p.serviceAreas||''), field('Email','m-email',p.email||''), field('Website','m-web',p.website||''), field('Google Business Profile link','m-gbp',p.gbpUrl||''), field('Competitor websites, comma separated','m-comp',p.competitors||''));
+    form.append(field('Business name',pre+'name',p.businessName||''), field('Location',pre+'loc',p.serviceAreas||''), field('Email',pre+'email',p.email||''), field('Website',pre+'web',p.website||''), field('Google Business Profile link',pre+'gbp',p.gbpUrl||''), field('Competitor websites, comma separated',pre+'comp',p.competitors||''));
     const status=el('div','appsub',''); status.id='m-crawl-status'; status.style.marginTop='8px';
     const go=el('button','go','Crawl'); go.style.marginTop='8px';
     go.onclick=async()=>{
       go.disabled=true; const label=go.textContent; go.textContent='Crawling your website...'; status.textContent='Crawling your website...';
       try{
-        const res=await fetch('/api/miles/crawl',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({businessName:$('#m-name').value, location:$('#m-loc').value, email:$('#m-email').value, website:$('#m-web').value, gbpUrl:$('#m-gbp').value, competitors:($('#m-comp').value||'').split(',').map(s=>s.trim()).filter(Boolean)})});
+        const res=await fetch('/api/miles/crawl',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({businessName:$('#'+pre+'name').value, location:$('#'+pre+'loc').value, email:$('#'+pre+'email').value, website:$('#'+pre+'web').value, gbpUrl:$('#'+pre+'gbp').value, competitors:($('#'+pre+'comp').value||'').split(',').map(s=>s.trim()).filter(Boolean)})});
         const text=await res.text();
         let r={};
         try{ r=text?JSON.parse(text):{}; }catch(parseErr){ throw new Error('Crawl did not return a result. Try again.'); }
         if(!res.ok||r.error) throw new Error(r.error||('Crawl failed ('+res.status+').'));
-        await openOverview();
-        const step=document.getElementById('miles-questions');
+        await refreshMilesSurface();
+        const step=document.getElementById(pre+'questions');
         if(step) step.scrollIntoView({behavior:'smooth', block:'center'});
       }catch(err){
         go.disabled=false; go.textContent=label||'Crawl';
@@ -2652,27 +2711,30 @@ function renderMilesHome(box, d){
       }
     };
     form.append(go, status); box.append(form);
-    const q=el('div','mcard'); q.id='miles-questions'; q.style.marginTop='12px';
+    const q=el('div','mcard'); q.id=pre+'questions'; q.style.marginTop='12px';
     if(d.phase==='questions'||d.found) q.style.outline='2px solid var(--ink)';
     q.append(el('div','sect-label','2. THREE QUESTIONS'));
-    q.append(field('Goal','m-goal','get me painting leads'), field('Daily budget','m-budget','20'), field('Leads wanted per day','m-leads','1'));
+    q.append(field('Goal',pre+'goal',(d.bundle&&d.bundle.setup&&d.bundle.setup.goal)||'get me painting leads'), field('Daily budget',pre+'budget',(d.bundle&&d.bundle.setup&&d.bundle.setup.dailyBudget)||'20'), field('Leads wanted per day',pre+'leads',(d.bundle&&d.bundle.setup&&d.bundle.setup.leadsPerDay)||'1'));
+    const qStatus=el('div','appsub',''); qStatus.id=pre+'q-status';
     const start=el('button','go','Save and show the Google plan'); start.style.marginTop='8px';
-    start.onclick=async()=>{ const body={goal:$('#m-goal').value, dailyBudget:Number($('#m-budget').value)||20, leadsPerDay:Number($('#m-leads').value)||1, googleShare:1, mode:d.mode||'hybrid'}; const r=await(await fetch('/api/miles/questions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})).json(); if(r.error){ toast(r.error); return; } openOverview(); };
-    q.append(start); box.append(q);
-  } else {
+    start.onclick=async()=>{ const r=await milesPost(start, qStatus, 'Saving the plan...', '/api/miles/questions', {goal:$('#'+pre+'goal').value, dailyBudget:Number($('#'+pre+'budget').value)||20, leadsPerDay:Number($('#'+pre+'leads').value)||1, googleShare:1, mode:d.mode||undefined}); if(!r) return; await refreshMilesSurface(); };
+    q.append(start, qStatus); box.append(q);
+  }
+  if(d.bundle){
     const plan=el('div','mcard'); plan.style.marginTop='12px';
     const spec=d.bundle.spec||{};
     plan.append(el('div','sect-label','GOOGLE PLAN'));
     plan.append(el('p','appsub',(spec.name||'Search')+' · $'+(spec.dailyBudget||0)+'/day · status '+(d.activation||'not created')));
     (spec.adGroups||[]).forEach(g=>{ const row=el('div','appsub', g.name+': '+(g.keywords||[]).map(k=>k.text).join(', ')); plan.append(row); });
     const row=el('div'); row.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-top:10px';
+    const planNote=el('div','appsub','');
     const start=el('button','go', d.mode==='automate'?'Start inside my caps':d.mode==='manual'?'Manual mode does not create':'Queue for my approval');
-    start.onclick=async()=>{ start.disabled=true; const r=await(await fetch('/api/miles/go',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:true})})).json(); start.disabled=false; toast(r.demo?'Preview only. Nothing was created in Google.':(r.enabled?'Enabled inside your caps.':(r.created?'Created paused.':'Waiting on you.'))); openOverview(); };
+    start.onclick=async()=>{ const r=await milesPost(start, planNote, 'Starting...', '/api/miles/go', {confirm:true}); if(!r) return; planNote.textContent=r.demo?'Preview only. Nothing was created in Google.':(r.enabled?'Enabled inside your caps.':(r.created?'Created paused.':'Waiting on you.')); await refreshMilesSurface(); };
     const kill=el('button',null, d.caps&&d.caps.paused?'Resume':'Pause all'); kill.style.cssText='border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;background:var(--panel)';
-    kill.onclick=async()=>{ await fetch('/api/miles/kill',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({paused:!(d.caps&&d.caps.paused)})}); openOverview(); };
+    kill.onclick=async()=>{ const r=await milesPost(kill, planNote, 'Pausing...', '/api/miles/kill', {paused:!(d.caps&&d.caps.paused)}); if(r) await refreshMilesSurface(); };
     const back=el('button',null,'Revert to paused'); back.style.cssText=kill.style.cssText;
-    back.onclick=async()=>{ await fetch('/api/miles/revert',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:true})}); openOverview(); };
-    row.append(start, kill, back); plan.append(row); box.append(plan);
+    back.onclick=async()=>{ const r=await milesPost(back, planNote, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) await refreshMilesSurface(); };
+    row.append(start, kill, back); plan.append(row, planNote); box.append(plan);
   }
   const g=d.ghl||{};
   const lead=el('div','mcard'); lead.style.marginTop='12px';
@@ -7036,7 +7098,7 @@ async function runSiteImport(url,container,noteEl){
 }
 function readProfileForm(container){ const out={}; container.querySelectorAll('[data-k]').forEach(i=>{ let v=(i.value||'').trim(); if(i.type==='number') v=v?Number(v):''; out[i.dataset.k]=v; }); return out; }
 async function saveProfile(vals){ try{ const r=await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(vals)}); return r.ok?(await r.json()).profile:null; }catch(e){ return null; } }
-async function loadProfile(){ if(!REMOTE)return; try{ const r=await fetch('/api/profile'); const d=await r.json(); PROFILE=d.profile||{}; buildProfileForm($('#profile-form'), d.profile||{}); }catch(e){} }
+async function loadProfile(){ if(!REMOTE)return; try{ const r=await fetch('/api/profile'); const d=await r.json(); PROFILE=d.profile||{}; buildProfileForm($('#profile-form'), d.profile||{}); }catch(e){} try{ const miles=await(await fetch('/api/miles/home')).json(); const slot=$('#miles-profile'); if(slot) renderMilesHome(slot, miles, 'profile'); }catch(e){} }
 $('#pf-import').onclick=async()=>{ const btn=$('#pf-import'); const url=($('#pf-website').value||'').trim()||($('#profile-form').querySelector('[data-k="website"]')||{}).value||''; if(!url){ $('#pf-import-note').textContent='Enter your website to re-import.'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#profile-form'),$('#pf-import-note')); btn.disabled=false; btn.textContent=old; };
 $('#profile-save').onclick=async()=>{ const btn=$('#profile-save'); btn.disabled=true; const p=await saveProfile(readProfileForm($('#profile-form'))); if(p){ PROFILE=p; applyIdentity(); queueChange('profile','Business profile updated'); } $('#profile-note').textContent=p?'Saved ✓':'Could not save.'; btn.disabled=false; setTimeout(()=>{$('#profile-note').textContent='';},2500); };
 $('#ob-import').onclick=async()=>{ const btn=$('#ob-import'); const url=($('#ob-website').value||'').trim(); if(!url){ $('#ob-import-note').textContent='Enter your website first (or skip and fill it in below).'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#onboard-form'),$('#ob-import-note')); btn.disabled=false; btn.textContent=old; };
