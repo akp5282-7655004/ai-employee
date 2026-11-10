@@ -29,6 +29,8 @@ import { buildMetaAssets, buildSearchAssets, checkMetaPack, checkSearchPack } fr
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, normalizeSiteUrl, repairCampaignUrls, type CampaignSpec } from './agents/campaign.js';
+import { judgeEnableReadback } from './agents/enablecheck.js';
+import { enforceRulebook, housekeepingProposals } from './agents/rulebook.js';
 import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, META_SHARED_ACCOUNT_NOTE, searchLaunchNote } from './agents/googlelaunch.js';
 import { buildLoopPlan, decideLead, ghlUpsertProps, GHL_UPSERT_ACTION, judgeActivation, normalizeLead, type ObservedAd } from './agents/plumberloop.js';
 import { judgeTikTokCreate, planFollowUp, proposeOptimizations, rollupJobs, stageOpportunity, TIKTOK_CREATE_ACTION, type JobMark } from './agents/contractorloop.js';
@@ -1341,6 +1343,26 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       dailySpend: daily,
       explicitCreate,
     });
+    const savedSite = normalizeSiteUrl(miles.bundle.setup.website || miles.bundle.profile.website || miles.found?.website || (data.profile as { website?: string } | undefined)?.website);
+    if (decisions.create.effect !== 'skip') {
+      if (!savedSite) {
+        return { error: 'Crawl your website first. Miles needs the saved website before it can set the landing page. Open the crawl step, enter the site, and run Crawl again. Nothing was created.', code: 400 as const, created: false };
+      }
+      miles.bundle.setup.website = savedSite;
+      const profile = (data.profile ?? {}) as { phone?: string; industry?: string };
+      const ruled = enforceRulebook(repairCampaignUrls(miles.bundle.spec, { website: savedSite, links: miles.crawl?.links ?? [] }), {
+        trade: profile.industry || miles.bundle.profile.industry,
+        city: miles.bundle.setup.location,
+        phone: profile.phone || miles.bundle.profile.phone,
+        gbpUrl: miles.bundle.setup.gbpUrl,
+      });
+      miles.bundle.spec = forcePausedSearchSpec(ruled.spec);
+      data.miles = miles;
+      if (ruled.blocks.length) {
+        await authStore.setUserData(uid, data);
+        return { error: ruled.blocks.join(' '), code: 400 as const, created: false };
+      }
+    }
     if (decisions.create.effect === 'queue') {
       miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'create', title: 'Create paused Google Search', reason: decisions.create.reason, status: 'queued' });
       miles.phase = 'ready';
@@ -1353,15 +1375,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       await authStore.setUserData(uid, data);
       return { ok: true, decisions, created: false };
     }
-    const savedSite = normalizeSiteUrl(miles.bundle.setup.website || miles.bundle.profile.website || miles.found?.website || (data.profile as { website?: string } | undefined)?.website);
-    if (!savedSite) {
-      return { error: 'Crawl your website first. Miles needs the saved website before it can set the landing page. Open the crawl step, enter the site, and run Crawl again. Nothing was created.', code: 400 as const };
-    }
-    miles.bundle.setup.website = savedSite;
-    miles.bundle.spec = repairCampaignUrls(miles.bundle.spec, { website: savedSite, links: miles.crawl?.links ?? [] });
-    const spec = forcePausedSearchSpec(miles.bundle.spec);
-    miles.bundle.spec = spec;
-    data.miles = miles;
+    const spec = miles.bundle.spec;
     const problems = validateCampaignSpec(spec);
     if (problems.length) {
       await authStore.setUserData(uid, data);
@@ -1400,18 +1414,23 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     miles.activation = 'paused';
     miles.phase = 'running';
     let enabled = false;
+    let enableNote = '';
     if (decisions.enable.effect === 'apply' && connector.setGoogleCampaignStatus) {
-      const turned = await connector.setGoogleCampaignStatus(uid, { campaignResource: result.campaignResource, status: 'ENABLED' });
-      enabled = !!turned.ok;
+      const adGroupResources = (result.steps ?? []).filter((step) => /create ad group/i.test(step.step) && step.resource).map((step) => step.resource!);
+      const adResources = (result.steps ?? []).filter((step) => /responsive search ad/i.test(step.step) && step.resource).map((step) => step.resource!);
+      const turned = await connector.setGoogleCampaignStatus(uid, { campaignResource: result.campaignResource, status: 'ENABLED', adGroupResources, adResources });
+      const verdict = judgeEnableReadback(turned.readback ?? { campaign: 'UNKNOWN', adGroups: [], ads: [], note: turned.note || 'No status was read back from Google.' });
+      enabled = verdict.enabled;
+      enableNote = verdict.reason;
       miles.activation = enabled ? 'enabled' : 'paused';
-      rememberMiles(data, miles, enabled ? `Created and enabled inside the $${daily}/day cap. Logged.` : `Created paused. Enable did not stick: ${turned.note}`);
+      rememberMiles(data, miles, enabled ? `Google reports the campaign, ad groups, and ads are enabled inside the $${daily}/day cap.` : `Created paused. ${verdict.reason}`);
     } else {
       miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'enable', title: 'Enable the Google campaign', reason: decisions.enable.reason, status: 'queued' });
       rememberMiles(data, miles, `Created paused. ${decisions.enable.reason}`);
     }
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: email, source: 'miles', title: enabled ? 'Standing approval enabled Google Search inside caps' : 'Google Search created paused' });
     await authStore.setUserData(uid, data);
-    return { ok: true, created: true, enabled, decisions, campaignResource: result.campaignResource };
+    return { ok: true, created: true, enabled, note: enableNote, decisions, campaignResource: result.campaignResource };
   };
 
   app.post<{ Body: { confirm?: boolean } }>('/api/miles/go', async (req, reply) => {
@@ -5370,6 +5389,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
               milesTick.inbox.unshift({ id: newToken().slice(0, 10), kind: 'skill', title: run.name, reason: `${decision.reason} ${run.summary}`.slice(0, 240), status: 'queued', skill: key });
             }
             changed = true;
+          }
+          if (milesTick.bundle.setup.mode === 'automate' && connector.name !== 'mock') {
+            const ctx = await buildSkillCtx(uid, data);
+            for (const proposal of housekeepingProposals({ searchTerms: ctx.searchTerms, keywords: [] })) {
+              if (milesTick.inbox.some((item) => item.title === proposal.title && item.status === 'queued')) continue;
+              milesTick.inbox.unshift({ id: newToken().slice(0, 10), kind: 'skill', title: proposal.title, reason: proposal.reason, status: 'queued', skill: 'search-term-gold-miner' });
+              changed = true;
+            }
           }
           data.miles = milesTick;
         }

@@ -47,13 +47,13 @@ function appFor() {
           { step: 'Create campaign "Painting" (PAUSED)', ok: true, resource: 'customers/DEMO/campaigns/2' },
           { step: 'Create ad group "Interior Painting"', ok: true, resource: 'customers/DEMO/adGroups/3' },
           { step: 'Add 3 keywords to "Interior Painting"', ok: true },
-          { step: 'Create responsive search ad in "Interior Painting"', ok: true },
+          { step: 'Create responsive search ad in "Interior Painting"', ok: true, resource: 'customers/DEMO/ads/8' },
         ],
       };
     },
     async setGoogleCampaignStatus(_id: string, args: { status: string }) {
       calls.push({ op: 'status', status: args.status });
-      return { ok: true, live: false, called: true, note: 'Status set to ' + args.status };
+      return { ok: true, live: false, called: true, note: 'Status set to ' + args.status, readback: { campaign: 'ENABLED', adGroups: ['ENABLED'], ads: ['ENABLED'], note: 'Read back from the account.' } };
     },
   } as unknown as Connector;
   return { app: buildServer({ authStore: new MemoryStore(), connector }), calls };
@@ -146,11 +146,11 @@ describe('plan URLs come from the crawl', () => {
             { step: 'Create campaign "Painting" (PAUSED)', ok: true, resource: 'customers/DEMO/campaigns/2' },
             { step: 'Create ad group "Interior Painting"', ok: true, resource: 'customers/DEMO/adGroups/3' },
             { step: 'Add 3 keywords to "Interior Painting"', ok: true },
-            { step: 'Create responsive search ad in "Interior Painting"', ok: true },
+            { step: 'Create responsive search ad in "Interior Painting"', ok: true, resource: 'customers/DEMO/ads/8' },
           ],
         };
       },
-      async setGoogleCampaignStatus() { calls.push({ op: 'status', status: 'ENABLED' }); return { ok: true, live: false, called: true, note: 'ok' }; },
+      async setGoogleCampaignStatus() { calls.push({ op: 'status', status: 'ENABLED' }); return { ok: true, live: false, called: true, note: 'ok', readback: { campaign: 'ENABLED', adGroups: ['ENABLED'], ads: ['ENABLED'], note: 'Read back from the account.' } }; },
     } as unknown as Connector;
     const app = buildServer({ authStore: store, connector });
     const headers = { cookie: await cookie(app, 'urls-repair@example.com') };

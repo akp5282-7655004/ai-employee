@@ -851,6 +851,7 @@ export class PipedreamConnector implements Connector {
           operationType: 'create',
           name: g.name,
           campaignId: campaignNumId,
+          status: 'ENABLED',
         });
         steps.push({ step: `Create ad group "${g.name}"`, ok: ag.ok && !!ag.resource, resource: ag.resource, error: ag.error || (!ag.resource ? `no ad group resource — Google said: ${ag.detail ?? '(empty)'}` : undefined) });
         const adGroupNumId = (ag.resource?.match(/adGroups\/(\d+)/) || [])[1];
@@ -877,7 +878,7 @@ export class PipedreamConnector implements Connector {
           descriptions: g.rsa.descriptions,
           finalUrls: [g.finalUrl || spec.finalUrl],
         });
-        steps.push({ step: `Create responsive search ad in "${g.name}"`, ok: rsa.ok, error: rsa.error });
+        steps.push({ step: `Create responsive search ad in "${g.name}"`, ok: rsa.ok, resource: rsa.resource, error: rsa.error });
       }
     }
 
@@ -933,7 +934,7 @@ export class PipedreamConnector implements Connector {
    * Google Ads CampaignStatus values used here are ENABLED and PAUSED.
    * A production tool-call block returns before any actions.run.
    */
-  async setGoogleCampaignStatus(externalUserId: string, args: { campaignResource: string; status: 'ENABLED' | 'PAUSED' }): Promise<{ ok: boolean; live: boolean; called: boolean; note: string }> {
+  async setGoogleCampaignStatus(externalUserId: string, args: { campaignResource: string; status: 'ENABLED' | 'PAUSED'; adGroupResources?: string[]; adResources?: string[] }): Promise<{ ok: boolean; live: boolean; called: boolean; note: string; readback?: import('../agents/enablecheck.js').EnableReadback }> {
     if (args.status !== 'ENABLED' && args.status !== 'PAUSED') {
       return { ok: false, live: false, called: false, note: 'Only ENABLED or PAUSED are allowed.' };
     }
@@ -962,7 +963,50 @@ export class PipedreamConnector implements Connector {
       updateMask: 'status',
       status: args.status,
     });
-    return { ok: result.ok, live: true, called: true, note: result.ok ? `Status set to ${args.status}.` : (result.error || 'Google did not accept the status change.') };
+    for (const resource of args.adGroupResources ?? []) {
+      const adGroupId = resource.split('/').pop();
+      if (!adGroupId) continue;
+      await this.writeComponent(externalUserId, 'google_ads-create-or-update-ad-group', account.id, {}, {
+        ...acct,
+        operationType: 'update',
+        adGroupId,
+        updateMask: 'status',
+        status: args.status,
+      });
+    }
+    let readback: import('../agents/enablecheck.js').EnableReadback = {
+      campaign: 'UNKNOWN',
+      adGroups: (args.adGroupResources ?? []).map(() => 'UNKNOWN' as const),
+      ads: (args.adResources ?? []).map(() => 'UNKNOWN' as const),
+      note: 'Miles could not read the status back from Google.',
+    };
+    try {
+      const rows = await this.listComponents('google_ads');
+      const listComp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-list-campaigns');
+      if (listComp) {
+        const pd = await this.backend();
+        const lkey = listComp.key ?? listComp.id ?? listComp.componentKey;
+        const lprops = await this.componentProps(listComp, lkey);
+        const lapp = lprops.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+        const res = await pd.actions.run({ externalUserId, id: lkey, configuredProps: { [lapp]: { authProvisionId: account.id }, ...acct } });
+        const { parseGoogleStatuses } = await import('../agents/enablecheck.js');
+        readback = parseGoogleStatuses(res?.ret ?? res?.exports ?? res ?? {}, {
+          campaignId,
+          adGroupIds: (args.adGroupResources ?? []).map((resource) => resource.split('/').pop() || '').filter(Boolean),
+          adIds: (args.adResources ?? []).map((resource) => resource.split('/').pop() || '').filter(Boolean),
+        });
+      }
+    } catch {
+      /* readback stays unknown */
+    }
+    const confirmed = readback.campaign === args.status;
+    return {
+      ok: result.ok && (args.status === 'PAUSED' || confirmed),
+      live: true,
+      called: true,
+      note: confirmed ? `Google reports the campaign as ${args.status}.` : (result.error || readback.note),
+      readback,
+    };
   }
 
   // ── Meta (Facebook/Instagram) campaign launch — direct Graph API ────────────
