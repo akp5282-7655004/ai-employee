@@ -9,7 +9,7 @@ export const DEMO_ACCOUNT_EMAIL = 'demo@miles.local';
  * there. Per-customer Meta is not part of this launch slice.
  */
 export const META_SHARED_ACCOUNT_NOTE =
-  'Meta campaigns are blocked. META_ADS_ACCESS_TOKEN, META_AD_ACCOUNT_ID, and META_PAGE_ID are one shared ad account for every customer, so Miles will not create a campaign there. Nothing was created and nothing can spend.';
+  'Coming later. Meta, TikTok, and Local Services Ads are not in this version. Miles will not create a Meta campaign, and a shared META_ADS_ACCESS_TOKEN would put every customer in one ad account. Nothing was created and nothing can spend.';
 
 export function isDemoAccount(email: string | undefined): boolean {
   return (email ?? '').trim().toLowerCase() === DEMO_ACCOUNT_EMAIL;

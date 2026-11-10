@@ -3836,7 +3836,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const keys = [
       { name: 'GoHighLevel (CRM + SMS)', done: ghl, note: ghl ? `Connected as ${ghlApp}` : 'Connect in Integrations — powers every automation' },
       { name: 'Google Ads', done: gads, note: gads ? 'Connected' : 'Connect in Integrations — ad spend + ROI' },
-      { name: 'Meta ad account (Facebook launch)', done: false, note: 'Blocked — META_* would be one shared ad account for every customer. Per-customer Meta is not connected.' },
+      { name: 'Meta, TikTok, and Local Services Ads', done: false, note: 'Coming later. This version runs Google Ads only.' },
       { name: 'AI copywriting', done: textLlmReady(), note: textLlmReady() ? 'On (OpenRouter)' : 'Add OPENROUTER_API_KEY on Render for AI-written copy' },
       { name: 'Image generation', done: falReady(), note: falReady() ? 'On (FAL)' : 'Add FAL_KEY on Render for generated ad images' },
       { name: 'Census (Market Map)', done: !!process.env.CENSUS_API_KEY, note: process.env.CENSUS_API_KEY ? 'On' : 'Add CENSUS_API_KEY on Render for income targeting' },
