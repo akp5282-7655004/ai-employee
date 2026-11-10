@@ -2677,7 +2677,9 @@ function renderMilesHome(box, d, place){
   if(d.found){
     const found=el('div','mcard'); found.id='miles-found'; found.style.marginTop='12px';
     const fnd=d.found;
+    const crawled = fnd.crawledAt ? new Date(fnd.crawledAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '';
     found.innerHTML='<div class="sect-label">WHAT MILES FOUND</div>'
+      +(crawled?'<p class="appsub">Last crawled '+esc(crawled)+'.</p>':'')
       +'<p class="appsub">Pages read: '+(fnd.pagesRead||0)+'.</p>'
       +'<p class="appsub">Business: '+esc(fnd.businessName||'Not found')+'.</p>'
       +'<p class="appsub">Phone: '+esc(fnd.phone||'Not found')+'.</p>'
@@ -2742,7 +2744,10 @@ function renderMilesHome(box, d, place){
   box.append(lead);
   const brief=el('div','mcard'); brief.style.marginTop='12px';
   brief.innerHTML='<div class="sect-label">MORNING BRIEF</div><p class="appsub">'+esc(d.brief||'')+'</p>';
-  (d.events||[]).slice(0,6).forEach(e=>{ brief.append(el('div','appsub', e.text)); });
+  (d.events||[]).slice(0,6).forEach(e=>{
+    const when = e.ts ? new Date(e.ts).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '';
+    brief.append(el('div','appsub', (when?when+' · ':'')+e.text));
+  });
   box.append(brief);
   const inbox=d.inbox||[];
   if(inbox.length){ const ib=el('div','mcard'); ib.style.marginTop='12px'; ib.append(el('div','sect-label','WAITING ON YOU'));
@@ -2945,11 +2950,15 @@ function renderOverview(d){
   const dt=el('span','appsub',today); dt.style.fontSize='13.5px';
   htxt.append(gh,dt);
   const ctrl=el('div'); ctrl.style.cssText='display:flex;align-items:center;gap:8px;flex:none';
-  ctrl.append(el('span','appsub','📅 Showing'));
+  ctrl.append(el('span','appsub','Showing'));
   const gsel=el('select','f'); gsel.style.cssText='width:auto;padding:5px 10px;font-size:13px;border-radius:8px';
   for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===MKT_RANGE)o.selected=true; gsel.append(o); }
-  gsel.title='Time window for the whole dashboard'; gsel.onchange=async()=>{ MKT_RANGE=gsel.value; await openOverview(); };
+  gsel.title='Changes live leads, booked revenue, and agent runs. Sample figures and ad spend stay on the last 30 days.';
+  gsel.onchange=async()=>{ MKT_RANGE=gsel.value; await openOverview(); };
   ctrl.append(gsel); head.append(htxt,ctrl);
+  const rangeNote=el('div','appsub','This changes live leads, booked revenue, and agent runs. The sample read and ad spend stay on the last 30 days.');
+  rangeNote.style.cssText='flex:1 0 100%;margin:4px 0 0';
+  head.append(rangeNote);
   box.append(head);
   // Layer 1 — the 30-second read: verdict, then the four numbers that matter.
   box.append(el('div','layer-label','The 30-second read'));
@@ -2961,8 +2970,9 @@ function renderOverview(d){
   box.append(el('div','layer-label','The details'));
   const reviewWrap=el('div'); reviewWrap.style.cssText='margin:0 0 18px'; box.append(reviewWrap); fillDashReview(reviewWrap);
   const g=el('div','stats'); g.style.cssText='margin:16px 0;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
-  g.append(statCard('Pending approvals',k.pendingApprovals||0), statCard('Changes live',k.liveChanges||0), statCard('Agents deployed',k.agentsDeployed||0), statCard('Agent runs · '+mktRangeLabel(d.range),k.agentRuns||0), statCard('Scheduled posts',k.scheduledPosts||0), statCard('Credits used',(k.creditsUsed||0).toLocaleString()), statCard('Weather triggers',k.weatherTriggers||0));
+  g.append(statCard('Pending approvals',k.pendingApprovals||0), statCard('Changes live',k.liveChanges||0), statCard('Agents deployed',k.agentsDeployed||0), statCard('Agent runs · '+mktRangeLabel(d.range),k.agentRuns||0), statCard('Scheduled posts',k.scheduledPosts||0), statCard('Credits used · '+(k.creditsPeriod||'this month'),(k.creditsUsed||0).toLocaleString()), statCard('Weather triggers',k.weatherTriggers||0));
   box.append(g);
+  box.append(el('div','appsub', d.sample?'SAMPLE. These counts are from this preview account, not a live ad account.':'From your account. Approvals, agents, posts, and weather rules are saved records. Agent runs use the window above. Credits used are this month.'));
   const autoRow=el('div'); autoRow.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px;margin:16px 0;align-items:start';
   autoRow.append(stlCard(d.speedToLead||{}), reviewCard(), autoCard());
   box.append(autoRow);
@@ -2976,8 +2986,9 @@ function renderOverview(d){
   grid.append(mc);
   const lk=d.leads||{}, rk=d.reviews||{}; const lc=el('div','mcard'); lc.innerHTML='<div class="sect-label" style="margin:0 0 10px">LEADS & REPUTATION</div>';
   if(lk.hasData||rk.hasData){ const ss=el('div','stats'); ss.append(statCard('New leads',lk.count||0), statCard('Uncontacted',lk.uncontacted||0), statCard('Reviews',rk.count||0), statCard('Avg rating', rk.avg!=null?(rk.avg+'★'):'—')); lc.append(ss); }
-  else if(lk.connected||rk.connected){ lc.append(ovSync('✓ '+[lk.connected?'CRM':null,rk.connected?'Google Business Profile':null].filter(Boolean).join(' & ')+' connected. Your leads & reviews will populate here as they come in.')); }
-  else lc.append(ovNudge('Connect your CRM & Google Business Profile to track leads and reviews here.'));
+  else if(lk.connected){ lc.append(ovSync('GoHighLevel is connected. Leads show here as they come in.')); }
+  else lc.append(ovNudge('GoHighLevel is not connected. Connect it under Integrations.'));
+  if(rk.connected && !rk.hasData) lc.append(ovSync('Google Business Profile is connected. Reviews show here as they come in.'));
   grid.append(lc);
   const sc=el('div','mcard'); sc.innerHTML='<div class="sect-label" style="margin:0 0 10px">SOCIAL</div>';
   if(d.social&&d.social.hasData){ const ss=el('div','stats'); ss.append(statCard('Impressions',(d.social.impressions||0).toLocaleString()), statCard('Clicks',d.social.clicks||0), statCard('Likes',d.social.likes||0), statCard('Followers',(d.social.followers||0).toLocaleString())); sc.append(ss); }

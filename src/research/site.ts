@@ -59,8 +59,28 @@ const GENERIC = new Set([
   'home','about','about us','contact','contact us','services','service','our services','blog','gallery','reviews',
   'testimonials','menu','login','sign in','book now','get a quote','request a quote','free estimate','careers','faq',
   'privacy','terms','shop','cart','search','more','our work','portfolio','financing','why choose us','our team',
-  'meet the team','get in touch','locations','service areas','areas we serve','news','projects','before and after',
+  'meet the team','get in touch','locations','location','service areas','areas we serve','news','projects','before and after',
+  'slide title','slider','all services','our location','find us','get started','call now','book online','request quote',
+  'free custom quote','header','footer','sidebar','hero','banner','section','navigation',
 ]);
+
+const OFFER_HEADING = /\b(free|quote|quotes|estimate|estimates|discount|special|specials|sale|financing)\b|\d+\s*%|\boff\b/i;
+const PLACEHOLDER_HEADING = /\b(slide|slider|placeholder|lorem|ipsum|untitled|template|click here|read more|learn more|your title|add title)\b/i;
+
+/** A heading is a service only when it names work, not an offer, a slider, or a nav label. */
+export function serviceName(raw: string): string | undefined {
+  const trimmed = raw.trim().replace(/\s*[»›>→]+\s*$/, '').replace(/\s+/g, ' ');
+  if (!trimmed || trimmed.split(/\s+/).length > 6) return undefined;
+  if (GENERIC.has(trimmed.toLowerCase())) return undefined;
+  if (OFFER_HEADING.test(trimmed) || PLACEHOLDER_HEADING.test(trimmed)) return undefined;
+  if (/^\W|©|http|\?$|!$|^\d+$/i.test(trimmed)) return undefined;
+  return trimmed.split(' ').map((word, i) => {
+    if (/^[A-Z0-9]{2,4}$/.test(word)) return word;
+    const lower = word.toLowerCase();
+    if (i > 0 && /^(and|or|of|the|a|an|for|to|in)$/.test(lower)) return lower;
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  }).join(' ');
+}
 
 /**
  * The trades we sell to, with the words their sites actually use. Order matters
@@ -396,9 +416,8 @@ export function parseSiteHtml(html: string, baseUrl: string, now = new Date()): 
   for (const m of html.matchAll(/<(?:h2|h3)[^>]*>([^<]{3,50})<\/(?:h2|h3)>/gi)) cand.add(decode(m[1]!));
   for (const m of html.matchAll(/<a[^>]+href=["'][^"']*(?:service|repair|install|cleaning|treatment|painting|remodel)[^"']*["'][^>]*>([^<]{3,40})<\/a>/gi)) cand.add(decode(m[1]!));
   const services = [...cand, ...(out.services ? out.services.split(', ') : [])]
-    .map((s) => s.trim().replace(/\s*[»›>→]+\s*$/, ''))
-    .filter((s) => s && s.split(/\s+/).length <= 6 && !GENERIC.has(s.toLowerCase())
-      && !/^\W|©|read more|learn more|click here|http|\?$|!$|^\d+$/i.test(s))
+    .map((s) => serviceName(s))
+    .filter((s): s is string => !!s)
     .slice(0, 14);
   out.services = services.length ? [...new Set(services)].join(', ') : undefined;
 
@@ -509,7 +528,8 @@ export function mergeFacts(parts: Partial<SiteImport>[]): Partial<SiteImport> {
       if (v == null || v === '') continue;
       if ((UNION_FIELDS as readonly string[]).includes(k)) {
         const cap = k === 'services' ? 14 : k === 'serviceAreas' ? 25 : 6;
-        (merged as any)[k] = joinUnique((merged as any)[k], String(v).split(', '), cap);
+        const parts = String(v).split(', ').map((s) => k === 'services' ? serviceName(s) : s.trim()).filter((s): s is string => !!s);
+        (merged as any)[k] = joinUnique((merged as any)[k], parts, cap);
       } else if (!(merged as any)[k]) (merged as any)[k] = v;
     }
   }

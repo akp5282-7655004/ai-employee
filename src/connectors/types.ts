@@ -187,6 +187,11 @@ export interface Connector {
   createConnectToken(externalUserId: string): Promise<ConnectTokenResult>;
   /** List the app accounts a user has connected (optionally filtered by app). */
   listAccounts(externalUserId: string, app?: string): Promise<ConnectedAccount[]>;
+  /** Accounts in the project that are not stored on this login's id. Used to
+   *  find a GoHighLevel connection made under a different external user. */
+  listProjectAccounts?(app?: string): Promise<ConnectedAccount[]>;
+  /** Extra Pipedream external ids that belong to this Miles login. */
+  rememberExternalIds?(userId: string, externalIds: string[]): void;
   /** Run an app action on the user's behalf — the "hands". */
   runAction(req: RunActionRequest): Promise<RunActionResult>;
   /** Resolve a plain-English task to a real app action and run it (discover +

@@ -86,7 +86,7 @@ describe('every nav tab loads', () => {
     expect(seen.failed, seen.failed.join('\n')).toEqual([]);
 
     await page.evaluate(() => { (globalThis as unknown as { setPage: (id: string) => void }).setPage('fblaunch'); });
-    expect(await page.locator('#page-fblaunch').innerText()).toMatch(/Coming later/);
+    await page.locator('#page-fblaunch').getByText('Coming later').waitFor();
     await page.evaluate(() => { (globalThis as unknown as { setPage: (id: string) => void }).setPage('integrations'); });
     const intro = await page.locator('#page-int').innerText();
     expect(intro).not.toMatch(/runs across all/i);

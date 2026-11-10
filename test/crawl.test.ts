@@ -78,4 +78,20 @@ describe('crawl uses the saved website and reports fetch failures', () => {
     expect(crawled.json().audits[0].summary).toMatch(/HTTP 403/);
     expect(crawled.json().found.fetchNote).toMatch(/https:\/\/paintersinphilly.com/);
   });
+
+  it('timestamps a repeat crawl and drops the older crawl line', async () => {
+    const server = app();
+    const headers = { cookie: await cookie(server, 'crawl-again@example.com') };
+    const first = await server.inject({ method: 'POST', url: '/api/miles/crawl', headers, payload: { html: page, businessName: 'Painters', location: 'Philadelphia' } });
+    expect(first.json().found.crawledAt).toBeTruthy();
+    const second = await server.inject({ method: 'POST', url: '/api/miles/crawl', headers, payload: { html: page, businessName: 'Painters', location: 'Philadelphia', gbpUrl: 'https://maps.example/gbp' } });
+    const home = await server.inject({ method: 'GET', url: '/api/miles/home', headers });
+    const events = home.json().events as { text: string; ts: string }[];
+    const crawls = events.filter((e) => e.text.startsWith('Crawl saved'));
+    expect(crawls).toHaveLength(1);
+    expect(crawls[0]?.text).toMatch(/Google Business Profile link saved/);
+    expect(crawls[0]?.text).not.toMatch(/No Google Business Profile link yet/);
+    expect(home.json().found.crawledAt).toBe(second.json().found.crawledAt);
+    expect(crawls[0]?.ts).toBe(home.json().found.crawledAt);
+  });
 });

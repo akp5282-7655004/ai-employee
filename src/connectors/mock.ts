@@ -106,8 +106,27 @@ export class MockConnector implements Connector {
   }
 
   /** Accounts for a user, plus any seeded under the "*" wildcard (dev/demo). */
+  private aliases = new Map<string, Set<string>>();
+  private project: ConnectedAccount[] = [];
+
+  rememberExternalIds(userId: string, externalIds: string[]): void {
+    const set = this.aliases.get(userId) ?? new Set<string>();
+    for (const id of externalIds) if (id && id !== userId) set.add(id);
+    this.aliases.set(userId, set);
+  }
+
+  /** A connection that lives on another external id, for tests. */
+  addProjectAccount(account: ConnectedAccount): void {
+    this.project.push(account);
+  }
+
   private acc(externalUserId: string): ConnectedAccount[] {
-    return [...(this.accounts.get(externalUserId) ?? []), ...(this.accounts.get('*') ?? [])];
+    const extra = [...(this.aliases.get(externalUserId) ?? [])].flatMap((id) => this.accounts.get(id) ?? []);
+    return [...(this.accounts.get(externalUserId) ?? []), ...extra, ...(this.accounts.get('*') ?? [])];
+  }
+
+  async listProjectAccounts(app?: string): Promise<ConnectedAccount[]> {
+    return this.project.filter((a) => !app || a.app === app);
   }
 
   async listAccounts(externalUserId: string, app?: string): Promise<ConnectedAccount[]> {
