@@ -46,10 +46,10 @@ describe('crawl uses the saved website and reports fetch failures', () => {
     expect(body.found.phone).toMatch(/215/);
     expect(body.found.services).toMatch(/Interior/);
     expect(body.audits[0].summary).toMatch(/Score/);
-    expect(body.profile.website).toBe('https://paintersinphilly.com');
+    expect(body.profile.website).toBe('https://paintersinphilly.com/');
     expect(body.profile.gbpUrl).toBe('https://maps.example/gbp');
     const home = await server.inject({ method: 'GET', url: '/api/miles/home', headers });
-    expect(home.json().profile.website).toBe('https://paintersinphilly.com');
+    expect(home.json().profile.website).toBe('https://paintersinphilly.com/');
     expect(home.json().profile.businessName).toMatch(/Painters/);
     expect(home.json().found.pagesRead).toBe(1);
     expect(home.json().phase).toBe('questions');

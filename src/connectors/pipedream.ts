@@ -875,7 +875,7 @@ export class PipedreamConnector implements Connector {
           adGroupId: adGroupNumId,
           headlines: g.rsa.headlines,
           descriptions: g.rsa.descriptions,
-          finalUrls: [spec.finalUrl],
+          finalUrls: [g.finalUrl || spec.finalUrl],
         });
         steps.push({ step: `Create responsive search ad in "${g.name}"`, ok: rsa.ok, error: rsa.error });
       }

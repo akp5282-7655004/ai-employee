@@ -28,7 +28,7 @@ import { briefFromSelection, buildLibrary, filterLibrary, libraryFacets, readSel
 import { buildMetaAssets, buildSearchAssets, checkMetaPack, checkSearchPack } from './creative/tospec.js';
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
-import { buildCampaignSpec, validateCampaignSpec, campaignSummary, type CampaignSpec } from './agents/campaign.js';
+import { buildCampaignSpec, validateCampaignSpec, campaignSummary, normalizeSiteUrl, repairCampaignUrls, type CampaignSpec } from './agents/campaign.js';
 import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, META_SHARED_ACCOUNT_NOTE, searchLaunchNote } from './agents/googlelaunch.js';
 import { buildLoopPlan, decideLead, ghlUpsertProps, GHL_UPSERT_ACTION, judgeActivation, normalizeLead, type ObservedAd } from './agents/plumberloop.js';
 import { judgeTikTokCreate, planFollowUp, proposeOptimizations, rollupJobs, stageOpportunity, TIKTOK_CREATE_ACTION, type JobMark } from './agents/contractorloop.js';
@@ -1188,7 +1188,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }
     const facts = crawlFacts({ businessName, location, email, website, gbpUrl, competitors, html });
     if (gbpUrl) facts.profile.gbpUrl = gbpUrl;
-    if (website) facts.profile.website = website;
+    const savedWebsite = normalizeSiteUrl(website);
+    if (savedWebsite) facts.profile.website = savedWebsite;
     if (competitors.length) facts.profile.competitors = competitors.join(', ');
     let placesNote = 'Google Places is not configured, so nearby listings were not read.';
     if (process.env.GOOGLE_PLACES_KEY && (facts.profile.businessName || location)) {
@@ -1209,7 +1210,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       businessName: facts.profile.businessName || businessName,
       phone: facts.profile.phone || '',
       services: facts.profile.services || '',
-      website,
+      website: savedWebsite || website,
       fetchNote,
       auditSummary: siteAudit.summary,
       crawledAt,
@@ -1229,14 +1230,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const crawl = miles.crawl;
     const p = (data.profile ?? {}) as Record<string, string>;
     const body = req.body ?? {};
+    const website = p.website || crawl?.profile.website || miles.found?.website || '';
     const bundle = buildBundle({
       businessName: p.businessName || crawl?.profile.businessName,
       location: p.serviceAreas || crawl?.profile.serviceAreas,
       email: body && p.email,
-      website: p.website,
-      gbpUrl: crawl ? '' : '',
-      competitors: [],
+      website,
+      gbpUrl: p.gbpUrl || crawl?.profile.gbpUrl || '',
+      competitors: String(p.competitors || '').split(',').map((s) => s.trim()).filter(Boolean),
       html: '',
+      links: crawl?.links,
       goal: body.goal || 'get me leads',
       dailyBudget: Number(body.dailyBudget) || 20,
       leadsPerDay: Number(body.leadsPerDay) || 1,
@@ -1350,14 +1353,25 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       await authStore.setUserData(uid, data);
       return { ok: true, decisions, created: false };
     }
-    if (!connector.launchCampaign || connector.name === 'mock') {
+    const savedSite = normalizeSiteUrl(miles.bundle.setup.website || miles.bundle.profile.website || miles.found?.website || (data.profile as { website?: string } | undefined)?.website);
+    if (!savedSite) {
+      return { error: 'Crawl your website first. Miles needs the saved website before it can set the landing page. Open the crawl step, enter the site, and run Crawl again. Nothing was created.', code: 400 as const };
+    }
+    miles.bundle.setup.website = savedSite;
+    miles.bundle.spec = repairCampaignUrls(miles.bundle.spec, { website: savedSite, links: miles.crawl?.links ?? [] });
+    const spec = forcePausedSearchSpec(miles.bundle.spec);
+    miles.bundle.spec = spec;
+    data.miles = miles;
+    const problems = validateCampaignSpec(spec);
+    if (problems.length) {
+      await authStore.setUserData(uid, data);
+      return { error: problems.join(' '), code: 400 as const };
+    }
+    if (!connector.launchCampaign) {
       rememberMiles(data, miles, 'Preview connector. The Google plan is saved. Nothing was created in Google Ads.');
       await authStore.setUserData(uid, data);
       return { ok: true, decisions, created: false, demo: true };
     }
-    const spec = forcePausedSearchSpec(miles.bundle.spec);
-    const problems = validateCampaignSpec(spec);
-    if (problems.length) return { error: problems.join(' '), code: 400 as const };
     let targets: { id: string; label: string }[] = [];
     if (connector.listAdTargets) {
       try { targets = await connector.listAdTargets(uid); } catch { targets = []; }
@@ -1370,8 +1384,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }
     const result = await connector.launchCampaign(uid, spec, targets[0]!.id);
     const judged = judgeSearchLaunch(result.steps ?? []);
-    const live = connector.name !== 'mock' && !!result.live;
-    if (!(live && judged.ok && result.campaignResource)) {
+    const demo = connector.name === 'mock';
+    const live = !demo && !!result.live;
+    if (demo && !result.campaignResource) {
+      rememberMiles(data, miles, 'Preview connector. The Google plan is saved. Nothing was created in Google Ads.');
+      await authStore.setUserData(uid, data);
+      return { ok: true, decisions, created: false, demo: true };
+    }
+    if (!((live || demo) && judged.ok && result.campaignResource)) {
       rememberMiles(data, miles, result.note || 'Google did not create the campaign. It was not enabled.');
       await authStore.setUserData(uid, data);
       return { ok: false, created: false, decisions, note: result.note, steps: result.steps, adsMissing: judged.adsMissing };
@@ -1456,6 +1476,18 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const ghl = ghlLinkNow.connected;
     const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     const stats = responderStats(st, new Date().toISOString());
+    const profile = (data.profile ?? {}) as Record<string, string>;
+    const savedSite = normalizeSiteUrl(miles.bundle?.setup.website || miles.bundle?.profile.website || miles.found?.website || profile.website);
+    if (miles.bundle && savedSite) {
+      const repaired = repairCampaignUrls(miles.bundle.spec, { website: savedSite, links: miles.crawl?.links ?? [] });
+      const changed = JSON.stringify(repaired) !== JSON.stringify(miles.bundle.spec) || miles.bundle.setup.website !== savedSite;
+      miles.bundle.spec = repaired;
+      miles.bundle.setup.website = savedSite;
+      if (changed) {
+        data.miles = miles;
+        await authStore.setUserData(u.id, data);
+      }
+    }
     const demo = connector.name === 'mock';
     const brief = demo || (!booked && miles.events.length === 0)
       ? 'Nothing has run on a live ad account yet.'

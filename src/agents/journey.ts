@@ -2,9 +2,9 @@
  * What Miles prepares from a crawl and the owner's setup.
  * Publishing and enabling go through the policy engine, not through this file.
  */
-import { buildCampaignSpec, deriveServiceLines, shortBrand, type CampaignSpec } from './campaign.js';
+import { buildCampaignSpec, deriveServiceLines, normalizeSiteUrl, repairCampaignUrls, shortBrand, type CampaignSpec, type PageLinkRef } from './campaign.js';
 import { runAuditChecks, scoreFindings, gradeFor } from '../research/audit.js';
-import { parseSiteHtml, type SiteImport } from '../research/site.js';
+import { extractPageLinks, parseSiteHtml, type SiteImport } from '../research/site.js';
 import { CHANNELS } from '../research/competitive.js';
 import { feasibility, playbookCard, type Feasibility, type PlaybookCard } from './feasibility.js';
 import { DEFAULT_CAPS, type Caps, type MilesArea, type MilesMode } from './policy.js';
@@ -17,6 +17,7 @@ export interface CrawlInput {
   gbpUrl?: string;
   competitors?: string[];
   html?: string;
+  links?: PageLinkRef[];
 }
 
 export interface SetupAnswers {
@@ -98,8 +99,9 @@ function licenseOf(text: string): string {
   return m ? m[0].replace(/\s+/g, ' ').trim() : 'Not found on the site';
 }
 
-export function crawlFacts(input: CrawlInput): { site: Partial<SiteImport>; text: string; profile: Record<string, string>; hours: string; license: string; gbpNote: string } {
+export function crawlFacts(input: CrawlInput): { site: Partial<SiteImport>; text: string; profile: Record<string, string>; hours: string; license: string; gbpNote: string; links: PageLinkRef[] } {
   const site = input.html ? parseSiteHtml(input.html, input.website || 'https://example.com') : {};
+  const links = input.links?.length ? input.links : (input.html && (input.website || site.website) ? extractPageLinks(input.html, input.website || site.website || '') : []);
   const text = input.html ? input.html.replace(/<[^>]+>/g, ' ') : '';
   const name = input.businessName || site.businessName || '';
   const location = input.location || site.serviceAreas || site.city || '';
@@ -108,7 +110,8 @@ export function crawlFacts(input: CrawlInput): { site: Partial<SiteImport>; text
   if (site.industry) profile.industry = site.industry;
   if (site.services) profile.services = site.services;
   if (location) profile.serviceAreas = location;
-  if (input.website || site.website) profile.website = input.website || site.website || '';
+  const siteUrl = normalizeSiteUrl(input.website || site.website);
+  if (siteUrl) profile.website = siteUrl;
   if (site.phone) profile.phone = site.phone;
   if (input.email) profile.email = input.email;
   if (site.brandColors) profile.brandColors = site.brandColors;
@@ -125,6 +128,7 @@ export function crawlFacts(input: CrawlInput): { site: Partial<SiteImport>; text
     gbpNote: gbp
       ? 'Google Business Profile link saved. Miles does not read ratings or hours from Google without a Places key, so nothing was guessed.'
       : 'No Google Business Profile link yet.',
+    links,
   };
 }
 
@@ -219,10 +223,13 @@ export function buildBundle(input: CrawlInput & SetupAnswers & { mode?: MilesMod
   const googleDaily = Math.round(daily * share * 100) / 100;
   const otherDaily = Math.round((daily - googleDaily) * 100) / 100;
   const services = deriveServiceLines(facts.profile.services, trade);
-  const spec = buildCampaignSpec(
-    { goal: input.goal, dailyBudget: googleDaily || daily, finalUrl: facts.profile.website || 'https://example.com', locations: [city] },
+  const website = input.website || facts.profile.website || '';
+  const links = input.links?.length ? input.links : facts.links;
+  const drafted = buildCampaignSpec(
+    { goal: input.goal, dailyBudget: googleDaily || daily, finalUrl: website, locations: [city] },
     { business: shortBrand(facts.profile.businessName, trade, city), trade, city, services: services.join(', ') },
   );
+  const spec = repairCampaignUrls(drafted, { website, links });
   const feas = feasibility({ dailyBudget: daily, leadsPerDay: input.leadsPerDay, trade, now: input.now });
   const seo: SeoDraft[] = services.slice(0, 3).map((service) => ({
     path: '/' + service.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
