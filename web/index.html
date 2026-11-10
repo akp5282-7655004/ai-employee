@@ -605,13 +605,13 @@
         </div>
       </div>
     </nav>
-    <div class="glabel" style="display:none">PROJECTS</div>
-    <div class="pill newproj" style="display:none"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New project</div>
-    <div class="glabel" style="display:none">ACTIVE PLAYBOOKS</div>
-    <div class="pill playbook" style="display:none">Home Services</div>
-    <div class="pill playbook" style="display:none">Roofing Restoration</div>
-    <div class="pill playbook" style="display:none">Dental Practice</div>
-    <div class="pill playbook" style="display:none">Solar Energy</div>
+    <div class="glabel">PROJECTS</div>
+    <div class="pill newproj"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New project</div>
+    <div class="glabel">ACTIVE PLAYBOOKS</div>
+    <div class="pill playbook">Home Services</div>
+    <div class="pill playbook">Roofing Restoration</div>
+    <div class="pill playbook">Dental Practice</div>
+    <div class="pill playbook">Solar Energy</div>
     <div class="grow"></div>
     <div class="ws acct"><span class="sq" id="user-av">·</span><div style="min-width:0;flex:1"><b id="user-email" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</b></div><button class="cx" id="logout" title="Log out" type="button" style="cursor:pointer;display:flex;align-items:center;gap:5px;background:none;border:none;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--muted);padding:4px 6px;border-radius:8px;white-space:nowrap;flex:none" onmouseover="this.style.background='var(--panel-2)';this.style.color='var(--ink)'" onmouseout="this.style.background='none';this.style.color='var(--muted)'"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button></div>
   </aside>
@@ -2584,7 +2584,20 @@ let aTab='overview';
 let MKT_RANGE='LAST_30_DAYS';
 const MKT_RANGES=[['LAST_7_DAYS','Last 7 days'],['LAST_14_DAYS','Last 14 days'],['LAST_30_DAYS','Last 30 days'],['THIS_MONTH','This month'],['LAST_MONTH','Last month']];
 const mktRangeLabel=(r)=>{ const f=MKT_RANGES.find(x=>x[0]===(r||MKT_RANGE)); return f?f[1].toLowerCase():'the last 30 days'; };
-async function openOverview(){ const box=$('#overview-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading...</p>'; let d={}; try{ d=await(await fetch('/api/miles/home')).json(); }catch(e){ box.innerHTML=''; box.append(ovNudge('Could not load the home.')); return; } renderMilesHome(box, d); }
+async function openOverview(){
+  const box=$('#overview-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading your dashboard…</p>';
+  let d={}, miles={};
+  if(REMOTE){
+    try{ d=await(await fetch('/api/dashboard?range='+encodeURIComponent(MKT_RANGE))).json(); ANDASH=d; }catch(e){}
+    try{ miles=await(await fetch('/api/miles/home')).json(); }catch(e){}
+  }
+  renderOverview(d);
+  const flow=document.createElement('div'); flow.id='miles-flow';
+  const head=box.firstElementChild;
+  if(head) head.insertAdjacentElement('afterend', flow); else box.append(flow);
+  renderMilesHome(flow, miles);
+  openCmdCenter();
+}
 function renderMilesHome(box, d){
   box.innerHTML='';
   const h=el('div','mcard');
@@ -2602,14 +2615,46 @@ function renderMilesHome(box, d){
   if(d.bundle&&d.bundle.feasibility){ const f=el('div','mcard'); f.style.marginTop='12px'; f.append(el('div','appsub', d.bundle.feasibility.message)); box.append(f); }
   const audits=d.audits||[];
   if(audits.length){ const a=el('div','mcard'); a.style.marginTop='12px'; a.append(el('div','sect-label','AUDITS')); audits.forEach(x=>{ const row=el('div'); row.style.cssText='padding:8px 0;border-top:1px solid var(--line)'; row.innerHTML='<b>'+esc(x.title)+'</b><div class="appsub">'+esc(x.summary)+'</div><div class="appsub">Source: '+esc(x.source)+'</div>'; a.append(row); }); box.append(a); }
+  if(d.found){
+    const found=el('div','mcard'); found.id='miles-found'; found.style.marginTop='12px';
+    const fnd=d.found;
+    found.innerHTML='<div class="sect-label">WHAT MILES FOUND</div>'
+      +'<p class="appsub">Pages read: '+(fnd.pagesRead||0)+'.</p>'
+      +'<p class="appsub">Business: '+esc(fnd.businessName||'Not found')+'.</p>'
+      +'<p class="appsub">Phone: '+esc(fnd.phone||'Not found')+'.</p>'
+      +'<p class="appsub">Services: '+esc(fnd.services||'Not found')+'.</p>'
+      +'<p class="appsub">'+esc(fnd.auditSummary||'')+'</p>'
+      +(fnd.fetchNote?'<p class="appsub">'+esc(fnd.fetchNote)+'</p>':'');
+    box.append(found);
+  }
   if(!d.bundle){
+    const p=d.profile||{};
     const form=el('div','mcard'); form.style.marginTop='12px'; form.append(el('div','sect-label','1. CRAWL'));
     const field=(label,id,val)=>{ const w=el('div'); w.style.margin='8px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.id=id; i.value=val||''; i.style.width='100%'; w.append(i); return w; };
-    form.append(field('Business name','m-name',''), field('Location','m-loc','Philadelphia, PA'), field('Email','m-email',''), field('Website','m-web',''), field('Google Business Profile link','m-gbp',''), field('Competitor websites, comma separated','m-comp',''));
+    form.append(field('Business name','m-name',p.businessName||''), field('Location','m-loc',p.serviceAreas||''), field('Email','m-email',p.email||''), field('Website','m-web',p.website||''), field('Google Business Profile link','m-gbp',p.gbpUrl||''), field('Competitor websites, comma separated','m-comp',p.competitors||''));
+    const status=el('div','appsub',''); status.id='m-crawl-status'; status.style.marginTop='8px';
     const go=el('button','go','Crawl'); go.style.marginTop='8px';
-    go.onclick=async()=>{ go.disabled=true; const body={businessName:$('#m-name').value, location:$('#m-loc').value, email:$('#m-email').value, website:$('#m-web').value, gbpUrl:$('#m-gbp').value, competitors:($('#m-comp').value||'').split(',').map(s=>s.trim()).filter(Boolean)}; const r=await(await fetch('/api/miles/crawl',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})).json(); go.disabled=false; if(r.error){ toast(r.error); return; } toast('Crawl saved'); openOverview(); };
-    form.append(go); box.append(form);
-    const q=el('div','mcard'); q.style.marginTop='12px'; q.append(el('div','sect-label','2. THREE QUESTIONS'));
+    go.onclick=async()=>{
+      go.disabled=true; const label=go.textContent; go.textContent='Crawling your website...'; status.textContent='Crawling your website...';
+      try{
+        const res=await fetch('/api/miles/crawl',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({businessName:$('#m-name').value, location:$('#m-loc').value, email:$('#m-email').value, website:$('#m-web').value, gbpUrl:$('#m-gbp').value, competitors:($('#m-comp').value||'').split(',').map(s=>s.trim()).filter(Boolean)})});
+        const text=await res.text();
+        let r={};
+        try{ r=text?JSON.parse(text):{}; }catch(parseErr){ throw new Error('Crawl did not return a result. Try again.'); }
+        if(!res.ok||r.error) throw new Error(r.error||('Crawl failed ('+res.status+').'));
+        await openOverview();
+        const step=document.getElementById('miles-questions');
+        if(step) step.scrollIntoView({behavior:'smooth', block:'center'});
+      }catch(err){
+        go.disabled=false; go.textContent=label||'Crawl';
+        const msg=(err&&err.message)?err.message:'Crawl failed. Try again.';
+        status.textContent=msg; toast(msg);
+      }
+    };
+    form.append(go, status); box.append(form);
+    const q=el('div','mcard'); q.id='miles-questions'; q.style.marginTop='12px';
+    if(d.phase==='questions'||d.found) q.style.outline='2px solid var(--ink)';
+    q.append(el('div','sect-label','2. THREE QUESTIONS'));
     q.append(field('Goal','m-goal','get me painting leads'), field('Daily budget','m-budget','20'), field('Leads wanted per day','m-leads','1'));
     const start=el('button','go','Save and show the Google plan'); start.style.marginTop='8px';
     start.onclick=async()=>{ const body={goal:$('#m-goal').value, dailyBudget:Number($('#m-budget').value)||20, leadsPerDay:Number($('#m-leads').value)||1, googleShare:1, mode:d.mode||'hybrid'}; const r=await(await fetch('/api/miles/questions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})).json(); if(r.error){ toast(r.error); return; } openOverview(); };
@@ -3089,7 +3134,6 @@ function renderAnalytics(){
 function anOverview(){
   const r=anRange(), city=anCity(), m=(ANDASH&&ANDASH.marketing)||{}, ld=(ANDASH&&ANDASH.leads)||{};
   const live=!!(m.hasData||ld.hasData);
-  if(!live) return '<div class="an-notice"><p><b>No live numbers yet.</b> Connect Google Ads and your CRM. Miles will not show sample dollars on this page.</p><button data-goint>Connect your accounts</button></div>';
   const cpl=m.cpa!=null?m.cpa:r.cpl[1];
   const leads=ld.count||r.leads[1];
   const booked=(ANDASH&&ANDASH.revenue&&ANDASH.revenue.bookedRate)||r.booked[1];

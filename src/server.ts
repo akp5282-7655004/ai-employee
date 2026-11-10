@@ -58,7 +58,7 @@ import {
 } from './billing/stripe.js';
 import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, updateBand } from './billing/subscription.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
-import { buildBundle, competitorAudit, crawlFacts, performanceAudit, websiteAudit } from './agents/journey.js';
+import { buildBundle, competitorAudit, crawlFacts, performanceAudit, readPublicPage, websiteAudit } from './agents/journey.js';
 import { planGo } from './agents/milesrun.js';
 import { decidePolicy } from './agents/policy.js';
 import { dueSkills, periodKey } from './agents/skillclock.js';
@@ -1108,6 +1108,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     skillClock: Record<string, string>;
     events: { ts: string; text: string }[];
     audits: { id: string; title: string; source: string; summary: string; score?: number; grade?: string }[];
+    found: { pagesRead: number; businessName: string; phone: string; services: string; website: string; fetchNote: string; auditSummary: string } | null;
   };
   const milesOf = (data: Record<string, unknown>): MilesFile => {
     const raw = (data.miles as Partial<MilesFile>) ?? {};
@@ -1121,6 +1122,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       skillClock: raw.skillClock ?? {},
       events: Array.isArray(raw.events) ? raw.events : [],
       audits: Array.isArray(raw.audits) ? raw.audits : [],
+      found: raw.found ?? null,
     };
   };
   const rememberMiles = (data: Record<string, unknown>, miles: MilesFile, text: string) => {
@@ -1133,31 +1135,55 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const body = req.body ?? {};
+    const data = await authStore.getUserData(u.id);
+    const saved = (data.profile ?? {}) as Record<string, string>;
+    const website = String(body.website || saved.website || '').trim();
+    const businessName = String(body.businessName || saved.businessName || '').trim();
+    const location = String(body.location || saved.serviceAreas || '').trim();
+    const email = String(body.email || saved.email || '').trim();
+    const gbpUrl = String(body.gbpUrl || saved.gbpUrl || '').trim();
+    const competitors = Array.isArray(body.competitors) && body.competitors.length
+      ? body.competitors.map((s) => String(s || '').trim()).filter(Boolean)
+      : String(saved.competitors || '').split(',').map((s) => s.trim()).filter(Boolean);
     let html = typeof body.html === 'string' ? body.html : '';
-    if (!html && body.website) {
-      try {
-        const res = await fetch(body.website.startsWith('http') ? body.website : `https://${body.website}`, { signal: AbortSignal.timeout(4000) });
-        if (res.ok) html = (await res.text()).slice(0, 200_000);
-      } catch { html = ''; }
+    let fetchNote = '';
+    if (!html && website) {
+      const read = await readPublicPage(website);
+      html = read.html;
+      fetchNote = read.note;
+    } else if (!html) {
+      fetchNote = 'No website is on the form or the saved profile, so no page was fetched.';
     }
-    const facts = crawlFacts({ ...body, html, competitors: body.competitors });
+    const facts = crawlFacts({ businessName, location, email, website, gbpUrl, competitors, html });
+    if (gbpUrl) facts.profile.gbpUrl = gbpUrl;
+    if (website) facts.profile.website = website;
+    if (competitors.length) facts.profile.competitors = competitors.join(', ');
     let placesNote = 'Google Places is not configured, so nearby listings were not read.';
-    if (process.env.GOOGLE_PLACES_KEY && (facts.profile.businessName || body.location)) {
+    if (process.env.GOOGLE_PLACES_KEY && (facts.profile.businessName || location)) {
       try {
-        const rows = await searchCompetitors(`${facts.profile.businessName || body.businessName || 'painter'} ${body.location || ''}`.trim());
+        const rows = await searchCompetitors(`${facts.profile.businessName || businessName || 'painter'} ${location}`.trim());
         placesNote = rows?.length ? `Google Places returned ${rows.length} public listing${rows.length === 1 ? '' : 's'}. Ratings are from Places, not invented.` : 'Google Places returned no listings.';
       } catch { placesNote = 'Google Places could not be read.'; }
     }
-    const data = await authStore.getUserData(u.id);
-    data.profile = { ...((data.profile as object) ?? {}), ...facts.profile, updatedAt: new Date().toISOString() };
+    data.profile = { ...saved, ...facts.profile, updatedAt: new Date().toISOString() };
     const miles = milesOf(data);
     miles.crawl = facts;
     miles.phase = 'questions';
-    miles.audits = [websiteAudit(html, body.website || ''), competitorAudit(body.competitors ?? [])];
-    miles.events = [{ ts: new Date().toISOString(), text: `Crawl saved. ${facts.gbpNote} ${placesNote}` }, ...miles.events].slice(0, 40);
+    const siteAudit = websiteAudit(html, website, html ? undefined : fetchNote);
+    miles.audits = [siteAudit, competitorAudit(competitors)];
+    miles.found = {
+      pagesRead: html.trim() ? 1 : 0,
+      businessName: facts.profile.businessName || businessName,
+      phone: facts.profile.phone || '',
+      services: facts.profile.services || '',
+      website,
+      fetchNote,
+      auditSummary: siteAudit.summary,
+    };
+    miles.events = [{ ts: new Date().toISOString(), text: `Crawl saved. ${miles.found.pagesRead} page read. ${facts.gbpNote} ${placesNote}` }, ...miles.events].slice(0, 40);
     data.miles = miles;
     await authStore.setUserData(u.id, data);
-    return { ok: true, profile: data.profile, hours: facts.hours, license: facts.license, gbpNote: facts.gbpNote, placesNote, audits: miles.audits };
+    return { ok: true, profile: data.profile, hours: facts.hours, license: facts.license, gbpNote: facts.gbpNote, placesNote, audits: miles.audits, found: miles.found };
   });
 
   app.post<{ Body: { goal?: string; dailyBudget?: number; leadsPerDay?: number; googleShare?: number; mode?: 'automate' | 'hybrid' | 'manual'; areaModes?: Record<string, 'automate' | 'hybrid' | 'manual'> } }>('/api/miles/questions', async (req, reply) => {
@@ -1412,6 +1438,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         setup: ghl ? 'GoHighLevel is connected. Speed to lead sends when it is on and the lead has a phone.' : 'GoHighLevel is not connected. Replies stay drafts. Connect it under Integrations.',
       },
       jobs: { leads: jobs.length, booked },
+      profile: (data.profile ?? {}) as Record<string, string>,
+      found: miles.found,
       brief,
     };
   });
@@ -2252,7 +2280,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     // CRM live values: webhook ledger first, then the direct deals read
     // (GHL opportunities) overrides won/revenue — the pipeline is the truth.
     const ledger = crmLiveValues(data, days);
-    const crm = { ...ledger, ...dealsLiveValues(snap?.deals ?? [], days) };
+    const jobs = Array.isArray(data.jobMarks) ? (data.jobMarks as JobMark[]) : [];
+    const fromJobs: Record<string, number> = {};
+    if (jobs.length) {
+      const booked = jobs.filter((j) => j.stage === 'booked' || j.stage === 'won').length;
+      const won = jobs.filter((j) => j.stage === 'won');
+      fromJobs['crm.leads_created'] = jobs.length;
+      fromJobs['crm.booked_jobs'] = booked;
+      if (won.length) fromJobs['crm.job_revenue'] = Math.round(won.reduce((s, j) => s + (Number(j.jobValue) || 0), 0) * 100) / 100;
+    }
+    const crm = { ...ledger, ...dealsLiveValues(snap?.deals ?? [], days), ...fromJobs };
     // GBP completeness comes live from the Local Presence audit once taken.
     const lpAnswers = (data.localPresence as Record<string, AuditAnswer>) ?? undefined;
     const gbpScore = lpAnswers ? { 'gbp.completeness_score': gbpCompletenessScore(buildLocalPresenceAudit(lpAnswers, (data.profile ?? {}) as Record<string, string>)) } : {};

@@ -75,6 +75,13 @@ export async function getMetric(key: string, days: number, live: LiveReaders = {
   return base;
 }
 
+/** Numbers a decision is allowed to use. Sample placeholders are dropped. */
+export function liveFacts(results: Pick<MetricResult, 'key' | 'value' | 'source'>[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const row of results) if (row.source === 'live') out[row.key] = row.value;
+  return out;
+}
+
 export async function getMetrics(keys: string[], days: number, live: LiveReaders = {}): Promise<MetricResult[]> {
   const out: MetricResult[] = [];
   for (const k of keys) {

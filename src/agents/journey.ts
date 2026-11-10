@@ -128,9 +128,44 @@ export function crawlFacts(input: CrawlInput): { site: Partial<SiteImport>; text
   };
 }
 
-export function websiteAudit(html: string, url: string): AuditCard {
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
+export interface PageRead {
+  html: string;
+  finalUrl: string;
+  ok: boolean;
+  note: string;
+}
+
+/** Read one public page. Callers pass a fake fetch in tests. No live call from those tests. */
+export async function readPublicPage(url: string, fetchImpl: typeof fetch = fetch, timeoutMs = 10_000): Promise<PageRead> {
+  const target = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  try {
+    const res = await fetchImpl(target, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: { 'user-agent': BROWSER_UA, accept: 'text/html,application/xhtml+xml' },
+    });
+    if (!res.ok) {
+      return { html: '', finalUrl: res.url || target, ok: false, note: `Could not read ${target}. The site returned HTTP ${res.status}.` };
+    }
+    const html = (await res.text()).slice(0, 200_000);
+    const finalUrl = res.url || target;
+    return { html, finalUrl, ok: !!html.trim(), note: html.trim() ? `Read ${finalUrl}.` : `The site at ${finalUrl} returned an empty page.` };
+  } catch (err) {
+    const name = (err as Error).name || '';
+    const message = (err as Error).message || '';
+    if (name === 'TimeoutError' || name === 'AbortError' || /timeout|aborted/i.test(message)) {
+      return { html: '', finalUrl: target, ok: false, note: `Could not read ${target}. The request timed out after ${Math.round(timeoutMs / 1000)} seconds.` };
+    }
+    return { html: '', finalUrl: target, ok: false, note: `Could not read ${target}. ${message || 'The request failed.'}` };
+  }
+}
+
+export function websiteAudit(html: string, url: string, failure?: string): AuditCard {
   if (!html) {
-    return { id: 'website', title: 'Website audit', source: 'No page was fetched', summary: 'Paste a website Miles can read. Nothing was scored.' };
+    const why = failure || 'No page was fetched. Nothing was scored.';
+    return { id: 'website', title: 'Website audit', source: why, summary: why };
   }
   const findings = runAuditChecks(html, url.startsWith('http') ? url : `https://${url}`);
   const score = scoreFindings(findings);
