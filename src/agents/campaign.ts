@@ -20,6 +20,8 @@ export interface AdGroupSpec {
   name: string;
   keywords: KeywordSpec[];
   rsa: RsaSpec;
+  /** Landing page for this ad group. Homepage when no crawled service page matches. */
+  finalUrl?: string;
 }
 /** Sitelink asset — link text (≤25) + up to two description lines (≤35) + its own URL. */
 export interface Sitelink {
@@ -167,7 +169,7 @@ export function deriveServiceLines(services: string | undefined, trade: string |
     if (found.length) return found.slice(0, 4);
     return book.slice(0, 3).map((row) => row.label);
   }
-  const parts = (services || '').split(/[,;/|]/).map((part) => stripOfferWords(part)).filter((part) => part.length > 2);
+  const parts = (services || '').split(/[,;/|]/).map((part) => stripOfferWords(part)).filter((part) => part.length > 2 && !JUNK_LINE.test(part));
   if (parts.length) return parts.slice(0, 3);
   const cleaned = stripOfferWords(trade || '');
   return [cleaned || 'Local service'];
@@ -193,6 +195,87 @@ export function budgetCaution(daily: number, targetCpl: number | null): { warn: 
 }
 
 const NEGATIVES = ['jobs', 'careers', 'salary', 'hiring', 'diy', 'how to', 'free', 'training', 'course', 'cheap', 'used', 'wholesale'];
+const JUNK_LINE = /\b(slide|slider|location|locations|placeholder|lorem|untitled|menu|header|footer|navigation)\b/i;
+
+export interface PageLinkRef {
+  href: string;
+  text: string;
+}
+
+/** https URL with a real hostname. A label such as "Interior Painting" is not a URL. */
+export function normalizeSiteUrl(raw: string | undefined): string | undefined {
+  const trimmed = (raw || '').trim();
+  if (!trimmed || /\s/.test(trimmed)) return undefined;
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed.replace(/^\/+/, '')}`;
+  try {
+    const url = new URL(withScheme);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
+    if (!url.hostname.includes('.') || url.username || url.password) return undefined;
+    if (url.hostname === 'example.com') return undefined;
+    url.protocol = 'https:';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function pathKey(raw: string): string {
+  try {
+    const path = new URL(raw).pathname.replace(/\/+$/, '');
+    return (path || '/').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function linkWords(label: string): string[] {
+  return label.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 3 && !['painting', 'service', 'services'].includes(word));
+}
+
+function matchCrawledLink(links: PageLinkRef[], label: string): string | undefined {
+  const words = [...new Set(linkWords(label))];
+  if (!words.length) return undefined;
+  const hit = links.find((link) => {
+    const hay = `${link.text} ${pathKey(link.href)}`.toLowerCase();
+    return words.every((word) => hay.includes(word));
+  });
+  return hit ? normalizeSiteUrl(hit.href) : undefined;
+}
+
+/**
+ * Fill the landing page and sitelinks from the crawled site. A sitelink is kept
+ * only when its URL is a page the crawl actually saw. Fewer than two real
+ * sitelinks means no sitelinks, never a blank or made-up path.
+ */
+export function repairCampaignUrls(spec: CampaignSpec, args: { website?: string; links?: PageLinkRef[] }): CampaignSpec {
+  const home = normalizeSiteUrl(args.website) || normalizeSiteUrl(spec.finalUrl);
+  const links = args.links ?? [];
+  const known = new Set(links.map((link) => pathKey(link.href)).filter(Boolean));
+  if (home) known.add('/');
+  const adGroups = spec.adGroups.map((group) => ({
+    ...group,
+    finalUrl: (home && matchCrawledLink(links, group.name)) || home || undefined,
+  }));
+  const labels = [...spec.adGroups.map((group) => group.name), 'Request A Visit', 'About Us', 'Contact Us'];
+  const seen = new Set<string>();
+  const sitelinks: Sitelink[] = [];
+  for (const label of labels) {
+    const text = fitCopy([label, 'Services'], 25);
+    if (!text || seen.has(text.toLowerCase())) continue;
+    const url = matchCrawledLink(links, text);
+    if (!url || !known.has(pathKey(url))) continue;
+    seen.add(text.toLowerCase());
+    sitelinks.push({ text, url, desc1: fitCopy([text, 'Local service'], 35) || undefined, desc2: 'Ask about timing' });
+    if (sitelinks.length >= 6) break;
+  }
+  return {
+    ...spec,
+    finalUrl: home || '',
+    adGroups,
+    sitelinks: sitelinks.length >= 2 ? sitelinks : [],
+  };
+}
 
 function keywordAllowed(text: string, negatives: string[]): boolean {
   const lower = text.toLowerCase();

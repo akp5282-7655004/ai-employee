@@ -150,6 +150,34 @@ export function decode(s: string): string {
     .replace(/\s+/g, ' ').trim();
 }
 
+export interface PageLink {
+  href: string;
+  text: string;
+}
+
+/** Same-site links from the page, absolute and de-duplicated. */
+export function extractPageLinks(html: string, baseUrl: string): PageLink[] {
+  let origin: URL;
+  try { origin = new URL(/^https?:\/\//i.test(baseUrl) ? baseUrl : `https://${baseUrl}`); } catch { return []; }
+  const out: PageLink[] = [];
+  const seen = new Set<string>();
+  for (const m of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]{0,120}?)<\/a>/gi)) {
+    const raw = decode(m[1] || '');
+    const text = decode((m[2] || '').replace(/<[^>]+>/g, ' '));
+    if (!raw || raw.startsWith('#') || /^(mailto|tel|javascript):/i.test(raw)) continue;
+    let abs: URL;
+    try { abs = new URL(raw, origin); } catch { continue; }
+    if (abs.origin !== origin.origin) continue;
+    abs.hash = '';
+    const href = abs.toString();
+    if (seen.has(href)) continue;
+    seen.add(href);
+    out.push({ href, text });
+    if (out.length >= 40) break;
+  }
+  return out;
+}
+
 /** Everything a human would read on the page, with the machinery stripped out. */
 export function visibleText(html: string): string {
   return decode(
