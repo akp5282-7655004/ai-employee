@@ -681,7 +681,7 @@
           <h3>CPA / CPL Benchmark Speedometer</h3>
           <p class="mdesc">Directional industry cost-per-lead benchmarks — not real-time or local. Figures vary by period, market, channel &amp; method.</p>
           <div class="vpick" id="meter-vpick"></div>
-          <div class="gauge-wrap"><div id="gauge"></div><div class="gauge-val" id="gauge-val">$110</div><div class="gauge-cap" id="gauge-cap">Market Median</div></div>
+          <div class="gauge-wrap"><div id="gauge"></div><div class="gauge-val" id="gauge-val">n/a</div><div class="gauge-cap" id="gauge-cap">Published range</div></div>
           <div class="legend" id="legend"></div>
           <div id="meter-note" class="appsub" style="margin-top:10px;text-align:center"></div>
         </div>
@@ -969,18 +969,19 @@
 
     <!-- INTEGRATIONS -->
     <section class="page" id="page-int">
-      <p class="mdesc" style="margin:-8px 0 16px">Connect your CRM, call tracking, ad channels, and booking tools — one click each. No emailing credentials, no waiting on a specialist. Miles runs across all of them.</p>
+      <p class="mdesc" style="margin:-8px 0 16px">Connect the accounts this version can use. Google Ads and GoHighLevel are the ones Miles runs. Meta, TikTok, and Local Services Ads are coming later. The rest of the catalogue is a preview until a connector is verified.</p>
       <div id="int-banner"></div>
       <div id="int-connected"></div>
       <div id="int-stack"></div>
-      <div class="sect-label" style="margin-top:22px">BROWSE ALL 3,000+ APPS</div>
-      <input class="searchbar" id="app-search" placeholder="Search from 3,000+ integrations…" autocomplete="off">
+      <div class="sect-label" style="margin-top:22px">BROWSE THE APP CATALOGUE</div>
+      <input class="searchbar" id="app-search" placeholder="Search the catalogue. Most apps are not wired yet." autocomplete="off">
       <div class="sect-label" id="cat-label">POPULAR</div>
       <div class="appgrid" id="int-catalog"></div>
     </section>
 
     <!-- BUSINESS PROFILE -->
     <section class="page" id="page-profile">
+      <div id="miles-profile" style="max-width:760px;margin-bottom:16px"></div>
       <div class="mcard" style="max-width:760px">
         <h3>Business Profile</h3>
         <p class="mdesc">Everything Miles needs to run marketing for you. Update anytime — plans, ads, and content use these details.</p>
@@ -1427,7 +1428,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',approvals:'Approvals & Autonomy',billing:'Plan & Credits',fblaunch:'Launch on Facebook',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',approvals:'Approvals & Autonomy',billing:'Plan & Credits',fblaunch:'Facebook, coming later',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 // A destination can own several pages — Launch owns the plan, both channel
 // launchers and the ad-copy writer. The nav lists the destination; its pages
 // become a tab strip, so a four-step job stops looking like four unrelated
@@ -2062,7 +2063,7 @@ async function openCompetitorAds(){
   if(REMOTE){ await renderMarketScan(box); await renderAdLibrary(box, CADS_FILTER); }
   const head=el('div','mcard');
   head.append(el('h3',null,'Competitor Ad Research'));
-  head.append(el('p','mdesc','See the Facebook & Instagram ads your local competitors are running — and, more importantly, read the signals that tell you what’s actually working. Then turn a winning angle into your own ad or campaign in one click.'));
+  head.append(el('p','mdesc','Research only. Meta ads are coming later, so Miles will not launch one from here. Paste or open competitor ads, then send an angle to the playbook or the studio as a draft.'));
   const ctrls=el('div'); ctrls.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px';
   const inp=el('input','f'); inp.style.cssText='margin:0;flex:1;min-width:220px'; inp.placeholder='e.g. roofing philadelphia · plumber near me · "$500 off"';
   const btn=el('button','go','Research'); btn.style.flex='none';
@@ -2450,7 +2451,7 @@ function dashOverview(){
     {name:'Facebook Ads',sub:'Paid Social',val:'$0.89 CPA',sub2:'▼ 5.3%'},
     {name:'Google Business Profile',sub:'Local Search',val:'1.2K views',sub2:'▲ 9.8%'}]));
   const status='<div class="ah" style="margin:6px 0 12px">Platform Integration Status</div><div class="statgrid">'+[
-    statusCard('Search Engines',[{name:'Google',metric:'145K organic',ok:true},{name:'Bing',metric:'12K organic',ok:false},{name:'DuckDuckGo',metric:'3K organic',ok:false}]),
+    statusCard('Search Engines',[{name:'Google',metric:'145K organic · sample',ok:false},{name:'Bing',metric:'12K organic · sample',ok:false},{name:'DuckDuckGo',metric:'3K organic · sample',ok:false}]),
     statusCard('Social Media',[{name:'Facebook',metric:'12.5K followers',ok:connDot('facebook')},{name:'Instagram',metric:'8.3K followers',ok:false},{name:'TikTok',metric:'25.1K followers',ok:false},{name:'LinkedIn',metric:'5.2K followers',ok:false}]),
     statusCard('Paid Ads',[{name:'Google Ads',metric:'$3.2K spend',ok:connDot('google_ads')},{name:'Meta Ads',metric:'$2.1K spend',ok:false},{name:'Microsoft Ads',metric:'$450 spend',ok:false}]),
     statusCard('Messaging & Email',[{name:'Mailchimp',metric:'28K subscribers',ok:false},{name:'GoHighLevel',metric:'15K contacts',ok:connDot('gohighlevel')},{name:'Twilio SMS',metric:'8K contacts',ok:false}]),
@@ -2595,22 +2596,80 @@ async function openOverview(){
   const flow=document.createElement('div'); flow.id='miles-flow';
   const head=box.firstElementChild;
   if(head) head.insertAdjacentElement('afterend', flow); else box.append(flow);
-  renderMilesHome(flow, miles);
+  renderMilesHome(flow, miles, 'dashboard');
   openCmdCenter();
 }
-function renderMilesHome(box, d){
+async function refreshMilesSurface(){
+  const onProfile=$('#page-profile')&&$('#page-profile').classList.contains('on');
+  if(onProfile){ await loadProfile(); return; }
+  await openOverview();
+}
+function modeBlurb(mode, caps){
+  const daily=(caps&&caps.dailyBudget)||20, month=(caps&&caps.monthlyCeiling)||600, pct=(caps&&caps.maxChangePct)!=null?caps.maxChangePct:10;
+  if(mode==='automate') return 'Automate everything is on. Miles will create and run Google Search inside $'+daily+'/day, $'+month+'/month, '+pct+'% max daily change once your plan is saved. Choosing a mode does not create or enable anything by itself.';
+  if(mode==='manual') return 'Manual is on. Miles will not create or change a campaign. Choosing a mode does not create or enable anything by itself.';
+  if(mode==='hybrid') return 'Hybrid is on. Miles will build the Google plan and wait for your approval. Choosing a mode does not create or enable anything by itself.';
+  return 'Pick a mode. Nothing is created until you start the Google plan.';
+}
+async function milesPost(btn, statusEl, working, url, payload){
+  if(btn){ btn.disabled=true; btn.dataset.prev=btn.textContent; btn.textContent=working; }
+  if(statusEl) statusEl.textContent=working;
+  try{
+    const res=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload||{})});
+    const text=await res.text();
+    let r={};
+    try{ r=text?JSON.parse(text):{}; }catch(e){ throw new Error('The server did not return a result. Try again.'); }
+    if(!res.ok||r.error) throw new Error(r.error||('Request failed ('+res.status+').'));
+    return r;
+  }catch(err){
+    if(btn){ btn.disabled=false; btn.textContent=btn.dataset.prev||btn.textContent; }
+    const msg=(err&&err.message)?err.message:'That did not work. Try again.';
+    if(statusEl) statusEl.textContent=msg;
+    toast(msg);
+    return null;
+  }
+}
+function renderMilesCompact(box, d){
+  box.innerHTML='';
+  const wrap=el('div','mcard'); wrap.id='miles-compact';
+  const bar=el('div'); bar.style.cssText='display:flex;flex-wrap:wrap;gap:8px;align-items:center';
+  const note=el('div','appsub', modeBlurb(d.mode, d.caps)); note.id='miles-mode-note'; note.style.marginTop='8px';
+  for(const [id,label] of [['automate','Automate everything'],['hybrid','Hybrid'],['manual','Manual']]){
+    const b=el('button',null,label); const on=d.mode===id;
+    b.style.cssText='border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:700;border:1px solid '+(on?'var(--ink)':'var(--line)')+';background:'+(on?'var(--ink)':'var(--panel)')+';color:'+(on?'var(--panel)':'var(--ink)');
+    b.onclick=async()=>{ const r=await milesPost(b, note, 'Saving...', '/api/miles/mode', {mode:id}); if(r) await refreshMilesSurface(); };
+    bar.append(b);
+  }
+  const spec=(d.bundle&&d.bundle.spec)||{};
+  const status=el('span','appsub',(spec.name||'Google plan')+' · $'+(spec.dailyBudget||0)+'/day · '+(d.activation||'not created'));
+  bar.append(status);
+  const kill=el('button',null, d.caps&&d.caps.paused?'Resume':'Pause all'); kill.style.cssText='border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;background:var(--panel)';
+  const back=el('button',null,'Revert to paused'); back.style.cssText=kill.style.cssText;
+  const edit=el('a',null,'Edit setup in Profile'); edit.href='#'; edit.style.cssText='font-size:13px;font-weight:700'; edit.onclick=(e)=>{ e.preventDefault(); setPage('profile'); };
+  bar.append(kill, back, edit);
+  kill.onclick=async()=>{ const r=await milesPost(kill, note, 'Pausing...', '/api/miles/kill', {paused:!(d.caps&&d.caps.paused)}); if(r) await refreshMilesSurface(); };
+  back.onclick=async()=>{ const r=await milesPost(back, note, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) await refreshMilesSurface(); };
+  wrap.append(bar, note);
+  box.append(wrap);
+}
+function renderMilesHome(box, d, place){
+  place=place||'dashboard';
+  if(place==='profile' && !(d.placement&&d.placement.profile)){ box.innerHTML=''; return; }
+  if(place==='dashboard' && d.placement&&d.placement.dashboard==='compact'){ renderMilesCompact(box, d); return; }
+  const pre=place==='profile'?'pfm-':'m-';
   box.innerHTML='';
   const h=el('div','mcard');
   h.innerHTML='<h3 style="margin:0">Miles</h3><p class="mdesc" style="margin:6px 0 0;max-width:680px">A marketing employee for your painting business. Google Ads only in this version. Meta, TikTok, and Local Services Ads are coming later.</p>';
   box.append(h);
   const modes=el('div'); modes.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin:12px 0';
-  for(const [id,label,desc] of [['automate','Automate everything','Your budget and caps are the standing yes. Miles runs Google inside them.'],['hybrid','Hybrid','Miles builds the work and waits for your approval.'],['manual','Manual','Miles does not act. You use the tools.']]){
-    const b=el('button',null,label); b.title=desc; const on=d.mode===id;
+  const modeNote=el('div','appsub', modeBlurb(d.mode, d.caps)); modeNote.id=pre+'mode-note';
+  for(const [id,label] of [['automate','Automate everything'],['hybrid','Hybrid'],['manual','Manual']]){
+    const b=el('button',null,label); const on=d.mode===id;
     b.style.cssText='border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:700;border:1px solid '+(on?'var(--ink)':'var(--line)')+';background:'+(on?'var(--ink)':'var(--panel)')+';color:'+(on?'var(--panel)':'var(--ink)');
-    b.onclick=async()=>{ if(!d.bundle){ toast('Save the questions first, then pick a mode.'); return; } await fetch('/api/miles/mode',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:id})}); openOverview(); };
+    b.onclick=async()=>{ const r=await milesPost(b, modeNote, 'Saving...', '/api/miles/mode', {mode:id}); if(r) await refreshMilesSurface(); };
     modes.append(b);
   }
-  box.append(modes);
+  box.append(modes, modeNote);
   if(d.playbook){ const p=el('div','mcard'); p.style.marginTop='12px'; p.innerHTML='<b>'+esc(d.playbook.title)+'</b><p class="appsub" style="margin:6px 0 0">'+esc(d.playbook.season)+'</p><p class="appsub">'+esc(d.playbook.benchmarkNote)+'</p><p class="appsub">'+esc(d.playbook.splitNote)+'</p>'; box.append(p); }
   if(d.bundle&&d.bundle.feasibility){ const f=el('div','mcard'); f.style.marginTop='12px'; f.append(el('div','appsub', d.bundle.feasibility.message)); box.append(f); }
   const audits=d.audits||[];
@@ -2618,7 +2677,9 @@ function renderMilesHome(box, d){
   if(d.found){
     const found=el('div','mcard'); found.id='miles-found'; found.style.marginTop='12px';
     const fnd=d.found;
+    const crawled = fnd.crawledAt ? new Date(fnd.crawledAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '';
     found.innerHTML='<div class="sect-label">WHAT MILES FOUND</div>'
+      +(crawled?'<p class="appsub">Last crawled '+esc(crawled)+'.</p>':'')
       +'<p class="appsub">Pages read: '+(fnd.pagesRead||0)+'.</p>'
       +'<p class="appsub">Business: '+esc(fnd.businessName||'Not found')+'.</p>'
       +'<p class="appsub">Phone: '+esc(fnd.phone||'Not found')+'.</p>'
@@ -2627,23 +2688,23 @@ function renderMilesHome(box, d){
       +(fnd.fetchNote?'<p class="appsub">'+esc(fnd.fetchNote)+'</p>':'');
     box.append(found);
   }
-  if(!d.bundle){
+  {
     const p=d.profile||{};
     const form=el('div','mcard'); form.style.marginTop='12px'; form.append(el('div','sect-label','1. CRAWL'));
     const field=(label,id,val)=>{ const w=el('div'); w.style.margin='8px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.id=id; i.value=val||''; i.style.width='100%'; w.append(i); return w; };
-    form.append(field('Business name','m-name',p.businessName||''), field('Location','m-loc',p.serviceAreas||''), field('Email','m-email',p.email||''), field('Website','m-web',p.website||''), field('Google Business Profile link','m-gbp',p.gbpUrl||''), field('Competitor websites, comma separated','m-comp',p.competitors||''));
+    form.append(field('Business name',pre+'name',p.businessName||''), field('Location',pre+'loc',p.serviceAreas||''), field('Email',pre+'email',p.email||''), field('Website',pre+'web',p.website||''), field('Google Business Profile link',pre+'gbp',p.gbpUrl||''), field('Competitor websites, comma separated',pre+'comp',p.competitors||''));
     const status=el('div','appsub',''); status.id='m-crawl-status'; status.style.marginTop='8px';
     const go=el('button','go','Crawl'); go.style.marginTop='8px';
     go.onclick=async()=>{
       go.disabled=true; const label=go.textContent; go.textContent='Crawling your website...'; status.textContent='Crawling your website...';
       try{
-        const res=await fetch('/api/miles/crawl',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({businessName:$('#m-name').value, location:$('#m-loc').value, email:$('#m-email').value, website:$('#m-web').value, gbpUrl:$('#m-gbp').value, competitors:($('#m-comp').value||'').split(',').map(s=>s.trim()).filter(Boolean)})});
+        const res=await fetch('/api/miles/crawl',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({businessName:$('#'+pre+'name').value, location:$('#'+pre+'loc').value, email:$('#'+pre+'email').value, website:$('#'+pre+'web').value, gbpUrl:$('#'+pre+'gbp').value, competitors:($('#'+pre+'comp').value||'').split(',').map(s=>s.trim()).filter(Boolean)})});
         const text=await res.text();
         let r={};
         try{ r=text?JSON.parse(text):{}; }catch(parseErr){ throw new Error('Crawl did not return a result. Try again.'); }
         if(!res.ok||r.error) throw new Error(r.error||('Crawl failed ('+res.status+').'));
-        await openOverview();
-        const step=document.getElementById('miles-questions');
+        await refreshMilesSurface();
+        const step=document.getElementById(pre+'questions');
         if(step) step.scrollIntoView({behavior:'smooth', block:'center'});
       }catch(err){
         go.disabled=false; go.textContent=label||'Crawl';
@@ -2652,27 +2713,30 @@ function renderMilesHome(box, d){
       }
     };
     form.append(go, status); box.append(form);
-    const q=el('div','mcard'); q.id='miles-questions'; q.style.marginTop='12px';
+    const q=el('div','mcard'); q.id=pre+'questions'; q.style.marginTop='12px';
     if(d.phase==='questions'||d.found) q.style.outline='2px solid var(--ink)';
     q.append(el('div','sect-label','2. THREE QUESTIONS'));
-    q.append(field('Goal','m-goal','get me painting leads'), field('Daily budget','m-budget','20'), field('Leads wanted per day','m-leads','1'));
+    q.append(field('Goal',pre+'goal',(d.bundle&&d.bundle.setup&&d.bundle.setup.goal)||'get me painting leads'), field('Daily budget',pre+'budget',(d.bundle&&d.bundle.setup&&d.bundle.setup.dailyBudget)||'20'), field('Leads wanted per day',pre+'leads',(d.bundle&&d.bundle.setup&&d.bundle.setup.leadsPerDay)||'1'));
+    const qStatus=el('div','appsub',''); qStatus.id=pre+'q-status';
     const start=el('button','go','Save and show the Google plan'); start.style.marginTop='8px';
-    start.onclick=async()=>{ const body={goal:$('#m-goal').value, dailyBudget:Number($('#m-budget').value)||20, leadsPerDay:Number($('#m-leads').value)||1, googleShare:1, mode:d.mode||'hybrid'}; const r=await(await fetch('/api/miles/questions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})).json(); if(r.error){ toast(r.error); return; } openOverview(); };
-    q.append(start); box.append(q);
-  } else {
+    start.onclick=async()=>{ const r=await milesPost(start, qStatus, 'Saving the plan...', '/api/miles/questions', {goal:$('#'+pre+'goal').value, dailyBudget:Number($('#'+pre+'budget').value)||20, leadsPerDay:Number($('#'+pre+'leads').value)||1, googleShare:1, mode:d.mode||undefined}); if(!r) return; await refreshMilesSurface(); };
+    q.append(start, qStatus); box.append(q);
+  }
+  if(d.bundle){
     const plan=el('div','mcard'); plan.style.marginTop='12px';
     const spec=d.bundle.spec||{};
     plan.append(el('div','sect-label','GOOGLE PLAN'));
     plan.append(el('p','appsub',(spec.name||'Search')+' · $'+(spec.dailyBudget||0)+'/day · status '+(d.activation||'not created')));
     (spec.adGroups||[]).forEach(g=>{ const row=el('div','appsub', g.name+': '+(g.keywords||[]).map(k=>k.text).join(', ')); plan.append(row); });
     const row=el('div'); row.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-top:10px';
+    const planNote=el('div','appsub','');
     const start=el('button','go', d.mode==='automate'?'Start inside my caps':d.mode==='manual'?'Manual mode does not create':'Queue for my approval');
-    start.onclick=async()=>{ start.disabled=true; const r=await(await fetch('/api/miles/go',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:true})})).json(); start.disabled=false; toast(r.demo?'Preview only. Nothing was created in Google.':(r.enabled?'Enabled inside your caps.':(r.created?'Created paused.':'Waiting on you.'))); openOverview(); };
+    start.onclick=async()=>{ const r=await milesPost(start, planNote, 'Starting...', '/api/miles/go', {confirm:true}); if(!r) return; planNote.textContent=r.demo?'Preview only. Nothing was created in Google.':(r.enabled?'Enabled inside your caps.':(r.created?'Created paused.':'Waiting on you.')); await refreshMilesSurface(); };
     const kill=el('button',null, d.caps&&d.caps.paused?'Resume':'Pause all'); kill.style.cssText='border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;background:var(--panel)';
-    kill.onclick=async()=>{ await fetch('/api/miles/kill',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({paused:!(d.caps&&d.caps.paused)})}); openOverview(); };
+    kill.onclick=async()=>{ const r=await milesPost(kill, planNote, 'Pausing...', '/api/miles/kill', {paused:!(d.caps&&d.caps.paused)}); if(r) await refreshMilesSurface(); };
     const back=el('button',null,'Revert to paused'); back.style.cssText=kill.style.cssText;
-    back.onclick=async()=>{ await fetch('/api/miles/revert',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:true})}); openOverview(); };
-    row.append(start, kill, back); plan.append(row); box.append(plan);
+    back.onclick=async()=>{ const r=await milesPost(back, planNote, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) await refreshMilesSurface(); };
+    row.append(start, kill, back); plan.append(row, planNote); box.append(plan);
   }
   const g=d.ghl||{};
   const lead=el('div','mcard'); lead.style.marginTop='12px';
@@ -2680,7 +2744,10 @@ function renderMilesHome(box, d){
   box.append(lead);
   const brief=el('div','mcard'); brief.style.marginTop='12px';
   brief.innerHTML='<div class="sect-label">MORNING BRIEF</div><p class="appsub">'+esc(d.brief||'')+'</p>';
-  (d.events||[]).slice(0,6).forEach(e=>{ brief.append(el('div','appsub', e.text)); });
+  (d.events||[]).slice(0,6).forEach(e=>{
+    const when = e.ts ? new Date(e.ts).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '';
+    brief.append(el('div','appsub', (when?when+' · ':'')+e.text));
+  });
   box.append(brief);
   const inbox=d.inbox||[];
   if(inbox.length){ const ib=el('div','mcard'); ib.style.marginTop='12px'; ib.append(el('div','sect-label','WAITING ON YOU'));
@@ -2804,16 +2871,17 @@ function dashSignals(wrap, d, M){
   const good=panel('What’s working','good'); let goodN=0;
   const cpl=g('calc.blended_cpl'), booked=g('crm.booked_jobs'), rev=g('crm.job_revenue');
   const gbpCalls=g('gbp.phone_calls');
-  if(gbpCalls) { row(good,'GBP organic', Math.round(gbpCalls)+' calls at $0 — your cheapest channel, keep reviews flowing'); goodN++; }
-  if(booked&&rev) { row(good,'Booked work', Math.round(booked)+' jobs worth '+money(rev)+' in the last 30 days'); goodN++; }
-  if(cpl!=null) { row(good,'Cost per lead', money(cpl)+' blended across every connected platform'); goodN++; }
+  const samp=k=>M[k]&&M[k].source!=='live'?' (sample)':'';
+  if(gbpCalls) { row(good,'GBP organic', Math.round(gbpCalls)+' calls at $0'+samp('gbp.phone_calls')); goodN++; }
+  if(booked&&rev) { row(good,'Booked work', Math.round(booked)+' jobs worth '+money(rev)+' in the last 30 days'+((M['crm.booked_jobs']&&M['crm.booked_jobs'].source!=='live')||(M['crm.job_revenue']&&M['crm.job_revenue'].source!=='live')?' (sample)':'')); goodN++; }
+  if(cpl!=null) { row(good,'Cost per lead', money(cpl)+' blended'+samp('calc.blended_cpl')); goodN++; }
   if(!goodN) row(good,'Nothing yet','Connect your ad and CRM accounts and Miles will name your best channel here.');
   // What needs attention
   const bad=panel('What needs attention','warn'); let badN=0;
   const clicks=g('google_ads.clicks'), leads=g('calc.blended_leads');
-  if(clicks&&leads){ const conv=(leads/clicks)*100; if(conv<25){ row(bad,'Click leak','Only '+conv.toFixed(0)+'% of clicks become leads — run CPL + Funnel Reader for the fix order'); badN++; } }
+  if(clicks&&leads){ const conv=(leads/clicks)*100; if(conv<25){ const sampleClick=(M['google_ads.clicks']&&M['google_ads.clicks'].source!=='live')||(M['calc.blended_leads']&&M['calc.blended_leads'].source!=='live'); row(bad,'Click leak','Only '+conv.toFixed(0)+'% of clicks become leads'+(sampleClick?' (sample)':'')+' — run CPL + Funnel Reader for the fix order'); badN++; } }
   const stl=(d.speedToLead||{});
-  if(!stl.enabled){ row(bad,'Speed-to-Lead','Off — 78% of homeowners hire whoever answers first'); badN++; }
+  if(!stl.enabled){ row(bad,'Speed-to-Lead','Off. Miles texts new leads only after GoHighLevel is connected and this is turned on.'); badN++; }
   if(!((d.upcomingPosts||[]).length)){ row(bad,'No posts','Nothing scheduled — queue a job photo, a review, and your current offer'); badN++; }
   if(!badN) row(bad,'All clear','Nothing is leaking money right now.');
   grid.append(good,bad); wrap.append(grid);
@@ -2882,11 +2950,15 @@ function renderOverview(d){
   const dt=el('span','appsub',today); dt.style.fontSize='13.5px';
   htxt.append(gh,dt);
   const ctrl=el('div'); ctrl.style.cssText='display:flex;align-items:center;gap:8px;flex:none';
-  ctrl.append(el('span','appsub','📅 Showing'));
+  ctrl.append(el('span','appsub','Showing'));
   const gsel=el('select','f'); gsel.style.cssText='width:auto;padding:5px 10px;font-size:13px;border-radius:8px';
   for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===MKT_RANGE)o.selected=true; gsel.append(o); }
-  gsel.title='Time window for the whole dashboard'; gsel.onchange=async()=>{ MKT_RANGE=gsel.value; await openOverview(); };
+  gsel.title='Changes live leads, booked revenue, and agent runs. Sample figures and ad spend stay on the last 30 days.';
+  gsel.onchange=async()=>{ MKT_RANGE=gsel.value; await openOverview(); };
   ctrl.append(gsel); head.append(htxt,ctrl);
+  const rangeNote=el('div','appsub','This changes live leads, booked revenue, and agent runs. The sample read and ad spend stay on the last 30 days.');
+  rangeNote.style.cssText='flex:1 0 100%;margin:4px 0 0';
+  head.append(rangeNote);
   box.append(head);
   // Layer 1 — the 30-second read: verdict, then the four numbers that matter.
   box.append(el('div','layer-label','The 30-second read'));
@@ -2898,8 +2970,9 @@ function renderOverview(d){
   box.append(el('div','layer-label','The details'));
   const reviewWrap=el('div'); reviewWrap.style.cssText='margin:0 0 18px'; box.append(reviewWrap); fillDashReview(reviewWrap);
   const g=el('div','stats'); g.style.cssText='margin:16px 0;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
-  g.append(statCard('Pending approvals',k.pendingApprovals||0), statCard('Changes live',k.liveChanges||0), statCard('Agents deployed',k.agentsDeployed||0), statCard('Agent runs · '+mktRangeLabel(d.range),k.agentRuns||0), statCard('Scheduled posts',k.scheduledPosts||0), statCard('Credits used',(k.creditsUsed||0).toLocaleString()), statCard('Weather triggers',k.weatherTriggers||0));
+  g.append(statCard('Pending approvals',k.pendingApprovals||0), statCard('Changes live',k.liveChanges||0), statCard('Agents deployed',k.agentsDeployed||0), statCard('Agent runs · '+mktRangeLabel(d.range),k.agentRuns||0), statCard('Scheduled posts',k.scheduledPosts||0), statCard('Credits used · '+(k.creditsPeriod||'this month'),(k.creditsUsed||0).toLocaleString()), statCard('Weather triggers',k.weatherTriggers||0));
   box.append(g);
+  box.append(el('div','appsub', d.sample?'SAMPLE. These counts are from this preview account, not a live ad account.':'From your account. Approvals, agents, posts, and weather rules are saved records. Agent runs use the window above. Credits used are this month.'));
   const autoRow=el('div'); autoRow.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px;margin:16px 0;align-items:start';
   autoRow.append(stlCard(d.speedToLead||{}), reviewCard(), autoCard());
   box.append(autoRow);
@@ -2913,8 +2986,9 @@ function renderOverview(d){
   grid.append(mc);
   const lk=d.leads||{}, rk=d.reviews||{}; const lc=el('div','mcard'); lc.innerHTML='<div class="sect-label" style="margin:0 0 10px">LEADS & REPUTATION</div>';
   if(lk.hasData||rk.hasData){ const ss=el('div','stats'); ss.append(statCard('New leads',lk.count||0), statCard('Uncontacted',lk.uncontacted||0), statCard('Reviews',rk.count||0), statCard('Avg rating', rk.avg!=null?(rk.avg+'★'):'—')); lc.append(ss); }
-  else if(lk.connected||rk.connected){ lc.append(ovSync('✓ '+[lk.connected?'CRM':null,rk.connected?'Google Business Profile':null].filter(Boolean).join(' & ')+' connected. Your leads & reviews will populate here as they come in.')); }
-  else lc.append(ovNudge('Connect your CRM & Google Business Profile to track leads and reviews here.'));
+  else if(lk.connected){ lc.append(ovSync('GoHighLevel is connected. Leads show here as they come in.')); }
+  else lc.append(ovNudge('GoHighLevel is not connected. Connect it under Integrations.'));
+  if(rk.connected && !rk.hasData) lc.append(ovSync('Google Business Profile is connected. Reviews show here as they come in.'));
   grid.append(lc);
   const sc=el('div','mcard'); sc.innerHTML='<div class="sect-label" style="margin:0 0 10px">SOCIAL</div>';
   if(d.social&&d.social.hasData){ const ss=el('div','stats'); ss.append(statCard('Impressions',(d.social.impressions||0).toLocaleString()), statCard('Clicks',d.social.clicks||0), statCard('Likes',d.social.likes||0), statCard('Followers',(d.social.followers||0).toLocaleString())); sc.append(ss); }
@@ -3146,7 +3220,7 @@ function anOverview(){
   const notice=(!live||r.sample)?`<div class="an-notice">
       <p><b>${live?'Your trade range is a sample.':'These are sample numbers.'}</b>
         ${live?`Real ${esc(r.label.toLowerCase())} benchmarks are not loaded yet, so the range bars are placeholders.`
-              :'Connect Google Ads, Meta, and your CRM to see your own.'}</p>
+              :'Connect Google Ads and your CRM to see your own. Meta is coming later.'}</p>
       <button data-goint>Connect your accounts</button></div>`:'';
 
   const sources=[['Google Ads',41],['Google Business Profile',26],['Facebook & Instagram',18],['Search (unpaid)',10],['Email',5]];
@@ -3164,18 +3238,18 @@ function anOverview(){
     ${anMetric('REVENUE FROM ADS',money(rev),spend?'live':'sample','up',r.roas,spend?rev/spend:r.roas[1],`${money(spend)} spent`,`${spend?(Math.round((rev/spend)*10)/10):r.roas[1]}× back`)}
   </div>
   <div class="an-grid">
-    <div class="an-panel"><h4>Where leads came from <span>last 30 days</span></h4>
+    <div class="an-panel"><h4>Where leads came from <span>last 30 days${live?'':' · SAMPLE'}</span></h4>
       ${sources.map(s=>`<div class="an-src"><span class="nm">${esc(s[0])}</span>
         <span class="bar"><i style="width:${s[1]}%"></i></span><span class="num">${s[1]}%</span></div>`).join('')}
     </div>
     <div class="an-panel"><h4>Connections</h4>
       ${(ANDASH&&ANDASH.marketing&&ANDASH.marketing.connected)?'<div class="an-conn"><i style="background:var(--an-pos)"></i><span class="nm">Google Ads</span><span class="st">connected</span></div>':''}
-      <div class="an-conn"><i style="background:#CFCBC2"></i><span class="nm">Meta Ads</span><span class="go" data-goint>Connect</span></div>
+      <div class="an-conn"><i style="background:#CFCBC2"></i><span class="nm">Meta Ads</span><span class="st">Coming later</span></div>
       <div class="an-conn"><i style="background:${(ANDASH&&ANDASH.leads&&ANDASH.leads.connected)?'var(--an-pos)':'#CFCBC2'}"></i><span class="nm">GoHighLevel</span>${(ANDASH&&ANDASH.leads&&ANDASH.leads.connected)?'<span class="st">connected</span>':'<span class="go" data-goint>Connect</span>'}</div>
       <div class="an-conn"><i style="background:${(ANDASH&&ANDASH.reviews&&ANDASH.reviews.connected)?'var(--an-pos)':'#CFCBC2'}"></i><span class="nm">Google Business Profile</span>${(ANDASH&&ANDASH.reviews&&ANDASH.reviews.connected)?'<span class="st">connected</span>':'<span class="go" data-goint>Connect</span>'}</div>
     </div>
   </div>
-  <div class="an-panel"><h4>What each channel cost you <span>last 30 days</span></h4>
+  <div class="an-panel"><h4>What each channel cost you <span>last 30 days${live?'':' · SAMPLE'}</span></h4>
     <table class="an-table"><thead><tr><th>CHANNEL</th><th>SPENT</th><th>LEADS</th><th>PER LEAD</th><th>JOBS WON</th></tr></thead><tbody>
     ${channels.map(c=>`<tr><td><span class="an-dot" style="background:${c[6]}"></span><b>${c[0]}</b><span class="sub">${c[1]}</span></td>
       <td>${c[2]?money(c[2]):'$0'}</td><td>${c[3]}</td><td>${c[4]}</td><td>${c[5]}</td></tr>`).join('')}
@@ -3232,7 +3306,7 @@ function openLaunch(){
   box.append(h);
   const loop=el('div','mcard'); loop.style.marginTop='14px';
   loop.append(el('div','sect-label','PLAN FROM YOUR PROFILE'));
-  loop.append(el('p','appsub','Uses the trade, service area, budget, target cost per lead, average job value, and landing page on your profile. Miles does not fill those in. Only paused Google Search can be created. Meta and Local Services Ads stay unavailable.'));
+  loop.append(el('p','appsub','Uses the trade, service area, budget, target cost per lead, average job value, and landing page on your profile. Miles does not fill those in. Only paused Google Search can be created. Meta, TikTok, and Local Services Ads are coming later.'));
   const loopOut=el('div');
   const loopBtn=el('button',null,'Show the plan from my profile'); loopBtn.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600';
   loopBtn.onclick=async()=>{
@@ -3950,7 +4024,7 @@ async function openLocalPresence(){
   const a=d.audit;
   const head=el('div','mcard');
   head.append(el('div','sect-label','LOCAL PRESENCE — GOOGLE BUSINESS PROFILE + LOCAL SERVICES ADS'));
-  head.append(el('p','appsub','Your Business Profile powers Maps and feeds your LSA rating; LSA is the highest-intent channel most trades can buy. Answer each line — ✓ yes, ✗ no, ? not sure — and Miles scores you against the spec and orders the fixes. "Not sure" counts as a gap: an unverified item is an unmanaged one.'));
+  head.append(el('p','appsub','Local Services Ads are coming later. Miles does not buy them. This page is a checklist for your Google Business Profile and for an LSA setup you would do yourself. Answer each line — yes, no, or not sure — and Miles scores the gaps. "Not sure" counts as a gap.'));
   const rings=el('div'); rings.style.cssText='display:flex;gap:28px;flex-wrap:wrap;margin-top:10px';
   rings.append(lpScoreRing(a.gbp.score,a.gbp.max,'Business Profile'),lpScoreRing(a.lsa.score,a.lsa.max,'Local Services Ads'));
   head.append(rings); box.append(head);
@@ -4190,7 +4264,7 @@ async function doFbLaunch(spec){
 }
 function openPlaybook(){
   const box=$('#playbook-body'); if(!box) return; box.innerHTML='';
-  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">📋 Campaign Playbook</h3><p class="mdesc" style="margin:6px 0 0;max-width:640px">Miles builds a complete, expert paid-social plan the way a veteran media buyer would — unit economics first, an <b>engineered</b> offer (not a naked discount), segmented ad sets, a creative battery, the instant form, and a weekly scorecard. Tuned to your trade.</p>';
+  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">📋 Campaign Playbook</h3><p class="mdesc" style="margin:6px 0 0;max-width:640px">A planning draft: unit economics, an offer, and a creative list for your trade. Google Ads can be created paused from Launch. Meta is coming later, so a Meta playbook is a draft only and is not launched.</p>';
   box.append(h);
   const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','TELL MILES THE BASICS'));
   const mk=(label,ph,val,type)=>{ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.placeholder=ph||''; if(val!=null)i.value=val; if(type)i.type=type; i.style.width='100%'; w.append(i); return {w,i}; };
@@ -4208,7 +4282,7 @@ function renderPlaybook(pb){
   const back=el('button',null,'← Start over'); back.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-bottom:8px'; back.onclick=openPlaybook; box.append(back);
   const money=(n)=>'$'+Number(n||0).toLocaleString();
   const sect=(title)=>{ const c=el('div','mcard'); c.style.marginTop='14px'; c.append(el('div','sect-label',title)); return c; };
-  box.append((()=>{ const c=el('div','mcard'); c.innerHTML='<h3 style="margin:0">'+esc(pb.headline)+'</h3><p class="mdesc" style="margin:4px 0 0">Channel: '+(pb.channel==='meta'?'Meta':'Google Ads')+' · trade: '+esc(pb.trade)+'. Everything below is ready to run — I can pre-fill the campaign builder from it.</p>'; return c; })());
+  box.append((()=>{ const c=el('div','mcard'); const meta=pb.channel==='meta'; c.innerHTML='<h3 style="margin:0">'+esc(pb.headline)+'</h3><p class="mdesc" style="margin:4px 0 0">Channel: '+(meta?'Meta, coming later':'Google Ads')+' · trade: '+esc(pb.trade)+'. '+(meta?'This is a draft. Miles will not create a Meta campaign.':'This is a draft. A Google Search campaign is created paused only after you approve it on Launch.')+'</p>'; return c; })());
   // Economics
   const e=pb.economics; const ec=sect('THE MATH THAT SETS YOUR BUDGET');
   const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin:6px 0';
@@ -5797,12 +5871,12 @@ function deployCustomAgent(spec){
 }
 function renderSchedules(){
   const box=$('#schedules-body'); if(!box) return; box.innerHTML='';
-  const head=el('div'); head.innerHTML='<h3 style="margin:0">Agents</h3><p class="mdesc" style="margin:4px 0 0;max-width:720px">Your always-on workforce. Deploy a ready-made agent below and it runs on its own, every day — reading your email, wrapping up your day, tracking performance — and drops its report in your inbox.</p>';
+  const head=el('div'); head.innerHTML='<h3 style="margin:0">Agents</h3><p class="mdesc" style="margin:4px 0 0;max-width:720px">Saved schedules. A deployed agent writes its result in this app. It does not spend, and it does not email you unless an email provider is connected.</p>';
   box.append(head);
   // ── Agent Studio — describe a problem, get a custom agent ──
   const studio=el('div','acard'); studio.style.cssText='margin:16px 0 6px;background:linear-gradient(135deg,var(--panel-2),transparent);border:1px solid var(--line)';
   studio.innerHTML='<div style="font-size:15px;font-weight:700">✨ Agent Studio — build your own</div>'+
-    '<p class="mdesc" style="margin:5px 0 10px;max-width:640px">Describe a job in plain English and Miles designs a custom agent for it. Review it, approve it, and it joins your workforce — running every day.</p>'+
+    '<p class="mdesc" style="margin:5px 0 10px;max-width:640px">Describe a job in plain English and Miles drafts a custom agent. You review it before it is saved. Saving it does not spend or contact anyone.</p>'+
     '<textarea id="studio-agent-problem" placeholder="e.g. Every morning, read my email, summarize it, sort by priority, and tell me which to reply to and which to ignore." style="width:100%;min-height:70px;resize:vertical"></textarea>'+
     '<button class="go" id="studio-agent-go" style="margin-top:10px">Design my agent →</button><span id="studio-agent-note" class="appsub" style="margin-left:10px"></span>'+
     '<div id="studio-agent-out" style="margin-top:14px"></div>';
@@ -6118,14 +6192,14 @@ function guardToggle(title,desc,on,cb){
 function guardrailsCard(){
   const g=AUTOPILOT.guardrails||(AUTOPILOT.guardrails={maxBudgetChangePct:10,protectProven:true,approveHighImpact:true});
   const card=el('div','mcard'); card.style.maxWidth='860px';
-  const p=el('p','mdesc'); p.style.margin='0 0 16px'; p.textContent='Safety rails that hold no matter how high you set autonomy — so Miles can optimize without risking your best campaigns.'; card.append(p);
+  const p=el('p','mdesc'); p.style.margin='0 0 16px'; p.textContent='These limits apply to growth proposals. This dial does not change a live Google Ads budget.'; card.append(p);
   card.append(el('div','sect-label','MAX BUDGET CHANGE PER ADJUSTMENT'));
-  const sub=el('div','mdesc'); sub.style.margin='-6px 0 10px'; sub.textContent='Miles never moves a campaign’s budget by more than this in one step — protects high performers from big swings.'; card.append(sub);
+  const sub=el('div','mdesc'); sub.style.margin='-6px 0 10px'; sub.textContent='A proposal will not suggest a budget step larger than this. Nothing is changed until you approve it.'; card.append(sub);
   const capRow=el('div','subtabs'); capRow.style.marginBottom='4px';
   for(const c of [5,10,15,25,100]){ const b=el('button','tab'+(g.maxBudgetChangePct===c?' on':''), c===100?'No cap':(c+'%')); b.onclick=()=>{ g.maxBudgetChangePct=c; saveAutopilot(); queueChange('guardrail','Max budget change: '+(c===100?'no cap':c+'%')); renderAutopilot(); }; capRow.append(b); }
   card.append(capRow);
-  card.append(guardToggle('Protect proven funnels','Miles only experiments on new/experimental campaigns and never modifies proven, profitable funnels.', g.protectProven, v=>{ g.protectProven=v; saveAutopilot(); queueChange('guardrail','Protect proven funnels: '+(v?'on':'off')); renderAutopilot(); }));
-  card.append(guardToggle('Require approval for high-impact changes','Even at higher autonomy, anything above your budget cap or touching a top campaign waits for your approval — suggestion-only for the big moves.', g.approveHighImpact, v=>{ g.approveHighImpact=v; saveAutopilot(); renderAutopilot(); }));
+  card.append(guardToggle('Protect proven funnels','Proposals leave campaigns marked proven alone. Miles still does not edit a live budget from this page.', g.protectProven, v=>{ g.protectProven=v; saveAutopilot(); queueChange('guardrail','Protect proven funnels: '+(v?'on':'off')); renderAutopilot(); }));
+  card.append(guardToggle('Require approval for high-impact changes','Proposals above this cap stay suggestions. Turning this off does not let Miles spend.', g.approveHighImpact, v=>{ g.approveHighImpact=v; saveAutopilot(); renderAutopilot(); }));
   return card;
 }
 async function saveAutopilot(){ if(!REMOTE) return; try{ await fetch('/api/autopilot',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({autopilot:AUTOPILOT})}); }catch(e){} }
@@ -6137,19 +6211,19 @@ function clusterCard(){
   const tenure=years>=10?'10+ yrs':years>=3?(years+' yrs'):(years>0?(years+' yr'):'newer');
   const area=((PROFILE&&PROFILE.serviceAreas)||'your market').split(',')[0]||'—';
   const card=el('div','mcard'); card.style.maxWidth='860px';
-  card.innerHTML='<p class="mdesc" style="margin:0 0 12px">Learnings only propagate between comparable businesses — Miles groups you by size, tenure, ticket, and market, so big operators teach big operators and startups learn from startups.</p>';
+  card.innerHTML='<p class="mdesc" style="margin:0 0 12px">A label for businesses of a similar size and age. Miles does not copy another customer\'s campaigns into yours.</p>';
   const g=el('div','stats'); g.style.margin='0';
   g.append(statCard('Size band',size),statCard('Tenure',tenure),statCard('Market',area),statCard('Employees',emp||'—'));
   card.append(g);
-  const v=el('div','verdict ok'); v.style.marginTop='14px'; v.textContent='🧠 As comparable '+size.toLowerCase()+' home-services businesses join your cluster, winning tactics from the top performers propagate into your playbook automatically.'; card.append(v);
+  const v=el('div','verdict ok'); v.style.marginTop='14px'; v.textContent='This is a size label only. Nothing is copied from other businesses, and nothing is changed in your ad account.'; card.append(v);
   return card;
 }
 function renderAutopilot(){
   const box=$('#autopilot-body'); box.innerHTML='';
-  const h=el('div'); h.innerHTML='<h3 style="margin:0">Autopilot</h3><p class="mdesc" style="margin:4px 0 0;max-width:740px">Set how much Miles does on its own, see the living playbook that adapts to your account, and the market intelligence behind your campaigns.</p>'; box.append(h);
+  const h=el('div'); h.innerHTML='<h3 style="margin:0">Autopilot</h3><p class="mdesc" style="margin:4px 0 0;max-width:740px">The three modes on the dashboard decide what Miles may do. This older dial does not spend, create, or enable anything by itself.</p>'; box.append(h);
   box.append(el('div','sect-label','AGENT AUTONOMY'));
   const ac=el('div','mcard'); ac.style.maxWidth='860px';
-  const p=el('p','mdesc'); p.style.margin='0 0 14px'; p.textContent='How much can Miles do without asking? Start conservative and raise it as trust builds.'; ac.append(p);
+  const p=el('p','mdesc'); p.style.margin='0 0 14px'; p.textContent='This dial is a reminder of the dashboard modes. Picking a percent here does not create a campaign or turn spend on.'; ac.append(p);
   const opts=el('div'); opts.style.cssText='display:flex;flex-direction:column;gap:10px';
   for(const o of AUTONOMY){ const sel=AUTOPILOT.autonomy===o.v; const row=el('button','acard'); row.style.cssText='text-align:left;cursor:pointer;margin:0;width:100%;border:'+(sel?'2px solid var(--accent)':'1px solid var(--line)');
     row.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>'+o.label+'</b>'+(sel?'<span class="apill active">CURRENT</span>':'<span class="appsub">Select</span>')+'</div><div class="mdesc" style="margin:5px 0 0">'+o.desc+'</div>';
@@ -6159,9 +6233,9 @@ function renderAutopilot(){
   box.append(el('div','sect-label','CAMPAIGN GUARDRAILS'));
   box.append(guardrailsCard());
   box.append(el('div','sect-label','CHANNEL PLAYBOOKS · LIVING SOP'));
-  const note=el('p','mdesc'); note.style.cssText='margin:-6px 0 12px;max-width:740px'; note.textContent='Each channel runs on a master playbook of best practice. Miles forks a private copy for your account and auto-tunes it every 1–2 weeks from your real results — there’s no one winning formula, so it learns what works for you.'; box.append(note);
-  const chans=[{n:'Google Ads',s:'Search setup, display/remarketing, campaign structure, audience & geo targeting, offers.'},{n:'Meta / Facebook',s:'Audience building, creative testing, automated rules, retargeting, CAPI events.'},{n:'Local Services Ads',s:'LSA setup, lead disputes, budget pacing, review management.'}];
-  const cg=el('div','folgrid'); for(const c of chans){ const card=el('div','acard'); card.style.margin='0'; card.innerHTML='<b>'+c.n+'</b><div class="mdesc" style="margin:6px 0 10px">'+c.s+'</div><div class="appsub">Master playbook → your account fork</div><div style="margin-top:8px"><span class="apill active">AUTO-TUNES EVERY 1–2 WKS</span></div>'; cg.append(card); } box.append(cg);
+  const note=el('p','mdesc'); note.style.cssText='margin:-6px 0 12px;max-width:740px'; note.textContent='Google Ads is the channel Miles can plan. Meta and Local Services Ads are coming later. Nothing on this card spends or rewrites a live campaign.'; box.append(note);
+  const chans=[{n:'Google Ads',s:'Search setup, campaign structure, and geo targeting. Create stays paused until you approve activation.', later:false},{n:'Meta / Facebook',s:'Coming later. Miles will not create a Meta campaign.', later:true},{n:'Local Services Ads',s:'Coming later. This checklist does not buy Local Services Ads.', later:true},{n:'TikTok',s:'Coming later. Miles will not create a TikTok campaign.', later:true}];
+  const cg=el('div','folgrid'); for(const c of chans){ const card=el('div','acard'); card.style.margin='0'; card.innerHTML='<b>'+c.n+'</b><div class="mdesc" style="margin:6px 0 10px">'+c.s+'</div><div style="margin-top:8px"><span class="apill'+(c.later?'':' active')+'">'+(c.later?'COMING LATER':'GOOGLE ADS ONLY')+'</span></div>'; cg.append(card); } box.append(cg);
   box.append(el('div','sect-label','YOUR CLUSTER')); box.append(clusterCard());
   box.append(el('div','sect-label','IDEAL CUSTOMER PROFILE'));
   const icp=el('div','mcard'); icp.style.maxWidth='860px';
@@ -6172,8 +6246,8 @@ function renderAutopilot(){
 // ═══ skills + marketplace ═══
 const MARKET=[
   {id:'google-ads',name:'Google Ads Toolkit',skills:27,cat:'Advertising',author:'Miles',featured:true,desc:'Search, Shopping, PMax, YouTube, Demand Gen, bidding, budgets, and creative — with Google Ads Editor-ready outputs.'},
-  {id:'meta-ads',name:'Meta Ads Toolkit',skills:28,cat:'Advertising',author:'Miles',featured:true,desc:'Full Meta Ads execution — campaign creation, audience management, automated rules, A/B testing, CAPI events, and creative strategy.'},
-  {id:'lsa',name:'Local Services Ads Pack',skills:12,cat:'Advertising',author:'Miles',desc:'Google LSA setup, lead disputes, budget pacing, and review management tuned for the trades.'},
+  {id:'meta-ads',name:'Meta Ads Toolkit',skills:28,cat:'Advertising',author:'Miles',featured:true,later:true,desc:'Coming later. A draft of Meta campaign structure and creative. Miles will not create a Meta campaign.'},
+  {id:'lsa',name:'Local Services Ads Pack',skills:12,cat:'Advertising',author:'Miles',later:true,desc:'Coming later. A checklist for Local Services Ads. Miles does not buy them.'},
   {id:'seo-local',name:'Local SEO & Google Business Profile',skills:15,cat:'SEO',author:'Miles',desc:'GBP optimization, local citations, and map-pack ranking playbooks.'},
   {id:'reviews',name:'Review Booster',skills:8,cat:'Reputation',author:'Miles',desc:'Automated review requests, response templates, and reputation monitoring.'},
   {id:'weather',name:'Weather-Triggered Ads',skills:6,cat:'Automation',author:'Miles',desc:'Turn weather into demand — heat, cold, and storm triggers that boost the right campaigns.'},
@@ -6191,7 +6265,7 @@ function playCount(m){ return m.plays?m.plays.length:(m.skills||0); }
 function skillCard(m,installed){
   const card=el('div','acard'); card.style.margin='0';
   const n=playCount(m);
-  card.innerHTML='<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><b>'+esc(m.name)+'</b><span class="apill" style="background:var(--panel-2);color:var(--muted)">'+n+' play'+(n===1?'':'s')+'</span></div><div class="mdesc" style="margin:6px 0 12px">'+esc(m.desc)+'</div>';
+  card.innerHTML='<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><b>'+esc(m.name)+'</b><span class="apill" style="background:var(--panel-2);color:var(--muted)">'+(m.later?'Coming later':(n+' play'+(n===1?'':'s')))+'</span></div><div class="mdesc" style="margin:6px 0 12px">'+esc(m.desc)+'</div>';
   const foot=el('div'); foot.style.cssText='display:flex;gap:8px;align-items:center';
   foot.append(el('span','appsub',m.cat+' · by '+(m.author||'Miles')));
   const wrap=el('div'); wrap.style.cssText='margin-left:auto;display:flex;gap:8px';
@@ -6439,7 +6513,7 @@ function renderSkills(){
 async function openMarket(){ if(!SKILLS_LOADED) await loadSkills(); renderMarket(); }
 function renderMarket(){
   const box=$('#market-body'); box.innerHTML='';
-  const h=el('div'); h.innerHTML='<h3 style="margin:0">Marketplace</h3><p class="mdesc" style="margin:4px 0 0;max-width:700px">Real abilities for Miles, one click away. Install a skill, then <b>Open</b> it to run its <b>plays</b> — expert deliverables (campaign blueprints, ad copy, review templates, nurture sequences) written on-brand for your business in seconds.</p>'; box.append(h);
+  const h=el('div'); h.innerHTML='<h3 style="margin:0">Marketplace</h3><p class="mdesc" style="margin:4px 0 0;max-width:700px">Install a skill, then open it to draft a play. Meta and Local Services Ads packs are coming later and do not launch. Without an AI key, plays return demo text.</p>'; box.append(h);
   const sb=el('input','searchbar'); sb.id='market-search'; sb.placeholder='Search the Marketplace…'; sb.value=MARKET_Q; sb.style.margin='16px 0'; sb.oninput=()=>{ MARKET_Q=sb.value; renderMarketList(); }; box.append(sb);
   const wrap=el('div'); wrap.id='market-list'; box.append(wrap); renderMarketList();
 }
@@ -6501,7 +6575,7 @@ function renderBenchmarks(){
       <td>$${t.cpl}</td><td>${t.bookRate}%</td><td>$${t.avgTicket.toLocaleString()}</td><td style="color:var(--good);font-weight:700">${t.roas}x</td>
       <td>$${be}</td><td>${badge}</td></tr>`; }).join('');
   host.innerHTML=`<div class="acard">
-    <div class="ah">LSA Benchmarks — What a Lead Really Costs <span style="font-weight:500;color:var(--faint);font-size:12px">· by trade, Feb 2026</span></div>
+    <div class="ah">LSA Benchmarks — published snapshot, not your account <span style="font-weight:500;color:var(--faint);font-size:12px">· by trade, Feb 2026 · SAMPLE of a published range</span></div>
     <div class="mdesc" style="margin:-8px 0 12px">CPL alone is the wrong metric — a lead is only worth its price if enough leads become paying customers at a high enough ticket. <b>Modeled breakeven CPL</b> = avg ticket × margin × book rate × match rate. <b>Caveat:</b> a single blended <b>${LSA_MATCH}% match rate</b> is applied to every trade (per-trade match rates are not published), so these are <b>scenario estimates, not measured trade-level breakevens</b>. Sample sizes vary widely — a 2-account figure (⚠︎) is not as trustworthy as a 400-account one.</div>
     <div style="display:flex;align-items:center;gap:10px;margin:0 0 12px;flex-wrap:wrap">
       <span class="appsub">Your EBITDA margin:</span>
@@ -6615,7 +6689,7 @@ function renderStack(connected){
   if(!groups.length) return;
   host.append(el('div','sect-label','RECOMMENDED FOR YOUR BUSINESS — CONNECT YOUR STACK'));
   const sub=el('div','appsub'); sub.style.cssText='margin:-6px 0 14px;max-width:640px';
-  sub.textContent='The tools home-services businesses run to turn marketing into booked revenue. One click each — Miles connects on your behalf.';
+  sub.textContent='Suggested tools. One click starts a connect flow only when that app is actually wired. Meta, TikTok, and Local Services Ads are coming later.';
   host.append(sub);
   for(const group of groups){
     host.append(el('div','sect-label',group.cat));
@@ -6671,7 +6745,7 @@ function renderInts(){
     ? '⚠️ Connections aren’t live yet — this is a preview of the app catalogue.'
     : !prod
       ? '🟡 Dev mode — only your own Pipedream login can connect accounts here. To let customers connect their own, set PIPEDREAM_ENVIRONMENT=production on the server.'
-      : '✅ Live for customers. Anyone who signs up can connect their own accounts in one click — linked apps sit up top with a ✓. Add more from your stack, or search 3,000+ apps below.';
+      : '✅ Live for customers. Google Ads and GoHighLevel can be connected here. Meta, TikTok, and Local Services Ads are coming later. Other catalogue apps stay a preview until a connector is verified.';
   banner.append(b);
 
   // Connected section — always pinned to the top, each with a ✓.
@@ -6746,7 +6820,7 @@ function renderResult(reply){
         setTimeout(()=>setPage('integrations'), 700);
       } else {
         cb.disabled=true; const rr=await apiConnectRun(reply.blocked);
-        say('emp','Connected '+names+'. Launched: '+((rr.launched||[]).join(', ')||names)+'. Miles is running the full plan.');
+        say('emp','Preview only. Nothing was connected and nothing was launched.');
       }
     };
     b.append(cb);
@@ -6933,7 +7007,7 @@ const PROFILE_SECTIONS=[
     {k:'adSpend',label:'Current monthly ad spend ($)',type:'number'},
     {k:'adResults',label:'What has worked or not in ads',type:'textarea',full:true,ph:'Anything you\'ve tried and how it went.'},
   ]},
-  {title:'Social media',fields:[
+  {title:'Social media (posting is coming later)',fields:[
     {k:'facebook',label:'Facebook URL',type:'text'},
     {k:'instagram',label:'Instagram URL',type:'text'},
     {k:'linkedin',label:'LinkedIn URL',type:'text'},
@@ -7036,7 +7110,7 @@ async function runSiteImport(url,container,noteEl){
 }
 function readProfileForm(container){ const out={}; container.querySelectorAll('[data-k]').forEach(i=>{ let v=(i.value||'').trim(); if(i.type==='number') v=v?Number(v):''; out[i.dataset.k]=v; }); return out; }
 async function saveProfile(vals){ try{ const r=await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(vals)}); return r.ok?(await r.json()).profile:null; }catch(e){ return null; } }
-async function loadProfile(){ if(!REMOTE)return; try{ const r=await fetch('/api/profile'); const d=await r.json(); PROFILE=d.profile||{}; buildProfileForm($('#profile-form'), d.profile||{}); }catch(e){} }
+async function loadProfile(){ if(!REMOTE)return; try{ const r=await fetch('/api/profile'); const d=await r.json(); PROFILE=d.profile||{}; buildProfileForm($('#profile-form'), d.profile||{}); }catch(e){} try{ const miles=await(await fetch('/api/miles/home')).json(); const slot=$('#miles-profile'); if(slot) renderMilesHome(slot, miles, 'profile'); }catch(e){} }
 $('#pf-import').onclick=async()=>{ const btn=$('#pf-import'); const url=($('#pf-website').value||'').trim()||($('#profile-form').querySelector('[data-k="website"]')||{}).value||''; if(!url){ $('#pf-import-note').textContent='Enter your website to re-import.'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#profile-form'),$('#pf-import-note')); btn.disabled=false; btn.textContent=old; };
 $('#profile-save').onclick=async()=>{ const btn=$('#profile-save'); btn.disabled=true; const p=await saveProfile(readProfileForm($('#profile-form'))); if(p){ PROFILE=p; applyIdentity(); queueChange('profile','Business profile updated'); } $('#profile-note').textContent=p?'Saved ✓':'Could not save.'; btn.disabled=false; setTimeout(()=>{$('#profile-note').textContent='';},2500); };
 $('#ob-import').onclick=async()=>{ const btn=$('#ob-import'); const url=($('#ob-website').value||'').trim(); if(!url){ $('#ob-import-note').textContent='Enter your website first (or skip and fill it in below).'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#onboard-form'),$('#ob-import-note')); btn.disabled=false; btn.textContent=old; };

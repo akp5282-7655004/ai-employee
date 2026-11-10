@@ -107,17 +107,54 @@ export class PipedreamConnector implements Connector {
     };
   }
 
-  async listAccounts(externalUserId: string, app?: string): Promise<ConnectedAccount[]> {
+  private aliases = new Map<string, Set<string>>();
+
+  rememberExternalIds(userId: string, externalIds: string[]): void {
+    const set = this.aliases.get(userId) ?? new Set<string>();
+    for (const id of externalIds) if (id && id !== userId) set.add(id);
+    this.aliases.set(userId, set);
+  }
+
+  private async listAccountsOnce(externalUserId: string, app?: string): Promise<ConnectedAccount[]> {
     const pd = await this.backend();
-    const res = await pd.accounts.list({ externalUserId, app });
+    const res = await pd.accounts.list(app ? { externalUserId, app } : { externalUserId });
+    return this.mapAccounts(res, externalUserId);
+  }
+
+  private mapAccounts(res: any, fallbackUserId: string): ConnectedAccount[] {
     const rows: any[] = res?.data ?? res?.accounts ?? (Array.isArray(res) ? res : []);
-    return rows.map((a) => ({
-      id: a.id,
-      app: a.app?.nameSlug ?? a.app?.name_slug ?? a.app?.name ?? a.app ?? 'unknown',
-      name: a.name,
-      externalUserId,
-      healthy: a.healthy ?? true,
-    }));
+    return rows.map((a) => {
+      const raw = a.app?.nameSlug ?? a.app?.name_slug ?? (typeof a.app === 'string' ? a.app : a.app?.name) ?? 'unknown';
+      return {
+        id: a.id,
+        app: String(raw).toLowerCase().replace(/\s+/g, '_'),
+        name: a.name,
+        externalUserId: String(a.externalId ?? a.external_id ?? fallbackUserId),
+        healthy: a.healthy ?? true,
+      };
+    });
+  }
+
+  async listAccounts(externalUserId: string, app?: string): Promise<ConnectedAccount[]> {
+    const ids = [externalUserId, ...(this.aliases.get(externalUserId) ?? [])];
+    const seen = new Set<string>();
+    const out: ConnectedAccount[] = [];
+    for (const id of ids) {
+      let rows: ConnectedAccount[] = [];
+      try { rows = await this.listAccountsOnce(id, app); } catch { rows = []; }
+      for (const row of rows) {
+        if (seen.has(row.id)) continue;
+        seen.add(row.id);
+        out.push(row);
+      }
+    }
+    return out;
+  }
+
+  async listProjectAccounts(app?: string): Promise<ConnectedAccount[]> {
+    const pd = await this.backend();
+    const res = await pd.accounts.list(app ? { app, limit: 100 } : { limit: 100 });
+    return this.mapAccounts(res, '');
   }
 
   async listApps(query?: string, limit = 48, after?: string): Promise<{ apps: AppInfo[]; after?: string }> {
@@ -1295,7 +1332,7 @@ export class PipedreamConnector implements Connector {
   }
 
   async getLeads(externalUserId: string): Promise<import('./types.js').Lead[]> {
-    for (const app of ['gohighlevel', 'hubspot', 'salesforce_rest_api', 'servicetitan', 'jobber', 'housecall_pro']) {
+    for (const app of ['highlevel_oauth', 'gohighlevel', 'highlevel', 'leadconnector', 'hubspot', 'salesforce_rest_api', 'servicetitan', 'jobber', 'housecall_pro']) {
       try {
         const accts = await this.listAccounts(externalUserId, app);
         if (!accts.length) continue;

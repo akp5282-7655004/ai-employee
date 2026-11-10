@@ -162,6 +162,12 @@ export async function readPublicPage(url: string, fetchImpl: typeof fetch = fetc
   }
 }
 
+/** Where the setup cards live. Both a saved page and saved questions are required. */
+export function setupPlacement(args: { pagesRead: number; hasBundle: boolean }): { setupComplete: boolean; dashboard: 'full' | 'compact'; profile: boolean } {
+  const setupComplete = args.pagesRead > 0 && args.hasBundle;
+  return { setupComplete, dashboard: setupComplete ? 'compact' : 'full', profile: setupComplete };
+}
+
 export function websiteAudit(html: string, url: string, failure?: string): AuditCard {
   if (!html) {
     const why = failure || 'No page was fetched. Nothing was scored.';

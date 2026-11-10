@@ -53,6 +53,18 @@ describe('parseSiteHtml', () => {
     expect(r.services).toContain('Water Heater Repair');
     expect(r.services).not.toContain('About Us');
   });
+  it('drops offer lines, slider placeholders, and generic section labels, and title-cases the rest', () => {
+    const html = `<html><body>
+      <h2>HOUSE PAINTING</h2><h2>COMMERCIAL PAINTING</h2><h2>CUSTOM PAINTING</h2>
+      <h2>FREE CUSTOM QUOTE</h2><h2>Slide title</h2><h2>LOCATION</h2><h3>HVAC Repair</h3>
+    </body></html>`;
+    const got = parseSiteHtml(html, 'https://example.com').services || '';
+    expect(got).toContain('House Painting');
+    expect(got).toContain('Commercial Painting');
+    expect(got).toContain('Custom Painting');
+    expect(got).toContain('HVAC Repair');
+    expect(got).not.toMatch(/FREE CUSTOM QUOTE|Slide title|LOCATION/i);
+  });
   it('resolves a relative logo to an absolute URL and reads the brand color', () => {
     expect(r.logo).toBe('https://riveraplumbing.com/img/logo.png');
     expect(r.brandColor).toBe('#0c5aa6');

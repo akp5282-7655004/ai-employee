@@ -109,7 +109,7 @@ export async function runSevenSkill(key: string, ctx: SkillCtx): Promise<Omit<Sk
         summary: `Ready to build a launch-ready campaign for ${ctx.business || 'your business'} — validated against the platform spec before anything goes live.`,
         details: [
           'Google Search: full RSA (15 headlines / 4 descriptions), keywords + negatives, sitelinks/callouts/snippets — built and launched from the Launch a Campaign page (campaigns land PAUSED).',
-          'Meta Leads: objective=Leads, Instant Form with 1–3 qualifiers + privacy URL, CTA=Get Quote — built from the Launch on Facebook page.',
+          'Meta, TikTok, and Local Services Ads are coming later. This skill does not launch them.',
           'Every field is checked against the master specs (character limits, counts) before launch.',
         ],
         approve_disabled_reason: 'Approval happens on the launch pages themselves — this skill routes you there with the brief filled in.',

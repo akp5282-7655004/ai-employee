@@ -37,8 +37,8 @@ export const CHANNELS: ChannelSpec[] = [
   { id: 'seo', label: 'SEO / Website', coverage: 'crawl', note: 'Crawled directly — a public website is served to anyone who asks.' },
   { id: 'local', label: 'Local Presence (GBP)', coverage: 'crawl', note: 'Read from Google Places. Needs GOOGLE_PLACES_KEY.' },
   { id: 'google_ads', label: 'Google Ads', coverage: 'capture', note: 'Google\'s Ads Transparency Center is public but has no API — captured, not crawled.' },
-  { id: 'meta', label: 'Meta (Facebook / Instagram)', coverage: 'capture', note: 'The Ad Library API withholds US commercial ads. Captured from the web UI, or from a licensed feed.' },
-  { id: 'tiktok', label: 'TikTok', coverage: 'capture', note: 'TikTok\'s Creative Center is public but has no API for competitor ads.' },
+  { id: 'meta', label: 'Meta (Facebook / Instagram)', coverage: 'capture', note: 'Coming later for campaigns. The Ad Library API withholds US commercial ads. Captured from the web UI, or from a licensed feed. Miles does not create Meta ads.' },
+  { id: 'tiktok', label: 'TikTok', coverage: 'capture', note: 'Coming later. TikTok\'s Creative Center is public but has no API for competitor ads, and Miles does not run TikTok ads.' },
   { id: 'youtube', label: 'YouTube', coverage: 'capture', note: 'Covered by Google\'s Ads Transparency Center — same limitation as Google Ads.' },
   { id: 'email', label: 'Email', coverage: 'none', note: 'No public or licensed source exists for a competitor\'s email programme. The only way in is to subscribe to their list yourself.' },
 ];

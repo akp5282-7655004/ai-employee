@@ -33,6 +33,7 @@ import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, META_SHARED_AC
 import { buildLoopPlan, decideLead, ghlUpsertProps, GHL_UPSERT_ACTION, judgeActivation, normalizeLead, type ObservedAd } from './agents/plumberloop.js';
 import { judgeTikTokCreate, planFollowUp, proposeOptimizations, rollupJobs, stageOpportunity, TIKTOK_CREATE_ACTION, type JobMark } from './agents/contractorloop.js';
 import { PIPEDREAM_APPS, pipedreamConfigPresence, CATALOG_READ_ON } from './connectors/pipedreamCatalog.js';
+import { claimableGhlAccount, externalIdCandidates, ghlSlugOf as ghlSlugFromApps, GHL_SLUGS } from './connectors/ghlstatus.js';
 import { SPEC_PLATFORMS, loadSpec, searchSpecCheck, type SpecPlatform } from './specs/index.js';
 import { metricCatalog, dashboardDefaults } from './metrics/catalog.js';
 import { getMetrics } from './metrics/resolver.js';
@@ -58,7 +59,7 @@ import {
 } from './billing/stripe.js';
 import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, updateBand } from './billing/subscription.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
-import { buildBundle, competitorAudit, crawlFacts, performanceAudit, readPublicPage, websiteAudit } from './agents/journey.js';
+import { buildBundle, competitorAudit, crawlFacts, performanceAudit, readPublicPage, setupPlacement, websiteAudit } from './agents/journey.js';
 import { planGo } from './agents/milesrun.js';
 import { decidePolicy } from './agents/policy.js';
 import { dueSkills, periodKey } from './agents/skillclock.js';
@@ -422,19 +423,48 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   // variant highlevel_oauth, the LeadConnector white-label). Treat them as one CRM
   // so a connection under any slug drives the automations. `ghlAppFor` returns the
   // slug the user actually connected; `sendGhl` runs an action on it.
-  const GHL_SLUGS = ['gohighlevel', 'highlevel_oauth', 'highlevel', 'leadconnector', 'gohighlevel_lead_connector'];
-  const ghlSlugOf = (apps: Iterable<string>): string | undefined => {
-    const s = new Set(apps);
-    return GHL_SLUGS.find((x) => s.has(x));
+  const ghlSlugOf = ghlSlugFromApps;
+  /**
+   * The same GoHighLevel answer for the leads card, System Health, and Analytics.
+   * Looks up this login, its email, and any external id already saved on the
+   * account. A single healthy highlevel_oauth that belongs to nobody else in
+   * this project is remembered so the next read finds it on this login.
+   */
+  const ghlLink = async (uid: string): Promise<{ connected: boolean; slug?: string; externalId: string }> => {
+    const user = await authStore.getUserById(uid);
+    const data = await authStore.getUserData(uid);
+    const saved = Array.isArray(data.pipedreamExternalIds) ? (data.pipedreamExternalIds as string[]) : [];
+    const candidates = externalIdCandidates({ id: uid, email: user?.email }, saved);
+    connector.rememberExternalIds?.(uid, candidates.filter((id) => id !== uid));
+    let accounts: { app: string; externalUserId: string }[] = [];
+    try { accounts = await connector.listAccounts(uid); } catch { accounts = []; }
+    let slug = ghlSlugOf(accounts.map((a) => a.app));
+    let externalId = uid;
+    if (slug) externalId = accounts.find((a) => ghlSlugOf([a.app]) === slug)?.externalUserId || uid;
+    if (!slug && connector.listProjectAccounts) {
+      const project: { app: string; externalId?: string; healthy?: boolean; dead?: boolean }[] = [];
+      for (const app of GHL_SLUGS) {
+        try { project.push(...(await connector.listProjectAccounts(app)).map((a) => ({ app: a.app, externalId: a.externalUserId, healthy: a.healthy }))); } catch { /* one slug failing does not hide the others */ }
+      }
+      const others = (await authStore.listUsers()).map((u) => u.id).filter((id) => id !== uid);
+      const claim = claimableGhlAccount({ selfId: uid, otherUserIds: others, accounts: project });
+      if (claim) {
+        slug = claim.slug;
+        externalId = claim.externalId;
+        const next = [...new Set([...saved, claim.externalId])];
+        data.pipedreamExternalIds = next;
+        connector.rememberExternalIds?.(uid, next.filter((id) => id !== uid));
+        await authStore.setUserData(uid, data);
+      }
+    }
+    return { connected: !!slug, slug, externalId };
   };
-  const ghlAppFor = async (uid: string): Promise<string | undefined> => {
-    try { return ghlSlugOf((await connector.listAccounts(uid)).map((a) => a.app)); } catch { return undefined; }
-  };
+  const ghlAppFor = async (uid: string): Promise<string | undefined> => (await ghlLink(uid)).slug;
   const sendGhl = async (uid: string, phone: string, name: string, message: string, verb: string, extra?: Record<string, string>): Promise<boolean> => {
     if (!phone || !connector.runAppTask) return false;
-    const app = await ghlAppFor(uid);
-    if (!app) return false;
-    try { const r = await connector.runAppTask({ externalUserId: uid, app, query: verb, params: { message, name, phone, ...(extra ?? {}) } }); return !!r?.ok; } catch { return false; }
+    const link = await ghlLink(uid);
+    if (!link.slug) return false;
+    try { const r = await connector.runAppTask({ externalUserId: link.externalId, app: link.slug, query: verb, params: { message, name, phone, ...(extra ?? {}) } }); return !!r?.ok; } catch { return false; }
   };
 
   const readWeb = (name: string, fallback: string) => {
@@ -1108,7 +1138,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     skillClock: Record<string, string>;
     events: { ts: string; text: string }[];
     audits: { id: string; title: string; source: string; summary: string; score?: number; grade?: string }[];
-    found: { pagesRead: number; businessName: string; phone: string; services: string; website: string; fetchNote: string; auditSummary: string } | null;
+    found: { pagesRead: number; businessName: string; phone: string; services: string; website: string; fetchNote: string; auditSummary: string; crawledAt?: string } | null;
+    pendingMode?: 'automate' | 'hybrid' | 'manual';
   };
   const milesOf = (data: Record<string, unknown>): MilesFile => {
     const raw = (data.miles as Partial<MilesFile>) ?? {};
@@ -1123,6 +1154,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       events: Array.isArray(raw.events) ? raw.events : [],
       audits: Array.isArray(raw.audits) ? raw.audits : [],
       found: raw.found ?? null,
+      pendingMode: raw.pendingMode,
     };
   };
   const rememberMiles = (data: Record<string, unknown>, miles: MilesFile, text: string) => {
@@ -1171,6 +1203,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     miles.phase = 'questions';
     const siteAudit = websiteAudit(html, website, html ? undefined : fetchNote);
     miles.audits = [siteAudit, competitorAudit(competitors)];
+    const crawledAt = new Date().toISOString();
     miles.found = {
       pagesRead: html.trim() ? 1 : 0,
       businessName: facts.profile.businessName || businessName,
@@ -1179,8 +1212,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       website,
       fetchNote,
       auditSummary: siteAudit.summary,
+      crawledAt,
     };
-    miles.events = [{ ts: new Date().toISOString(), text: `Crawl saved. ${miles.found.pagesRead} page read. ${facts.gbpNote} ${placesNote}` }, ...miles.events].slice(0, 40);
+    const crawlLine = `Crawl saved. ${miles.found.pagesRead} page read. ${facts.gbpNote} ${placesNote}`;
+    miles.events = [{ ts: crawledAt, text: crawlLine }, ...miles.events.filter((e) => !/^Crawl saved\b/.test(e.text))].slice(0, 40);
     data.miles = miles;
     await authStore.setUserData(u.id, data);
     return { ok: true, profile: data.profile, hours: facts.hours, license: facts.license, gbpNote: facts.gbpNote, placesNote, audits: miles.audits, found: miles.found };
@@ -1206,10 +1241,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       dailyBudget: Number(body.dailyBudget) || 20,
       leadsPerDay: Number(body.leadsPerDay) || 1,
       googleShare: body.googleShare == null ? 1 : Number(body.googleShare),
-      mode: body.mode || miles.bundle?.setup.mode || 'hybrid',
+      mode: body.mode || miles.pendingMode || miles.bundle?.setup.mode || 'hybrid',
     });
     if (crawl?.profile) bundle.profile = { ...bundle.profile, ...crawl.profile, ...p };
-    bundle.setup.mode = body.mode || 'hybrid';
+    const chosenMode = body.mode || miles.pendingMode || miles.bundle?.setup.mode || 'hybrid';
+    bundle.setup.mode = chosenMode === 'automate' || chosenMode === 'manual' || chosenMode === 'hybrid' ? chosenMode : 'hybrid';
+    miles.pendingMode = bundle.setup.mode;
     const allowed = ['automate', 'hybrid', 'manual'] as const;
     const areas = ['ppc', 'seo', 'social', 'ghl', 'organic', 'chat'] as const;
     if (body.areaModes) {
@@ -1245,9 +1282,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const miles = milesOf(data);
-    if (!miles.bundle) return reply.code(400).send({ error: 'Save the three questions first.' });
     const body = req.body ?? {};
-    if (body.mode === 'automate' || body.mode === 'hybrid' || body.mode === 'manual') miles.bundle.setup.mode = body.mode;
+    const nextMode = body.mode === 'automate' || body.mode === 'hybrid' || body.mode === 'manual' ? body.mode : undefined;
+    if (!nextMode && !miles.bundle) return reply.code(400).send({ error: 'Pick automate, hybrid, or manual. Nothing was created.' });
+    if (nextMode) miles.pendingMode = nextMode;
+    if (!miles.bundle) {
+      rememberMiles(data, miles, `Mode set to ${miles.pendingMode}. Nothing was created or enabled.`);
+      await authStore.setUserData(u.id, data);
+      return { ok: true, mode: miles.pendingMode, created: false, enabled: false };
+    }
+    if (nextMode) miles.bundle.setup.mode = nextMode;
     const areas = ['ppc', 'seo', 'social', 'ghl', 'organic', 'chat'] as const;
     if (body.areaModes) {
       for (const area of areas) {
@@ -1258,9 +1302,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (body.dailyBudget) miles.bundle.setup.caps.dailyBudget = Number(body.dailyBudget);
     if (body.monthlyCeiling) miles.bundle.setup.caps.monthlyCeiling = Number(body.monthlyCeiling);
     if (body.maxChangePct) miles.bundle.setup.caps.maxChangePct = Number(body.maxChangePct);
-    rememberMiles(data, miles, `Mode is ${miles.bundle.setup.mode}. Daily cap $${miles.bundle.setup.caps.dailyBudget}. Max change ${miles.bundle.setup.caps.maxChangePct}% a day.`);
+    rememberMiles(data, miles, `Mode is ${miles.bundle.setup.mode}. Nothing was created by this change. Daily cap $${miles.bundle.setup.caps.dailyBudget}. Max change ${miles.bundle.setup.caps.maxChangePct}% a day.`);
     await authStore.setUserData(u.id, data);
-    return { ok: true, setup: miles.bundle.setup };
+    return { ok: true, mode: miles.bundle.setup.mode, created: false, enabled: false, setup: miles.bundle.setup };
   });
 
   app.post<{ Body: { paused?: boolean } }>('/api/miles/kill', async (req, reply) => {
@@ -1408,7 +1452,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const miles = milesOf(data);
     const jobs = Array.isArray(data.jobMarks) ? (data.jobMarks as JobMark[]) : [];
     const booked = jobs.filter((j) => j.stage === 'booked' || j.stage === 'won').length;
-    const ghl = !!(await ghlAppFor(u.id));
+    const ghlLinkNow = await ghlLink(u.id);
+    const ghl = ghlLinkNow.connected;
     const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     const stats = responderStats(st, new Date().toISOString());
     const demo = connector.name === 'mock';
@@ -1424,7 +1469,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       inbox: miles.inbox.slice(0, 20),
       events: miles.events.slice(0, 12),
       caps: miles.bundle?.setup.caps ?? null,
-      mode: miles.bundle?.setup.mode ?? null,
+      mode: miles.bundle?.setup.mode || miles.pendingMode || null,
       playbook: miles.bundle?.playbook ?? null,
       channels: miles.bundle?.channels ?? [
         { id: 'google', label: 'Google Search', status: 'runnable', note: 'The only channel in this build.' },
@@ -1440,6 +1485,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       jobs: { leads: jobs.length, booked },
       profile: (data.profile ?? {}) as Record<string, string>,
       found: miles.found,
+      placement: setupPlacement({ pagesRead: miles.found?.pagesRead ?? 0, hasBundle: !!miles.bundle }),
       brief,
     };
   });
@@ -1738,7 +1784,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const days = range === 'LAST_7_DAYS' ? 7 : range === 'LAST_14_DAYS' ? 14 : 30;
       return { start: nowMs - days * 86_400_000, end: nowMs };
     })();
-    const inWin = (ts?: string) => { const t = Date.parse(ts || ''); return !Number.isFinite(t) || (t >= win.start && t <= win.end); };
+    const inWin = (ts?: string) => { const t = Date.parse(ts || ''); return Number.isFinite(t) && t >= win.start && t <= win.end; };
     // Served from the background snapshot — no platform round-trips in the
     // request path (see refreshSnapshot / the scheduler).
     const snap = await getSnapshot(u.id, d);
@@ -1766,7 +1812,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       googleAds: { oauth: google.oauth, customerResolved: google.ready, ready: google.ready, note: google.note },
       metaAds: { oauth: false, ready: false, note: 'Meta Ads is not connected. A Facebook Page is not an ad account, and there is no verified Pipedream Meta campaign app.' },
     };
-    const crmLinked = has('gohighlevel', 'highlevel_oauth', 'hubspot', 'salesforce_rest_api', 'servicetitan', 'jobber', 'housecall_pro');
+    const ghlNow = await ghlLink(u.id);
+    const crmLinked = ghlNow.connected;
     const gmbLinked = has('google_my_business', 'gmb');
     const socialLinked = has('facebook_pages', 'instagram', 'linkedin');
     return {
@@ -1780,6 +1827,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         scheduledPosts: posts.filter((x) => x.status === 'scheduled').length,
         publishedPosts: posts.filter((x) => x.status === 'published').length,
         creditsUsed: summarizeUsage(d.usage as Usage | undefined, new Date()).credits,
+        creditsPeriod: summarizeUsage(d.usage as Usage | undefined, new Date()).period,
+        accountCounts: true,
         weatherTriggers: ((d.weatherRules as Array<{ enabled?: boolean }>) ?? []).filter((r) => r.enabled).length,
       },
       sample: connector.name === 'mock',
@@ -3789,8 +3838,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(u.id);
     let apps = new Set<string>();
     try { apps = new Set((await connector.listAccounts(u.id)).map((a) => a.app)); } catch { /* none */ }
-    const ghlApp = ghlSlugOf(apps);
-    const ghl = !!ghlApp;
+    const ghlNow = await ghlLink(u.id);
+    const ghlApp = ghlNow.slug;
+    const ghl = ghlNow.connected;
     const gads = apps.has('google_ads');
 
     const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
@@ -3824,7 +3874,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const keys = [
       { name: 'GoHighLevel (CRM + SMS)', done: ghl, note: ghl ? `Connected as ${ghlApp}` : 'Connect in Integrations — powers every automation' },
       { name: 'Google Ads', done: gads, note: gads ? 'Connected' : 'Connect in Integrations — ad spend + ROI' },
-      { name: 'Meta ad account (Facebook launch)', done: false, note: 'Blocked — META_* would be one shared ad account for every customer. Per-customer Meta is not connected.' },
+      { name: 'Meta, TikTok, and Local Services Ads', done: false, note: 'Coming later. This version runs Google Ads only.' },
       { name: 'AI copywriting', done: textLlmReady(), note: textLlmReady() ? 'On (OpenRouter)' : 'Add OPENROUTER_API_KEY on Render for AI-written copy' },
       { name: 'Image generation', done: falReady(), note: falReady() ? 'On (FAL)' : 'Add FAL_KEY on Render for generated ad images' },
       { name: 'Census (Market Map)', done: !!process.env.CENSUS_API_KEY, note: process.env.CENSUS_API_KEY ? 'On' : 'Add CENSUS_API_KEY on Render for income targeting' },
@@ -4683,13 +4733,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const decision = decideLead(parsed.lead, seen, !!st.enabled);
     if (!decision.valid) return reply.code(400).send({ error: decision.reason });
     if (decision.duplicate) return { ok: true, duplicate: true, upserted: false, followedUp: false, reason: decision.reason };
-    let apps: string[] = [];
-    try { apps = (await connector.listAccounts(uid)).map((a) => a.app); } catch { apps = []; }
-    const ghl = apps.includes('highlevel_oauth');
+    const link = await ghlLink(uid);
+    const ghl = link.slug === 'highlevel_oauth';
     let upserted = false;
     if (decision.upsert && ghl) {
       try {
-        const r = await connector.runAction({ externalUserId: uid, actionId: GHL_UPSERT_ACTION, configuredProps: ghlUpsertProps(lead) });
+        const r = await connector.runAction({ externalUserId: link.externalId, actionId: GHL_UPSERT_ACTION, configuredProps: ghlUpsertProps(lead) });
         if (!r.ok) return reply.code(503).send({ error: r.note || 'GoHighLevel upsert failed. The event was not marked done, so it can be retried.', upserted: false });
         upserted = true;
       } catch (err) {
@@ -4718,7 +4767,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       data.followUpDrafts = [{ at: new Date().toISOString(), eventId: lead.eventId, kind: follow.kind, body: follow.body, reason: follow.reason }, ...drafts].slice(0, 100);
     } else if (follow.disposition === 'send' && ghl && connector.runAppTask) {
       try {
-        const sms = await connector.runAppTask({ externalUserId: uid, app: 'highlevel_oauth', query: 'Send SMS', params: { phone: lead.phone || '', name: lead.name || '', message: follow.body } });
+        const sms = await connector.runAppTask({ externalUserId: link.externalId, app: 'highlevel_oauth', query: 'Send SMS', params: { phone: lead.phone || '', name: lead.name || '', message: follow.body } });
         followedUp = !!sms?.ok;
       } catch { followedUp = false; }
     }
