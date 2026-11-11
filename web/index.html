@@ -683,6 +683,45 @@
   :root[data-theme="dark"] body.on-dash .md-greet,
   :root[data-theme="dark"] body.on-dash .md-h,
   :root[data-theme="dark"] body.on-dash .md-num{color:#fff;}
+  .ln-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start;}
+  .ln-main{display:flex;flex-direction:column;gap:14px;min-width:0;}
+  .ln-side{display:flex;flex-direction:column;gap:14px;}
+  .ln-title{margin:0;font-size:28px;font-weight:800;letter-spacing:-.03em;text-transform:uppercase;}
+  .ln-sub{margin:4px 0 0;color:#6e6e76;font-size:14px;}
+  .ln-shortcut{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#111;color:#fff;border-radius:16px;padding:14px 16px;}
+  .ln-shortcut p{margin:0;font-size:14px;font-weight:700;}
+  .ln-shortcut button{background:#fff;color:#111;border:0;border-radius:999px;padding:8px 12px;font-weight:800;cursor:pointer;font-family:inherit;}
+  .ln-step{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8a8a92;margin:0 0 10px;}
+  .ln-goals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+  .ln-goal,.ln-bud,.ln-chan{border:1px solid #e6e6ea;background:#fff;border-radius:14px;padding:12px;text-align:left;cursor:pointer;font-family:inherit;}
+  .ln-goal.on,.ln-bud.on,.ln-chan.on{background:#111;color:#fff;border-color:#111;}
+  .ln-goal b,.ln-bud b,.ln-chan b{display:block;font-size:13px;color:inherit;}
+  .ln-bit b{word-break:break-word;}
+  .ln-goal span,.ln-bud span,.ln-chan span{display:block;font-size:12px;color:#6e6e76;margin-top:3px;}
+  .ln-goal.on span,.ln-bud.on span,.ln-chan.on span{color:#d0d0d6;}
+  .ln-chan[disabled],.ln-bud[disabled]{cursor:not-allowed;opacity:.72;}
+  .ln-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
+  .ln-fields label{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8a8a92;}
+  .ln-fields select,.ln-fields input{width:100%;margin-top:4px;border:1px solid #e6e6ea;border-radius:12px;padding:10px 12px;font:inherit;background:#fafafa;}
+  .ln-buds{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;}
+  .ln-chans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px;}
+  .ln-profile{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px;}
+  .ln-bit{background:#f6f6f7;border-radius:12px;padding:10px 12px;}
+  .ln-bit b{display:block;font-size:13px;margin-top:4px;}
+  .ln-ads{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .ln-ad{border:1px solid #ececef;border-radius:14px;padding:12px;background:#fff;}
+  .ln-ad .host{color:#1a73e8;font-size:12px;}
+  .ln-ad h3{margin:6px 0;font-size:16px;}
+  .ln-expect{background:#111;color:#fff;border-radius:18px;padding:18px;}
+  .ln-expect h3{margin:8px 0 12px;font-size:22px;letter-spacing:-.03em;color:#fff;}
+  .ln-expect .k{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#b7b7be;}
+  .ln-expect .v{font-size:26px;font-weight:800;}
+  .ln-metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .ln-count{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid #f0f0f2;font-size:14px;}
+  .ln-build{display:flex;justify-content:center;margin-top:8px;}
+  .ln-build button{background:#1b8552;color:#fff;border:0;border-radius:999px;padding:12px 22px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit;}
+  .ln-photo{display:flex;gap:14px;align-items:center;margin-top:10px;font-size:14px;}
+  @media(max-width:1100px){.ln-grid,.ln-goals,.ln-buds,.ln-profile,.ln-ads{grid-template-columns:1fr 1fr;}}
 </style>
 
 <div class="app">
@@ -893,7 +932,7 @@
 
     <!-- LAUNCH A CAMPAIGN (build → review every setting → approve & go live) -->
     <section class="page" id="page-launch">
-      <div id="launch-body" style="max-width:900px"></div>
+      <div id="launch-body"></div>
     </section>
 
     <!-- LAUNCH ON FACEBOOK (business + offer → build → review → push paused draft to Meta) -->
@@ -1574,7 +1613,7 @@ function renderSubTabs(id){
   });
 }
 function setPage(id){
-  document.body.classList.toggle('on-dash', id==='overview');
+  document.body.classList.toggle('on-dash', id==='overview' || id==='launch');
   const dest=destFor(id);
   // Highlight the DESTINATION, not the page — otherwise moving between tabs
   // looks like leaving the section you are standing in.
@@ -3742,55 +3781,256 @@ function openAdStudio(){ const apply=()=>{ renderAdVpick(); fillAdCats(); render
 // ── Launch a Campaign — build → review every setting → approve & go live ──
 let LAUNCH={spec:null,connected:false};
 function lchField(label,ph,val,type){ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.placeholder=ph||''; if(val!=null)i.value=val; if(type)i.type=type; i.style.width='100%'; w.append(i); return {w,i}; }
-function openLaunch(){
-  const box=$('#launch-body'); if(!box) return; box.innerHTML='';
-  const h=el('div','mcard'); h.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">Launch a Campaign</h3><span style="font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;background:#e8f0fe;color:#1a56db">GOOGLE ADS</span></div><p class="mdesc" style="margin:6px 0 0;max-width:640px">Miles builds a complete <b>Google Ads Search</b> campaign (budget, bidding, ad groups, keywords, and ads) from your goal. You review every setting, then approve. <b>It is created paused. Nothing spends until you approve activation.</b><br><span class="appsub">Meta ads are not available from a verified Pipedream campaign action.</span></p>';
-  box.append(h);
-  const loop=el('div','mcard'); loop.style.marginTop='14px';
-  loop.append(el('div','sect-label','PLAN FROM YOUR PROFILE'));
-  loop.append(el('p','appsub','Uses the trade, service area, budget, target cost per lead, average job value, and landing page on your profile. Miles does not fill those in. Only paused Google Search can be created. Meta, TikTok, and Local Services Ads are coming later.'));
-  const loopOut=el('div');
-  const loopBtn=el('button',null,'Show the plan from my profile'); loopBtn.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600';
-  loopBtn.onclick=async()=>{
-    loopBtn.disabled=true;
-    try{
-      const r=await(await fetch('/api/journey/plan',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({})})).json();
-      loopOut.innerHTML='';
-      const p=r.plan||{};
-      if(p.missing&&p.missing.length){ const miss=el('div'); miss.style.cssText='padding:8px 0;font-size:13px'; miss.textContent='Still needed: '+p.missing.map(m=>m.label).join(', ')+'.'; loopOut.append(miss); }
-      loopOut.append(el('p','appsub',(p.summary||'')+' '+((p.budgetControl)||'')));
-      (p.channels||[]).forEach(c=>{
-        const row=el('div'); row.style.cssText='padding:6px 0;border-top:1px solid var(--line-soft);font-size:13px';
-        row.textContent=c.label+': $'+c.recommendedDaily+'/day recommended, $'+c.executedDaily+' would be created paused. '+c.status+'. '+c.reason;
-        loopOut.append(row);
-      });
-      const asset=p.asset||{};
-      loopOut.append(el('p','appsub', asset.logoIncluded ? 'Logo on file is attached. No new image was generated.' : 'No logo on the profile. No image was generated.'));
-      if(p.market) loopOut.append(el('p','appsub', p.market.note||''));
-    }catch(e){ toast('Could not build the plan.'); }
-    loopBtn.disabled=false;
-  };
-  loop.append(loopBtn, loopOut); box.append(loop);
-  const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','STEP 1 — TELL MILES THE GOAL'));
-  const goal=lchField('What do you want the campaign to do?','e.g. Get more calls for emergency repairs');
-  const budget=lchField('Daily budget (USD)','20','20','number');
-  const url=lchField('Landing page URL','https://yourbusiness.com/service');
-  const loc=lchField('Locations (comma-separated — blank = your service area)','e.g. Philadelphia, PA');
-  if(window.__prefillLocations){ loc.i.value=window.__prefillLocations; window.__prefillLocations=null; }
-  f.append(goal.w,budget.w,url.w,loc.w);
-  const btnRow=el('div'); btnRow.style.cssText='display:flex;gap:10px;flex-wrap:wrap;align-items:center';
-  const ai=el('button','go','✨ Auto-fill with AI'); ai.title='Miles builds and writes the whole campaign from your business profile';
-  ai.onclick=()=>autofillCampaign(ai,{dailyBudget:Number(budget.i.value)||undefined,finalUrl:url.i.value,locations:loc.i.value.split(',').map(s=>s.trim()).filter(Boolean)});
-  const btn=el('button',null,'Build from my goal →'); btn.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:11px 16px;cursor:pointer;font-weight:600;font-family:var(--sans)';
-  btn.onclick=async()=>{ btn.disabled=true; btn.textContent='Building…';
-    try{ const r=await(await fetch('/api/campaign/draft',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({goal:goal.i.value,dailyBudget:Number(budget.i.value)||20,finalUrl:url.i.value,locations:loc.i.value.split(',').map(s=>s.trim()).filter(Boolean)})})).json();
-      LAUNCH={spec:r.spec,connected:r.gadsConnected}; renderLaunchReview();
-    }catch(e){ toast('Could not build — try again.'); btn.disabled=false; btn.textContent='Build from my goal →'; }
-  };
-  btnRow.append(ai,btn); f.append(btnRow);
-  const hint=el('div','appsub','✨ Auto-fill uses your Business Profile to write everything — no typing needed. Or set a specific goal above and build from that.'); hint.style.marginTop='8px'; f.append(hint);
-  box.append(f);
-  renderSavedDrafts(box);
+let LN={launch:null,spec:null,miles:null,goal:'more_calls',service:'',offer:'',daily:null,photo:'miles'};
+async function openLaunch(){
+  const box=$('#launch-body'); if(!box) return;
+  box.innerHTML='<p class="appsub">Loading launch...</p>';
+  let miles={}, pack=null;
+  if(REMOTE){
+    try{ miles=await(await fetch('/api/miles/home')).json(); }catch(e){}
+    try{ pack=await(await fetch('/api/launch/home')).json(); }catch(e){}
+  }
+  LN.miles=miles||{};
+  LN.launch=pack&&pack.launch;
+  LN.spec=pack&&pack.spec;
+  LN.goal='more_calls';
+  LN.service=(LN.launch&&LN.launch.services&&LN.launch.services[0])||'';
+  LN.offer='';
+  LN.daily=LN.launch?LN.launch.selectedDaily:null;
+  LN.photo='miles';
+  renderLaunchPage();
+}
+function lnMoney(n){ return '$'+Math.round(n).toLocaleString(); }
+function lnHeadline(){
+  const goals=(LN.launch&&LN.launch.goals)||[];
+  const goal=goals.find(g=>g.id===LN.goal);
+  const title=goal?goal.title:'More calls';
+  return LN.service ? title+' for '+LN.service : title;
+}
+function renderLaunchPage(){
+  const box=$('#launch-body'); if(!box) return;
+  const L=LN.launch||{};
+  const miles=LN.miles||{};
+  box.innerHTML='';
+  const head=el('div','md-top');
+  const titles=el('div');
+  titles.append(el('h1','ln-title','Launch a campaign'));
+  titles.append(el('p','ln-sub','Tell Miles what you want. It builds the campaign. You approve.'));
+  const ctrl=el('div','md-controls');
+  ctrl.append(el('span','md-modelab','Miles mode'));
+  const pills=el('div','md-pills');
+  const note=el('div','md-note', modeBlurb(miles.mode, miles.caps)); note.id='launch-mode-note';
+  [['manual','Ask me first'],['hybrid','Hybrid'],['automate','Do everything']].forEach(([id,label])=>{
+    const b=el('button', miles.mode===id?'on':'', label);
+    b.dataset.mode=id;
+    b.onclick=async()=>{ const r=await milesPost(b, note, 'Saving...', '/api/miles/mode', {mode:id}); if(r){ if(LN.miles) LN.miles.mode=id; note.textContent=modeBlurb(id, miles.caps); renderLaunchPage(); } };
+    pills.append(b);
+  });
+  const ask=el('button','md-ask','Ask Miles');
+  ask.onclick=()=>{ if(typeof enterChat==='function') enterChat(); };
+  const theme=el('button','md-theme','◑'); theme.title='Theme'; theme.onclick=()=>{ const t=$('#theme'); if(t) t.click(); };
+  const gsel=el('select','md-range');
+  for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===MKT_RANGE) o.selected=true; gsel.append(o); }
+  gsel.onchange=()=>{ MKT_RANGE=gsel.value; };
+  ctrl.append(pills, gsel, ask, theme);
+  head.append(titles, ctrl);
+  box.append(head, note);
+  const setup=el('div','md-setup');
+  const line=el('div');
+  const setupBits=[];
+  if(L.tradeLabel&&L.tradeLabel!=='your trade') setupBits.push(L.tradeLabel);
+  if(L.area&&L.area!=='Not saved') setupBits.push(L.area);
+  setupBits.push('Google Search');
+  if(L.savedCap) setupBits.push('$'+Math.round(L.savedCap)+'/day');
+  line.append(document.createTextNode(setupBits.length>1?('Setup: '+setupBits.join(' · ')):'Setup: Google Search only. Add a trade, market, and daily budget in Profile.'));
+  setup.append(line);
+  const legend=el('span','md-legend'); legend.append(mdSample(), document.createTextNode(' = example numbers until that source connects'));
+  setup.append(legend);
+  const acts=el('div','md-actions');
+  const kill=el('button','md-ghost', miles.caps&&miles.caps.paused?'Resume':'Pause all');
+  const back=el('button','md-ghost','Revert to paused');
+  const edit=el('button','md-link','Edit setup');
+  kill.onclick=async()=>{ const r=await milesPost(kill, note, 'Pausing...', '/api/miles/kill', {paused:!(miles.caps&&miles.caps.paused)}); if(r) openLaunch(); };
+  back.onclick=async()=>{ const r=await milesPost(back, note, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) openLaunch(); };
+  edit.onclick=()=>setPage('profile');
+  acts.append(kill, back, edit);
+  setup.append(acts);
+  box.append(setup);
+
+  const grid=el('div','ln-grid');
+  const main=el('div','ln-main');
+  const shortcut=el('div','ln-shortcut');
+  shortcut.append(el('p',null, L.playbookLine||'Run a ready-made playbook from the list. Meta and Local Services Ads are not launched from there.'));
+  const see=el('button',null,'See playbooks');
+  see.onclick=()=>setPage('skills');
+  shortcut.append(see);
+  main.append(shortcut);
+
+  const step1=el('div','md-card');
+  step1.append(el('div','ln-step','1. What do you want more of?'));
+  const goals=el('div','ln-goals');
+  (L.goals||[{id:'more_calls',title:'More calls',detail:'Ready-to-book homeowners'},{id:'slow_season',title:'Fill a slow season',detail:'Use the seasonal line from your playbook'},{id:'offer',title:'Promote an offer',detail:'Lead with a deal'}]).forEach(g=>{
+    const b=el('button','ln-goal'+(LN.goal===g.id?' on':''));
+    b.append(el('b',null,g.title), el('span',null,g.detail));
+    b.onclick=()=>{ LN.goal=g.id; renderLaunchPage(); };
+    goals.append(b);
+  });
+  step1.append(goals);
+  const fields=el('div','ln-fields');
+  const svc=el('div'); svc.append(el('label',null,'Service'));
+  const sel=el('select');
+  const services=L.services||[];
+  if(!services.length){ const o=el('option',null,'No service saved'); o.value=''; sel.append(o); }
+  services.forEach(name=>{ const o=el('option',null,name); o.value=name; if(name===LN.service) o.selected=true; sel.append(o); });
+  sel.onchange=()=>{ LN.service=sel.value; renderLaunchPage(); };
+  svc.append(sel);
+  const off=el('div'); off.append(el('label',null,'Offer, optional'));
+  const offer=el('input'); offer.placeholder='e.g. 15% off a second room'; offer.value=LN.offer||'';
+  offer.oninput=()=>{ LN.offer=offer.value; };
+  off.append(offer);
+  fields.append(svc, off);
+  step1.append(fields);
+  main.append(step1);
+
+  const step2=el('div','md-card');
+  step2.append(el('div','ln-step','2. Where should it run, and how much?'));
+  const chans=el('div','ln-chans');
+  (L.channels||[]).forEach(c=>{
+    const b=el('button','ln-chan'+(c.id==='google'&&c.selectable?' on':''));
+    b.append(el('b',null,c.label), el('span',null,c.detail));
+    b.onclick=()=>{ if(!c.selectable){ toast(c.detail); return; } };
+    chans.append(b);
+  });
+  step2.append(el('div','appsub','Channel'), chans);
+  step2.append(el('div','appsub','Daily budget'));
+  const buds=el('div','ln-buds');
+  (L.budgets||[]).forEach(b=>{
+    const btn=el('button','ln-bud'+(LN.daily===b.daily?' on':''));
+    btn.dataset.daily=String(b.daily);
+    btn.append(el('b',null,b.label), el('span',null,b.hint));
+    btn.onclick=()=>{ LN.daily=b.daily; renderLaunchPage(); };
+    buds.append(btn);
+  });
+  step2.append(buds);
+  if(!L.savedCap) step2.append(el('p','md-legend','No daily cap is saved yet. Pick a budget. Miles will not assume $0 a day.'));
+  const prof=el('div','ln-profile');
+  const bit=(k,v)=>{ const d=el('div','ln-bit'); d.append(el('div','appsub',k), el('b',null,v||'Not saved')); const ed=el('button','md-link','Edit'); ed.onclick=()=>setPage('profile'); d.append(ed); return d; };
+  prof.append(bit('Area', L.area&&L.area!=='Not saved'?L.area:''), bit('Landing page', L.landingPage||''), bit('Avg job value', L.jobValue||''));
+  step2.append(el('p','md-legend','From your profile. Edit if anything is wrong.'), prof);
+  const fin=el('label'); fin.style.cssText='display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px';
+  const cb=el('input'); cb.type='checkbox'; cb.checked=!!L.financing;
+  cb.onchange=async()=>{ try{ await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({financing:cb.checked?'yes':'no'})}); }catch(e){} };
+  fin.append(cb, document.createTextNode(' We offer financing'));
+  step2.append(fin);
+  main.append(step2);
+
+  const step3=el('div','md-card');
+  const s3h=el('div'); s3h.style.cssText='display:flex;justify-content:space-between;gap:8px;align-items:center';
+  s3h.append(el('div','ln-step','3. Your ads. Miles wrote these'));
+  const rewrite=el('button','md-ghost','Write new ones');
+  rewrite.onclick=()=>lnRewrite(rewrite);
+  s3h.append(rewrite);
+  step3.append(s3h);
+  const ads=el('div','ln-ads');
+  const groups=(LN.spec&&LN.spec.adGroups)||[];
+  const host=L.landingHost;
+  if(!groups.length) ads.append(el('p','md-explain','Miles has not written ads yet. Save a service or a landing page, then write new ones. Nothing here is a live ad.'));
+  groups.slice(0,2).forEach(g=>{
+    const card=el('div','ln-ad');
+    card.append(el('div','host', host?('Sponsored · '+host):'No landing page saved'));
+    card.append(el('h3',null, (g.rsa&&g.rsa.headlines&&g.rsa.headlines[0])||'Draft'));
+    card.append(el('p',null, (g.rsa&&g.rsa.descriptions&&g.rsa.descriptions[0])||''));
+    ads.append(card);
+  });
+  step3.append(ads);
+  const photo=el('div','ln-photo');
+  photo.append(document.createTextNode('Ad photo'));
+  [['miles','Miles makes one'],['mine','Use my photo']].forEach(([id,label])=>{
+    const lab=el('label'); lab.style.cssText='display:flex;gap:6px;align-items:center';
+    const r=el('input'); r.type='radio'; r.name='ln-photo'; r.checked=LN.photo===id;
+    r.onchange=()=>{ LN.photo=id; };
+    lab.append(r, document.createTextNode(label));
+    photo.append(lab);
+  });
+  step3.append(photo);
+  step3.append(el('p','md-legend', L.photoNote||'A photo Miles makes uses monthly media credits. This page does not generate a photo or charge credits.'));
+  main.append(step3);
+  main.append(el('p','md-explain', L.footer||'Miles builds it paused. You will see every setting, then approve it before a dollar is spent.'));
+  const buildWrap=el('div','ln-build');
+  const go=el('button',null,'Build my campaign');
+  go.id='ln-build';
+  go.onclick=()=>lnBuild(go);
+  buildWrap.append(go);
+  main.append(buildWrap);
+  const result=el('div'); result.id='ln-result'; main.append(result);
+  grid.append(main);
+
+  const side=el('div','ln-side');
+  const expect=el('div','ln-expect');
+  expect.append(el('div','k','What to expect'));
+  expect.append(el('h3',null, lnHeadline()));
+  const metrics=el('div','ln-metrics');
+  (L.estimates||[]).forEach(est=>{
+    const cell=el('div');
+    const display=est.label==='Monthly spend' ? (LN.daily?lnMoney(LN.daily*30):'n/a') : est.display;
+    cell.append(el('div','k', est.label), el('div','v', display));
+    if(est.kind!=='empty'){ const tag=el('div','k', est.kind==='saved_goal'?'Saved goal':'Estimate'); cell.append(tag); }
+    metrics.append(cell);
+  });
+  expect.append(metrics);
+  const spendNote=(L.estimates||[]).map(e=>e.note).filter(Boolean)[0]||'';
+  expect.append(el('p',null, [spendNote, L.breakEven].filter(Boolean).join(' ')||'Estimates use your saved budget and goals. They are not live results.'));
+  side.append(expect);
+  const counts=el('div','md-card');
+  counts.append(el('div','ln-step','Miles will build'));
+  const row=(k,v)=>{ const r=el('div','ln-count'); r.append(el('span',null,k), el('b',null,v)); return r; };
+  const C=L.counts||{};
+  const n=v=>v==null?'Not counted yet':String(v);
+  counts.append(row('Ad groups', n(C.adGroups)), row('Keywords', n(C.keywords)), row('Blocked search terms', n(C.blocked)), row('Ads', n(C.ads)), row('Sitelinks and call button', C.call?'Phone on file':(C.sitelinks==null?'Not counted yet':String(C.sitelinks)+' sitelinks')));
+  counts.append(el('p','md-legend', C.note||'You will review every setting before approving.'));
+  side.append(counts);
+  grid.append(side);
+  box.append(grid);
+}
+async function lnRewrite(btn){
+  const L=LN.launch||{};
+  btn.disabled=true; const old=btn.textContent; btn.textContent='Writing...';
+  try{
+    const r=await(await fetch('/api/campaign/autofill',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({dailyBudget:LN.daily||undefined, finalUrl:L.landingPage||undefined, locations:L.area&&L.area!=='Not saved'?[L.area]:undefined})})).json();
+    if(r&&r.spec){ r.spec.status='PAUSED'; LN.spec=r.spec; renderLaunchPage(); toast('New draft copy is ready to review. Nothing was created.'); }
+    else toast('Could not write new ads.');
+  }catch(e){ toast('Could not write new ads.'); btn.disabled=false; btn.textContent=old; }
+}
+async function lnBuild(btn){
+  const L=LN.launch||{};
+  const mode=(LN.miles&&LN.miles.mode)||L.mode||null;
+  const daily=LN.daily;
+  const cap=L.savedCap;
+  const result=$('#ln-result');
+  const say=(t)=>{ if(result) result.innerHTML=''; if(result) result.append(el('p','md-explain', t)); };
+  if(!daily){ say('Pick a daily budget. Nothing was created.'); return; }
+  if(cap && daily>cap+0.001){ say('That is above your $'+Math.round(cap)+'/day cap. Raise the cap in setup, or pick a lower budget. Nothing was created.'); return; }
+  if(mode==='manual'||!mode){ say('Ask me first is on. Miles will not create this campaign. Nothing was created.'); return; }
+  btn.disabled=true;
+  if(mode==='hybrid'){
+    const leads=(LN.miles&&LN.miles.bundle&&LN.miles.bundle.setup&&LN.miles.bundle.setup.leadsPerDay)||1;
+    const saved=await milesPost(btn, result, 'Queuing...', '/api/miles/questions', {goal:LN.offer? (LN.service+' '+LN.offer): (LN.service||'more calls'), dailyBudget:daily, leadsPerDay:leads, mode:'hybrid'});
+    if(!saved){ btn.disabled=false; return; }
+    const queued=await milesPost(btn, result, 'Queuing...', '/api/miles/go', {confirm:true});
+    if(queued) say(queued.created?'Created paused. Nothing was enabled.':'Hybrid is on. This is waiting for your approval. Nothing was created or spent.');
+    btn.disabled=false;
+    return;
+  }
+  try{
+    const draft=await(await fetch('/api/campaign/draft',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({goal:LN.service||'more calls', dailyBudget:daily, finalUrl:L.landingPage||undefined, locations:L.area&&L.area!=='Not saved'?[L.area.split(' + ')[0]]:undefined})})).json();
+    if(!draft||!draft.spec){ say('Could not build the plan. Nothing was created.'); btn.disabled=false; return; }
+    draft.spec.status='PAUSED';
+    const res=await fetch('/api/campaign/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:draft.spec, confirm:true})});
+    const body=await res.json().catch(()=>({}));
+    if(!res.ok||body.ok===false){ say((body.error||body.note||'Nothing was created.')+' It was not enabled.'); btn.disabled=false; return; }
+    say(body.demo||body.live===false?'Nothing was created in Google. The plan stays paused.':'Created paused. This button did not enable it or spend.');
+  }catch(e){ say('Could not create the campaign. Nothing was enabled.'); }
+  btn.disabled=false;
 }
 async function autofillCampaign(btn,opts){
   const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='✨ Writing your campaign…'; }

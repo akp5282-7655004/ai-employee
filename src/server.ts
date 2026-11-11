@@ -41,6 +41,7 @@ import { SPEC_PLATFORMS, loadSpec, searchSpecCheck, type SpecPlatform } from './
 import { metricCatalog, dashboardDefaults } from './metrics/catalog.js';
 import { getMetrics } from './metrics/resolver.js';
 import { buildOperatorView } from './dashboard/operator.js';
+import { buildLaunchView, previewSpec } from './dashboard/launch.js';
 import { appendCrmEvent, amountFrom, crmLiveValues, calcLiveValues, dealsLiveValues } from './metrics/crmledger.js';
 import { buildLocalPresenceAudit, gbpCompletenessScore, type AuditAnswer } from './agents/localpresence.js';
 import { appendApproval, approvalLog, defaultAutonomy, normalizeAutonomy, TOS_VERSION, type ApprovalEntry } from './agents/approvallog.js';
@@ -3247,6 +3248,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       try { await connector.listAdTargets(userId); } catch { /* readiness stays unresolved */ }
     }
     const num = (v?: string) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : undefined; };
+    const milesCap = milesOf(data).bundle?.setup.caps.dailyBudget;
+    const savedDaily = num(p.dailyBudget) || (typeof milesCap === 'number' && milesCap > 0 ? milesCap : undefined);
     const plan = buildLoopPlan({
       profile: {
         businessName: p.businessName,
@@ -3257,7 +3260,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         website: p.website,
         phone: p.phone,
         logoUrl: kit.logoUrl || assets.logo || p.logo,
-        dailyBudget: num(p.dailyBudget),
+        dailyBudget: savedDaily,
         monthlyBudget: num(p.monthlyBudget),
         targetCpl: num(p.targetCpl) || num(p.targetCpa),
         averageJobValue: num(p.averageJobValue) || num(p.avgTicket),
@@ -3280,6 +3283,34 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       pendingPlaybook: 'Akhil will supply an operator playbook. It is not implemented or validated.',
       apps: PIPEDREAM_APPS,
     };
+  });
+
+  app.get('/api/launch/home', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const miles = milesOf(data);
+    const google = await googleReadiness(u.id);
+    const num = (v?: string | number) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null; };
+    const cap = miles.bundle?.setup.caps.dailyBudget;
+    const input = {
+      mode: miles.bundle?.setup.mode || miles.pendingMode || null,
+      trade: String(p.industry || miles.bundle?.profile.industry || ''),
+      market: String(p.serviceAreas || miles.bundle?.setup.location || ''),
+      services: String(p.services || miles.found?.services || miles.bundle?.profile.services || ''),
+      website: String(p.website || miles.bundle?.setup.website || miles.found?.website || ''),
+      phone: String(p.phone || ''),
+      savedCap: (typeof cap === 'number' && cap > 0 ? cap : null) || num(p.dailyBudget),
+      leadsPerDay: miles.bundle ? num(miles.bundle.setup.leadsPerDay) : num(p.leadsPerDay),
+      averageJobValue: num(p.averageJobValue) || num(p.avgTicket),
+      closeRate: num(p.closeRate) != null && num(p.closeRate)! <= 1 ? num(p.closeRate) : null,
+      financing: /^(1|true|yes)$/i.test(String(p.financing || '')),
+      google: { oauth: google.oauth, ready: google.ready, note: google.note },
+      businessName: String(p.businessName || miles.bundle?.setup.businessName || ''),
+    };
+    const spec = previewSpec(input);
+    return { launch: buildLaunchView(input, spec), spec };
   });
 
   app.post<{ Body: { totalDaily?: number; observedAds?: ObservedAd[] } }>('/api/journey/plan', async (req, reply) => {
