@@ -1,5 +1,6 @@
 import type { Config } from '../config.js';
 import { META_SHARED_ACCOUNT_NOTE as _META_NOTE } from '../agents/googlelaunch.js';
+import { listCampaignRows, parseGoogleStatuses } from '../agents/enablecheck.js';
 import { classifyGadsAccounts, extractCustomerNodes, type GadsAccess } from './gadsAccess.js';
 import { explainPipedreamError, type PipedreamFailure } from './pipedreamErrors.js';
 import { withTimeout } from './readcache.js';
@@ -1087,6 +1088,55 @@ export class PipedreamConnector implements Connector {
       note: confirmed ? `Google reports the campaign as ${args.status}.` : (result.error || readback.note),
       readback,
     };
+  }
+
+  /**
+   * Read campaign status through google_ads-list-campaigns. This is the same
+   * list the enable path uses for read-back, and it does not update anything.
+   */
+  async readGoogleCampaignStatus(externalUserId: string, campaignResource?: string): Promise<import('../agents/enablecheck.js').GoogleCampaignRead> {
+    const blocked = this.gadsBlock.get(externalUserId);
+    if (blocked?.kind === 'connect_production_unavailable') {
+      return { live: false, called: false, sample: false, note: blocked.message, campaigns: [] };
+    }
+    try {
+      const accts = await this.listAccounts(externalUserId, 'google_ads');
+      const account = accts.find((a) => a.healthy) ?? accts[0];
+      if (!account) return { live: false, called: false, sample: false, note: 'Google Ads is not connected for this account.', campaigns: [] };
+      const rows = await this.listComponents('google_ads');
+      const targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
+      const again = this.gadsBlock.get(externalUserId);
+      if (again?.kind === 'connect_production_unavailable') {
+        return { live: false, called: false, sample: false, note: again.message, campaigns: [] };
+      }
+      const target = this.preferTargets(externalUserId, targets)[0];
+      const acct: Record<string, unknown> = {};
+      if (target?.login) acct.accountId = target.login;
+      if (target?.client) acct.customerClientId = target.client;
+      const listComp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-list-campaigns');
+      if (!listComp) {
+        return { live: false, called: false, sample: false, note: 'google_ads-list-campaigns is not available on this connection, so Miles could not read campaign status.', campaigns: [] };
+      }
+      const pd = await this.backend();
+      const lkey = listComp.key ?? listComp.id ?? listComp.componentKey;
+      const lprops = await this.componentProps(listComp, lkey);
+      const lapp = lprops.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+      const res = await pd.actions.run({ externalUserId, id: lkey, configuredProps: { [lapp]: { authProvisionId: account.id }, ...acct } });
+      const payload = res?.ret ?? res?.exports ?? res ?? {};
+      const campaignId = (campaignResource?.match(/campaigns\/(\d+)/) || [])[1];
+      const readback = parseGoogleStatuses(payload, { campaignId, adGroupIds: [], adIds: [] });
+      const campaigns = listCampaignRows(payload);
+      return {
+        live: true,
+        called: true,
+        sample: false,
+        note: campaigns.length ? 'Read from Google Ads just now.' : readback.note,
+        readback,
+        campaigns,
+      };
+    } catch {
+      return { live: false, called: false, sample: false, note: 'Miles could not read campaign status from Google.', campaigns: [] };
+    }
   }
 
   // ── Meta (Facebook/Instagram) campaign launch — direct Graph API ────────────

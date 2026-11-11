@@ -487,16 +487,26 @@
   .appsub{font-size:11.5px;color:var(--muted);margin-top:2px;}
   .appcard .cdot{width:18px;height:18px;border-radius:50%;background:var(--good);color:#fff;font-size:11px;font-weight:800;line-height:1;margin-left:auto;flex:none;display:grid;place-items:center;}
 
-  /* chat */
-  .chatview{display:none;max-width:820px;margin:0 auto;} .chatview.on{display:flex;flex-direction:column;height:calc(100dvh - 120px);}
-  .back{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:14px;width:fit-content;}
-  .chat{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:15px;padding-bottom:14px;}
+  /* chat. Same canvas, card, and 36px pill as the shared signed-in layout. */
+  .chatview{display:none;max-width:760px;margin:0 auto;width:100%;}
+  .chatview.on{display:flex;flex-direction:column;height:calc(100dvh - 148px);min-height:420px;}
+  .chat{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding:6px 2px 18px;}
   .row{display:flex;gap:10px;align-items:flex-end;} .row.user{flex-direction:row-reverse;}
-  .av{width:26px;height:26px;border-radius:7px;flex:none;display:grid;place-items:center;font-size:12px;font-weight:700;}
-  .av.emp{background:var(--brand);color:#fff;} .av.you{background:var(--panel-2);color:var(--muted);border:1px solid var(--line);}
-  .bubble{padding:11px 14px;border-radius:14px;max-width:min(560px,84%);white-space:pre-wrap;word-wrap:break-word;font-size:14.5px;}
-  .user .bubble{background:var(--primary);color:var(--primary-ink);border-bottom-right-radius:5px;}
-  .emp .bubble{background:var(--card);border:1px solid var(--line);border-bottom-left-radius:5px;box-shadow:var(--shadow);}
+  .av{width:32px;height:32px;border-radius:10px;flex:none;display:grid;place-items:center;font-size:13px;font-weight:800;}
+  .av.emp{background:var(--ink);color:var(--primary-ink);} .av.you{background:var(--panel-2);color:var(--muted);border:1px solid var(--line);}
+  .bubble{padding:12px 16px;border-radius:18px;max-width:min(640px,86%);white-space:pre-wrap;word-wrap:break-word;font-size:15px;line-height:1.5;color:var(--graphite);}
+  .user .bubble{background:var(--ink);color:var(--primary-ink);border-bottom-right-radius:6px;}
+  .emp .bubble{background:var(--card);border:1px solid var(--line);border-bottom-left-radius:6px;box-shadow:0 1px 2px rgba(16,16,20,.04);}
+  .chat-empty{flex:1;display:flex;align-items:center;justify-content:center;padding:8px 8px 24px;}
+  .chat-empty[hidden]{display:none !important;}
+  .chat-empty-card{width:min(520px,100%);text-align:center;}
+  .chat-empty-card .av{margin:0 auto 14px;}
+  .chat-empty-card h3{margin:0 0 8px;font-size:28px;font-weight:800;letter-spacing:-.03em;line-height:1.05;}
+  .chat-empty-card p{margin:0 auto;max-width:42ch;color:var(--muted);font-size:15px;line-height:1.5;}
+  .chat-suggest{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:18px;}
+  .chat-suggest button{box-sizing:border-box;min-height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+  .chat-suggest button:hover{border-color:var(--ink);}
+  .chatview.on:has(#chat-empty:not([hidden])) .chat{display:none;}
   .pcard{margin-top:10px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel-2);}
   .pcard h4{margin:0;padding:11px 14px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line-soft);display:flex;justify-content:space-between;}
   .allocs{padding:6px 14px 10px;display:flex;flex-direction:column;gap:8px;}
@@ -510,16 +520,17 @@
   .result{margin-top:10px;display:flex;flex-direction:column;gap:7px;} .res-row{display:flex;align-items:center;gap:9px;font-size:13.5px;}
   .rbadge{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 7px;border-radius:6px;flex:none;} .rbadge.ok{background:var(--good-soft);color:var(--good);} .rbadge.hold{background:var(--warn-soft);color:var(--warn);}
   .connect{margin-top:4px;align-self:flex-start;font-weight:600;font-size:13px;color:var(--accent);background:var(--accent-soft);border:none;border-radius:8px;padding:8px 13px;cursor:pointer;}
-  .composer{border:1px solid var(--line);background:var(--panel-2);border-radius:22px;padding:8px 10px 8px;display:flex;flex-direction:column;gap:6px;transition:border-color .15s,box-shadow .15s;}
-  .composer:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
-  .composer textarea{width:100%;resize:none;font-family:var(--sans);font-size:15px;color:var(--ink);background:none;border:none;border-radius:0;padding:7px 8px 2px;max-height:150px;outline:none;line-height:1.45;}
+  .composer{border:1px solid var(--line);background:var(--card);border-radius:18px;padding:10px 10px 10px 14px;display:flex;flex-direction:column;gap:4px;box-shadow:0 1px 2px rgba(16,16,20,.04);transition:border-color .15s,box-shadow .15s;}
+  .composer:focus-within{border-color:var(--ink);box-shadow:0 0 0 3px rgba(17,17,18,.08);}
+  .composer textarea{width:100%;resize:none;font-family:inherit;font-size:15px;color:var(--ink);background:none;border:none;border-radius:0;padding:6px 4px 2px;max-height:150px;outline:none;line-height:1.45;}
+  .composer textarea::placeholder{color:var(--faint);}
   .cbar{display:flex;align-items:center;justify-content:space-between;gap:8px;}
   .cbar-side{display:flex;align-items:center;gap:6px;}
-  .csend{width:36px;height:36px;border-radius:50%;border:none;background:var(--primary);color:var(--primary-ink);font-size:16px;font-weight:700;cursor:pointer;display:grid;place-items:center;transition:transform .08s,opacity .15s;}
+  .csend{width:36px;height:36px;border-radius:999px;border:none;background:var(--ink);color:var(--primary-ink);font-size:16px;font-weight:700;cursor:pointer;display:grid;place-items:center;font-family:inherit;}
   .csend:active{transform:scale(.92);}
   .cmic{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer;font-size:16px;display:grid;place-items:center;padding:0;line-height:1;}
   .cmic:hover{border-color:var(--accent);color:var(--ink);}
-  .cmode{height:34px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:0 12px;font-size:13px;font-weight:600;font-family:var(--sans);cursor:pointer;outline:none;}
+  .cmode{height:36px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:0 12px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;outline:none;}
   /* Rendered Markdown inside assistant bubbles */
   .emp .bubble h1,.emp .bubble h2,.emp .bubble h3{font-size:15px;font-weight:800;margin:12px 0 5px;}
   .emp .bubble h1:first-child,.emp .bubble h2:first-child,.emp .bubble h3:first-child{margin-top:0;}
@@ -598,6 +609,12 @@
   .side .acct{background:#121214;box-shadow:none;border-color:#2a2a30;}
   .side #logout{color:#c8c8ce;}
   body.on-dash .pagehead{display:none;}
+  body.on-chat .askbtn{display:none;}
+  body.on-chat .main{display:flex;flex-direction:column;overflow:hidden;height:100dvh;padding-bottom:18px;}
+  body.on-chat .pagehead{flex:none;}
+  body.on-chat #page-chat.on{display:flex;flex:1;min-height:0;}
+  body.on-chat .chatview.on{height:auto;flex:1;min-height:0;}
+  body.on-chat .side .newtask.on{background:#2a2a30;color:#fff;}
   body.on-dash .main{background:#f3f3f5;padding:22px 28px 72px;}
   body.on-dash .mcard{background:#fff;border:1px solid #ececef;border-radius:16px;box-shadow:0 1px 2px rgba(16,16,20,.04);}
   .md-top{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:14px;}
@@ -1327,18 +1344,25 @@
     <!-- CHAT -->
     <section class="page" id="page-chat">
       <div class="chatview on">
-        <span class="back" id="back"><svg class="ico" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Back</span>
         <div class="chat" id="chat" aria-live="polite"></div>
+        <div class="chat-empty" id="chat-empty" hidden>
+          <div class="chat-empty-card">
+            <div class="av emp" aria-hidden="true">M</div>
+            <h3 id="chat-empty-title">Miles</h3>
+            <p id="chat-empty-line">I work from this account. Ask what I am doing, or which integrations are connected.</p>
+            <div class="chat-suggest" id="chat-suggest"></div>
+          </div>
+        </div>
         <div class="composer">
-          <textarea id="cinput" rows="1" placeholder="Ask Miles anything…"></textarea>
+          <textarea id="cinput" rows="1" placeholder="Ask about this account"></textarea>
           <div class="cbar">
             <div class="cbar-side">
-              <div class="cplus-wrap"><button class="cplus" id="cplus" title="Add" aria-label="Add">+</button><div class="cmenu" id="cmenu" style="display:none"></div></div>
-              <select id="cmode" class="cmode" title="Answer depth"><option value="easy">⚡ Quick</option><option value="medium" selected>💬 Standard</option><option value="high">🧠 Deep</option><option value="research">🔬 Research</option></select>
+              <div class="cplus-wrap"><button class="cplus" id="cplus" type="button" title="Add" aria-label="Add">+</button><div class="cmenu" id="cmenu" style="display:none"></div></div>
+              <select id="cmode" class="cmode" title="Answer depth"><option value="easy">Quick</option><option value="medium" selected>Standard</option><option value="high">Deep</option><option value="research">Research</option></select>
             </div>
             <div class="cbar-side">
-              <button class="cmic" id="cmic" title="Speak to Miles" aria-label="Speak to Miles">🎤</button>
-              <button class="csend" id="csend" aria-label="Send">↑</button>
+              <button class="cmic" id="cmic" type="button" title="Speak to Miles" aria-label="Speak to Miles">🎤</button>
+              <button class="csend" id="csend" type="button" aria-label="Send">↑</button>
             </div>
           </div>
         </div>
@@ -1833,6 +1857,9 @@ function renderSubTabs(id){
 function setPage(id){
   document.body.classList.toggle('on-dash', id==='overview' || id==='launch');
   document.body.classList.toggle('on-biz', id==='profile');
+  document.body.classList.toggle('on-chat', id==='chat');
+  const askNav=document.querySelector('.side .newtask');
+  if(askNav) askNav.classList.toggle('on', id==='chat');
   const dest=destFor(id);
   // Highlight the DESTINATION, not the page — otherwise moving between tabs
   // looks like leaving the section you are standing in.
@@ -7930,6 +7957,7 @@ async function send(text,silent){
   const msg=(text!=null?text:cinput.value).trim(); if(!msg) return;
   if(!silent) say('user',msg);
   logChat('user',msg);
+  const empty=$('#chat-empty'); if(empty) empty.hidden=true;
   cinput.value=''; cinput.style.height='auto';
   if(!REMOTE){ const b=addRow('emp'); b.textContent='Chat runs on the live app.'; return; }
   if(isEmailRequest(msg)) return milesEmailFlow(msg);
@@ -7938,7 +7966,7 @@ async function send(text,silent){
   try{
     const r=await fetch('/api/chat/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-16),mode:chatMode})});
     const d=await r.json(); b.className='bubble md'; b.innerHTML=mdToHtml(d.text||''); logChat('emp',d.text||''); chat.scrollTop=chat.scrollHeight;
-  }catch(e){ b.textContent='Sorry — I couldn’t reach the server just now.'; }
+  }catch(e){ b.textContent='I could not reach the server just now. Try again.'; }
 }
 // Miles takes the request, picks the workflow, builds it on-brand, and leaves it
 // in the dashboard review queue.
@@ -7989,11 +8017,22 @@ async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method
 let CHAT_LOG=[], CHAT_LOADED=false, chatSaveT;
 function logChat(role,text){ if(!text) return; CHAT_LOG.push({role,text}); if(REMOTE){ clearTimeout(chatSaveT); chatSaveT=setTimeout(saveChat,600); } }
 function saveChat(){ if(!REMOTE) return; try{ fetch('/api/chat',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-200)})}); }catch(e){} }
-async function loadChat(){ CHAT_LOADED=true; if(!REMOTE) return; try{ const r=await fetch('/api/chat'); const d=await r.json(); CHAT_LOG=(d.messages||[]).filter(m=>m&&m.text); chat.innerHTML=''; for(const m of CHAT_LOG){ const b=addRow(m.role==='user'?'user':'emp'); if(m.role==='user') b.textContent=m.text; else { b.className='bubble md'; b.innerHTML=mdToHtml(m.text); } } chat.scrollTop=chat.scrollHeight; }catch(e){} }
-async function enterChat(){ setPage('chat'); if(!CHAT_LOADED) await loadChat(); if(!chat.children.length){ say('emp',"Hi — I'm Miles, your marketing assistant. Ask me anything: marketing strategy, benchmarks, competitor research, ad copy, or help running your business. Pick an answer depth below — ⚡ Quick, 💬 Standard, 🧠 Deep, or 🔬 Research — and go."); } }
+async function loadChat(){ CHAT_LOADED=true; if(!REMOTE){ await paintChatEmpty(); return; } try{ const r=await fetch('/api/chat'); const d=await r.json(); CHAT_LOG=(d.messages||[]).filter(m=>m&&m.text); chat.innerHTML=''; for(const m of CHAT_LOG){ const b=addRow(m.role==='user'?'user':'emp'); if(m.role==='user') b.textContent=m.text; else { b.className='bubble md'; b.innerHTML=mdToHtml(m.text); } } chat.scrollTop=chat.scrollHeight; }catch(e){} await paintChatEmpty(); }
+async function paintChatEmpty(){
+  const box=$('#chat-empty'); if(!box) return;
+  const has=!!(chat&&chat.children.length);
+  box.hidden=has;
+  if(has) return;
+  let starters={businessName:'', line:'I work from this account. Ask what I am doing, or which integrations are connected.', suggestions:[{ask:'What are you here to do?'},{ask:'Which of my integrations are connected?'},{ask:'Check my campaign status.'}]};
+  if(REMOTE){ try{ const r=await fetch('/api/chat/starters'); if(r.ok) starters=await r.json(); }catch(e){} }
+  const title=$('#chat-empty-title'); if(title) title.textContent=starters.businessName||'Miles';
+  const line=$('#chat-empty-line'); if(line&&starters.line) line.textContent=starters.line;
+  const sug=$('#chat-suggest'); if(!sug) return; sug.innerHTML='';
+  (starters.suggestions||[]).forEach(s=>{ const b=el('button',null,s.ask); b.type='button'; b.onclick=()=>send(s.ask); sug.append(b); });
+}
+async function enterChat(){ setPage('chat'); if(!CHAT_LOADED) await loadChat(); else await paintChatEmpty(); }
 async function openChat(seed){ await enterChat(); if(seed){ await resetSession(); send(seed); } }
 
-$('#back').onclick=()=>setPage('overview');
 $('#hgo').onclick=()=>{const v=$('#hprompt').value.trim();if(v)openChat(v);};
 $('#hprompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#hgo').click();}});
 document.querySelectorAll('[data-ask]').forEach(n=>n.onclick=()=>enterChat());

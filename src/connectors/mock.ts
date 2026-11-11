@@ -145,6 +145,16 @@ export class MockConnector implements Connector {
     return [{ id: '1234567890', login: '1234567890', name: 'Demo Google Ads account', label: 'Demo Google Ads account (123-456-7890) — not a real account' }];
   }
 
+  async readGoogleCampaignStatus(): Promise<import('../agents/enablecheck.js').GoogleCampaignRead> {
+    return {
+      live: false,
+      called: false,
+      sample: true,
+      note: 'SAMPLE. The preview connector does not read Google Ads. This is not a live campaign status.',
+      campaigns: [],
+    };
+  }
+
   async launchCampaign(externalUserId: string, spec: import('../agents/campaign.js').CampaignSpec): Promise<import('./types.js').CampaignLaunchResult> {
     const connected = this.acc(externalUserId).some((a) => a.app === 'google_ads');
     if (!connected) {
