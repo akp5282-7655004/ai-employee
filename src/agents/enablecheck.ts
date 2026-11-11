@@ -54,3 +54,44 @@ export function parseGoogleStatuses(payload: unknown, ids: { campaignId?: string
     note: found.size ? 'Read from the account list.' : 'The account list did not include a status.',
   };
 }
+
+export interface ListedCampaign {
+  id: string;
+  name?: string;
+  status: AdsStatus;
+}
+
+/** Result of a read-only Google campaign list. `sample` is never a live account. */
+export interface GoogleCampaignRead {
+  live: boolean;
+  called: boolean;
+  sample: boolean;
+  note: string;
+  readback?: EnableReadback;
+  campaigns: ListedCampaign[];
+}
+
+/** Campaign rows from a google_ads-list-campaigns payload. Ad groups are skipped. */
+export function listCampaignRows(payload: unknown): ListedCampaign[] {
+  const found = new Map<string, ListedCampaign>();
+  const walk = (node: unknown, keyHint?: string) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      node.forEach((item) => walk(item, keyHint));
+      return;
+    }
+    const row = node as Record<string, unknown>;
+    const campaign = row.campaign && typeof row.campaign === 'object' ? row.campaign as Record<string, unknown> : undefined;
+    const rawId = String(row.resourceName ?? row.id ?? campaign?.resourceName ?? campaign?.id ?? '');
+    const bare = rawId.split('/').pop() || '';
+    const status = asStatus(row.status ?? campaign?.status);
+    const nameRaw = row.name ?? campaign?.name;
+    const name = typeof nameRaw === 'string' && nameRaw.trim() ? nameRaw.trim() : undefined;
+    const underCampaigns = keyHint === 'campaigns';
+    const looksLikeCampaign = /campaigns\/\d+$/.test(rawId) || (underCampaigns && !!bare && (status !== 'UNKNOWN' || !!name));
+    if (looksLikeCampaign && bare && !found.has(bare)) found.set(bare, { id: bare, name, status });
+    for (const [key, value] of Object.entries(row)) walk(value, key);
+  };
+  walk(payload);
+  return [...found.values()].slice(0, 20);
+}

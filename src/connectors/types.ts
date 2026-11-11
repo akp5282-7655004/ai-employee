@@ -213,6 +213,8 @@ export interface Connector {
   /** The Google Ads accounts a launch can write into (id + human label), so
    *  an MCC owner can pick the client account instead of Miles guessing. */
   listAdTargets?(externalUserId: string): Promise<{ id: string; login: string; name?: string; label: string }[]>;
+  /** Read campaign status from Google. Never writes. */
+  readGoogleCampaignStatus?(externalUserId: string, campaignResource?: string): Promise<import('../agents/enablecheck.js').GoogleCampaignRead>;
   /** Why Google customer-id resolution failed for this external user, if it did. */
   googleAdsBlock?(externalUserId: string): { kind: string; message: string; providerMessage: string } | null;
   /** Last customer-id resolution for this external user, after a list or describe. */

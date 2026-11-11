@@ -78,6 +78,11 @@ import { emptyAutomationsState, noShowText, onboardingText, type AutomationsStat
 import { buildGrowthPlan } from './agents/growth.js';
 import { buildPlaybook } from './agents/playbook.js';
 import { generateText, textLlmReady } from './llm/text.js';
+import { answerChat } from './chat/ask.js';
+import { chatEmptyLine, chatSuggestions } from './chat/prompt.js';
+import { defaultChatModel, type ChatModel } from './chat/model.js';
+import { buildAccountSnapshot, leadFacts } from './chat/snapshot.js';
+import type { ChatReaders } from './chat/tools.js';
 import { catalogForClient, findPlay } from './skills/catalog.js';
 import {
   TASK_SPECS,
@@ -158,6 +163,8 @@ export interface ServerDeps {
   /** Persistent store for accounts, sessions, and customer profiles. Pass one
    * already `init()`-ed (Postgres in prod); defaults to in-memory. */
   authStore?: Store;
+  /** Test seam for Chat with Miles. Production uses OpenRouter when a key is set. */
+  chatModel?: ChatModel;
 }
 
 const SESSION_DAYS = 30;
@@ -1236,64 +1243,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const profile = (data.profile ?? {}) as Record<string, unknown>;
-    const stored = (data.brandKit ?? {}) as Partial<BrandKit>;
-    const assets = (data.assets ?? {}) as { logo?: string; photos?: { url?: string }[] };
-    const miles = milesOf(data);
-    const caps = miles.bundle?.setup.caps ?? null;
-    // Same cached account reads as Dashboard. Opening this page must not start
-    // a second Pipedream account list or a second GoHighLevel project scan.
-    const [google, ghlNow, listed] = await Promise.all([
-      googleReadiness(u.id),
-      ghlLink(u.id),
-      accountsOf(u.id),
-    ]);
-    const linked = new Set(listed.accounts.map((a) => a.app));
-    const freshAudit = miles.audits.find((a) => a.id === 'website');
-    const bundledAudit = miles.bundle?.audits?.find((a) => a.id === 'website');
-    const siteAudit = freshAudit?.summary ? freshAudit : (bundledAudit ?? null);
-    const crawlProfile = (miles.crawl?.profile ?? {}) as Record<string, string>;
-    const photos = Array.isArray(assets.photos) ? assets.photos.filter((p) => p && typeof p.url === 'string' && p.url) as { url: string }[] : [];
-    const explicitColors = stored.colors?.length ? stored.colors : parseColors(typeof profile.brandColors === 'string' ? profile.brandColors : '');
-    const bundleLoc = miles.bundle?.setup.location;
-    const market = (bundleLoc && bundleLoc !== 'Your area' ? bundleLoc : '') || (typeof profile.serviceAreas === 'string' ? profile.serviceAreas : '');
-    const profileDaily = Number(profile.dailyBudget);
-    const profileLeads = Number(profile.leadsPerDay);
-    const business = buildBusinessProfile({
-      profile,
-      brand: {
-        tagline: stored.tagline || (typeof profile.tagline === 'string' ? profile.tagline : ''),
-        colors: explicitColors,
-        fonts: stored.fonts || (typeof profile.fonts === 'string' ? profile.fonts : ''),
-        logoUrl: stored.logoUrl || assets.logo || (typeof profile.logo === 'string' ? profile.logo : ''),
-        voice: stored.voice || (typeof profile.brandVoice === 'string' ? profile.brandVoice : ''),
-        audience: stored.audience || (typeof profile.audience === 'string' ? profile.audience : ''),
-        avoid: stored.avoid || (typeof profile.brandAvoid === 'string' ? profile.brandAvoid : ''),
-      },
-      photos,
-      caps,
-      profileDaily: !caps && Number.isFinite(profileDaily) && profileDaily > 0 ? profileDaily : null,
-      goal: miles.bundle?.setup.goal || '',
-      hasBundle: !!miles.bundle,
-      leadsPerDay: miles.bundle
-        ? (miles.bundle.setup.leadsPerDay > 0 ? miles.bundle.setup.leadsPerDay : null)
-        : (Number.isFinite(profileLeads) && profileLeads > 0 ? profileLeads : null),
-      mode: miles.bundle?.setup.mode || miles.pendingMode || null,
-      paused: !!caps?.paused,
-      market,
-      found: miles.found,
-      crawlFound: { logo: crawlProfile.logo, brandColors: crawlProfile.brandColors },
-      websiteAudit: siteAudit ? { summary: siteAudit.summary } : null,
-      google: { oauth: google.oauth, ready: google.ready, note: google.note },
-      ghlConnected: ghlNow.connected,
-      ghlDetail: ghlNow.connected
-        ? 'GoHighLevel is connected. Speed to lead sends when it is on and the lead has a phone.'
-        : 'GoHighLevel is not connected. Replies stay drafts. Connect it under Integrations.',
-      gbpConnected: ['google_my_business', 'gmb'].some((a) => linked.has(a)),
-      facebookConnected: ['facebook_pages', 'facebook'].some((a) => linked.has(a)),
-      instagramConnected: linked.has('instagram'),
-      linkedinConnected: linked.has('linkedin'),
-    });
-    return { business, profile };
+    return { business: await businessProfileFor(u.id, data), profile };
   });
 
   type MilesInbox = { id: string; kind: 'create' | 'enable' | 'skill'; title: string; reason: string; status: 'queued' | 'applied' | 'reverted'; skill?: string };
@@ -5846,33 +5796,218 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return res.reply;
   });
 
-  // Conversational chat — a general assistant (ask questions, do research), seeded
-  // with the owner's business profile, with a selectable depth/research mode.
+  // Same inputs as Your Business. Chat and that page share one builder.
+  async function businessProfileFor(uid: string, data: Record<string, unknown>) {
+    const profile = (data.profile ?? {}) as Record<string, unknown>;
+    const stored = (data.brandKit ?? {}) as Partial<BrandKit>;
+    const assets = (data.assets ?? {}) as { logo?: string; photos?: { url?: string }[] };
+    const miles = milesOf(data);
+    const caps = miles.bundle?.setup.caps ?? null;
+    const [google, ghlNow, listed] = await Promise.all([
+      googleReadiness(uid),
+      ghlLink(uid),
+      accountsOf(uid),
+    ]);
+    const linked = new Set(listed.accounts.map((a) => a.app));
+    const freshAudit = miles.audits.find((a) => a.id === 'website');
+    const bundledAudit = miles.bundle?.audits?.find((a) => a.id === 'website');
+    const siteAudit = freshAudit?.summary ? freshAudit : (bundledAudit ?? null);
+    const crawlProfile = (miles.crawl?.profile ?? {}) as Record<string, string>;
+    const photos = Array.isArray(assets.photos) ? assets.photos.filter((p) => p && typeof p.url === 'string' && p.url) as { url: string }[] : [];
+    const explicitColors = stored.colors?.length ? stored.colors : parseColors(typeof profile.brandColors === 'string' ? profile.brandColors : '');
+    const bundleLoc = miles.bundle?.setup.location;
+    const market = (bundleLoc && bundleLoc !== 'Your area' ? bundleLoc : '') || (typeof profile.serviceAreas === 'string' ? profile.serviceAreas : '');
+    const profileDaily = Number(profile.dailyBudget);
+    const profileLeads = Number(profile.leadsPerDay);
+    return buildBusinessProfile({
+      profile,
+      brand: {
+        tagline: stored.tagline || (typeof profile.tagline === 'string' ? profile.tagline : ''),
+        colors: explicitColors,
+        fonts: stored.fonts || (typeof profile.fonts === 'string' ? profile.fonts : ''),
+        logoUrl: stored.logoUrl || assets.logo || (typeof profile.logo === 'string' ? profile.logo : ''),
+        voice: stored.voice || (typeof profile.brandVoice === 'string' ? profile.brandVoice : ''),
+        audience: stored.audience || (typeof profile.audience === 'string' ? profile.audience : ''),
+        avoid: stored.avoid || (typeof profile.brandAvoid === 'string' ? profile.brandAvoid : ''),
+      },
+      photos,
+      caps,
+      profileDaily: !caps && Number.isFinite(profileDaily) && profileDaily > 0 ? profileDaily : null,
+      goal: miles.bundle?.setup.goal || '',
+      hasBundle: !!miles.bundle,
+      leadsPerDay: miles.bundle
+        ? (miles.bundle.setup.leadsPerDay > 0 ? miles.bundle.setup.leadsPerDay : null)
+        : (Number.isFinite(profileLeads) && profileLeads > 0 ? profileLeads : null),
+      mode: miles.bundle?.setup.mode || miles.pendingMode || null,
+      paused: !!caps?.paused,
+      market,
+      found: miles.found,
+      crawlFound: { logo: crawlProfile.logo, brandColors: crawlProfile.brandColors },
+      websiteAudit: siteAudit ? { summary: siteAudit.summary } : null,
+      google: { oauth: google.oauth, ready: google.ready, note: google.note },
+      ghlConnected: ghlNow.connected,
+      ghlDetail: ghlNow.connected
+        ? 'GoHighLevel is connected. Speed to lead sends when it is on and the lead has a phone.'
+        : 'GoHighLevel is not connected. Replies stay drafts. Connect it under Integrations.',
+      gbpConnected: ['google_my_business', 'gmb'].some((a) => linked.has(a)),
+      facebookConnected: ['facebook_pages', 'facebook'].some((a) => linked.has(a)),
+      instagramConnected: linked.has('instagram'),
+      linkedinConnected: linked.has('linkedin'),
+    });
+  }
+
+  // One signed-in tenant. Journey rows owned by anyone else are left out.
+  async function chatSnapshotFor(uid: string) {
+    const data = await authStore.getUserData(uid);
+    if (typeof data.googleAdsCustomerId === 'string') connector.rememberGoogleCustomer?.(uid, data.googleAdsCustomerId);
+    const miles = milesOf(data);
+    const [business, google, ghlNow, listed, snap] = await Promise.all([
+      businessProfileFor(uid, data),
+      googleReadiness(uid),
+      ghlLink(uid),
+      accountsOf(uid),
+      getSnapshot(uid, data),
+    ]);
+    const linked = new Set(listed.accounts.map((a) => a.app));
+    const gbpField = business.sections.flatMap((section) => section.fields).find((field) => field.id === 'gbp');
+    const access = connector.googleAdsAccess?.(uid) ?? null;
+    const savedId = typeof data.googleAdsCustomerId === 'string' ? data.googleAdsCustomerId.replace(/\D/g, '') : '';
+    const googleError = access && (access.kind === 'error' || access.kind === 'none' || access.kind === 'manager_only') ? access.reason : null;
+    const customerId = google.ready && connector.name !== 'mock'
+      ? (savedId || access?.selectedId || access?.customers[0]?.id || null)
+      : null;
+    const jobs = Array.isArray(data.jobMarks) ? data.jobMarks as { stage?: string }[] : [];
+    const deals = snap?.deals ?? [];
+    const loop = (data.plumberLoop ?? {}) as { ownerId?: string; campaignResource?: string; status?: string; campaigns?: { resource?: string; name?: string; status?: string }[] };
+    const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
+    const stats = responderStats(st, new Date().toISOString());
+    const autos = (data.automations as AutomationsState) ?? emptyAutomationsState();
+    const spec = miles.bundle?.spec;
+    const lastReadback = miles.events.find((event) => /google reports|read-back|read back|created paused|reverted to paused/i.test(event.text))?.text;
+    return buildAccountSnapshot({
+      tenantId: uid,
+      sampleConnector: connector.name === 'mock',
+      profile: (data.profile ?? {}) as Record<string, unknown>,
+      completeness: {
+        percent: business.percent,
+        filled: business.filledCount,
+        total: business.totalCount,
+        missing: business.missingChips,
+        gbp: gbpField?.href || gbpField?.value || '',
+      },
+      phase: miles.phase,
+      mode: miles.bundle?.setup.mode || miles.pendingMode || null,
+      caps: miles.bundle?.setup.caps ?? null,
+      tracking: trackingProofView(data.trackingProof),
+      plan: spec ? {
+        name: spec.name,
+        dailyBudget: spec.dailyBudget,
+        status: spec.status,
+        finalUrl: spec.finalUrl,
+        locations: spec.locations.slice(0, 4),
+        bidding: spec.biddingStrategy,
+      } : null,
+      milesCampaign: miles.campaignResource || spec ? {
+        resource: miles.campaignResource,
+        status: miles.activation,
+        name: spec?.name,
+        lastReadback,
+      } : null,
+      journey: (loop.ownerId || loop.campaignResource || loop.campaigns?.length) ? {
+        ownerId: loop.ownerId,
+        rows: loop.campaigns?.length ? loop.campaigns : (loop.campaignResource ? [{ resource: loop.campaignResource, status: loop.status, name: undefined }] : []),
+      } : null,
+      spendRows: (snap?.campaigns ?? []).map((row) => ({ platform: row.platform, name: row.campaign, spend: row.spend || 0, leads: row.conversions || 0 })),
+      spendReadAt: snap?.ts ?? null,
+      bookedFromJobs: jobs.length ? jobs.filter((job) => job.stage === 'booked' || job.stage === 'won').length : null,
+      bookedFromDeals: deals.length ? deals.filter((deal) => deal.won).length : null,
+      google: { oauth: google.oauth, ready: google.ready, customerId, note: google.note, error: googleError },
+      ghl: {
+        connected: ghlNow.connected,
+        detail: ghlNow.connected
+          ? 'GoHighLevel is connected. Speed to lead sends when it is on and the lead has a phone.'
+          : 'GoHighLevel is not connected. Replies stay drafts. Connect it under Integrations.',
+      },
+      speedToLead: { ...stats, canSend: ghlNow.connected },
+      social: {
+        facebook: ['facebook_pages', 'facebook'].some((app) => linked.has(app)),
+        instagram: linked.has('instagram'),
+        linkedin: linked.has('linkedin'),
+        gbp: ['google_my_business', 'gmb'].some((app) => linked.has(app)),
+      },
+      automations: { noShow: !!autos.noShow.enabled, onboarding: !!autos.onboarding.enabled },
+      events: miles.events,
+      changeLog: approvalLog(data).slice(0, 8).map((entry) => ({ ts: entry.ts, kind: entry.kind, title: entry.title })),
+      inbox: miles.inbox.filter((row) => row.status === 'queued').map((row) => ({ id: row.id, kind: row.kind, title: row.title, reason: row.reason })),
+      leads: (snap?.leads ?? []).map(leadFacts).filter((lead): lead is NonNullable<typeof lead> => !!lead),
+    });
+  }
+
+  function chatReadersFor(uid: string): ChatReaders {
+    return {
+      campaignStatus: async () => {
+        const snapshot = await chatSnapshotFor(uid);
+        const resource = snapshot.campaigns.find((campaign) => campaign.resource)?.resource ?? undefined;
+        const liveRead = connector.readGoogleCampaignStatus
+          ? await connector.readGoogleCampaignStatus(uid, resource)
+          : { live: false, called: false, sample: connector.name === 'mock', note: 'This connector cannot read Google campaign status.', campaigns: [] };
+        return { onFile: snapshot.campaigns, performance: snapshot.performance, liveRead };
+      },
+      integrations: async () => (await chatSnapshotFor(uid)).integrations,
+      leads: async () => {
+        let rows: unknown[] = [];
+        if (connector.getLeads) {
+          try { rows = await connector.getLeads(uid); } catch { rows = []; }
+        }
+        const sample = connector.name === 'mock' && rows.length > 0;
+        return {
+          sample,
+          note: rows.length === 0
+            ? 'No leads came back from the CRM read.'
+            : sample
+              ? 'SAMPLE. Example leads from the preview connector, not a live CRM.'
+              : 'From the connected CRM.',
+          leads: rows.map(leadFacts).filter((lead): lead is NonNullable<typeof lead> => !!lead).slice(0, 12).map((lead) => ({ ...lead, sample })),
+        };
+      },
+      changeLog: async () => {
+        const data = await authStore.getUserData(uid);
+        const miles = milesOf(data);
+        return {
+          events: miles.events.slice(0, 20).map((event) => ({ ts: event.ts, text: event.text.slice(0, 240) })),
+          approvals: approvalLog(data).slice(0, 20).map((entry) => ({ ts: entry.ts, kind: entry.kind, title: entry.title, source: entry.source })),
+        };
+      },
+    };
+  }
+
+  // Empty-state prompts for Chat with Miles. Same snapshot as a chat turn, no model call.
+  app.get('/api/chat/starters', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const snapshot = await chatSnapshotFor(u.id);
+    return {
+      businessName: snapshot.business.name,
+      line: chatEmptyLine(snapshot),
+      suggestions: chatSuggestions(snapshot),
+    };
+  });
+
+  // Chat with Miles. Every turn gets this tenant's current account snapshot.
   app.post<{ Body: { messages?: Array<{ role?: string; text?: string }>; mode?: string } }>('/api/chat/ask', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    const data = await authStore.getUserData(u.id);
-    const p = (data.profile ?? {}) as Record<string, string>;
-    const mode = ['easy', 'medium', 'high', 'research'].includes(req.body?.mode ?? '') ? (req.body!.mode as string) : 'medium';
-    const cfg: Record<string, { tokens: number; style: string }> = {
-      easy: { tokens: 500, style: 'Answer briefly and plainly — a few sentences, straight to the point, no filler.' },
-      medium: { tokens: 900, style: 'Give a clear, helpful answer with light structure (a short intro and bullets where useful).' },
-      high: { tokens: 1500, style: 'Think it through thoroughly. Give a well-structured, step-by-step answer with specifics, examples, and the reasoning behind your advice.' },
-      research: { tokens: 2200, style: 'Act as a research analyst. Produce an in-depth, well-organized report: use Markdown headings and bullets, cover options and trade-offs, cite concrete numbers/benchmarks where you know them, state assumptions, and finish with clear, prioritized recommendations.' },
-    };
-    const m = cfg[mode]!;
-    const bizBits = [p.businessName && `the business "${p.businessName}"`, p.industry && `industry: ${p.industry}`, p.serviceAreas && `area: ${p.serviceAreas}`, p.services && `services: ${p.services}`].filter(Boolean).join('; ');
-    const system =
-      `You are Miles, an expert AI marketing and business assistant for local-service / home-services businesses. ` +
-      `Answer questions and do research for the owner like a sharp, practical consultant. ` +
-      (bizBits ? `Context about the owner's business — ${bizBits}. Use it when relevant. ` : '') +
-      m.style +
-      ` Be accurate and honest; if you don't know or can't verify something, say so plainly rather than guessing. Use plain text with light Markdown (headings, **bold**, bullet lists) for readability. Never invent statistics.`;
-    const msgs = (req.body?.messages ?? []).filter((x) => x && x.text).slice(-16);
-    const convo = msgs.map((x) => `${x.role === 'user' ? 'User' : 'Miles'}: ${x.text}`).join('\n\n') || 'The user just opened the chat.';
-    const text = await generateText({ system, user: convo, maxTokens: m.tokens });
-    if (text) await meterUser(u.id, 'text');
-    return { text: text ?? "I can't reach my language model right now — add an OPENROUTER_API_KEY on Render and I'll answer live.", live: !!text, mode };
+    const mode = ['easy', 'medium', 'high', 'research'].includes(req.body?.mode ?? '') ? req.body!.mode! : 'medium';
+    const snapshot = await chatSnapshotFor(u.id);
+    const out = await answerChat({
+      snapshot,
+      messages: req.body?.messages ?? [],
+      mode,
+      model: deps.chatModel ?? defaultChatModel,
+      readers: chatReadersFor(u.id),
+    });
+    if (out.live) await meterUser(u.id, 'text');
+    return out;
   });
 
   // ── Send an email — Miles drafts it, then sends through the connected Gmail ──

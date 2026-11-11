@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildCampaignSpec, deriveServiceLines } from '../src/agents/campaign.js';
-import { judgeEnableReadback, parseGoogleStatuses } from '../src/agents/enablecheck.js';
+import { judgeEnableReadback, listCampaignRows, parseGoogleStatuses } from '../src/agents/enablecheck.js';
 import { enforceRulebook, housekeepingProposals, nextBidStage, RULEBOOK_DEFAULTS } from '../src/agents/rulebook.js';
 
 describe('campaign rulebook', () => {
@@ -75,5 +75,13 @@ describe('enable read-back', () => {
     expect(read.campaign).toBe('ENABLED');
     expect(read.adGroups).toEqual(['PAUSED']);
     expect(read.ads).toEqual(['UNKNOWN']);
+  });
+
+  it('lists campaigns and skips ad groups', () => {
+    const rows = listCampaignRows({
+      campaigns: [{ id: '9', status: 'ENABLED', name: 'Search' }],
+      adGroups: [{ resourceName: 'customers/1/adGroups/3', status: 'PAUSED', name: 'Group' }],
+    });
+    expect(rows).toEqual([{ id: '9', name: 'Search', status: 'ENABLED' }]);
   });
 });
