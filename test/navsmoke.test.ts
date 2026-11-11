@@ -93,6 +93,11 @@ describe('every nav tab loads', () => {
     expect(intro).toMatch(/coming later/i);
     await page.evaluate(() => { (globalThis as unknown as { setPage: (id: string) => void }).setPage('overview'); });
     await page.locator('#overview-body').getByText('SAMPLE').first().waitFor();
+    const dash = await page.locator('#overview-body').innerText();
+    expect(dash).toMatch(/Coming later/);
+    expect(dash).not.toMatch(/\$100 goal|25 goal/);
+    expect(dash.toLowerCase()).not.toContain('searchlight');
+    expect(dash).not.toContain('\u2014');
 
     const seeded = await page.evaluate(async () => {
       const html = '<html><head><title>Painters</title></head><body><h2>Interior painting</h2></body></html>';
@@ -110,10 +115,10 @@ describe('every nav tab loads', () => {
     expect(seen.failed.slice(failAt), seen.failed.join('\n')).toEqual([]);
 
     await page.evaluate(() => { (globalThis as unknown as { setPage: (id: string) => void }).setPage('overview'); });
-    await page.getByRole('button', { name: 'Automate everything', exact: true }).first().waitFor();
-    for (const label of ['Automate everything', 'Hybrid', 'Manual']) {
+    await page.getByRole('button', { name: 'Ask me first', exact: true }).first().waitFor();
+    for (const [label, blurb] of [['Ask me first', 'Ask me first is on'], ['Hybrid', 'Hybrid is on'], ['Do everything', 'Do everything is on']] as const) {
       await page.getByRole('button', { name: label, exact: true }).first().click();
-      await page.waitForTimeout(300);
+      await page.locator('#miles-mode-note').getByText(blurb).waitFor();
     }
     expect(calls).not.toContain('launch');
     expect(calls).not.toContain('status');
