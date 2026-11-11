@@ -293,9 +293,11 @@ export function runSopGate(action: SopAction, subject: SopSubject): SopGate {
   }
 
   if (action === 'campaign_enable') {
+    const method = subject.tracking?.method;
+    // call_or_form counts calls or form fills as the lead. thank_you and an unnamed method stay leads. purchase does not.
     if (!subject.tracking?.leadConversion) add('sop039-lead', '039', 'block', 'No proof a lead form or thank-you page is counted. Hold enable until SOP 039, 002, or 019 is done.');
-    else if (subject.tracking.method === 'purchase') add('sop039-lead', '039', 'block', 'The counted action is a purchase. This contractor campaign should count a lead.');
-    else add('sop039-lead', '039', 'pass', 'A lead conversion is marked ready.');
+    else if (method === 'purchase') add('sop039-lead', '039', 'block', 'The counted action is a purchase. This contractor campaign should count a lead.');
+    else add('sop039-lead', '039', 'pass', method === 'call_or_form' ? 'Calls or form fills are marked as the lead conversion.' : 'A lead conversion is marked ready.');
   }
 
   if (action === 'negative_add') {

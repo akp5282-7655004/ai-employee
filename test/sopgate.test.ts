@@ -56,6 +56,42 @@ describe('SOP gate', () => {
 });
 
 describe('tracking proof lets Automate enable', () => {
+  it('home returns the proof and call_or_form unblocks enable', async () => {
+    const spec = buildCampaignSpec(
+      { dailyBudget: 20, finalUrl: 'https://paintersinphilly.com', locations: ['Philadelphia'] },
+      { trade: 'Painting', city: 'Philadelphia', services: 'Interior painting', business: 'Painters In Philly' },
+    );
+    const connector = {
+      name: 'mock',
+      async createConnectToken() { return { token: 't', expiresAt: '2099', connectUrl: 'https://example.com' }; },
+      async listAccounts() { return []; },
+      async runAction() { return { ok: false, actionId: 'x', app: 'x', output: null }; },
+    } as unknown as Connector;
+    const app = buildServer({ authStore: new MemoryStore(), connector });
+    const signed = await app.inject({ method: 'POST', url: '/auth/signup', payload: { email: 'track@example.com', password: 'password1', tos: true } });
+    const headers = { cookie: String(signed.headers['set-cookie']).split(';')[0] };
+    const before = await app.inject({ method: 'GET', url: '/api/miles/home', headers });
+    expect(before.json().trackingProof).toBeNull();
+    const saved = await app.inject({ method: 'POST', url: '/api/miles/tracking', headers, payload: { leadConversion: true, method: 'call_or_form' } });
+    expect(saved.statusCode).toBe(200);
+    const home = await app.inject({ method: 'GET', url: '/api/miles/home', headers });
+    expect(home.json().trackingProof).toEqual({ leadConversion: true, ga4Linked: false, method: 'call_or_form' });
+    const opened = runSopGate('campaign_enable', { mode: 'automate', spec, tracking: home.json().trackingProof });
+    expect(opened.disposition).toBe('execute');
+    expect(opened.blocks).toEqual([]);
+    expect(opened.logs.find((row) => row.ruleId === 'sop039-lead')?.detail).toMatch(/Calls or form fills/);
+    const purchase = runSopGate('campaign_enable', { mode: 'automate', spec, tracking: { leadConversion: true, method: 'purchase' } });
+    expect(purchase.disposition).toBe('block');
+    expect(purchase.blocks.join(' ')).toMatch(/purchase/);
+    const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+    expect(html).toContain('Google Ads counts my calls or form fills as conversions');
+    expect(html).toContain('Lead tracking confirmed');
+    expect(html).toContain("method:'call_or_form'");
+    expect(html.slice(html.indexOf("sect-label','GOOGLE PLAN'"), html.indexOf("sect-label','GOOGLE PLAN'") + 2500)).toContain('trackingProofRow');
+    expect(html.slice(html.indexOf('function renderLaunchPage'), html.indexOf('function renderLaunchPage') + 12000)).toContain('trackingProofRow');
+    expect(html).not.toMatch(/Google Ads counts my calls or form fills as conversions\u2014/);
+  });
+
   it('stores the proof and the change log names the rule', async () => {
     const connector = {
       name: 'mock',

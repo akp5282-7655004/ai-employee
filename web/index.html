@@ -562,8 +562,13 @@
   }
   @media (prefers-reduced-motion:reduce){ .side{transition:none;} }
 
-  /* Operator dashboard: dark rail, light canvas, white cards. */
+  /* Operator dashboard: dark rail, light canvas, white cards.
+     This rule sits after the phone layout, so the phone rule is repeated below. */
   .app{grid-template-columns:228px 1fr;}
+  @media (max-width:760px){
+    .app{grid-template-columns:1fr;}
+    body.on-dash .main{padding:16px 16px 72px;}
+  }
   .side{background:#121214;color:#e7e7eb;border-right:1px solid #1c1c20;}
   .side .wm{display:flex;flex-direction:column;line-height:1.05;color:#fff;}
   .side .wm-miles{font-weight:800;font-size:15px;letter-spacing:.12em;}
@@ -596,6 +601,9 @@
   body.on-dash .main{background:#f3f3f5;padding:22px 28px 72px;}
   body.on-dash .mcard{background:#fff;border:1px solid #ececef;border-radius:16px;box-shadow:0 1px 2px rgba(16,16,20,.04);}
   .md-top{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:14px;}
+  body.on-dash .pagetabs{align-items:center;gap:8px;margin:0 0 22px;padding:2px 0 14px;border-bottom:1px solid #e4e4e8;}
+  body.on-dash .pagetab{padding:8px 14px;font-size:13px;font-weight:700;background:#fff;border:1px solid #e4e4e8;color:#3f3f46;}
+  body.on-dash .pagetab.on{background:#111112;border-color:#111112;color:#fff;}
   .md-greet{margin:0;font-size:28px;font-weight:800;letter-spacing:-.03em;text-transform:uppercase;color:#111112;line-height:1.05;}
   .md-date{margin-top:4px;color:#6e6e76;font-size:13.5px;}
   .md-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
@@ -609,6 +617,12 @@
   .md-note{margin:0 0 12px;color:#6e6e76;font-size:13px;}
   .md-setup{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 2px 16px;color:#3f3f46;font-size:13.5px;}
   .md-setup .md-actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;}
+  .md-track{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;font-size:13.5px;color:#3f3f46;line-height:1.4;}
+  .md-track .md-track-note{flex-basis:100%;}
+  .md-plan-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px;}
+  .md-plan-actions .go,.md-plan-actions .md-ghost{min-height:36px;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;}
+  .md-plan-actions .md-ghost{padding:8px 14px;}
+  .md-plan-actions .md-track{margin:0;flex:1 1 240px;}
   .md-ghost{background:#fff;border:1px solid #e4e4e8;border-radius:999px;padding:7px 12px;font-size:12.5px;font-weight:700;cursor:pointer;color:#111;font-family:inherit;}
   .md-link{background:none;border:0;padding:7px 4px;font-size:12.5px;font-weight:700;cursor:pointer;color:#111;font-family:inherit;text-decoration:underline;}
   .md-sample{display:inline-flex;align-items:center;font-size:10px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:999px;background:#f3efe2;color:#86651c;vertical-align:middle;}
@@ -694,8 +708,31 @@
   .ln-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start;}
   .ln-main{display:flex;flex-direction:column;gap:14px;min-width:0;}
   .ln-side{display:flex;flex-direction:column;gap:14px;}
-  .ln-title{margin:0;font-size:28px;font-weight:800;letter-spacing:-.03em;text-transform:uppercase;}
-  .ln-sub{margin:4px 0 0;color:#6e6e76;font-size:14px;}
+  .ln-head{display:flex;flex-direction:column;gap:12px;margin:0 0 4px;}
+  .ln-head-row{display:flex;align-items:center;justify-content:space-between;gap:16px 20px;flex-wrap:wrap;}
+  .ln-head-row .md-controls{flex:0 0 auto;justify-content:flex-end;gap:10px;max-width:100%;}
+  .md-pills{flex:none;}
+  .md-pills button{white-space:nowrap;flex:none;}
+  .ln-head-row .md-pills,.ln-head-row .md-range,.ln-head-row .md-ask,.ln-head-row .md-theme{box-sizing:border-box;}
+  .ln-head-row .md-range,.ln-head-row .md-ask,.ln-head-row .md-theme{height:36px;}
+  .ln-head-row .md-theme{width:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;}
+  .ln-head-row .md-range{padding:0 12px;}
+  .ln-head-row .md-ask{padding:0 14px;}
+  .ln-title{margin:0;flex:1 1 240px;min-width:0;font-size:28px;font-weight:800;letter-spacing:-.03em;text-transform:uppercase;line-height:1.05;}
+  .ln-sub{margin:0;color:#6e6e76;font-size:15px;line-height:1.45;}
+  .ln-head .md-note{margin:0;max-width:62ch;color:#8a8a92;font-size:13.5px;line-height:1.5;}
+  .ln-setup.md-setup{flex-direction:column;align-items:stretch;gap:12px;padding:16px 0 6px;margin-top:8px;border-top:1px solid #ececef;}
+  .ln-setup-meta,.ln-setup-actions{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;}
+  .ln-setup-actions .md-actions{margin-left:auto;align-items:center;gap:8px;}
+  .ln-setup .md-ghost{min-height:36px;padding:8px 14px;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;}
+  .ln-setup-actions .md-track{margin:0;flex:1 1 260px;}
+  @media(max-width:760px){
+    body.on-dash .pagetabs{margin-bottom:16px;padding-bottom:12px;}
+    .ln-title{font-size:24px;}
+    .ln-head-row{align-items:flex-start;}
+    .ln-head-row .md-controls{flex-basis:100%;justify-content:flex-start;}
+    .ln-setup-actions .md-actions{margin-left:0;}
+  }
   .ln-shortcut{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#111;color:#fff;border-radius:16px;padding:14px 16px;}
   .ln-shortcut p{margin:0;font-size:14px;font-weight:700;}
   .ln-shortcut button{background:#fff;color:#111;border:0;border-radius:999px;padding:8px 12px;font-weight:800;cursor:pointer;font-family:inherit;}
@@ -806,6 +843,69 @@
   @media(max-width:980px){
     .yb-hero,.yb-cols,.yb-bottom,.yb-fields,.yb-ads{grid-template-columns:1fr;}
     .yb-field.wide{grid-column:auto;}
+  }
+
+  /* Shared signed-in chrome. Taken from the Your Business profile and the
+     operator dashboard: one canvas, one pill, one button height, one card. */
+  .main{background:#f3f3f5;padding:22px 28px 72px;}
+  :root[data-theme="dark"] .main{background:#111112;}
+  .pagehead{align-items:center;gap:12px;margin-bottom:16px;}
+  .pagehead h2{margin:0;font-size:28px;font-weight:800;letter-spacing:-.03em;line-height:1.05;}
+  .askbtn,.tbtn{box-sizing:border-box;height:36px;border-radius:999px;font-family:inherit;}
+  .askbtn{background:#111112;color:#fff;border:0;padding:0 14px;font-size:13px;font-weight:700;}
+  .tbtn{width:36px;margin-left:0;background:#fff;border:1px solid #e4e4e8;color:#111;}
+  .pagetabs,.subtabs{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 18px;padding:0;}
+  .pagetab,.tab{
+    box-sizing:border-box;height:36px;min-height:36px;padding:0 14px;border-radius:999px;
+    border:1px solid var(--line);background:var(--card);color:var(--graphite);
+    font-family:inherit;font-size:13px;font-weight:700;line-height:1;
+    display:inline-flex;align-items:center;justify-content:center;cursor:pointer;white-space:nowrap;
+  }
+  .pagetab.on,.tab.on,.subtabs .tab.on{background:var(--ink);border-color:var(--ink);color:var(--primary-ink);}
+  button.go,.pf-save,.btn-ink,.yb-fix,.md-ask{
+    box-sizing:border-box;min-height:36px;height:36px;padding:0 16px;border-radius:999px;
+    background:var(--ink);color:var(--primary-ink);border:0;font-family:inherit;font-size:13px;font-weight:700;
+    display:inline-flex;align-items:center;justify-content:center;cursor:pointer;line-height:1;
+  }
+  .md-ghost,button.ghost,.adsave,.btn-sec{
+    box-sizing:border-box;min-height:36px;height:36px;padding:0 14px;border-radius:999px;
+    background:var(--card);color:var(--ink);border:1px solid var(--line);
+    font-family:inherit;font-size:13px;font-weight:700;
+    display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+  }
+  .md-link{min-height:36px;display:inline-flex;align-items:center;padding:0 4px;font-size:13px;font-weight:700;}
+  .mcard,.acard,.md-card,.stat,.depcard,.yb-card{
+    background:var(--card);border:1px solid var(--line);border-radius:18px;
+    box-shadow:0 1px 2px rgba(16,16,20,.04);
+  }
+  .mcard{padding:20px 22px;margin-bottom:16px;}
+  .acard{padding:16px 18px;}
+  .mcard h3,.acard h3{margin:0 0 6px;font-size:18px;font-weight:800;letter-spacing:-.02em;}
+  .mdesc,.appsub{line-height:1.45;}
+  .mdesc{color:var(--muted);max-width:68ch;}
+  .sect-label,.md-label{
+    font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:18px 0 10px;
+  }
+  input.f,select.f,textarea.f,.pf input,.pf select,.pf textarea,.yb-input{
+    box-sizing:border-box;width:100%;border:1px solid var(--line);border-radius:10px;
+    background:var(--panel);color:var(--ink);min-height:42px;padding:10px 12px;font:inherit;font-size:14px;
+  }
+  textarea.f,.pf textarea{min-height:96px;height:auto;}
+  input.f:disabled,.pf input:disabled,select.f:disabled{background:var(--panel-2);color:var(--muted);}
+  .ui-section+.ui-section{margin-top:22px;padding-top:18px;border-top:1px solid var(--line);}
+  .ui-section .sect-label:first-child{margin-top:0;}
+  .ui-actions{display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap;}
+  .ui-actions .pf-save{margin-top:0;}
+  .sheet{border-radius:18px;padding:22px 24px;}
+  .sheet h2,.sheet h3{letter-spacing:-.03em;}
+  #set-subtabs{display:none;}
+  @media(max-width:760px){
+    .main{padding:16px 16px 72px;}
+    .pagehead h2,.ln-title,.md-greet,.yb-title h1{font-size:24px;}
+    .pagetabs,.subtabs{gap:6px;margin-bottom:14px;}
+    .mcard{padding:16px;}
+    .ln-grid,.ln-goals,.ln-buds,.ln-chans,.ln-profile,.ln-ads,.ln-fields{grid-template-columns:1fr;}
+    .ln-shortcut{flex-wrap:wrap;align-items:flex-start;}
   }
 </style>
 
@@ -1174,7 +1274,7 @@
 
     <!-- SETTINGS -->
     <section class="page" id="page-settings">
-      <div class="subtabs" id="set-subtabs"></div>
+      <div class="subtabs" id="set-subtabs" hidden></div>
       <div id="settings-body"></div>
     </section>
 
@@ -1667,15 +1767,63 @@ const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',sch
 function destFor(id){
   return [...document.querySelectorAll('#nav a[data-pages]')].find(a=>a.dataset.pages.split(',').includes(id));
 }
+function settingsTabs(){
+  const tabs=[
+    ['account','Account'],
+    ['model','Model'],
+    ['team','Team'],
+    ['keys','API Keys'],
+    ['usage','Usage'],
+    ['plan','Plan & Credits'],
+    ['health','System Health'],
+    ['logs','Change Log'],
+  ];
+  if(typeof IS_ADMIN!=='undefined' && IS_ADMIN) tabs.push(['admin','Users'],['feedback','Feedback']);
+  return tabs;
+}
+function settingsTabKey(id){
+  if(id==='billing') return 'plan';
+  if(id==='health') return 'health';
+  if(id==='logs') return 'logs';
+  return setTab||'account';
+}
+function openSettingsTab(key){
+  if(key==='plan'){ setPage('billing'); return; }
+  if(key==='health'){ setPage('health'); return; }
+  if(key==='logs'){ setPage('logs'); return; }
+  setTab=key;
+  const on=$('#page-settings')&&$('#page-settings').classList.contains('on');
+  if(on){ renderSubTabs('settings'); renderSettings(); }
+  else setPage('settings');
+}
+function renderSettingsStrip(id){
+  const strip=$('#pagetabs'); if(!strip) return;
+  strip.innerHTML='';
+  strip.style.display='flex';
+  const active=settingsTabKey(id);
+  settingsTabs().forEach(([key,label])=>{
+    const b=document.createElement('button');
+    b.type='button';
+    b.className='pagetab'+(key===active?' on':'');
+    b.textContent=label;
+    b.onclick=()=>openSettingsTab(key);
+    strip.append(b);
+  });
+}
 function renderSubTabs(id){
   const strip=$('#pagetabs'); if(!strip) return;
   strip.innerHTML=''; strip.style.display='none';
   const a=destFor(id); if(!a) return;
   const pages=a.dataset.pages.split(','), labels=(a.dataset.tabs||'').split('|');
+  if(pages.includes('settings') && ['settings','billing','health','logs'].includes(id)){
+    renderSettingsStrip(id);
+    return;
+  }
   if(pages.length<2||a.dataset.nostrip) return;  // single page, or the page draws its own switch
   strip.style.display='flex';
   pages.forEach((p,i)=>{
     const b=document.createElement('button');
+    b.type='button';
     b.className='pagetab'+(p===id?' on':'');
     b.textContent=labels[i]||p;
     b.onclick=()=>setPage(p);
@@ -2837,6 +2985,13 @@ function modeBlurb(mode, caps){
   if(mode==='hybrid') return 'Hybrid is on. Miles will build the Google plan and wait for your approval. Choosing a mode does not create or enable anything by itself.';
   return 'Pick a mode. Nothing is created until you start the Google plan.';
 }
+function launchModeNote(mode, caps){
+  const daily=(caps&&caps.dailyBudget)||20, month=(caps&&caps.monthlyCeiling)||600;
+  if(mode==='automate') return 'Do everything is on. Miles can run Google Search inside $'+daily+'/day and $'+month+'/month. Picking a mode does not create or enable anything.';
+  if(mode==='manual') return 'Ask me first is on. Miles will not create or change a campaign until you say so.';
+  if(mode==='hybrid') return 'Hybrid is on. Miles builds the Google plan and waits for your approval.';
+  return 'Pick a mode. Nothing is created until you start the Google plan.';
+}
 async function milesPost(btn, statusEl, working, url, payload){
   if(btn){ btn.disabled=true; btn.dataset.prev=btn.textContent; btn.textContent=working; }
   if(statusEl) statusEl.textContent=working;
@@ -2854,6 +3009,36 @@ async function milesPost(btn, statusEl, working, url, payload){
     toast(msg);
     return null;
   }
+}
+function trackingMethodLabel(method){
+  if(method==='call_or_form') return 'calls or form fills';
+  if(method==='thank_you') return 'thank-you page';
+  if(method==='form_submit') return 'form submit';
+  if(method==='call') return 'calls';
+  if(method==='purchase') return 'purchase';
+  return method ? String(method).replace(/_/g,' ') : '';
+}
+function trackingProofRow(miles, refresh){
+  const row=el('div','md-track');
+  const proof=miles&&miles.trackingProof;
+  if(proof){
+    row.append(el('span',null,'Lead tracking confirmed'));
+    const label=trackingMethodLabel(proof.method);
+    if(label) row.append(el('span','md-legend', label));
+    return row;
+  }
+  row.append(el('span',null,'Google Ads counts my calls or form fills as conversions'));
+  const note=el('div','md-legend md-track-note','');
+  note.style.display='none';
+  const btn=el('button','md-ghost','Confirm');
+  btn.type='button';
+  btn.onclick=async()=>{
+    note.style.display='';
+    const r=await milesPost(btn, note, 'Saving...', '/api/miles/tracking', {leadConversion:true, method:'call_or_form'});
+    if(r) await refresh();
+  };
+  row.append(btn, note);
+  return row;
 }
 function renderMilesCompact(box, d){
   box.innerHTML='';
@@ -2958,15 +3143,20 @@ function renderMilesHome(box, d, place, opts){
     plan.append(el('div','sect-label','GOOGLE PLAN'));
     plan.append(el('p','appsub',(spec.name||'Search')+' · $'+(spec.dailyBudget||0)+'/day · status '+(d.activation||'not created')));
     (spec.adGroups||[]).forEach(g=>{ const row=el('div','appsub', g.name+': '+(g.keywords||[]).map(k=>k.text).join(', ')); plan.append(row); });
-    const row=el('div'); row.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-top:10px';
+    const row=el('div','md-plan-actions');
     const planNote=el('div','appsub','');
     const start=el('button','go', d.mode==='automate'?'Start inside my caps':d.mode==='manual'?'Manual mode does not create':'Queue for my approval');
+    start.type='button';
     start.onclick=async()=>{ const r=await milesPost(start, planNote, 'Starting...', '/api/miles/go', {confirm:true}); if(!r) return; planNote.textContent=r.note||(r.enabled?'Google reports the campaign, ad groups, and ads as enabled.':(r.demo?'Preview only. Nothing was created in Google.':(r.created?'Created paused.':'Waiting on you.'))); await refreshMilesSurface(); };
-    const kill=el('button',null, d.caps&&d.caps.paused?'Resume':'Pause all'); kill.style.cssText='border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;background:var(--panel)';
+    const kill=el('button','md-ghost', d.caps&&d.caps.paused?'Resume':'Pause all');
+    kill.type='button';
     kill.onclick=async()=>{ const r=await milesPost(kill, planNote, 'Pausing...', '/api/miles/kill', {paused:!(d.caps&&d.caps.paused)}); if(r) await refreshMilesSurface(); };
-    const back=el('button',null,'Revert to paused'); back.style.cssText=kill.style.cssText;
+    const back=el('button','md-ghost','Revert to paused');
+    back.type='button';
     back.onclick=async()=>{ const r=await milesPost(back, planNote, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) await refreshMilesSurface(); };
-    row.append(start, kill, back); plan.append(row, planNote); box.append(plan);
+    row.append(start, kill, back, trackingProofRow(d, refreshMilesSurface));
+    plan.append(row, planNote);
+    box.append(plan);
   }
   const g=d.ghl||{};
   const lead=el('div','mcard'); lead.style.marginTop='12px';
@@ -3948,30 +4138,33 @@ function renderLaunchPage(){
   const L=LN.launch||{};
   const miles=LN.miles||{};
   box.innerHTML='';
-  const head=el('div','md-top');
-  const titles=el('div');
-  titles.append(el('h1','ln-title','Launch a campaign'));
-  titles.append(el('p','ln-sub','Tell Miles what you want. It builds the campaign. You approve.'));
+  const head=el('div','ln-head');
+  const headRow=el('div','ln-head-row');
+  headRow.append(el('h1','ln-title','Launch a campaign'));
   const ctrl=el('div','md-controls');
   ctrl.append(el('span','md-modelab','Miles mode'));
   const pills=el('div','md-pills');
-  const note=el('div','md-note', modeBlurb(miles.mode, miles.caps)); note.id='launch-mode-note';
+  const note=el('div','md-note', launchModeNote(miles.mode, miles.caps)); note.id='launch-mode-note';
   [['manual','Ask me first'],['hybrid','Hybrid'],['automate','Do everything']].forEach(([id,label])=>{
     const b=el('button', miles.mode===id?'on':'', label);
+    b.type='button';
     b.dataset.mode=id;
-    b.onclick=async()=>{ const r=await milesPost(b, note, 'Saving...', '/api/miles/mode', {mode:id}); if(r){ if(LN.miles) LN.miles.mode=id; note.textContent=modeBlurb(id, miles.caps); renderLaunchPage(); } };
+    b.onclick=async()=>{ const r=await milesPost(b, note, 'Saving...', '/api/miles/mode', {mode:id}); if(r){ if(LN.miles) LN.miles.mode=id; note.textContent=launchModeNote(id, miles.caps); renderLaunchPage(); } };
     pills.append(b);
   });
   const ask=el('button','md-ask','Ask Miles');
+  ask.type='button';
   ask.onclick=()=>{ if(typeof enterChat==='function') enterChat(); };
-  const theme=el('button','md-theme','◑'); theme.title='Theme'; theme.onclick=()=>{ const t=$('#theme'); if(t) t.click(); };
+  const theme=el('button','md-theme','◑'); theme.type='button'; theme.title='Theme'; theme.onclick=()=>{ const t=$('#theme'); if(t) t.click(); };
   const gsel=el('select','md-range');
   for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===MKT_RANGE) o.selected=true; gsel.append(o); }
   gsel.onchange=()=>{ MKT_RANGE=gsel.value; };
   ctrl.append(pills, gsel, ask, theme);
-  head.append(titles, ctrl);
-  box.append(head, note);
-  const setup=el('div','md-setup');
+  headRow.append(ctrl);
+  head.append(headRow, el('p','ln-sub','Tell Miles what you want. It builds the campaign. You approve.'), note);
+  box.append(head);
+  const setup=el('div','md-setup ln-setup');
+  const meta=el('div','ln-setup-meta');
   const line=el('div');
   const setupBits=[];
   if(L.tradeLabel&&L.tradeLabel!=='your trade') setupBits.push(L.tradeLabel);
@@ -3979,18 +4172,20 @@ function renderLaunchPage(){
   setupBits.push('Google Search');
   if(L.savedCap) setupBits.push('$'+Math.round(L.savedCap)+'/day');
   line.append(document.createTextNode(setupBits.length>1?('Setup: '+setupBits.join(' · ')):'Setup: Google Search only. Add a trade, market, and daily budget in Profile.'));
-  setup.append(line);
   const legend=el('span','md-legend'); legend.append(mdSample(), document.createTextNode(' = example numbers until that source connects'));
-  setup.append(legend);
+  meta.append(line, legend);
+  const band=el('div','ln-setup-actions');
   const acts=el('div','md-actions');
   const kill=el('button','md-ghost', miles.caps&&miles.caps.paused?'Resume':'Pause all');
   const back=el('button','md-ghost','Revert to paused');
-  const edit=el('button','md-link','Edit setup');
+  const edit=el('button','md-ghost','Edit setup');
+  kill.type='button'; back.type='button'; edit.type='button';
   kill.onclick=async()=>{ const r=await milesPost(kill, note, 'Pausing...', '/api/miles/kill', {paused:!(miles.caps&&miles.caps.paused)}); if(r) openLaunch(); };
   back.onclick=async()=>{ const r=await milesPost(back, note, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) openLaunch(); };
   edit.onclick=()=>setPage('profile');
   acts.append(kill, back, edit);
-  setup.append(acts);
+  band.append(trackingProofRow(miles, openLaunch), acts);
+  setup.append(meta, band);
   box.append(setup);
 
   const grid=el('div','ln-grid');
@@ -6838,10 +7033,15 @@ const MODEL_CATALOG=[
 async function loadModel(){ if(!REMOTE){ MODEL_LOADED=true; return; } try{ const r=await fetch('/api/model'); MODEL=(await r.json()).model||MODEL; }catch(e){} MODEL_LOADED=true; }
 async function saveModel(){ if(!REMOTE) return; try{ await fetch('/api/model',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({model:MODEL})}); }catch(e){} }
 function renderSettings(){
-  const bar=$('#set-subtabs'); bar.innerHTML=setTabsList().map(t=>`<button class="tab${t[0]===setTab?' on':''}" data-stab="${t[0]}">${t[1]}</button>`).join('');
-  bar.querySelectorAll('[data-stab]').forEach(b=>b.onclick=()=>{ setTab=b.dataset.stab; renderSettings(); });
+  const bar=$('#set-subtabs'); if(bar){ bar.innerHTML=''; bar.hidden=true; }
   const body=$('#settings-body'); body.innerHTML='';
   ({account:setAccount,model:setModel,team:setTeam,keys:setKeys,usage:setUsage,billing:setBilling,admin:setAdmin,feedback:setFeedback}[setTab]||setAccount)(body);
+}
+function savedAccountName(account){
+  const name=String((account&&account.name)||'').trim();
+  const email=String((account&&account.email)||'').trim();
+  if(!name || name.toLowerCase()===email.toLowerCase()) return '';
+  return name;
 }
 function setModel(box){
   const card=el('div','mcard'); card.style.maxWidth='860px';
@@ -6885,14 +7085,19 @@ function setModel(box){
 async function saveTeam(){ if(!REMOTE) return; try{ await fetch('/api/team',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({team:SETTINGS.team})}); }catch(e){} }
 function setAccount(box){
   const card=el('div','mcard pf'); card.style.maxWidth='620px';
-  card.innerHTML='<h3>My Account</h3><p class="mdesc">Your name and sign-in.</p>';
-  const grid=el('div','pf-grid'); grid.innerHTML='<div class="full"><label>Name</label><input id="set-name" placeholder="Your name"></div><div class="full"><label>Email</label><input id="set-email" disabled></div>'; card.append(grid);
-  const save=el('button','pf-save','Save'); const note=el('span','appsub'); note.style.marginLeft='12px'; const row=el('div'); row.style.marginTop='16px'; row.append(save,note); card.append(row);
-  card.append(el('div','sect-label','CHANGE PASSWORD'));
-  const pg=el('div','pf-grid'); pg.innerHTML='<div class="full"><label>Current password</label><input id="set-pw-cur" type="password"></div><div class="full"><label>New password</label><input id="set-pw-new" type="password" placeholder="at least 6 characters"></div>'; card.append(pg);
-  const pwbtn=el('button','pf-save','Update password'); const pwnote=el('span','appsub'); pwnote.style.marginLeft='12px'; const prow=el('div'); prow.style.marginTop='14px'; prow.append(pwbtn,pwnote); card.append(prow);
+  const account=el('div','ui-section');
+  account.innerHTML='<h3>My Account</h3><p class="mdesc">Your name and sign-in.</p>';
+  const grid=el('div','pf-grid'); grid.innerHTML='<div class="full"><label>Name</label><input id="set-name" placeholder="Your name" autocomplete="name"></div><div class="full"><label>Email</label><input id="set-email" disabled></div>';
+  account.append(grid);
+  const save=el('button','pf-save','Save'); save.type='button'; const note=el('span','appsub'); const row=el('div','ui-actions'); row.append(save,note); account.append(row);
+  const pw=el('div','ui-section');
+  pw.append(el('div','sect-label','Change password'));
+  const pg=el('div','pf-grid'); pg.innerHTML='<div class="full"><label>Current password</label><input id="set-pw-cur" type="password" autocomplete="current-password"></div><div class="full"><label>New password</label><input id="set-pw-new" type="password" placeholder="at least 6 characters" autocomplete="new-password"></div>';
+  pw.append(pg);
+  const pwbtn=el('button','pf-save','Update password'); pwbtn.type='button'; const pwnote=el('span','appsub'); const prow=el('div','ui-actions'); prow.append(pwbtn,pwnote); pw.append(prow);
+  card.append(account, pw);
   box.append(card);
-  $('#set-name').value=SETTINGS.account.name||''; $('#set-email').value=SETTINGS.account.email||'';
+  $('#set-name').value=savedAccountName(SETTINGS.account); $('#set-email').value=SETTINGS.account.email||'';
   save.onclick=async()=>{ if(!REMOTE) return; save.disabled=true; const name=$('#set-name').value.trim(); await fetch('/api/account',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({name})}); SETTINGS.account.name=name; ME.name=name; applyIdentity(); note.textContent='Saved ✓'; save.disabled=false; setTimeout(()=>note.textContent='',2000); };
   pwbtn.onclick=async()=>{ if(!REMOTE) return; pwbtn.disabled=true; const r=await fetch('/auth/change-password',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({current:$('#set-pw-cur').value,next:$('#set-pw-new').value})}); const d=await r.json().catch(()=>({})); pwnote.textContent=r.ok?'Password updated ✓':(d.error||'Failed'); if(r.ok){ $('#set-pw-cur').value=''; $('#set-pw-new').value=''; } pwbtn.disabled=false; setTimeout(()=>pwnote.textContent='',3500); };
 }
