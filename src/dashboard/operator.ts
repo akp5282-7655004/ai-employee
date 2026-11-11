@@ -183,18 +183,32 @@ function statusFor(spend: number, leads: number, target: number | null): string 
   return 'OK';
 }
 
-function setupLine(input: OperatorInput): string {
+/** Shared setup status line for Dashboard, Launch, and Your Business. */
+export function formatSetupLine(input: { trade: string; market: string; dailyBudget: number | null; maxChangePct: number | null }): string {
+  const trade = input.trade.trim();
+  const market = input.market.trim();
   const bits: string[] = [];
-  if (input.trade.trim()) bits.push(input.trade.trim());
-  if (input.market.trim()) bits.push(input.market.trim());
+  if (trade) bits.push(trade);
+  if (market) bits.push(market);
   bits.push('Google Search');
-  const daily = pos(input.dailyBudget);
+  const daily = typeof input.dailyBudget === 'number' && Number.isFinite(input.dailyBudget) && input.dailyBudget > 0
+    ? Math.round(input.dailyBudget)
+    : null;
   if (daily) bits.push(`${money(daily)}/day`);
   if (input.maxChangePct != null && Number.isFinite(input.maxChangePct)) bits.push(`${input.maxChangePct}% max daily change`);
-  if (!input.trade.trim() && !input.market.trim() && !daily) {
-    return 'Google Search only. Add a trade, market, and daily budget in Profile. Meta, TikTok, and Local Services Ads are coming later.';
-  }
-  return bits.join(' · ');
+  const line = !trade && !market && !daily
+    ? 'Google Search only. Add a trade, market, and daily budget in Profile. Meta, TikTok, and Local Services Ads are coming later.'
+    : bits.join(' · ');
+  return plain(line);
+}
+
+function setupLine(input: OperatorInput): string {
+  return formatSetupLine({
+    trade: input.trade,
+    market: input.market,
+    dailyBudget: pos(input.dailyBudget),
+    maxChangePct: input.maxChangePct,
+  });
 }
 
 function decisionsOf(input: OperatorInput): OperatorDecision[] {

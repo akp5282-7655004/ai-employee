@@ -117,6 +117,9 @@ describe('signed-in pages do not repeat Pipedream account work', () => {
     expect(again.json().leads.connected).toBe(true);
     expect(profile.json().ghl.connected).toBe(true);
     expect(profile.json().ghl.setup).toMatch(/GoHighLevel is connected/);
+    const biz = await app.inject({ method: 'GET', url: '/api/profile/business', headers });
+    expect(biz.json().business.accounts.ghl.pill).toBe('Connected');
+    expect(biz.json().business.accounts.ghl.connect).toBe(false);
     expect(projectCalls).toBe(GHL_SLUGS.length);
     expect(again.json().marketing.platforms.metaAds.ready).toBe(false);
     await app.close();
@@ -141,6 +144,7 @@ describe('signed-in pages do not repeat Pipedream account work', () => {
     const first = await app.inject({ method: 'GET', url: '/api/dashboard', headers });
     const home = await app.inject({ method: 'GET', url: '/api/miles/home', headers });
     const conn = await app.inject({ method: 'GET', url: '/api/connections', headers });
+    const bizEarly = await app.inject({ method: 'GET', url: '/api/profile/business', headers });
     expect(Date.now() - t0).toBeLessThan(2_500);
     expect(first.json().marketing.platforms.googleAds.oauth).toBe(false);
     expect(first.json().marketing.platforms.googleAds.ready).toBe(false);
@@ -148,10 +152,19 @@ describe('signed-in pages do not repeat Pipedream account work', () => {
     expect(conn.statusCode).toBe(200);
     expect(home.statusCode).toBe(200);
     expect(accountCalls).toBe(1);
+    expect(bizEarly.statusCode).toBe(200);
+    expect(bizEarly.json().business.accounts.google.fix).toBe(false);
+    expect(bizEarly.json().business.accounts.google.pill).toBe('Not connected');
+    expect(bizEarly.json().business.accounts.meta.pill).toBe('Coming soon');
     await sleep(3_200);
     const again = await app.inject({ method: 'GET', url: '/api/dashboard', headers });
     const launch = await app.inject({ method: 'GET', url: '/api/campaign/drafts', headers });
+    const biz = await app.inject({ method: 'GET', url: '/api/profile/business', headers });
     expect(accountCalls).toBe(1);
+    expect(biz.json().business.accounts.google.pill).toBe('Customer ID not found');
+    expect(biz.json().business.accounts.google.fix).toBe(true);
+    expect(biz.json().business.accounts.ghl.pill).toBe('Not connected');
+    expect(biz.json().business.accounts.meta.pill).toBe('Coming soon');
     expect(again.json().marketing.platforms.googleAds.oauth).toBe(true);
     expect(again.json().marketing.platforms.googleAds.ready).toBe(false);
     expect(again.json().marketing.connected).toBe(false);

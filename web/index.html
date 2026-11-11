@@ -730,6 +730,83 @@
   .ln-build button{background:#1b8552;color:#fff;border:0;border-radius:999px;padding:12px 22px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit;}
   .ln-photo{display:flex;gap:14px;align-items:center;margin-top:10px;font-size:14px;}
   @media(max-width:1100px){.ln-grid,.ln-goals,.ln-buds,.ln-profile,.ln-ads{grid-template-columns:1fr 1fr;}}
+
+  /* Your Business. Scoped so Dashboard and Launch keep their own layout. */
+  body.on-biz .pagehead{display:none;}
+  body.on-biz .main{background:#f3f3f5;padding:22px 28px 64px;}
+  :root[data-theme="dark"] body.on-biz .main{background:#111112;}
+  :root[data-theme="dark"] body.on-biz .yb-title h1{color:#fff;}
+  @media(max-width:760px){
+    body.on-biz .pagehead{display:flex;margin-bottom:8px;}
+    body.on-biz .pagehead h2,
+    body.on-biz .pagehead .askbtn,
+    body.on-biz .pagehead #theme{display:none;}
+  }
+  .yb-title{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;min-width:0;}
+  .yb-title h1{margin:0;font-size:30px;font-weight:800;letter-spacing:-.03em;line-height:1;}
+  .yb-title p{margin:0;color:#6e6e76;font-size:14.5px;}
+  .yb-hero{display:grid;grid-template-columns:1.45fr .8fr;gap:18px;background:#111112;color:#fff;border-radius:22px;padding:22px 24px;margin-top:4px;}
+  .yb-pct{font-size:40px;font-weight:800;letter-spacing:-.04em;line-height:1;}
+  .yb-pct span{font-size:13px;font-weight:800;letter-spacing:.08em;margin-left:8px;}
+  .yb-track{height:8px;border-radius:999px;background:#2c2c32;margin:12px 0;overflow:hidden;}
+  .yb-track i{display:block;height:100%;background:#3dce7a;border-radius:999px;}
+  .yb-hero p{margin:0;color:#d7d7dc;font-size:14px;line-height:1.45;max-width:68ch;}
+  .yb-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
+  .yb-chip{background:#f0c14a;color:#1a1a1a;border:0;border-radius:999px;padding:7px 12px;font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit;}
+  .yb-read{background:#1c1c20;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:6px;min-width:0;}
+  .yb-read .k{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#b7b7be;}
+  .yb-read .host{font-weight:800;font-size:16px;word-break:break-all;}
+  .yb-read .sub{color:#b7b7be;font-size:13px;line-height:1.4;}
+  .yb-read button{align-self:flex-start;margin-top:8px;background:#fff;color:#111;border:0;border-radius:999px;padding:8px 14px;font-weight:800;cursor:pointer;font-family:inherit;}
+  .yb-read button:disabled{opacity:.45;cursor:not-allowed;}
+  .yb-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;margin-top:14px;}
+  .yb-col{display:flex;flex-direction:column;gap:14px;min-width:0;}
+  .yb-card{background:#fff;border:1px solid #ececef;border-radius:18px;padding:16px 18px 18px;color:#16161a;}
+  .yb-card h3{margin:0;font-size:13.5px;letter-spacing:.04em;text-transform:uppercase;font-weight:800;}
+  .yb-cardhead{display:flex;align-items:center;gap:8px;}
+  .yb-badge{margin-left:auto;font-size:11px;font-weight:800;border-radius:999px;padding:3px 8px;white-space:nowrap;}
+  .yb-badge.add{background:#fde7c7;color:#9a5b12;}
+  .yb-badge.ok{background:#e5f6ec;color:#1b8552;}
+  .yb-edit{background:none;border:0;padding:0;font-weight:800;font-size:12px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:inherit;color:#111;}
+  .yb-blurb{margin:6px 0 12px;color:#8a8a92;font-size:13px;}
+  .yb-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px 16px;}
+  .yb-field.wide{grid-column:1/-1;}
+  .yb-k{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8a8a92;}
+  .yb-v{margin-top:4px;font-size:14px;font-weight:700;color:#16161a;overflow-wrap:anywhere;line-height:1.35;}
+  .yb-v a{margin-left:6px;font-weight:800;color:#111;}
+  .yb-add{margin-top:4px;background:#f8e7c9;color:#8a5a12;border:0;border-radius:10px;padding:7px 8px;font-size:12.5px;font-weight:700;text-align:left;cursor:pointer;font-family:inherit;}
+  .yb-pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;align-items:center;}
+  .yb-pill{background:#f3f3f5;border-radius:999px;padding:5px 10px;font-size:12.5px;font-weight:700;}
+  .yb-input{width:100%;margin-top:4px;border:1px solid #e6e6ea;border-radius:10px;padding:8px 10px;font:inherit;background:#fafafa;color:#111;box-sizing:border-box;}
+  .yb-logo{width:84px;height:84px;border:1px dashed #d5d5dc;border-radius:12px;display:grid;place-items:center;overflow:hidden;background:#fafafa;cursor:pointer;}
+  .yb-logo img{width:100%;height:100%;object-fit:contain;}
+  .yb-swatch{width:28px;height:28px;border-radius:8px;border:1px solid rgba(0,0,0,.08);display:inline-block;}
+  .yb-ads{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
+  .yb-ad{border-radius:14px;min-height:108px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;}
+  .yb-ad b{font-size:15px;line-height:1.25;}
+  .yb-ad span{font-size:11px;opacity:.9;}
+  .yb-photos{display:flex;gap:10px;flex-wrap:wrap;}
+  .yb-slot{position:relative;width:92px;height:92px;border:1px dashed #d5d5dc;border-radius:14px;display:grid;place-items:center;background:#fafafa;cursor:pointer;overflow:hidden;font-weight:800;color:#8a8a92;}
+  .yb-slot img{width:100%;height:100%;object-fit:cover;}
+  .yb-x{position:absolute;top:4px;right:4px;width:18px;height:18px;border:0;border-radius:999px;background:#111;color:#fff;cursor:pointer;line-height:1;}
+  .yb-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-top:1px solid #f2f2f4;font-size:14.5px;}
+  .yb-row:first-of-type{border-top:0;}
+  .yb-pillstat{font-size:12px;font-weight:800;border-radius:999px;padding:4px 8px;}
+  .yb-pillstat.on{background:#e5f6ec;color:#1b8552;}
+  .yb-pillstat.off,.yb-pillstat.later{background:#f3f3f5;color:#6e6e76;}
+  .yb-pillstat.hold{background:#fde7c7;color:#9a5b12;}
+  .yb-fix{background:#111;color:#fff;border:0;border-radius:999px;padding:7px 12px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit;}
+  .yb-bottom{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;align-items:stretch;}
+  .yb-check{background:#fff;border:1px solid #ececef;border-radius:18px;padding:16px 18px;display:flex;justify-content:space-between;gap:12px;align-items:center;}
+  .yb-score{font-size:28px;font-weight:800;letter-spacing:-.03em;white-space:nowrap;}
+  .yb-score small{font-size:14px;color:#8a8a92;font-weight:700;}
+  .yb-social{background:#fff;border:1px solid #ececef;border-radius:18px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .yb-foot{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-top:16px;color:#6e6e76;font-size:13.5px;}
+  .yb-inline{background:none;border:0;padding:0;font:inherit;font-weight:800;text-decoration:underline;cursor:pointer;color:#111;}
+  @media(max-width:980px){
+    .yb-hero,.yb-cols,.yb-bottom,.yb-fields,.yb-ads{grid-template-columns:1fr;}
+    .yb-field.wide{grid-column:auto;}
+  }
 </style>
 
 <div class="app">
@@ -1142,19 +1219,9 @@
       <div class="appgrid" id="int-catalog"></div>
     </section>
 
-    <!-- BUSINESS PROFILE -->
+    <!-- BUSINESS PROFILE (Your Business). Account & Setup stays the live nav group. -->
     <section class="page" id="page-profile">
-      <div id="account-ops" style="max-width:760px;margin-bottom:16px"></div>
-      <div id="miles-profile" style="max-width:760px;margin-bottom:16px"></div>
-      <div class="mcard" style="max-width:760px">
-        <h3>Business Profile</h3>
-        <p class="mdesc">Everything Miles needs to run marketing for you. Update anytime — plans, ads, and content use these details.</p>
-        <div class="importbar"><span style="font-size:18px">🌐</span><input id="pf-website" placeholder="Re-import from yourbusiness.com"><button class="go" id="pf-import" style="flex:none">Import</button></div>
-        <div id="pf-import-note" class="appsub" style="margin:-8px 0 12px"></div>
-        <div class="pf"><div class="pf-grid" id="profile-form"></div></div>
-        <button class="pf-save" id="profile-save">Save changes</button>
-        <span id="profile-note" class="appsub" style="margin-left:12px"></span>
-      </div>
+      <div id="biz-body"></div>
     </section>
 
     <!-- CHAT -->
@@ -1617,6 +1684,7 @@ function renderSubTabs(id){
 }
 function setPage(id){
   document.body.classList.toggle('on-dash', id==='overview' || id==='launch');
+  document.body.classList.toggle('on-biz', id==='profile');
   const dest=destFor(id);
   // Highlight the DESTINATION, not the page — otherwise moving between tabs
   // looks like leaving the section you are standing in.
@@ -7910,20 +7978,477 @@ async function runSiteImport(url,container,noteEl){
 }
 function readProfileForm(container){ const out={}; container.querySelectorAll('[data-k]').forEach(i=>{ let v=(i.value||'').trim(); if(i.type==='number') v=v?Number(v):''; out[i.dataset.k]=v; }); return out; }
 async function saveProfile(vals){ try{ const r=await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(vals)}); return r.ok?(await r.json()).profile:null; }catch(e){ return null; } }
+let YB={view:null,miles:{}};
+let YBEDIT={};
+let bizSaveKind={profile:false,brand:false,plan:false};
+let bizTimer=0;
+let bizLoad=0;
+const BIZ_CHIP={
+  'Most profitable jobs':'topServices','Current offer':'currentOffers','Main competitors':'competitors','Tagline':'tagline','Job photos':'photos','Year founded':'yearStarted','Business name':'businessName','Trade':'industry','Phone':'phone','Website':'website','Service area':'serviceAreas','Services':'services','Goal':'goal','Daily budget':'dailyBudget','Leads you want':'leadsPerDay'
+};
+const BIZ_BRAND={tagline:1,voice:1,audience:1,fonts:1,avoid:1,colors:1,logo:1};
+const BIZ_PLAN={goal:1,dailyBudget:1,leadsPerDay:1};
+function bizKind(id){ return BIZ_BRAND[id]?'brand':(BIZ_PLAN[id]?'plan':'profile'); }
+function sectionOf(id){
+  const secs=(YB.view&&YB.view.sections)||[];
+  for(const s of secs) if((s.fields||[]).some(f=>f.id===id)) return s.id;
+  return 'basics';
+}
+function bizNum(v){ const s=String(v??'').trim(); if(!s) return ''; const n=Number(s.replace(/[$,]/g,'')); return Number.isFinite(n)?n:s; }
+function bizProfilePayload(d){
+  const payload={
+    businessName:d.businessName||'', industry:d.industry||'', yearStarted:bizNum(d.yearStarted), phone:d.phone||'', email:d.email||'', website:d.website||'', description:d.description||'',
+    city:d.city||'', state:d.state||'', zip:d.zip||'', serviceAreas:d.serviceAreas||'', services:d.services||'', topServices:d.topServices||'', avgTicket:bizNum(d.avgTicket), currentOffers:d.currentOffers||'',
+    goal:d.goal||'', targetCpa:bizNum(d.targetCpa), idealCustomer:d.idealCustomer||'', runningAds:d.runningAds||'', competitors:d.competitors||'', dailyBudget:bizNum(d.dailyBudget), leadsPerDay:bizNum(d.leadsPerDay),
+    tagline:d.tagline||'', brandVoice:d.voice||'', fonts:d.fonts||'', audience:d.audience||'', brandAvoid:d.avoid||'', brandColors:(d.colors||[]).join(', ')
+  };
+  if(d.logoUrl && !String(d.logoUrl).startsWith('data:')) payload.logo=d.logoUrl;
+  else if(!d.logoUrl) payload.logo='';
+  return payload;
+}
+function bizKit(d){ return { name:d.businessName||'', tagline:d.tagline||'', colors:d.colors||[], fonts:d.fonts||'', voice:d.voice||'', audience:d.audience||'', avoid:d.avoid||'', logoUrl:d.logoUrl||'' }; }
+function scheduleBizSave(kind){
+  bizSaveKind[kind]=true; bizSaveKind.profile=true;
+  const note=$('#biz-save-note'); if(note) note.textContent='Saving...';
+  clearTimeout(bizTimer); bizTimer=setTimeout(flushBiz, 650);
+}
+async function flushBiz(){
+  const kind=bizSaveKind; bizSaveKind={profile:false,brand:false,plan:false};
+  const d=(YB.view&&YB.view.draft)||{};
+  const note=$('#biz-save-note');
+  try{
+    if(kind.profile||kind.brand||kind.plan){
+      const r=await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(bizProfilePayload(d))});
+      const body=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(body.error||'save');
+      if(body.profile){ PROFILE=body.profile; try{ applyIdentity(); }catch(e){} }
+      if(typeof queueChange==='function') queueChange('profile','Business profile updated');
+    }
+    if(kind.brand){
+      if(!ASSETS_LOADED) await loadAssets();
+      const br=await fetch('/api/brand',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({kit:bizKit(d)})});
+      if(!br.ok) throw new Error('brand');
+      if(d.logoUrl) ASSETS.logo=d.logoUrl; else delete ASSETS.logo;
+      await saveAssets();
+    }
+    if(kind.plan){
+      const goal=String(d.goal||'').trim();
+      const daily=Number(d.dailyBudget);
+      const leads=Number(d.leadsPerDay);
+      if(goal && daily>0 && leads>0){
+        const payload={goal, dailyBudget:daily, leadsPerDay:leads};
+        if(YB.miles&&YB.miles.mode) payload.mode=YB.miles.mode;
+        const qr=await fetch('/api/miles/questions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+        if(!qr.ok) toast('The profile saved. The Google plan did not update.');
+      }
+    }
+    if(note) note.textContent='Changes save automatically. Miles uses the new details from the next thing it makes.';
+  }catch(e){
+    if(note) note.textContent='Could not save. Try again.';
+    return;
+  }
+  const ae=document.activeElement;
+  const typing=ae&&ae.closest&&ae.closest('#biz-body')&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
+  if(!typing) await loadProfile();
+}
+function bindBiz(node, id, draftKey){
+  node.dataset.biz=id;
+  node.value=YB.view.draft[draftKey]??'';
+  const on=()=>{ YB.view.draft[draftKey]=node.value; scheduleBizSave(bizKind(id)); };
+  node.addEventListener('input', on);
+  node.addEventListener('change', on);
+}
+function bizText(id, draftKey, type){ const i=el('input'); i.type=type||'text'; i.className='yb-input'; bindBiz(i, id, draftKey); return i; }
+function bizArea(id, draftKey){ const t=el('textarea'); t.rows=3; t.className='yb-input'; bindBiz(t, id, draftKey); return t; }
+function bizSelect(id, draftKey, optionKey){
+  const spec=PROFILE_FIELDS.find(f=>f.k===optionKey);
+  const opts=spec&&spec.options?spec.options.slice():[];
+  const cur=YB.view.draft[draftKey]||'';
+  if(cur && opts.indexOf(cur)<0) opts.unshift(cur);
+  const sel=el('select'); sel.className='yb-input';
+  const blank=el('option', null, 'Add'); blank.value=''; sel.append(blank);
+  opts.forEach(o=>{ const op=el('option', null, o); op.value=o; if(o===cur) op.selected=true; sel.append(op); });
+  bindBiz(sel, id, draftKey);
+  return sel;
+}
+function bizColors(){
+  const wrap=el('div','yb-pills');
+  (YB.view.draft.colors||[]).forEach((c,i)=>{
+    const chip=el('span','yb-pill');
+    const sw=el('i','yb-swatch'); if(/^#[0-9a-fA-F]{6}$/.test(c)) sw.style.background=c;
+    chip.append(sw, document.createTextNode(' '+c+' '));
+    const x=el('button', null, 'x'); x.type='button';
+    x.onclick=()=>{ YB.view.draft.colors.splice(i,1); YBEDIT.brand=true; scheduleBizSave('brand'); renderBusiness($('#biz-body'), YB.view, YB.miles); };
+    chip.append(x); wrap.append(chip);
+  });
+  const add=el('input'); add.type='color'; add.value='#12a08f'; add.className='yb-swatch';
+  const btn=el('button','yb-add','+ Add color'); btn.type='button';
+  btn.onclick=()=>{
+    const colors=YB.view.draft.colors||[];
+    if(colors.length>=5){ toast('Up to 5 brand colors'); return; }
+    if(colors.indexOf(add.value)<0) colors.push(add.value);
+    YB.view.draft.colors=colors; YBEDIT.brand=true; scheduleBizSave('brand');
+    renderBusiness($('#biz-body'), YB.view, YB.miles);
+  };
+  wrap.append(add, btn); return wrap;
+}
+function bizLogo(){
+  const wrap=el('div');
+  const box=el('div','yb-logo');
+  if(YB.view.draft.logoUrl){ const im=el('img'); im.src=YB.view.draft.logoUrl; im.alt='Logo'; box.append(im); }
+  else box.append(el('span','md-legend','+ Logo'));
+  const file=el('input'); file.type='file'; file.accept='image/*'; file.style.display='none';
+  box.onclick=()=>file.click();
+  file.onchange=async()=>{
+    const f=file.files&&file.files[0]; if(!f) return;
+    try{ YB.view.draft.logoUrl=await downscaleImage(f, 320, 'image/png'); scheduleBizSave('brand'); }
+    catch(e){ toast('Could not read that image.'); }
+  };
+  const rm=el('button','yb-edit','Remove'); rm.type='button';
+  rm.onclick=()=>{ YB.view.draft.logoUrl=''; YBEDIT.brand=true; scheduleBizSave('brand'); renderBusiness($('#biz-body'), YB.view, YB.miles); };
+  wrap.append(box, file, rm); return wrap;
+}
+function bizEditor(f){
+  const id=f.id;
+  if(id==='basedIn'){
+    const wrap=el('div'); wrap.style.display='grid'; wrap.style.gap='6px';
+    [['city','City'],['state','State'],['zip','ZIP']].forEach((pair, idx)=>{
+      const i=bizText('basedIn', pair[0], 'text'); i.placeholder=pair[1]; if(idx) i.dataset.biz=pair[0]; wrap.append(i);
+    });
+    return wrap;
+  }
+  if(id==='industry') return bizSelect(id, 'industry', 'industry');
+  if(id==='goal') return bizSelect(id, 'goal', 'goal');
+  if(id==='voice') return bizSelect(id, 'voice', 'brandVoice');
+  if(id==='runningAds') return bizSelect(id, 'runningAds', 'runningAds');
+  if(id==='description'||id==='services'||id==='idealCustomer'||id==='competitors'||id==='avoid') return bizArea(id, id);
+  if(id==='yearStarted'||id==='avgTicket'||id==='targetCpa'||id==='dailyBudget'||id==='leadsPerDay') return bizText(id, id, 'number');
+  if(id==='colors') return bizColors();
+  if(id==='logo') return bizLogo();
+  return bizText(id, id, 'text');
+}
+function bizDisplay(f){
+  if(f.id==='logo'){
+    const box=el('div','yb-logo');
+    if(YB.view.draft.logoUrl){ const im=el('img'); im.src=YB.view.draft.logoUrl; im.alt='Logo'; box.append(im); }
+    else { box.append(el('span','md-legend','+ Add')); box.onclick=()=>openBizEdit('brand','logo'); }
+    return box;
+  }
+  if(f.id==='colors' && YB.view.draft.colors && YB.view.draft.colors.length){
+    const row=el('div','yb-pills');
+    YB.view.draft.colors.forEach(c=>{ const sw=el('i','yb-swatch'); if(/^#[0-9a-fA-F]{6}$/.test(c)) sw.style.background=c; row.append(sw); });
+    return row;
+  }
+  if((f.id==='services'||f.id==='avoid') && f.filled){
+    const row=el('div','yb-pills');
+    String(f.value).split(/[,\n]/).map(s=>s.trim()).filter(Boolean).forEach(s=>row.append(el('span','yb-pill', s)));
+    return row;
+  }
+  if(!f.filled){
+    if(f.connect){ const b=el('button','yb-add','Connect'); b.type='button'; b.onclick=()=>connectApp(f.connect); return b; }
+    const b=el('button','yb-add', f.hint||'+ Add'); b.type='button';
+    b.onclick=()=>openBizEdit(sectionOf(f.id), f.id);
+    return b;
+  }
+  const v=el('div','yb-v');
+  v.append(document.createTextNode(f.value));
+  if(f.href){ const a=el('a', null, 'View'); a.href=f.href; a.target='_blank'; a.rel='noopener'; v.append(document.createTextNode(' · '), a); }
+  return v;
+}
+function openBizEdit(sectionId, focusId){
+  if(focusId==='photos'){
+    const card=document.getElementById('yb-photos');
+    if(card) card.scrollIntoView({behavior:'smooth', block:'center'});
+    const slot=card&&card.querySelector('.yb-slot');
+    if(slot) slot.click();
+    return;
+  }
+  YBEDIT[sectionId]=true;
+  renderBusiness($('#biz-body'), YB.view, YB.miles);
+  const node=document.querySelector('[data-biz="'+focusId+'"]');
+  if(node&&node.focus) node.focus();
+  const card=document.getElementById('yb-'+sectionId);
+  if(card) card.scrollIntoView({behavior:'smooth', block:'center'});
+}
+function cardHead(sec){
+  const head=el('div','yb-cardhead');
+  head.append(el('h3', null, sec.title));
+  head.append(el('span', 'yb-badge '+(sec.emptyCount?'add':'ok'), sec.emptyCount?sec.badge:'Complete'));
+  const edit=el('button','yb-edit','Edit'); edit.type='button';
+  edit.onclick=()=>{ YBEDIT[sec.id]=!YBEDIT[sec.id]; renderBusiness($('#biz-body'), YB.view, YB.miles); };
+  head.append(edit);
+  return head;
+}
+function renderPreview(preview){
+  const box=el('div'); box.style.marginTop='16px';
+  box.append(el('div','yb-k','Preview. How your brand looks on an ad'));
+  const colors=((preview&&preview.colors)||[]).filter(c=>/^#[0-9a-fA-F]{6}$/.test(c));
+  if(!preview || (!preview.name && !preview.phone && !preview.offer)){
+    box.append(el('p','md-legend', colors.length?'Colors saved. Add a name or an offer to preview an ad.':'Add a name, a color, or an offer and a preview shows up here.'));
+    return box;
+  }
+  const ads=el('div','yb-ads');
+  const cards=[];
+  if(preview.offer) cards.push({title:preview.offer, bg:colors[0]||'#f4f4f5', color:colors[0]?'#fff':'#111'});
+  if(preview.name||preview.phone) cards.push({title:preview.name||preview.phone, bg:(preview.offer?colors[1]:colors[0])||colors[0]||'#111112', color:'#fff'});
+  if(!preview.offer && colors[1] && (preview.name||preview.phone)) cards.push({title:preview.name||preview.phone, bg:colors[1], color:'#fff'});
+  cards.slice(0,2).forEach(c=>{
+    const ad=el('div','yb-ad'); ad.style.background=c.bg; ad.style.color=c.color;
+    ad.append(el('b', null, c.title));
+    const sub=[preview.name, preview.phone].filter(Boolean).join(' · ');
+    if(sub && sub!==c.title) ad.append(el('span', null, sub));
+    ads.append(ad);
+  });
+  box.append(ads);
+  return box;
+}
+function renderPhotos(sec){
+  const card=el('div','yb-card'); card.id='yb-photos';
+  card.append(cardHead(sec));
+  card.append(el('p','yb-blurb', sec.blurb));
+  const row=el('div','yb-photos');
+  const file=el('input'); file.type='file'; file.accept='image/*'; file.multiple=true; file.style.display='none';
+  const upload=el('button','yb-slot'); upload.type='button'; upload.append(el('span', null, '+ Upload'));
+  upload.onclick=()=>file.click();
+  file.onchange=async()=>{
+    const files=[...(file.files||[])];
+    if(!ASSETS_LOADED) await loadAssets();
+    for(const f of files){ try{ const url=await downscaleImage(f, 1024, 'image/jpeg'); (ASSETS.photos=ASSETS.photos||[]).push({id:newId(), url, caption:''}); }catch(e){} }
+    await saveAssets();
+    await loadProfile();
+  };
+  row.append(upload);
+  (YB.view.photos||[]).forEach(p=>{
+    const slot=el('div','yb-slot');
+    const im=el('img'); im.src=p.url; im.alt='Job photo';
+    const del=el('button','yb-x','×'); del.type='button';
+    del.onclick=async()=>{
+      if(!ASSETS_LOADED) await loadAssets();
+      const list=ASSETS.photos||[];
+      const at=list.findIndex(ph=>ph&&ph.url===p.url);
+      if(at>=0) list.splice(at,1);
+      ASSETS.photos=list;
+      await saveAssets();
+      await loadProfile();
+    };
+    slot.append(im, del); row.append(slot);
+  });
+  card.append(row, file);
+  card.append(el('p','md-legend','Tip: before-and-after shots get the most calls. Upload 5 to 10 from your phone.'));
+  return card;
+}
+function renderSection(sec){
+  if(sec.id==='photos') return renderPhotos(sec);
+  const card=el('div','yb-card'); card.id='yb-'+sec.id;
+  card.append(cardHead(sec));
+  card.append(el('p','yb-blurb', sec.blurb));
+  const grid=el('div','yb-fields');
+  (sec.fields||[]).forEach(f=>{
+    const cell=el('div','yb-field'+(f.wide?' wide':''));
+    cell.append(el('div','yb-k', f.label));
+    const editing=!!YBEDIT[sec.id] && f.id!=='gbp' && f.id!=='facebook' && f.id!=='instagram';
+    cell.append(editing?bizEditor(f):bizDisplay(f));
+    grid.append(cell);
+  });
+  card.append(grid);
+  if(sec.id==='brand') card.append(renderPreview(YB.view.preview));
+  return card;
+}
+function accountRow(name, pill, kind, action){
+  const r=el('div','yb-row');
+  r.append(el('b', null, name));
+  const right=el('div'); right.style.cssText='display:flex;gap:8px;align-items:center';
+  right.append(el('span','yb-pillstat '+kind, pill));
+  if(action) right.append(action);
+  r.append(right);
+  return r;
+}
+function renderAccounts(view){
+  const card=el('div','yb-card');
+  const head=el('div','yb-cardhead'); head.append(el('h3', null, 'Connected accounts')); card.append(head);
+  card.append(el('p','yb-blurb','One click to connect. No passwords or keys to paste.'));
+  const g=view.accounts.google;
+  let gAction=null;
+  if(g.fix){ gAction=el('button','yb-fix','FIX'); gAction.type='button'; gAction.onclick=()=>bizFixGoogle(); }
+  else if(g.connect){ gAction=el('button','yb-fix','Connect'); gAction.type='button'; gAction.onclick=()=>connectApp('google_ads'); }
+  const gKind=g.pill==='Connected'?'on':(g.fix||g.pill==='Not ready'?'hold':'off');
+  card.append(accountRow('Google Ads', g.pill, gKind, gAction));
+  if(g.detail && g.detail.replace(/\.$/,'')!==g.pill) card.append(el('p','md-legend', g.detail));
+  const h=view.accounts.ghl;
+  let hAction=null;
+  if(h.connect){ hAction=el('button','yb-fix','Connect'); hAction.type='button'; hAction.onclick=()=>connectApp('gohighlevel'); }
+  card.append(accountRow('GoHighLevel', h.pill, h.pill==='Connected'?'on':'off', hAction));
+  if(h.detail && h.detail.replace(/\.$/,'')!==h.pill) card.append(el('p','md-legend', h.detail));
+  card.append(accountRow('Meta Ads', view.accounts.meta.pill, 'later', null));
+  if(view.accounts.meta.detail) card.append(el('p','md-legend', view.accounts.meta.detail));
+  return card;
+}
+async function bizFixGoogle(){
+  let detail={};
+  try{ detail=await(await fetch('/api/connections/detail')).json(); }catch(e){}
+  const g=((detail&&detail.details)||[]).find(d=>d.app==='google_ads');
+  if(g&&g.choices&&g.choices.length){
+    const opts=g.choices.map(o=>'<option value="'+esc(o.id)+'">'+esc(o.label||o.id)+'</option>').join('');
+    showModal('<h3 style="margin:0 0 8px">Which Google Ads account?</h3><p class="mdesc">Pick the account Miles should use. Nothing is typed in, and nothing is created.</p><select class="f" id="gfix-sel" style="width:100%">'+opts+'</select><button class="go" id="gfix-go" style="margin-top:12px">Use this ad account</button>');
+    const go=$('#gfix-go');
+    if(go) go.onclick=async()=>{
+      go.disabled=true;
+      try{
+        const r=await fetch('/api/google-ads/customer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({customerId:$('#gfix-sel').value})});
+        const d=await r.json().catch(()=>({}));
+        if(d.ok){ closeModal(); toast('Ad account saved'); await loadProfile(); }
+        else { toast(d.error||'Could not save that ad account'); go.disabled=false; }
+      }catch(e){ toast('Could not save that ad account'); go.disabled=false; }
+    };
+    return;
+  }
+  setPage('integrations');
+}
+function renderBottom(view){
+  const wrap=el('div','yb-bottom');
+  const check=el('div','yb-check');
+  const left=el('div');
+  left.append(el('div','yb-k','Website check'));
+  left.append(el('div', null, view.websiteCheck.line));
+  check.append(left);
+  if(view.websiteCheck.score!=null){
+    const score=el('div','yb-score');
+    score.append(document.createTextNode(String(view.websiteCheck.score)), el('small', null, '/100'));
+    check.append(score);
+  }
+  const social=el('div','yb-social');
+  const sleft=el('div');
+  sleft.append(el('b', null, 'Facebook · Instagram · LinkedIn posting'));
+  sleft.append(el('div','md-legend', view.social.detail));
+  social.append(sleft);
+  const sright=el('div'); sright.style.cssText='display:flex;gap:8px;align-items:center';
+  const kind=view.social.pill==='Connected'?'on':(view.social.pill==='Partly connected'?'hold':'off');
+  sright.append(el('span','yb-pillstat '+kind, view.social.pill));
+  if(view.social.connectSlug){
+    const b=el('button','yb-fix','Connect'); b.type='button';
+    b.onclick=()=>connectApp(view.social.connectSlug);
+    sright.append(b);
+  }
+  social.append(sright);
+  wrap.append(check, social);
+  return wrap;
+}
+function renderHero(view){
+  const hero=el('div','yb-hero');
+  const left=el('div');
+  const pct=el('div','yb-pct');
+  pct.append(document.createTextNode(view.percent+'%'), el('span', null, 'PROFILE COMPLETE'));
+  left.append(pct);
+  const track=el('div','yb-track'); track.setAttribute('role','progressbar'); track.setAttribute('aria-valuenow', String(view.percent)); track.setAttribute('aria-valuemin','0'); track.setAttribute('aria-valuemax','100');
+  const bar=el('i'); bar.style.width=Math.max(0, Math.min(100, view.percent))+'%'; track.append(bar);
+  left.append(track, el('p', null, view.banner));
+  const chips=el('div','yb-chips');
+  (view.missingChips||[]).forEach(label=>{
+    const b=el('button','yb-chip', label); b.type='button';
+    b.onclick=()=>{ const id=BIZ_CHIP[label]; if(id) openBizEdit(sectionOf(id), id); };
+    chips.append(b);
+  });
+  left.append(chips);
+  const read=el('div','yb-read');
+  read.append(el('div','k','Read from your website'));
+  read.append(el('div','host', view.websiteRead.host||'No website saved'));
+  read.append(el('div','sub', view.websiteRead.line));
+  const again=el('button', null, 'Read it again'); again.type='button'; again.disabled=!view.websiteRead.canReread;
+  again.onclick=async()=>{ const r=await milesPost(again, $('#biz-save-note'), 'Reading your website...', '/api/miles/crawl', {}); if(r) await loadProfile(); };
+  read.append(again);
+  hero.append(left, read);
+  return hero;
+}
+function renderBusiness(box, view, miles){
+  if(!box) return;
+  YB={view:view||null, miles:miles||{}};
+  box.innerHTML='';
+  if(!view){ box.append(el('p','md-explain','Could not load your business profile.')); return; }
+  miles=miles||{};
+  const mode=(miles.mode!=null?miles.mode:view.mode);
+  const caps=miles.caps||view.caps;
+  const top=el('div','md-top');
+  const titles=el('div','yb-title');
+  titles.append(el('h1', null, view.title||'YOUR BUSINESS'));
+  titles.append(el('p', null, view.subtitle||''));
+  const ctrl=el('div','md-controls');
+  ctrl.append(el('span','md-modelab','Miles mode'));
+  const pills=el('div','md-pills'); pills.setAttribute('role','group'); pills.setAttribute('aria-label','Miles mode');
+  const note=el('div','md-note', modeBlurb(mode, caps)); note.id='biz-mode-note';
+  (view.modes||[]).forEach(m=>{
+    const b=el('button', mode===m.id?'on':'', m.label); b.type='button'; b.dataset.mode=m.id;
+    b.setAttribute('aria-pressed', mode===m.id?'true':'false');
+    b.onclick=async()=>{ const r=await milesPost(b, note, 'Saving...', '/api/miles/mode', {mode:m.id}); if(r) await refreshMilesSurface(); };
+    pills.append(b);
+  });
+  const gsel=el('select','md-range');
+  for(const pair of MKT_RANGES){ const o=el('option', null, pair[1]); o.value=pair[0]; if(pair[0]===MKT_RANGE) o.selected=true; gsel.append(o); }
+  gsel.title='Changes the date window on Dashboard. This page does not invent numbers for the range.';
+  gsel.onchange=()=>{ MKT_RANGE=gsel.value; };
+  const ask=el('button','md-ask','Ask Miles'); ask.type='button'; ask.onclick=()=>{ if(typeof enterChat==='function') enterChat(); };
+  const theme=el('button','md-theme','◑'); theme.type='button'; theme.title='Theme'; theme.onclick=()=>{ const t=$('#theme'); if(t) t.click(); };
+  ctrl.append(pills, gsel, ask, theme);
+  top.append(titles, ctrl);
+  box.append(top, note);
+  const setup=el('div','md-setup');
+  const line=el('div'); line.append(document.createTextNode('Setup: '+(view.setupLine||'')));
+  setup.append(line);
+  const legend=el('span','md-legend'); legend.append(mdSample(), document.createTextNode(' = example numbers until that source connects'));
+  setup.append(legend);
+  const acts=el('div','md-actions');
+  const paused=!!((miles.caps&&miles.caps.paused)||view.paused);
+  const kill=el('button','md-ghost', paused?'Resume':'Pause all'); kill.type='button';
+  const back=el('button','md-ghost','Revert to paused'); back.type='button';
+  const edit=el('button','md-link','Edit setup'); edit.type='button';
+  kill.onclick=async()=>{ const r=await milesPost(kill, note, paused?'Resuming...':'Pausing...', '/api/miles/kill', {paused:!paused}); if(r) await loadProfile(); };
+  back.onclick=async()=>{ const r=await milesPost(back, note, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) await loadProfile(); };
+  edit.onclick=()=>openBizEdit('goals','goal');
+  acts.append(kill, back, edit);
+  setup.append(acts);
+  box.append(setup, renderHero(view));
+  const cols=el('div','yb-cols');
+  const leftCol=el('div','yb-col'); const rightCol=el('div','yb-col');
+  const byId={}; (view.sections||[]).forEach(s=>{ byId[s.id]=s; });
+  ['basics','work','goals','presence'].forEach(id=>{ if(byId[id]) leftCol.append(renderSection(byId[id])); });
+  ['brand','photos'].forEach(id=>{ if(byId[id]) rightCol.append(renderSection(byId[id])); });
+  rightCol.append(renderAccounts(view));
+  cols.append(leftCol, rightCol);
+  box.append(cols, renderBottom(view));
+  const foot=el('div','yb-foot');
+  const save=el('div'); save.id='biz-save-note'; save.textContent=view.footer||'Changes save automatically. Miles uses the new details from the next thing it makes.';
+  const next=el('div');
+  next.append(document.createTextNode('Looking for the plan, leads or Miles mode? They\'re on your '));
+  const dash=el('button','yb-inline','Dashboard'); dash.type='button'; dash.onclick=()=>setPage('overview');
+  const launch=el('button','yb-inline','Launch'); launch.type='button'; launch.onclick=()=>setPage('launch');
+  next.append(dash, document.createTextNode(' and '), launch, document.createTextNode('.'));
+  foot.append(save, next);
+  box.append(foot);
+}
 async function loadProfile(){
   if(!REMOTE) return;
-  const [prof, miles, oper]=await Promise.all([
-    fetch('/api/profile').then(r=>r.json()).catch(()=>null),
-    fetch('/api/miles/home').then(r=>r.json()).catch(()=>null),
-    fetch('/api/dashboard/operator').then(r=>r.json()).catch(()=>null),
-  ]);
-  try{ if(prof){ PROFILE=prof.profile||{}; buildProfileForm($('#profile-form'), prof.profile||{}); } }catch(e){}
-  try{ const slot=$('#miles-profile'); if(slot&&miles) renderMilesHome(slot, miles, 'profile'); }catch(e){}
-  const connections=(oper&&oper.operator&&oper.operator.connections)||[];
-  renderAccountOps(miles||{}, connections);
+  const token=++bizLoad;
+  const box=$('#biz-body'); if(!box) return;
+  let view=null, miles={};
+  try{
+    const [biz, home]=await Promise.all([
+      fetch('/api/profile/business').then(r=>r.json()).catch(()=>null),
+      fetch('/api/miles/home').then(r=>r.json()).catch(()=>null),
+    ]);
+    if(biz){
+      view=biz.business||null;
+      if(biz.profile){ PROFILE=biz.profile; try{ applyIdentity(); }catch(e){} }
+    }
+    if(home&&typeof home==='object'){
+      miles=home;
+      if(home.profile) PROFILE=home.profile;
+      MILES_HOME=home;
+    }
+  }catch(e){}
+  if(token!==bizLoad) return;
+  YBEDIT={};
+  renderBusiness(box, view, miles);
+  markSetupBadge(miles);
 }
-$('#pf-import').onclick=async()=>{ const btn=$('#pf-import'); const url=($('#pf-website').value||'').trim()||($('#profile-form').querySelector('[data-k="website"]')||{}).value||''; if(!url){ $('#pf-import-note').textContent='Enter your website to re-import.'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#profile-form'),$('#pf-import-note')); btn.disabled=false; btn.textContent=old; };
-$('#profile-save').onclick=async()=>{ const btn=$('#profile-save'); btn.disabled=true; const p=await saveProfile(readProfileForm($('#profile-form'))); if(p){ PROFILE=p; applyIdentity(); queueChange('profile','Business profile updated'); } $('#profile-note').textContent=p?'Saved ✓':'Could not save.'; btn.disabled=false; setTimeout(()=>{$('#profile-note').textContent='';},2500); };
 $('#ob-import').onclick=async()=>{ const btn=$('#ob-import'); const url=($('#ob-website').value||'').trim(); if(!url){ $('#ob-import-note').textContent='Enter your website first (or skip and fill it in below).'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#onboard-form'),$('#ob-import-note')); btn.disabled=false; btn.textContent=old; };
 $('#ob-website').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#ob-import').click(); } });
 // Dismiss onboarding without saving. Miles keeps nudging for the profile in the
