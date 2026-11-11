@@ -109,13 +109,13 @@
   .nav a.on{background:var(--panel-2);color:var(--ink);font-weight:600;}
   .nav a.sub{margin-left:20px;padding-left:12px;border-left:1.5px solid var(--line);font-size:13px;border-radius:0 8px 8px 0;}
   .nav a.sub .ico{width:15px;height:15px;}
-  .navbadge{background:#c2564d;color:#fff;font-size:10px;font-weight:800;border-radius:10px;padding:1px 7px;margin-left:auto;}
+  .navbadge{background:#1b8552;color:#fff;font-size:10px;font-weight:800;border-radius:10px;padding:1px 7px;margin-left:6px;flex:none;}
   /* Collapsible nav groups — keep the sidebar to a few clear categories. */
   .navgroup{display:flex;flex-direction:column;}
   .navhead{display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:8px;color:var(--muted);font-size:13.5px;cursor:pointer;background:none;border:none;font-family:inherit;text-align:left;width:100%;}
   .navhead:hover{background:var(--panel-2);color:var(--ink);}
   .navhead.active{color:var(--ink);font-weight:600;}
-  .navhead .hlabel{flex:1;}
+  .navhead .hlabel{flex:1;white-space:nowrap;}
   .navhead .chev{width:13px;height:13px;color:var(--faint);transition:transform .15s;}
   .navgroup.open>.navhead .chev{transform:rotate(90deg);}
   .navkids{display:none;flex-direction:column;gap:2px;margin:1px 0 3px;}
@@ -561,51 +561,214 @@
     .side.open{transform:none;}
   }
   @media (prefers-reduced-motion:reduce){ .side{transition:none;} }
+
+  /* Operator dashboard: dark rail, light canvas, white cards. */
+  .app{grid-template-columns:228px 1fr;}
+  .side{background:#121214;color:#e7e7eb;border-right:1px solid #1c1c20;}
+  .side .wm{display:flex;flex-direction:column;line-height:1.05;color:#fff;}
+  .side .wm-miles{font-weight:800;font-size:15px;letter-spacing:.12em;}
+  .side .wm-ai{font-weight:700;font-size:12px;letter-spacing:.18em;color:#9b9ba3;margin-top:1px;}
+  .side .ws{background:#1b1b1f;border-color:#2a2a30;color:#eee;}
+  .side .ws b,.side .acct b{color:#fff;}
+  .side .ws .sq,.side .acct .sq{background:#2a2a30;color:#ddd;border-color:#3a3a42;}
+  .side .newtask{background:transparent;border-color:transparent;box-shadow:none;color:#eee;text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;}
+  .side .newtask:hover{background:#2a2a30;border-color:transparent;}
+  .side .nav a.top{display:flex;align-items:center;padding:8px 10px;border-radius:8px;color:#eee;font-weight:800;letter-spacing:.08em;text-transform:uppercase;font-size:12px;cursor:pointer;}
+  .side .nav a.top.on,.side .nav a.top:hover{background:#2a2a30;color:#fff;}
+  .side .nav a,.side .navhead{color:#b9b9c1;}
+  .md-else{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:8px;}
+  .md-switch{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #f2f2f4;font-size:14px;}
+  .md-on,.md-off{font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px;border:0;cursor:pointer;font-family:inherit;}
+  .md-on{background:#e7f6ee;color:#1b8552;}
+  .md-off{background:#f3f3f5;color:#6e6e76;}
+  @media(max-width:1100px){.md-else{grid-template-columns:1fr;}}
+  .side .navhead{text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;}
+  .side .nav a:hover,.side .navhead:hover{background:#2a2a30;color:#fff;}
+  .side .nav a.on,.side .navhead.active{background:#2a2a30;color:#fff;}
+  .side .navkids a{border-left-color:#34343a;text-transform:none;letter-spacing:0;font-size:13.5px;font-weight:500;}
+  .side .glabel{color:#8d8d96;letter-spacing:.1em;}
+  .side .pill{color:#c8c8ce;}
+  .side .pill:hover{background:#2a2a30;color:#fff;}
+  .side .newproj{color:#d5d5dc;border-color:#3a3a42;}
+  .side .acct{background:#121214;box-shadow:none;border-color:#2a2a30;}
+  .side #logout{color:#c8c8ce;}
+  body.on-dash .pagehead{display:none;}
+  body.on-dash .main{background:#f3f3f5;padding:22px 28px 72px;}
+  body.on-dash .mcard{background:#fff;border:1px solid #ececef;border-radius:16px;box-shadow:0 1px 2px rgba(16,16,20,.04);}
+  .md-top{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:14px;}
+  .md-greet{margin:0;font-size:28px;font-weight:800;letter-spacing:-.03em;text-transform:uppercase;color:#111112;line-height:1.05;}
+  .md-date{margin-top:4px;color:#6e6e76;font-size:13.5px;}
+  .md-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+  .md-modelab{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a8a92;}
+  .md-pills{display:flex;background:#fff;border:1px solid #e4e4e8;border-radius:999px;padding:3px;gap:2px;}
+  .md-pills button{border:0;background:transparent;border-radius:999px;padding:7px 12px;font-size:12.5px;font-weight:700;color:#3f3f46;cursor:pointer;font-family:inherit;}
+  .md-pills button.on{background:#111112;color:#fff;}
+  .md-range{border:1px solid #e4e4e8;background:#fff;border-radius:999px;padding:8px 12px;font-size:12.5px;font-weight:700;color:#111;font-family:inherit;}
+  .md-ask{display:inline-flex;align-items:center;gap:6px;background:#111112;color:#fff;border:0;border-radius:999px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .md-theme{width:34px;height:34px;border-radius:999px;border:1px solid #e4e4e8;background:#fff;cursor:pointer;color:#111;}
+  .md-note{margin:0 0 12px;color:#6e6e76;font-size:13px;}
+  .md-setup{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 2px 16px;color:#3f3f46;font-size:13.5px;}
+  .md-setup .md-actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;}
+  .md-ghost{background:#fff;border:1px solid #e4e4e8;border-radius:999px;padding:7px 12px;font-size:12.5px;font-weight:700;cursor:pointer;color:#111;font-family:inherit;}
+  .md-link{background:none;border:0;padding:7px 4px;font-size:12.5px;font-weight:700;cursor:pointer;color:#111;font-family:inherit;text-decoration:underline;}
+  .md-sample{display:inline-flex;align-items:center;font-size:10px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:999px;background:#f3efe2;color:#86651c;vertical-align:middle;}
+  .md-legend{color:#8a8a92;font-size:12.5px;}
+  .md-label{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a8a92;margin:18px 0 10px;}
+  .md-card{background:#fff;border:1px solid #ececef;border-radius:18px;padding:22px 24px;box-shadow:0 1px 2px rgba(16,16,20,.04);}
+  .md-split{display:grid;grid-template-columns:1.4fr .9fr;gap:14px;align-items:stretch;}
+  .md-h{margin:0;font-size:30px;line-height:1.05;letter-spacing:-.03em;font-weight:800;color:#111;}
+  .md-row{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-top:16px;font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#6e6e76;}
+  .md-num{font-size:22px;font-weight:800;letter-spacing:-.03em;color:#111;text-transform:none;}
+  .md-bar{height:8px;border-radius:999px;background:#ececef;margin-top:8px;overflow:hidden;}
+  .md-bar i{display:block;height:100%;background:#1f8a4c;border-radius:999px;}
+  .md-explain{margin:14px 0 0;color:#3f3f46;font-size:14px;line-height:1.45;max-width:62ch;}
+  .md-action{background:#111112;color:#fff;border-radius:18px;padding:20px 20px 16px;display:flex;flex-direction:column;min-height:100%;}
+  .md-action .kicker{font-size:11px;font-weight:800;letter-spacing:.1em;color:#8dcea8;}
+  .md-action h3{margin:8px 0 8px;font-size:22px;letter-spacing:-.03em;line-height:1.15;color:#fff;}
+  .md-action p{margin:0;color:#d7d7dc;font-size:14px;line-height:1.45;flex:1;}
+  .md-action button{margin-top:16px;align-self:flex-start;background:#fff;color:#111;border:0;border-radius:999px;padding:9px 14px;font-weight:800;font-size:12.5px;cursor:pointer;font-family:inherit;}
+  .md-money{border-radius:18px;padding:18px 20px 8px;background:#f3faf6;border:1px solid #e3f2e9;}
+  .md-money.negative{background:#faf4f4;border-color:#f0e2e3;}
+  .md-money.sample,.md-money.unknown{background:#fff;border:1px solid #ececef;}
+  .md-money-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .md-badge{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:4px 8px;border-radius:999px;background:#e5f6ec;color:#1b8552;}
+  .md-money.negative .md-badge{background:#f6eaeB;color:#a45359;}
+  .md-money.sample .md-badge,.md-money.unknown .md-badge{background:#f3efe2;color:#86651c;}
+  .md-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px;}
+  .md-tilebox{background:#fff;border-radius:14px;padding:14px 14px 12px;min-width:0;}
+  .md-tilebox .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#8a8a92;}
+  .md-tilebox .v{font-size:28px;font-weight:800;letter-spacing:-.03em;margin-top:4px;color:#111;}
+  .md-tilebox .d{font-size:12.5px;font-weight:700;color:#1b8552;margin-top:2px;}
+  .md-tilebox .s{font-size:12.5px;color:#6e6e76;margin-top:4px;}
+  .md-table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:12px;}
+  .md-table th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8a8a92;font-weight:700;text-align:left;padding:8px 8px 8px 0;border-bottom:1px solid #eee;}
+  .md-table td{padding:12px 8px 12px 0;border-bottom:1px solid #f2f2f4;vertical-align:top;}
+  .md-table td.num,.md-table th.num{text-align:right;}
+  .md-verdict{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.04em;padding:4px 8px;border-radius:999px;background:#f3efe2;color:#6e6248;}
+  .md-dec{display:flex;gap:12px;align-items:center;padding:14px 0;border-top:1px solid #eee;}
+  .md-dec:first-child{border-top:0;}
+  .md-qn{width:26px;height:26px;border-radius:50%;background:#f3f3f5;display:grid;place-items:center;font-weight:800;font-size:12px;flex:none;}
+  .md-impact{font-size:12.5px;font-weight:800;color:#1b8552;white-space:nowrap;}
+  .md-approve{background:#111;color:#fff;border:0;border-radius:999px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit;}
+  .md-skip{background:#fff;border:1px solid #e4e4e8;border-radius:999px;padding:8px 12px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;}
+  .md-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding-top:12px;}
+  .md-all{background:#1b8552;color:#fff;border:0;border-radius:999px;padding:9px 16px;font-weight:800;cursor:pointer;font-family:inherit;}
+  .md-plays{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;}
+  .md-play{background:#fff;border:1px solid #ececef;border-radius:16px;padding:16px;display:flex;flex-direction:column;min-height:240px;}
+  .md-play .eye{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8a8a92;}
+  .md-play h3{margin:8px 0;font-size:18px;letter-spacing:-.02em;}
+  .md-play p{margin:0;color:#3f3f46;font-size:13.5px;line-height:1.45;flex:1;}
+  .md-play .bud{margin-top:12px;font-size:12.5px;color:#6e6e76;}
+  .md-run{margin-top:12px;align-self:flex-start;background:#111;color:#fff;border:0;border-radius:999px;padding:8px 14px;font-weight:800;cursor:pointer;font-family:inherit;}
+  .md-run:disabled{opacity:.45;cursor:not-allowed;}
+  .md-chans{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;}
+  .md-chan{background:#fff;border:1px solid #ececef;border-radius:16px;padding:16px;min-height:180px;}
+  .md-chan h3{margin:0;font-size:14px;letter-spacing:.04em;text-transform:uppercase;}
+  .md-grade{float:right;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-weight:800;color:#fff;background:#1b8552;}
+  .md-grade.later,.md-grade.empty,.md-grade.hold{background:#e7e7ea;color:#6e6e76;}
+  .md-grade.sample{background:#f3efe2;color:#86651c;}
+  .md-subhead{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#8a8a92;margin:18px 0 8px;}
+  .md-status{font-size:11px;font-weight:800;letter-spacing:.04em;padding:3px 8px;border-radius:999px;}
+  .md-status.win{background:#e6f6ee;color:#1b8552;}
+  .md-status.ok{background:#f3f3f5;color:#3f3f46;}
+  .md-status.lose{background:#f6eaeB;color:#a45359;}
+  .md-activity{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;}
+  body.on-dash .md-activity .stat{border-radius:16px;box-shadow:none;padding:14px 12px;}
+  body.on-dash .md-activity .stat .lab{font-size:10.5px;letter-spacing:.06em;}
+  body.on-dash .md-activity .stat .val{font-family:var(--ui);font-size:26px;font-weight:800;}
+  .md-trio{display:grid;grid-template-columns:1.1fr 1.2fr .9fr;gap:12px;align-items:start;margin-top:14px;}
+  .md-conn{background:#fff;border:1px solid #ececef;border-radius:16px;padding:16px;}
+  .md-crow{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid #f2f2f4;font-size:13.5px;}
+  .md-crow:first-of-type{border-top:0;}
+  .md-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;}
+  .md-low{display:grid;grid-template-columns:1.3fr .7fr;gap:12px;margin-top:14px;align-items:start;}
+  .md-trends{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;}
+  .md-tile{background:#fff;border:1px solid #ececef;border-radius:16px;padding:14px 16px;}
+  @media (max-width:1100px){
+    .md-split,.md-tiles,.md-plays,.md-chans,.md-trio,.md-low,.md-activity,.md-trends{grid-template-columns:1fr 1fr;}
+  }
+  :root[data-theme="dark"] body.on-dash .main{background:#111112;}
+  :root[data-theme="dark"] body.on-dash .md-greet,
+  :root[data-theme="dark"] body.on-dash .md-h,
+  :root[data-theme="dark"] body.on-dash .md-num{color:#fff;}
+  .ln-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start;}
+  .ln-main{display:flex;flex-direction:column;gap:14px;min-width:0;}
+  .ln-side{display:flex;flex-direction:column;gap:14px;}
+  .ln-title{margin:0;font-size:28px;font-weight:800;letter-spacing:-.03em;text-transform:uppercase;}
+  .ln-sub{margin:4px 0 0;color:#6e6e76;font-size:14px;}
+  .ln-shortcut{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#111;color:#fff;border-radius:16px;padding:14px 16px;}
+  .ln-shortcut p{margin:0;font-size:14px;font-weight:700;}
+  .ln-shortcut button{background:#fff;color:#111;border:0;border-radius:999px;padding:8px 12px;font-weight:800;cursor:pointer;font-family:inherit;}
+  .ln-step{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8a8a92;margin:0 0 10px;}
+  .ln-goals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+  .ln-goal,.ln-bud,.ln-chan{border:1px solid #e6e6ea;background:#fff;border-radius:14px;padding:12px;text-align:left;cursor:pointer;font-family:inherit;}
+  .ln-goal.on,.ln-bud.on,.ln-chan.on{background:#111;color:#fff;border-color:#111;}
+  .ln-goal b,.ln-bud b,.ln-chan b{display:block;font-size:13px;color:inherit;}
+  .ln-bit b{word-break:break-word;}
+  .ln-goal span,.ln-bud span,.ln-chan span{display:block;font-size:12px;color:#6e6e76;margin-top:3px;}
+  .ln-goal.on span,.ln-bud.on span,.ln-chan.on span{color:#d0d0d6;}
+  .ln-chan[disabled],.ln-bud[disabled]{cursor:not-allowed;opacity:.72;}
+  .ln-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
+  .ln-fields label{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8a8a92;}
+  .ln-fields select,.ln-fields input{width:100%;margin-top:4px;border:1px solid #e6e6ea;border-radius:12px;padding:10px 12px;font:inherit;background:#fafafa;}
+  .ln-buds{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;}
+  .ln-chans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px;}
+  .ln-profile{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px;}
+  .ln-bit{background:#f6f6f7;border-radius:12px;padding:10px 12px;}
+  .ln-bit b{display:block;font-size:13px;margin-top:4px;}
+  .ln-ads{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .ln-ad{border:1px solid #ececef;border-radius:14px;padding:12px;background:#fff;}
+  .ln-ad .host{color:#1a73e8;font-size:12px;}
+  .ln-ad h3{margin:6px 0;font-size:16px;}
+  .ln-expect{background:#111;color:#fff;border-radius:18px;padding:18px;}
+  .ln-expect h3{margin:8px 0 12px;font-size:22px;letter-spacing:-.03em;color:#fff;}
+  .ln-expect .k{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#b7b7be;}
+  .ln-expect .v{font-size:26px;font-weight:800;}
+  .ln-metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .ln-count{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid #f0f0f2;font-size:14px;}
+  .ln-build{display:flex;justify-content:center;margin-top:8px;}
+  .ln-build button{background:#1b8552;color:#fff;border:0;border-radius:999px;padding:12px 22px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit;}
+  .ln-photo{display:flex;gap:14px;align-items:center;margin-top:10px;font-size:14px;}
+  @media(max-width:1100px){.ln-grid,.ln-goals,.ln-buds,.ln-profile,.ln-ads{grid-template-columns:1fr 1fr;}}
 </style>
 
 <div class="app">
   <div id="navscrim" class="navscrim" hidden></div>
   <aside class="side">
-    <div class="brandrow"><svg class="milesmark" viewBox="0 0 100 100" width="26" height="26" role="img" aria-label="Miles"><rect x="1.5" y="1.5" width="97" height="97" rx="27" fill="#111112"/><g fill="none" stroke="#fff" stroke-width="8"><path d="M31.6 31.6A26 26 0 0 0 68.4 68.4" stroke-opacity=".22"/><path d="M31.6 31.6A26 26 0 0 1 68.4 68.4"/></g><circle cx="42" cy="50" r="4" fill="#fff"/><circle cx="58" cy="50" r="4" fill="#fff"/></svg><span class="wm">miles.ai</span></div>
+    <div class="brandrow"><svg class="milesmark" viewBox="0 0 100 100" width="28" height="28" role="img" aria-label="Miles"><rect x="1.5" y="1.5" width="97" height="97" rx="27" fill="#2A2A2E"/><g fill="none" stroke="#fff" stroke-width="8"><path d="M31.6 31.6A26 26 0 0 0 68.4 68.4" stroke-opacity=".35"/><path d="M31.6 31.6A26 26 0 0 1 68.4 68.4"/></g><circle cx="42" cy="50" r="4" fill="#fff"/><circle cx="58" cy="50" r="4" fill="#fff"/></svg><span class="wm"><span class="wm-miles">MILES</span><span class="wm-ai">AI</span></span></div>
     <div class="ws"><span class="sq" id="ws-av">·</span><b id="ws-name">Your Workspace</b><span class="cx"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg></span></div>
-    <div class="newtask" data-ask><svg class="ico" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-9 9c0 1.6.42 3.1 1.15 4.4L3 21l4.8-1.1A9 9 0 1 0 12 3Z"/></svg> Chat with Miles</div>
     <nav class="nav" id="nav">
-      <div class="navgroup open" data-group="run">
-        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0"/><path d="M12 13l4-3"/><path d="M4 13h1M19 13h1M12 3v1"/></svg> Run<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+      <a class="top" data-page="overview" data-pages="overview" data-tabs="Dashboard">Dashboard</a>
+      <div class="newtask" data-ask>Chat with Miles</div>
+      <div class="navgroup" data-group="marketing">
+        <button class="navhead"><span class="hlabel">Marketing</span><svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="navkids">
-          <a data-page="overview" data-pages="overview" data-tabs="Dashboard"><svg class="ico" viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0"/><path d="M12 13l4-3"/><path d="M4 13h1M19 13h1M12 3v1"/></svg> Dashboard</a>
-          <a data-page="launch" data-pages="playbook,launch,fblaunch,adstudio" data-tabs="Plan|Google Ads|Facebook|Ad Copy"><svg class="ico" viewBox="0 0 24 24"><path d="M5 13a8 8 0 0 1 16 0"/><path d="M12 3v2M4 13H2M22 13h-2M12 13l4-4"/><circle cx="12" cy="13" r="1.6"/></svg> Launch</a>
-          <a data-page="studio" data-pages="studio,editor,calendar" data-tabs="Create|Edit|Schedule"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4 3.6L17 19l-5-3-5 3 1-6.4L4 9l5.8-.7Z"/></svg> Studio</a>
-          <a data-page="adsmgr" data-pages="adsmgr" data-tabs="Ads Manager"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16"/></svg> Ads Manager</a>
-          <a data-page="localpresence" data-pages="localpresence" data-tabs="Local Presence"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-7-5.2-7-11a7 7 0 0 1 14 0c0 5.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.6"/></svg> Local Presence</a>
+          <a data-page="launch" data-pages="playbook,launch,fblaunch,adstudio" data-tabs="Plan|Google Ads|Facebook|Ad Copy">Launch</a>
+          <a data-page="studio" data-pages="studio,editor,calendar" data-tabs="Create|Edit|Schedule">Studio</a>
+          <a data-page="adsmgr" data-pages="adsmgr" data-tabs="Ads Manager">Ads Manager</a>
+          <a data-page="localpresence" data-pages="localpresence" data-tabs="Local Presence">Local Presence</a>
         </div>
       </div>
-      <div class="navgroup" data-group="compete">
-        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3M7 9l3 2-3 2V9zM14 9h4M14 13h3"/></svg> Compete<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+      <div class="navgroup" data-group="insights">
+        <button class="navhead"><span class="hlabel">Insights</span><svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="navkids">
-          <a data-page="cads" data-pages="cads,affluence,research" data-tabs="Ads & Market Scan|Market Map|Demographics"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3M7 9l3 2-3 2V9zM14 9h4M14 13h3"/></svg> Competitors</a>
-          <a data-page="audit" data-pages="audit" data-tabs="Site &amp; Competitor Audits"><svg class="ico" viewBox="0 0 24 24"><path d="M4 4h16v12H4z"/><path d="M4 8h16M8 12h6"/><circle cx="17" cy="18" r="3"/><path d="M19.5 20.5L22 23"/></svg> Audits</a>
+          <a data-page="cads" data-pages="cads,affluence,research" data-tabs="Ads & Market Scan|Market Map|Demographics">Competitors</a>
+          <a data-page="audit" data-pages="audit" data-tabs="Site &amp; Competitor Audits">Audits</a>
+          <a data-page="analytics" data-pages="analytics,meters" data-tabs="Analytics|Benchmarks" data-nostrip="1">Analytics</a>
+          <a data-page="recs" data-pages="recs,growth" data-tabs="Recommendations|Growth Autopilot">Recommendations</a>
+          <a data-page="skills" data-pages="skills,market,ghl" data-tabs="Skills|Marketplace|GHL Workflows">Playbooks</a>
         </div>
       </div>
-      <div class="navgroup" data-group="know">
-        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Know<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+      <div class="navgroup" data-group="account">
+        <button class="navhead"><span class="hlabel">Account &amp; setup</span><span class="navbadge" id="setup-badge" hidden></span><svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="navkids">
-          <a data-page="analytics" data-pages="analytics,meters" data-tabs="Analytics|Benchmarks" data-nostrip="1"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Analytics</a>
-          <a data-page="recs" data-pages="recs,growth" data-tabs="Recommendations|Growth Autopilot"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.3 1 2.5h6c0-1.2.3-1.8 1-2.5A6 6 0 0 0 12 3Z"/></svg> Recommendations</a>
-          <a data-page="skills" data-pages="skills,market,ghl" data-tabs="Skills|Marketplace|GHL Workflows"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 2.2 5.6L20 9l-4.3 3.8L17 19l-5-3-5 3 1.3-6.2L4 9l5.8-.4Z"/></svg> Playbooks</a>
-        </div>
-      </div>
-      <div class="navgroup" data-group="set-up">
-        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Set up<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
-        <div class="navkids">
-          <a data-page="profile" data-pages="profile,brand,assets" data-tabs="Profile|Brand|Assets"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
-          <a data-page="integrations" data-pages="integrations" data-tabs="Integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
-          <a data-page="autohub" data-pages="autohub,schedules,weather,autopilot,approvals" data-tabs="Plays|Scheduled|Weather|Autonomy|Approvals"><svg class="ico" viewBox="0 0 24 24"><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/><circle cx="12" cy="12" r="3.5"/></svg> Automations</a>
-          <a data-page="settings" data-pages="settings,billing,health,logs" data-tabs="Account|Plan &amp; Credits|System Health|Change Log"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg> Settings</a>
+          <a data-page="profile" data-pages="profile,brand,assets" data-tabs="Profile|Brand|Assets">Business Profile</a>
+          <a data-page="integrations" data-pages="integrations" data-tabs="Integrations">Integrations</a>
+          <a data-page="autohub" data-pages="autohub,schedules,weather,autopilot,approvals" data-tabs="Plays|Scheduled|Weather|Autonomy|Approvals">Automations</a>
+          <a data-page="settings" data-pages="settings,billing,health,logs" data-tabs="Account|Plan &amp; Credits|System Health|Change Log">Settings</a>
         </div>
       </div>
     </nav>
-    <div class="glabel">PROJECTS</div>
     <div class="pill newproj"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New project</div>
     <div class="glabel">ACTIVE PLAYBOOKS</div>
     <div class="pill playbook">Home Services</div>
@@ -613,7 +776,7 @@
     <div class="pill playbook">Dental Practice</div>
     <div class="pill playbook">Solar Energy</div>
     <div class="grow"></div>
-    <div class="ws acct"><span class="sq" id="user-av">·</span><div style="min-width:0;flex:1"><b id="user-email" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</b></div><button class="cx" id="logout" title="Log out" type="button" style="cursor:pointer;display:flex;align-items:center;gap:5px;background:none;border:none;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--muted);padding:4px 6px;border-radius:8px;white-space:nowrap;flex:none" onmouseover="this.style.background='var(--panel-2)';this.style.color='var(--ink)'" onmouseout="this.style.background='none';this.style.color='var(--muted)'"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button></div>
+    <div class="ws acct"><span class="sq" id="user-av">·</span><div style="min-width:0;flex:1"><b id="user-email" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</b></div><button class="cx" id="logout" title="Log out" type="button" style="cursor:pointer;display:flex;align-items:center;gap:5px;background:none;border:none;font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.06em;color:#c8c8ce;padding:4px 6px;border-radius:8px;white-space:nowrap;flex:none;text-transform:uppercase" onmouseover="this.style.background='#2a2a30';this.style.color='#fff'" onmouseout="this.style.background='none';this.style.color='#c8c8ce'"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button></div>
   </aside>
 
   <main class="main">
@@ -771,7 +934,7 @@
 
     <!-- LAUNCH A CAMPAIGN (build → review every setting → approve & go live) -->
     <section class="page" id="page-launch">
-      <div id="launch-body" style="max-width:900px"></div>
+      <div id="launch-body"></div>
     </section>
 
     <!-- LAUNCH ON FACEBOOK (business + offer → build → review → push paused draft to Meta) -->
@@ -981,6 +1144,7 @@
 
     <!-- BUSINESS PROFILE -->
     <section class="page" id="page-profile">
+      <div id="account-ops" style="max-width:760px;margin-bottom:16px"></div>
       <div id="miles-profile" style="max-width:760px;margin-bottom:16px"></div>
       <div class="mcard" style="max-width:760px">
         <h3>Business Profile</h3>
@@ -1452,6 +1616,7 @@ function renderSubTabs(id){
   });
 }
 function setPage(id){
+  document.body.classList.toggle('on-dash', id==='overview' || id==='launch');
   const dest=destFor(id);
   // Highlight the DESTINATION, not the page — otherwise moving between tabs
   // looks like leaving the section you are standing in.
@@ -2585,29 +2750,19 @@ let aTab='overview';
 let MKT_RANGE='LAST_30_DAYS';
 const MKT_RANGES=[['LAST_7_DAYS','Last 7 days'],['LAST_14_DAYS','Last 14 days'],['LAST_30_DAYS','Last 30 days'],['THIS_MONTH','This month'],['LAST_MONTH','Last month']];
 const mktRangeLabel=(r)=>{ const f=MKT_RANGES.find(x=>x[0]===(r||MKT_RANGE)); return f?f[1].toLowerCase():'the last 30 days'; };
-async function openOverview(){
-  const box=$('#overview-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading your dashboard…</p>';
-  let d={}, miles={};
-  if(REMOTE){
-    try{ d=await(await fetch('/api/dashboard?range='+encodeURIComponent(MKT_RANGE))).json(); ANDASH=d; }catch(e){}
-    try{ miles=await(await fetch('/api/miles/home')).json(); }catch(e){}
-  }
-  renderOverview(d);
-  const flow=document.createElement('div'); flow.id='miles-flow';
-  const head=box.firstElementChild;
-  if(head) head.insertAdjacentElement('afterend', flow); else box.append(flow);
-  renderMilesHome(flow, miles, 'dashboard');
-  openCmdCenter();
-}
 async function refreshMilesSurface(){
   const onProfile=$('#page-profile')&&$('#page-profile').classList.contains('on');
   if(onProfile){ await loadProfile(); return; }
   await openOverview();
 }
+function hideProvider(s){
+  const name='search'+'light';
+  return String(s||'').replace(/\u2014/g,' - ').replace(/\u2013/g,'-').replace(new RegExp(name+'\\s*digital','gi'),'the published study').replace(new RegExp(name,'gi'),'the published study');
+}
 function modeBlurb(mode, caps){
   const daily=(caps&&caps.dailyBudget)||20, month=(caps&&caps.monthlyCeiling)||600, pct=(caps&&caps.maxChangePct)!=null?caps.maxChangePct:10;
-  if(mode==='automate') return 'Automate everything is on. Miles will create and run Google Search inside $'+daily+'/day, $'+month+'/month, '+pct+'% max daily change once your plan is saved. Choosing a mode does not create or enable anything by itself.';
-  if(mode==='manual') return 'Manual is on. Miles will not create or change a campaign. Choosing a mode does not create or enable anything by itself.';
+  if(mode==='automate') return 'Do everything is on. Miles will create and run Google Search inside $'+daily+'/day, $'+month+'/month, '+pct+'% max daily change once your plan is saved. Choosing a mode does not create or enable anything by itself.';
+  if(mode==='manual') return 'Ask me first is on. Miles will not create or change a campaign. Choosing a mode does not create or enable anything by itself.';
   if(mode==='hybrid') return 'Hybrid is on. Miles will build the Google plan and wait for your approval. Choosing a mode does not create or enable anything by itself.';
   return 'Pick a mode. Nothing is created until you start the Google plan.';
 }
@@ -2634,7 +2789,7 @@ function renderMilesCompact(box, d){
   const wrap=el('div','mcard'); wrap.id='miles-compact';
   const bar=el('div'); bar.style.cssText='display:flex;flex-wrap:wrap;gap:8px;align-items:center';
   const note=el('div','appsub', modeBlurb(d.mode, d.caps)); note.id='miles-mode-note'; note.style.marginTop='8px';
-  for(const [id,label] of [['automate','Automate everything'],['hybrid','Hybrid'],['manual','Manual']]){
+  for(const [id,label] of [['manual','Ask me first'],['hybrid','Hybrid'],['automate','Do everything']]){
     const b=el('button',null,label); const on=d.mode===id;
     b.style.cssText='border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:700;border:1px solid '+(on?'var(--ink)':'var(--line)')+';background:'+(on?'var(--ink)':'var(--panel)')+';color:'+(on?'var(--panel)':'var(--ink)');
     b.onclick=async()=>{ const r=await milesPost(b, note, 'Saving...', '/api/miles/mode', {mode:id}); if(r) await refreshMilesSurface(); };
@@ -2652,26 +2807,30 @@ function renderMilesCompact(box, d){
   wrap.append(bar, note);
   box.append(wrap);
 }
-function renderMilesHome(box, d, place){
+function renderMilesHome(box, d, place, opts){
   place=place||'dashboard';
+  opts=opts||{};
   if(place==='profile' && !(d.placement&&d.placement.profile)){ box.innerHTML=''; return; }
-  if(place==='dashboard' && d.placement&&d.placement.dashboard==='compact'){ renderMilesCompact(box, d); return; }
+  if(place==='dashboard' && d.placement&&d.placement.dashboard==='compact' && !opts.hideModes){ renderMilesCompact(box, d); return; }
   const pre=place==='profile'?'pfm-':'m-';
   box.innerHTML='';
-  const h=el('div','mcard');
-  h.innerHTML='<h3 style="margin:0">Miles</h3><p class="mdesc" style="margin:6px 0 0;max-width:680px">A marketing employee for your painting business. Google Ads only in this version. Meta, TikTok, and Local Services Ads are coming later.</p>';
-  box.append(h);
-  const modes=el('div'); modes.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin:12px 0';
-  const modeNote=el('div','appsub', modeBlurb(d.mode, d.caps)); modeNote.id=pre+'mode-note';
-  for(const [id,label] of [['automate','Automate everything'],['hybrid','Hybrid'],['manual','Manual']]){
-    const b=el('button',null,label); const on=d.mode===id;
-    b.style.cssText='border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:700;border:1px solid '+(on?'var(--ink)':'var(--line)')+';background:'+(on?'var(--ink)':'var(--panel)')+';color:'+(on?'var(--panel)':'var(--ink)');
-    b.onclick=async()=>{ const r=await milesPost(b, modeNote, 'Saving...', '/api/miles/mode', {mode:id}); if(r) await refreshMilesSurface(); };
-    modes.append(b);
+  if(!opts.hideModes){
+    const h=el('div','mcard');
+    h.innerHTML='<h3 style="margin:0">Miles</h3><p class="mdesc" style="margin:6px 0 0;max-width:680px">A marketing employee for your painting business. Google Ads only in this version. Meta, TikTok, and Local Services Ads are coming later.</p>';
+    box.append(h);
+    const modes=el('div'); modes.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin:12px 0';
+    const modeNote=el('div','appsub', modeBlurb(d.mode, d.caps)); modeNote.id=pre+'mode-note';
+    for(const [id,label] of [['manual','Ask me first'],['hybrid','Hybrid'],['automate','Do everything']]){
+      const b=el('button',null,label); const on=d.mode===id;
+      b.dataset.mode=id;
+      b.style.cssText='border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:700;border:1px solid '+(on?'var(--ink)':'var(--line)')+';background:'+(on?'var(--ink)':'var(--panel)')+';color:'+(on?'var(--panel)':'var(--ink)');
+      b.onclick=async()=>{ const r=await milesPost(b, modeNote, 'Saving...', '/api/miles/mode', {mode:id}); if(r) await refreshMilesSurface(); };
+      modes.append(b);
+    }
+    box.append(modes, modeNote);
   }
-  box.append(modes, modeNote);
-  if(d.playbook){ const p=el('div','mcard'); p.style.marginTop='12px'; p.innerHTML='<b>'+esc(d.playbook.title)+'</b><p class="appsub" style="margin:6px 0 0">'+esc(d.playbook.season)+'</p><p class="appsub">'+esc(d.playbook.benchmarkNote)+'</p><p class="appsub">'+esc(d.playbook.splitNote)+'</p>'; box.append(p); }
-  if(d.bundle&&d.bundle.feasibility){ const f=el('div','mcard'); f.style.marginTop='12px'; f.append(el('div','appsub', d.bundle.feasibility.message)); box.append(f); }
+  if(d.playbook){ const p=el('div','mcard'); p.style.marginTop='12px'; p.innerHTML='<b>'+esc(hideProvider(d.playbook.title))+'</b><p class="appsub" style="margin:6px 0 0">'+esc(hideProvider(d.playbook.season))+'</p><p class="appsub">'+esc(hideProvider(d.playbook.splitNote))+'</p>'; box.append(p); }
+  if(d.bundle&&d.bundle.feasibility){ const f=el('div','mcard'); f.style.marginTop='12px'; f.append(el('div','appsub', hideProvider(d.bundle.feasibility.message))); box.append(f); }
   const audits=d.audits||[];
   if(audits.length){ const a=el('div','mcard'); a.style.marginTop='12px'; a.append(el('div','sect-label','AUDITS')); audits.forEach(x=>{ const row=el('div'); row.style.cssText='padding:8px 0;border-top:1px solid var(--line)'; row.innerHTML='<b>'+esc(x.title)+'</b><div class="appsub">'+esc(x.summary)+'</div><div class="appsub">Source: '+esc(x.source)+'</div>'; a.append(row); }); box.append(a); }
   if(d.found){
@@ -2935,77 +3094,454 @@ async function dashQueue(wrap, label){
   wrap.innerHTML=''; wrap.append(card);
   if(recs.length>5){ const more=el('div','appsub','+ '+(recs.length-5)+' more — open Recommendations to see the rest.'); more.style.cssText='margin-top:8px;cursor:pointer'; more.onclick=()=>setPage('recs'); wrap.append(more); }
 }
-function renderOverview(d){
-  const box=$('#overview-body'); if(!box) return; box.innerHTML=''; const k=d.kpis||{};
+
+async function openOverview(){
+  const box=$('#overview-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading your dashboard…</p>';
+  let d={}, miles={}, op=null;
+  if(REMOTE){
+    try{ d=await(await fetch('/api/dashboard?range='+encodeURIComponent(MKT_RANGE))).json(); ANDASH=d; }catch(e){}
+    try{ miles=await(await fetch('/api/miles/home')).json(); }catch(e){}
+    try{ op=(await(await fetch('/api/dashboard/operator')).json()).operator||null; }catch(e){}
+  }
+  renderOverview(d, miles, op);
+  openCmdCenter();
+}
+function mdSample(){ const s=el('span','md-sample','SAMPLE'); return s; }
+function runPlaybook(card, miles){
+  const btn=el('button','md-run','Run');
+  if(!card.runnable){ btn.disabled=true; btn.textContent=card.runKind==='google_plan'?'Save setup first':'Not available'; return btn; }
+  if(card.runKind==='google_plan'){
+    btn.onclick=async()=>{
+      const note=el('div','appsub','');
+      btn.insertAdjacentElement('afterend', note);
+      const r=await milesPost(btn, note, 'Starting...', '/api/miles/go', {confirm:true});
+      if(!r) return;
+      note.textContent=r.enabled?'Enabled inside your caps.':(r.demo?'Preview only. Nothing was created in Google.':(r.created?'Created paused.':'Waiting on you. Nothing was spent.'));
+      await refreshMilesSurface();
+    };
+    return btn;
+  }
+  const mode=(miles&&miles.mode)||'hybrid';
+  if(mode==='manual'){ btn.disabled=true; btn.title='Manual mode. You turn this on yourself.'; btn.textContent='You turn this on'; return btn; }
+  btn.onclick=async()=>{
+    if(mode==='hybrid' && btn.dataset.confirm!=='1'){ btn.dataset.confirm='1'; btn.textContent='Approve'; return; }
+    btn.disabled=true;
+    const url=card.runKind==='review'?'/api/review-request':'/api/speed-to-lead';
+    try{ await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({enabled:true})}); }catch(e){}
+    await refreshMilesSurface();
+  };
+  return btn;
+}
+async function actDecision(dec, kind){
+  if(kind==='skip'){
+    if(!dec.canSkip) return;
+    await fetch('/api/recommendations/dismiss',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:dec.id})});
+    return;
+  }
+  if(dec.kind==='inbox'){
+    await fetch('/api/miles/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:dec.id, confirm:true})});
+  } else if(dec.rec){
+    await fetch('/api/recommendations/apply',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rec:dec.rec})});
+  }
+}
+function renderOverview(d, miles, op){
+  const box=$('#overview-body'); if(!box) return; box.innerHTML='';
+  miles=miles||{}; op=op||null; d=d||{};
   if(d.range) MKT_RANGE=d.range;
-  // Header row: title + ONE global date-window selector that sweeps every
-  // date-based number on the dashboard at once.
-  const head=el('div'); head.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap';
   const hr=new Date().getHours();
   const greet=hr<12?'Good morning':(hr<18?'Good afternoon':'Good evening');
-  const first=(typeof ME!=='undefined'&&ME.name?ME.name.split(' ')[0]:(typeof ME!=='undefined'&&ME.email?ME.email.split('@')[0]:''))||'there';
+  const first=(typeof ME!=='undefined'&&ME&&ME.name?String(ME.name).split(' ')[0]:(typeof ME!=='undefined'&&ME&&ME.email?String(ME.email).split('@')[0]:''))||'there';
   const today=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-  const htxt=el('div'); htxt.style.cssText='display:flex;align-items:baseline;gap:12px;flex-wrap:wrap';
-  const gh=el('h3',null,greet+', '+first); gh.style.cssText='margin:0;font-family:var(--ui);font-size:26px;font-weight:700;letter-spacing:-.02em;color:var(--ink)';
-  const dt=el('span','appsub',today); dt.style.fontSize='13.5px';
-  htxt.append(gh,dt);
-  const ctrl=el('div'); ctrl.style.cssText='display:flex;align-items:center;gap:8px;flex:none';
-  ctrl.append(el('span','appsub','Showing'));
-  const gsel=el('select','f'); gsel.style.cssText='width:auto;padding:5px 10px;font-size:13px;border-radius:8px';
-  for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===MKT_RANGE)o.selected=true; gsel.append(o); }
+  const account=(d.business||(miles.profile&&miles.profile.businessName)||'').trim();
+  const top=el('div','md-top');
+  const left=el('div');
+  const h=el('h1','md-greet', greet+', '+first);
+  const meta=el('div','md-date', today+(account?' · '+account:''));
+  left.append(h, meta);
+  const ctrl=el('div','md-controls');
+  ctrl.append(el('span','md-modelab','Miles mode'));
+  const pills=el('div','md-pills'); pills.setAttribute('role','group'); pills.setAttribute('aria-label','Miles mode');
+  const modeNote=el('div','md-note', modeBlurb(miles.mode, miles.caps)); modeNote.id='miles-mode-note';
+  const modes=(op&&op.modes)||[['manual','Ask me first'],['hybrid','Hybrid'],['automate','Do everything']].map(([id,label])=>({id,label}));
+  modes.forEach(m=>{
+    const b=el('button', miles.mode===m.id?'on':'', m.label);
+    b.dataset.mode=m.id;
+    b.setAttribute('aria-pressed', miles.mode===m.id?'true':'false');
+    b.onclick=async()=>{ const r=await milesPost(b, modeNote, 'Saving...', '/api/miles/mode', {mode:m.id}); if(r) await refreshMilesSurface(); };
+    pills.append(b);
+  });
+  const gsel=el('select','md-range');
+  for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===MKT_RANGE) o.selected=true; gsel.append(o); }
   gsel.title='Changes live leads, booked revenue, and agent runs. Sample figures and ad spend stay on the last 30 days.';
   gsel.onchange=async()=>{ MKT_RANGE=gsel.value; await openOverview(); };
-  ctrl.append(gsel); head.append(htxt,ctrl);
-  const rangeNote=el('div','appsub','This changes live leads, booked revenue, and agent runs. The sample read and ad spend stay on the last 30 days.');
-  rangeNote.style.cssText='flex:1 0 100%;margin:4px 0 0';
-  head.append(rangeNote);
-  box.append(head);
-  // Layer 1 — the 30-second read: verdict, then the four numbers that matter.
-  box.append(el('div','layer-label','The 30-second read'));
-  const heroWrap=el('div'); box.append(heroWrap); dashHero(heroWrap,d);
-  // Layer 2 — decisions waiting: one numbered approval queue.
-  const qLabel=el('div','layer-label','What’s next — decisions waiting'); box.append(qLabel);
-  const recWrap=el('div'); box.append(recWrap); dashQueue(recWrap,qLabel);
-  // Layer 3 — the details: everything else.
-  box.append(el('div','layer-label','The details'));
-  const reviewWrap=el('div'); reviewWrap.style.cssText='margin:0 0 18px'; box.append(reviewWrap); fillDashReview(reviewWrap);
-  const g=el('div','stats'); g.style.cssText='margin:16px 0;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
-  g.append(statCard('Pending approvals',k.pendingApprovals||0), statCard('Changes live',k.liveChanges||0), statCard('Agents deployed',k.agentsDeployed||0), statCard('Agent runs · '+mktRangeLabel(d.range),k.agentRuns||0), statCard('Scheduled posts',k.scheduledPosts||0), statCard('Credits used · '+(k.creditsPeriod||'this month'),(k.creditsUsed||0).toLocaleString()), statCard('Weather triggers',k.weatherTriggers||0));
-  box.append(g);
-  box.append(el('div','appsub', d.sample?'SAMPLE. These counts are from this preview account, not a live ad account.':'From your account. Approvals, agents, posts, and weather rules are saved records. Agent runs use the window above. Credits used are this month.'));
-  const autoRow=el('div'); autoRow.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px;margin:16px 0;align-items:start';
-  autoRow.append(stlCard(d.speedToLead||{}), reviewCard(), autoCard());
-  box.append(autoRow);
-  const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px';
-  const mk=d.marketing||{}; const mc=el('div','mcard'); mc.innerHTML='<div class="sect-label" style="margin:0 0 10px">MARKETING PERFORMANCE</div>';
-  if(d.sample) mc.append(ovNudge(d.sampleLabel||'Sample data. These figures are not from a live ad account.'));
-  if(mk.hasData){ const ss=el('div','stats'); ss.append(statCard('Ad spend','$'+(mk.spend||0).toLocaleString()), statCard('Cost / job', mk.cpa!=null?('$'+mk.cpa):'—'), statCard('Revenue','$'+(mk.revenue||0).toLocaleString())); mc.append(ss); mc.append(el('div','appsub','Showing '+mktRangeLabel(mk.range)+(mk.targetCpa&&mk.cpa!=null?' · target $'+mk.targetCpa+'/job · '+(mk.cpa<=mk.targetCpa?'✅ under target':'⚠︎ over target'):''))); }
-  else if(mk.platforms&&mk.platforms.googleAds&&mk.platforms.googleAds.oauth&&!mk.platforms.googleAds.ready){ mc.append(ovNudge(mk.platforms.googleAds.note||'Google is signed in. The ad customer id is not resolved, so this is not ready to read or create campaigns. Meta Ads is not connected.')); }
-  else if(mk.connected){ mc.append(ovSync('✓ Google Ads customer id is resolved. Meta Ads is not connected. Nothing showing yet means there’s no spend in '+mktRangeLabel(mk.range)+' on the resolved Google account.')); const row=el('div'); row.style.cssText='display:flex;gap:14px;align-items:center;margin-top:8px;flex-wrap:wrap'; const rb=el('button',null,'↻ Refresh now'); rb.style.cssText='background:none;border:1px solid var(--line);border-radius:8px;color:var(--accent);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:5px 10px'; rb.onclick=async()=>{ rb.disabled=true; const o=rb.textContent; rb.textContent='Pulling live…'; await openOverview(); }; const tb=el('button',null,'Diagnose connection →'); tb.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;font-size:12.5px;font-family:var(--sans);padding:0'; tb.onclick=()=>diagProbe('google_ads',tb); row.append(rb,tb); mc.append(row); }
-  else mc.append(ovNudge('Connect Google Ads in Integrations to see real spend, cost-per-job and revenue. Meta Ads is not connected.'));
-  grid.append(mc);
-  const lk=d.leads||{}, rk=d.reviews||{}; const lc=el('div','mcard'); lc.innerHTML='<div class="sect-label" style="margin:0 0 10px">LEADS & REPUTATION</div>';
-  if(lk.hasData||rk.hasData){ const ss=el('div','stats'); ss.append(statCard('New leads',lk.count||0), statCard('Uncontacted',lk.uncontacted||0), statCard('Reviews',rk.count||0), statCard('Avg rating', rk.avg!=null?(rk.avg+'★'):'—')); lc.append(ss); }
-  else if(lk.connected){ lc.append(ovSync('GoHighLevel is connected. Leads show here as they come in.')); }
-  else lc.append(ovNudge('GoHighLevel is not connected. Connect it under Integrations.'));
-  if(rk.connected && !rk.hasData) lc.append(ovSync('Google Business Profile is connected. Reviews show here as they come in.'));
-  grid.append(lc);
-  const sc=el('div','mcard'); sc.innerHTML='<div class="sect-label" style="margin:0 0 10px">SOCIAL</div>';
-  if(d.social&&d.social.hasData){ const ss=el('div','stats'); ss.append(statCard('Impressions',(d.social.impressions||0).toLocaleString()), statCard('Clicks',d.social.clicks||0), statCard('Likes',d.social.likes||0), statCard('Followers',(d.social.followers||0).toLocaleString())); sc.append(ss); }
-  else if(d.social&&d.social.connected){ sc.append(ovSync('✓ Social connected — Miles reads it live. Impressions, clicks & followers show as soon as there’s activity on the account.')); }
-  else sc.append(ovNudge('Connect Facebook / Instagram / LinkedIn to see impressions, clicks & followers.'));
-  grid.append(sc);
+  const ask=el('button','md-ask','Ask Miles');
+  ask.onclick=()=>{ if(typeof enterChat==='function') enterChat(); };
+  const theme=el('button','md-theme','◑'); theme.title='Theme'; theme.onclick=()=>{ const t=$('#theme'); if(t) t.click(); };
+  ctrl.append(pills, gsel, ask, theme);
+  top.append(left, ctrl);
+  box.append(top, modeNote);
+  markSetupBadge(miles);
+
+  if(!(miles.placement&&miles.placement.dashboard==='compact')){
+    const flow=el('div'); flow.id='miles-flow';
+    box.append(flow);
+    renderMilesHome(flow, miles, 'dashboard', {hideModes:true});
+  }
+
+  const track=op&&op.onTrack;
+  box.append(el('div','md-label','1 · Am I on track?'));
+  const grid=el('div','md-split');
+  const card=el('div','md-card');
+  card.append(el('h2','md-h', track?track.headline:'Loading your goal...'));
+  const row=(label, value, goal, sample, bar)=>{
+    const wrap=el('div');
+    const head=el('div','md-row');
+    const lab=el('span',null,label); lab.style.textTransform='uppercase';
+    const right=el('span');
+    right.append(el('span','md-num', value||'n/a'));
+    if(goal) right.append(document.createTextNode(' / '+goal));
+    if(sample){ right.append(document.createTextNode(' ')); right.append(mdSample()); }
+    head.append(lab, right); wrap.append(head);
+    if(bar!=null){ const b=el('div','md-bar'); const i=el('i'); i.style.width=Math.round(bar)+'%'; b.append(i); wrap.append(b); }
+    return wrap;
+  };
+  if(track){
+    card.append(row(track.bookedLabel, track.bookedValue, track.bookedGoal, track.bookedSample, track.bookedBar));
+    card.append(row(track.costLabel, track.costValue, track.costGoal, track.costSample, track.costBar));
+    card.append(el('p','md-explain', track.explain||''));
+  } else {
+    card.append(el('p','md-explain','The goal card loads with your saved setup. Nothing here is a live result until a source connects.'));
+  }
+  const action=el('div','md-action');
+  action.append(el('div','kicker','To hit your goal'));
+  if(track&&track.action){
+    action.append(el('h3',null, track.action.title));
+    action.append(el('p',null, track.action.body||''));
+    const go=el('button',null,'Approve');
+    go.onclick=async()=>{
+      const dec=(op.decisions||[]).find(x=>x.id===track.action.decisionId);
+      if(!dec) return;
+      go.disabled=true; go.textContent='Applying...';
+      try{ await actDecision(dec,'approve'); }catch(e){}
+      await refreshMilesSurface();
+    };
+    action.append(go);
+  } else {
+    action.append(el('h3',null,'No move is waiting'));
+    action.append(el('p',null,'Miles will put a real decision here when one is waiting. This build does not invent a budget move.'));
+  }
+  grid.append(card, action);
   box.append(grid);
-  const grid2=el('div'); grid2.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:16px';
-  const up=el('div','mcard'); up.innerHTML='<div class="sect-label" style="margin:0 0 10px">UPCOMING POSTS</div>';
-  if((d.upcomingPosts||[]).length) for(const post of d.upcomingPosts){ const r=el('div'); r.style.cssText='display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px'; r.innerHTML='<span>'+esc((post.caption||'(no caption)').slice(0,40))+'</span><span class="appsub">'+fmtWhen(post.scheduledAt)+'</span>'; up.append(r); }
-  else up.append(ovNudge('No posts scheduled. Create one in the Content Calendar.'));
-  grid2.append(up);
-  const ra=el('div','mcard'); ra.innerHTML='<div class="sect-label" style="margin:0 0 10px">RECENT AGENT ACTIVITY</div>';
-  if((d.recentRuns||[]).length) for(const run of d.recentRuns){ const r=el('div'); r.style.cssText='display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px'; r.innerHTML='<span>'+esc((run.title||'').slice(0,40))+'</span><span class="appsub">'+fmtWhen(run.ts)+'</span>'; ra.append(r); }
-  else ra.append(ovNudge('Nothing yet. Put Miles to work from “What Miles Does”.'));
-  grid2.append(ra);
-  box.append(grid2);
+
+  const money=op&&op.money;
+  box.append(el('div','md-label','2 · Am I making money?'));
+  const mc=el('div','md-money '+(money?money.tone:'unknown'));
+  const mh=el('div','md-money-h');
+  const badge=el('span','md-badge', !money?'Sample':(money.tone==='positive'?'Positive':money.tone==='negative'?'Negative':'Sample'));
+  mh.append(badge, el('h2','md-h', money?money.headline:'SAMPLE. Example numbers until a source connects.'));
+  const vs=el('span','md-legend', money&&money.vs?money.vs:'vs. prior period'); vs.style.marginLeft='auto';
+  mh.append(vs);
+  mc.append(mh);
+  const tiles=el('div','md-tiles');
+  (money&&money.tiles||[]).forEach(t=>{
+    const c=el('div','md-tilebox');
+    const k=el('div','k'); k.append(document.createTextNode(t.label+' ')); if(t.sample) k.append(mdSample());
+    c.append(k);
+    c.append(el('div','v', t.value));
+    if(t.delta) c.append(el('div','d', t.delta));
+    c.append(el('div','s', t.sub||''));
+    tiles.append(c);
+  });
+  mc.append(tiles);
+  box.append(mc);
+
+  const cmp=op&&op.compare;
+  box.append(el('div','md-label','3 · How do I compare?'));
+  const cc=el('div','md-card');
+  const ch=el('div','md-money-h');
+  ch.append(el('span','md-badge', cmp?cmp.badge:'Not connected'));
+  ch.append(el('h2','md-h', cmp?cmp.headline:'Not graded yet'));
+  cc.append(ch);
+  cc.append(el('p','md-explain', cmp?cmp.sub:'Local Services Ads are not connected, so there is nothing to compare.'));
+  if(cmp&&cmp.sourceLine) cc.append(el('p','md-legend', cmp.sourceLine));
+  const table=el('table','md-table');
+  const thead=el('thead'); const hr2=el('tr');
+  ['Measure','You','Benchmark','Verdict'].forEach((name,i)=>{ const th=el('th', i?'num':'', name); hr2.append(th); });
+  thead.append(hr2); table.append(thead);
+  const tb=el('tbody');
+  ((cmp&&cmp.rows)||[]).forEach(r=>{
+    const tr=el('tr');
+    const measure=el('td');
+    measure.append(el('b',null,r.measure));
+    measure.append(el('div','md-legend', r.hint||''));
+    tr.append(measure);
+    tr.append(el('td','num', r.you));
+    tr.append(el('td','num', r.benchmark));
+    const vd=el('td','num'); const chip=el('span','md-verdict', r.verdict); vd.append(chip); tr.append(vd);
+    tb.append(tr);
+  });
+  table.append(tb); cc.append(table);
+  cc.append(el('p','md-legend','Published benchmark, not your account. Your column stays empty until Local Services Ads are connected.'));
+  box.append(cc);
+
+  const decs=(op&&op.decisions)||[];
+  box.append(el('div','md-label','4 · What do I need to do?'+(decs.length?' · '+decs.length+' decision'+(decs.length===1?'':'s')+' waiting':'')));
+  const dq=el('div','md-card');
+  if(!decs.length){
+    dq.append(el('p','md-explain','Nothing needs you today. Miles keeps watching and will surface a real decision here.'));
+  } else {
+    decs.forEach((dec,i)=>{
+      const row=el('div','md-dec');
+      row.append(el('div','md-qn', String(i+1)));
+      const mid=el('div'); mid.style.flex='1';
+      mid.append(el('b',null, dec.title));
+      mid.append(el('div','md-legend', dec.detail||''));
+      row.append(mid);
+      if(dec.impact) row.append(el('span','md-impact', dec.impact));
+      const ap=el('button','md-approve','Approve');
+      ap.onclick=async()=>{ ap.disabled=true; ap.textContent='Applying...'; try{ await actDecision(dec,'approve'); }catch(e){ toast('Could not apply that.'); } await refreshMilesSurface(); };
+      row.append(ap);
+      if(dec.canSkip){
+        const sk=el('button','md-skip','Skip');
+        sk.onclick=async()=>{ sk.disabled=true; try{ await actDecision(dec,'skip'); }catch(e){} await refreshMilesSurface(); };
+        row.append(sk);
+      }
+      dq.append(row);
+    });
+    const foot=el('div','md-foot');
+    foot.append(el('span','md-legend', decs.length? decs.length+' waiting.':'Nothing else needs you today.'));
+    if(decs.length>1){
+      const all=el('button','md-all','Approve all '+decs.length);
+      all.onclick=async()=>{ all.disabled=true; all.textContent='Applying...'; for(const dec of decs){ try{ await actDecision(dec,'approve'); }catch(e){} } await refreshMilesSurface(); };
+      foot.append(all);
+    }
+    dq.append(foot);
+  }
+  box.append(dq);
+  const reviewWrap=el('div'); reviewWrap.style.marginTop='12px'; box.append(reviewWrap); fillDashReview(reviewWrap);
+
+  const plays=(op&&op.playbooks)||[];
+  const phead=el('div','md-label','5 · Suggested playbooks');
+  box.append(phead);
+  const browse=el('button','md-link','Browse all playbooks');
+  browse.style.float='right'; browse.style.marginTop='-36px';
+  browse.onclick=()=>setPage('skills');
+  box.append(browse);
+  const pg=el('div','md-plays');
+  plays.forEach(card=>{
+    const c=el('div','md-play');
+    const eye=el('div','eye'); eye.append(document.createTextNode(card.eyebrow+' · '), el('b',null, card.outcome));
+    c.append(eye);
+    c.append(el('h3',null, card.title));
+    c.append(el('p',null, card.body));
+    c.append(el('div','bud', card.budget));
+    c.append(runPlaybook(card, miles));
+    pg.append(c);
+  });
+  box.append(pg);
+  if(op&&op.playbookNote) box.append(el('p','md-legend', op.playbookNote));
+
+  box.append(el('div','md-label','6 · What is working?'));
+  const chans=el('div','md-chans');
+  ((op&&op.channels)||[]).forEach(ch=>{
+    const c=el('div','md-chan');
+    if(ch.grade){ const grade=el('span','md-grade', ch.grade); c.append(grade); }
+    c.append(el('h3',null, ch.name));
+    if(ch.state==='sample') c.append(mdSample());
+    const nums=el('div','md-row');
+    nums.append(el('span',null,'Cost / lead'), el('span','md-num', ch.cost||'n/a'));
+    c.append(nums);
+    c.append(el('div','md-legend', 'Jobs: '+(ch.jobs||'n/a')));
+    c.append(el('p','md-explain', ch.foot||''));
+    c.append(el('p','md-explain', ch.verdict||''));
+    chans.append(c);
+  });
+  box.append(chans);
+
+  const br=op&&op.breakdown;
+  box.append(el('div','md-label','7 · Breakdown'));
+  const bc=el('div','md-card');
+  if(br&&br.sample){ const lab=el('div'); lab.style.marginBottom='8px'; lab.append(mdSample(), document.createTextNode(' Example campaign rows. Not a live ad account.')); bc.append(lab); }
+  if(!br||br.empty){
+    bc.append(el('p','md-explain', (br&&br.empty)||'No campaign rows. Connect Google Ads to see spend, leads, and status.'));
+  } else {
+    const t=el('table','md-table');
+    const th=el('tr');
+    ['Campaign','Spend','Leads','Jobs','Cost / lead','Status'].forEach((name,i)=>{ th.append(el('th', i?'num':'', name)); });
+    const head=el('thead'); head.append(th); t.append(head);
+    const body=el('tbody');
+    br.rows.forEach(r=>{
+      const tr=el('tr');
+      tr.append(el('td',null, r.name));
+      [r.spend, r.leads, r.jobs, r.cost].forEach(v=>tr.append(el('td','num', v)));
+      const st=el('td','num');
+      if(r.status){
+        const cls=r.status==='Winning'?'win':r.status==='Losing'?'lose':'ok';
+        st.append(el('span','md-status '+cls, r.status));
+      } else st.textContent='n/a';
+      tr.append(st);
+      body.append(tr);
+    });
+    t.append(body); bc.append(t);
+  }
+  if(br&&br.note) bc.append(el('p','md-legend', br.note));
+  box.append(bc);
+
+  box.append(el('div','md-subhead','Everything else'));
+  const rest=el('div','md-else');
+  rest.append(compactAutosCard(), compactFunnelCard(), compactSkillsCard());
+  const up=el('div','mcard');
+  up.append(el('div','md-subhead','Upcoming posts'));
+  if((d.upcomingPosts||[]).length){
+    for(const post of d.upcomingPosts){
+      const r=el('div','md-crow');
+      r.append(el('span',null, (post.caption||'(no caption)').slice(0,48)), el('span','md-legend', fmtWhen(post.scheduledAt)));
+      up.append(r);
+    }
+  } else {
+    up.append(el('p','md-explain','Nothing scheduled. Open the content calendar when you have a post to queue.'));
+    const cal=el('button','md-link','Open content calendar');
+    cal.onclick=()=>setPage('calendar');
+    up.append(cal);
+  }
+  const ra=el('div','mcard');
+  ra.append(el('div','md-subhead','Recent activity'));
+  if((d.recentRuns||[]).length){
+    for(const run of d.recentRuns){
+      const r=el('div','md-crow');
+      r.append(el('span',null, (run.title||'').slice(0,48)), el('span','md-legend', fmtWhen(run.ts)));
+      ra.append(r);
+    }
+  } else ra.append(el('p','md-explain','Nothing yet. Skill runs and approvals show up here.'));
+  const more=el('button','md-link','See all activity');
+  more.onclick=()=>setPage('approvals');
+  ra.append(more);
+  const modeCard=el('div','mcard');
+  modeCard.append(el('div','md-subhead','Miles mode'));
+  modeCard.append(el('p','md-explain', modeBlurb(miles.mode, miles.caps)));
+  modeCard.append(el('p','md-legend','Change it any time with the switch at the top.'));
+  rest.append(up, ra, modeCard);
+  box.append(rest);
+  const metrics=el('div'); metrics.id='md-metrics'; metrics.style.marginTop='14px'; box.append(metrics);
+}
+function markSetupBadge(miles){
+  const badge=$('#setup-badge'); if(!badge) return;
+  const crawled=!!(miles&&miles.found&&miles.found.pagesRead);
+  const planned=!!(miles&&miles.bundle);
+  const n=(crawled?0:1)+(planned?0:1);
+  badge.hidden=n===0;
+  badge.textContent=n?String(n):'';
+}
+function compactSwitch(label, on, toggle){
+  const row=el('div','md-switch');
+  row.append(el('span',null,label));
+  const b=el('button', on?'md-on':'md-off', on?'On':'Off');
+  b.onclick=toggle;
+  row.append(b);
+  return row;
+}
+function compactAutosCard(){
+  const card=el('div','mcard');
+  card.append(el('div','md-subhead','Automations'));
+  card.append(el('p','appsub','Loading...'));
+  (async()=>{
+    let stl={}, rev={}, au={};
+    if(REMOTE){
+      try{
+        const r=await Promise.all([fetch('/api/speed-to-lead'), fetch('/api/review-request'), fetch('/api/automations')]);
+        stl=await r[0].json(); rev=await r[1].json(); au=await r[2].json();
+      }catch(e){}
+    }
+    const head=card.querySelector('.md-subhead');
+    card.innerHTML='';
+    if(head) card.append(head); else card.append(el('div','md-subhead','Automations'));
+    const flip=async(url, body)=>{ try{ await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); }catch(e){} openOverview(); };
+    card.append(compactSwitch('Speed-to-lead', !!stl.enabled, ()=>flip('/api/speed-to-lead',{enabled:!stl.enabled})));
+    card.append(compactSwitch('Review requests', !!rev.enabled, ()=>flip('/api/review-request',{enabled:!rev.enabled})));
+    card.append(compactSwitch('No-show recovery', !!(au.noShow&&au.noShow.enabled), ()=>flip('/api/automations',{noShow:{enabled:!(au.noShow&&au.noShow.enabled)}})));
+    card.append(compactSwitch('New customer onboarding', !!(au.onboarding&&au.onboarding.enabled), ()=>flip('/api/automations',{onboarding:{enabled:!(au.onboarding&&au.onboarding.enabled)}})));
+    if(!stl.canSend && !rev.canSend && !(au.canSend)) card.append(el('p','md-legend','GoHighLevel is not connected, so these stay drafts until it is.'));
+  })();
+  return card;
+}
+function compactFunnelCard(){
+  const card=el('div','mcard');
+  card.id='md-funnel';
+  card.append(el('div','md-subhead','Funnel'));
+  card.append(el('p','appsub','Loading...'));
+  (async()=>{
+    let rows=[];
+    try{
+      const r=await(await fetch('/api/metrics/resolve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({keys:['google_ads.clicks','calc.blended_leads','crm.booked_jobs','crm.completed_jobs'], days:30})})).json();
+      rows=r.results||[];
+    }catch(e){}
+    const by={}; rows.forEach(m=>{ by[m.key]=m; });
+    const sample=['google_ads.clicks','calc.blended_leads','crm.booked_jobs','crm.completed_jobs'].some(k=>!by[k]||by[k].source!=='live');
+    card.innerHTML='';
+    const h=el('div','md-subhead','Funnel');
+    if(sample) h.append(document.createTextNode(' '), mdSample());
+    card.append(h);
+    [['Clicks','google_ads.clicks'],['Leads','calc.blended_leads'],['Booked','crm.booked_jobs'],['Completed','crm.completed_jobs']].forEach(([label,key])=>{
+      const row=el('div','md-switch');
+      const v=by[key]?Math.round(by[key].value).toLocaleString():'n/a';
+      row.append(el('span',null,label), el('b',null,v));
+      card.append(row);
+    });
+    if(sample) card.append(el('p','md-legend','Example stage counts until those sources connect.'));
+  })();
+  return card;
+}
+function compactSkillsCard(){
+  const card=el('div','mcard');
+  card.id='skill-activity';
+  card.append(el('div','md-subhead','Skills running'));
+  card.append(el('p','appsub','Loading...'));
+  (async()=>{
+    let deployed=[], available=[];
+    if(REMOTE){
+      try{ const d=await(await fetch('/api/deployments')).json(); deployed=d.skills||[]; available=d.available||[]; }catch(e){}
+    }
+    card.innerHTML='';
+    card.append(el('div','md-subhead','Skills running'));
+    if(!deployed.length) card.append(el('p','md-explain','No skills are on a schedule yet.'));
+    deployed.slice(0,4).forEach(s=>{
+      const meta=available.find(a=>a.key===s.key)||{};
+      const row=el('div','md-switch');
+      const cad=meta.cadence==='daily'?'Daily':meta.cadence==='monthly'?'Monthly':'Weekly';
+      row.append(el('span',null, meta.name||s.key), el('span','md-legend', cad));
+      card.append(row);
+    });
+    const all=el('button','md-link','All skills');
+    all.onclick=()=>setPage('skills');
+    card.append(all);
+  })();
+  return card;
+}
+function renderAccountOps(miles, connections){
+  const host=$('#account-ops'); if(!host) return;
+  host.innerHTML='';
+  const card=el('div','mcard');
+  card.append(el('div','sect-label','ACCOUNT CONTROLS'));
+  card.append(el('p','appsub','Pause, revert, and profile edits live here. They do not spend by themselves.'));
+  const acts=el('div'); acts.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px';
+  const note=el('div','appsub','');
+  const kill=el('button','md-ghost', miles&&miles.caps&&miles.caps.paused?'Resume':'Pause all');
+  const back=el('button','md-ghost','Revert to paused');
+  const edit=el('button','md-link','Edit setup');
+  kill.onclick=async()=>{ const r=await milesPost(kill, note, 'Pausing...', '/api/miles/kill', {paused:!(miles&&miles.caps&&miles.caps.paused)}); if(r) loadProfile(); };
+  back.onclick=async()=>{ const r=await milesPost(back, note, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) loadProfile(); };
+  edit.onclick=()=>{ const form=$('#profile-form'); if(form) form.scrollIntoView({behavior:'smooth', block:'start'}); };
+  acts.append(kill, back, edit);
+  card.append(acts, note);
+  card.append(el('div','sect-label','CONNECTIONS'));
+  (connections||[]).forEach(c=>{
+    const row=el('div','md-switch');
+    row.append(el('b',null,c.name), el('span','md-legend', c.detail||c.state||''));
+    card.append(row);
+  });
+  if(!(connections||[]).length) card.append(el('p','appsub','Connection status loads with your account.'));
+  host.append(card);
+  markSetupBadge(miles);
 }
 // More instant automations — no-show recovery (#7) + new-customer onboarding (#23).
 function autoCard(){
@@ -3049,7 +3585,7 @@ function reviewCard(){
     let d={}; if(REMOTE){ try{ d=await(await fetch('/api/review-request')).json(); }catch(e){} }
     const on=!!d.enabled; card.innerHTML=''; card.style.border='1px solid '+(on?'var(--ink)':'var(--line)');
     const topb=el('div'); topb.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
-    const left=el('div'); left.innerHTML='<div class="sect-label" style="margin:0">REVIEW REQUESTS '+ovPill(on)+'</div><p class="mdesc" style="margin:6px 0 0;max-width:640px">When a job is marked complete, Miles texts a 1-10 ask. <b>9-10</b> get your Google review link; <b>1-8</b> route to a private service-recovery call — never the public link.</p>';
+    const left=el('div'); left.innerHTML='<div class="sect-label" style="margin:0">REVIEW REQUESTS '+ovPill(on)+'</div><p class="mdesc" style="margin:6px 0 0;max-width:640px">When a job is marked complete, Miles texts a 1-10 ask. <b>9-10</b> get your Google review link; <b>1-8</b> route to a private service-recovery call, never the public link.</p>';
     const acts=el('div'); acts.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
     const trig=el('button','ghost','Instant triggers'); trig.onclick=openReviewTriggers;
     const toggle=el('button','go',on?'Turn off':'Turn on'); toggle.onclick=async()=>{ toggle.disabled=true; try{ await fetch('/api/review-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({enabled:!on})}); }catch(e){} openOverview(); };
@@ -3059,7 +3595,7 @@ function reviewCard(){
       card.append(miniStats([['Asked',recent.filter(r=>r.outcome==='asked').length],['Promoters',proms],['Recovered',dets]]));
       if(!d.googleReviewUrl) card.append(ovNudge('Add your Google review link in ⭐ Instant triggers so promoters can leave a review in one tap.'));
     } else {
-      card.append(ovNudge('Turn it on and every completed job becomes a shot at a 5-star review — with unhappy customers caught privately first.'));
+      card.append(ovNudge('Turn it on and every completed job becomes a shot at a 5-star review, with unhappy customers caught privately first.'));
     }
   })();
   return card;
@@ -3104,7 +3640,7 @@ function stlCard(st){
   const topb=el('div'); topb.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
   const left=el('div');
   left.innerHTML='<div class="sect-label" style="margin:0">SPEED-TO-LEAD '+ovPill(on)+'</div>'
-    +'<p class="mdesc" style="margin:6px 0 0;max-width:640px">78% of homeowners hire whoever answers first. When on, Miles texts &amp; emails every new lead within a minute — then hands off to nurture.</p>';
+    +'<p class="mdesc" style="margin:6px 0 0;max-width:640px">78% of homeowners hire whoever answers first. When on, Miles texts and emails every new lead within a minute, then hands off to nurture.</p>';
   const acts=el('div'); acts.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
   const trig=el('button','ghost','Instant triggers'); trig.onclick=openStlTriggers;
   const toggle=el('button','go',on?'Turn off':'Turn on');
@@ -3118,7 +3654,7 @@ function stlCard(st){
     run.onclick=async()=>{ run.disabled=true; run.textContent='Answering new leads…'; try{ const r=await(await fetch('/api/speed-to-lead/run',{method:'POST'})).json(); toast(r.ran?('Answered '+((r.stats&&r.stats.today)||0)+' today'):'No new leads right now'); }catch(e){} openOverview(); };
     card.append(run);
   } else {
-    card.append(ovNudge('Turn it on and Miles watches for new leads every minute — the single highest-ROI play in home services.'));
+    card.append(ovNudge('Turn it on and Miles watches for new leads every minute. It is the single highest-ROI play in home services.'));
   }
   return card;
 }
@@ -3300,55 +3836,256 @@ function openAdStudio(){ const apply=()=>{ renderAdVpick(); fillAdCats(); render
 // ── Launch a Campaign — build → review every setting → approve & go live ──
 let LAUNCH={spec:null,connected:false};
 function lchField(label,ph,val,type){ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.placeholder=ph||''; if(val!=null)i.value=val; if(type)i.type=type; i.style.width='100%'; w.append(i); return {w,i}; }
-function openLaunch(){
-  const box=$('#launch-body'); if(!box) return; box.innerHTML='';
-  const h=el('div','mcard'); h.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">Launch a Campaign</h3><span style="font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;background:#e8f0fe;color:#1a56db">GOOGLE ADS</span></div><p class="mdesc" style="margin:6px 0 0;max-width:640px">Miles builds a complete <b>Google Ads Search</b> campaign (budget, bidding, ad groups, keywords, and ads) from your goal. You review every setting, then approve. <b>It is created paused. Nothing spends until you approve activation.</b><br><span class="appsub">Meta ads are not available from a verified Pipedream campaign action.</span></p>';
-  box.append(h);
-  const loop=el('div','mcard'); loop.style.marginTop='14px';
-  loop.append(el('div','sect-label','PLAN FROM YOUR PROFILE'));
-  loop.append(el('p','appsub','Uses the trade, service area, budget, target cost per lead, average job value, and landing page on your profile. Miles does not fill those in. Only paused Google Search can be created. Meta, TikTok, and Local Services Ads are coming later.'));
-  const loopOut=el('div');
-  const loopBtn=el('button',null,'Show the plan from my profile'); loopBtn.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600';
-  loopBtn.onclick=async()=>{
-    loopBtn.disabled=true;
-    try{
-      const r=await(await fetch('/api/journey/plan',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({})})).json();
-      loopOut.innerHTML='';
-      const p=r.plan||{};
-      if(p.missing&&p.missing.length){ const miss=el('div'); miss.style.cssText='padding:8px 0;font-size:13px'; miss.textContent='Still needed: '+p.missing.map(m=>m.label).join(', ')+'.'; loopOut.append(miss); }
-      loopOut.append(el('p','appsub',(p.summary||'')+' '+((p.budgetControl)||'')));
-      (p.channels||[]).forEach(c=>{
-        const row=el('div'); row.style.cssText='padding:6px 0;border-top:1px solid var(--line-soft);font-size:13px';
-        row.textContent=c.label+': $'+c.recommendedDaily+'/day recommended, $'+c.executedDaily+' would be created paused. '+c.status+'. '+c.reason;
-        loopOut.append(row);
-      });
-      const asset=p.asset||{};
-      loopOut.append(el('p','appsub', asset.logoIncluded ? 'Logo on file is attached. No new image was generated.' : 'No logo on the profile. No image was generated.'));
-      if(p.market) loopOut.append(el('p','appsub', p.market.note||''));
-    }catch(e){ toast('Could not build the plan.'); }
-    loopBtn.disabled=false;
-  };
-  loop.append(loopBtn, loopOut); box.append(loop);
-  const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','STEP 1 — TELL MILES THE GOAL'));
-  const goal=lchField('What do you want the campaign to do?','e.g. Get more calls for emergency repairs');
-  const budget=lchField('Daily budget (USD)','20','20','number');
-  const url=lchField('Landing page URL','https://yourbusiness.com/service');
-  const loc=lchField('Locations (comma-separated — blank = your service area)','e.g. Philadelphia, PA');
-  if(window.__prefillLocations){ loc.i.value=window.__prefillLocations; window.__prefillLocations=null; }
-  f.append(goal.w,budget.w,url.w,loc.w);
-  const btnRow=el('div'); btnRow.style.cssText='display:flex;gap:10px;flex-wrap:wrap;align-items:center';
-  const ai=el('button','go','✨ Auto-fill with AI'); ai.title='Miles builds and writes the whole campaign from your business profile';
-  ai.onclick=()=>autofillCampaign(ai,{dailyBudget:Number(budget.i.value)||undefined,finalUrl:url.i.value,locations:loc.i.value.split(',').map(s=>s.trim()).filter(Boolean)});
-  const btn=el('button',null,'Build from my goal →'); btn.style.cssText='background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:11px 16px;cursor:pointer;font-weight:600;font-family:var(--sans)';
-  btn.onclick=async()=>{ btn.disabled=true; btn.textContent='Building…';
-    try{ const r=await(await fetch('/api/campaign/draft',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({goal:goal.i.value,dailyBudget:Number(budget.i.value)||20,finalUrl:url.i.value,locations:loc.i.value.split(',').map(s=>s.trim()).filter(Boolean)})})).json();
-      LAUNCH={spec:r.spec,connected:r.gadsConnected}; renderLaunchReview();
-    }catch(e){ toast('Could not build — try again.'); btn.disabled=false; btn.textContent='Build from my goal →'; }
-  };
-  btnRow.append(ai,btn); f.append(btnRow);
-  const hint=el('div','appsub','✨ Auto-fill uses your Business Profile to write everything — no typing needed. Or set a specific goal above and build from that.'); hint.style.marginTop='8px'; f.append(hint);
-  box.append(f);
-  renderSavedDrafts(box);
+let LN={launch:null,spec:null,miles:null,goal:'more_calls',service:'',offer:'',daily:null,photo:'miles'};
+async function openLaunch(){
+  const box=$('#launch-body'); if(!box) return;
+  box.innerHTML='<p class="appsub">Loading launch...</p>';
+  let miles={}, pack=null;
+  if(REMOTE){
+    try{ miles=await(await fetch('/api/miles/home')).json(); }catch(e){}
+    try{ pack=await(await fetch('/api/launch/home')).json(); }catch(e){}
+  }
+  LN.miles=miles||{};
+  LN.launch=pack&&pack.launch;
+  LN.spec=pack&&pack.spec;
+  LN.goal='more_calls';
+  LN.service=(LN.launch&&LN.launch.services&&LN.launch.services[0])||'';
+  LN.offer='';
+  LN.daily=LN.launch?LN.launch.selectedDaily:null;
+  LN.photo='miles';
+  renderLaunchPage();
+}
+function lnMoney(n){ return '$'+Math.round(n).toLocaleString(); }
+function lnHeadline(){
+  const goals=(LN.launch&&LN.launch.goals)||[];
+  const goal=goals.find(g=>g.id===LN.goal);
+  const title=goal?goal.title:'More calls';
+  return LN.service ? title+' for '+LN.service : title;
+}
+function renderLaunchPage(){
+  const box=$('#launch-body'); if(!box) return;
+  const L=LN.launch||{};
+  const miles=LN.miles||{};
+  box.innerHTML='';
+  const head=el('div','md-top');
+  const titles=el('div');
+  titles.append(el('h1','ln-title','Launch a campaign'));
+  titles.append(el('p','ln-sub','Tell Miles what you want. It builds the campaign. You approve.'));
+  const ctrl=el('div','md-controls');
+  ctrl.append(el('span','md-modelab','Miles mode'));
+  const pills=el('div','md-pills');
+  const note=el('div','md-note', modeBlurb(miles.mode, miles.caps)); note.id='launch-mode-note';
+  [['manual','Ask me first'],['hybrid','Hybrid'],['automate','Do everything']].forEach(([id,label])=>{
+    const b=el('button', miles.mode===id?'on':'', label);
+    b.dataset.mode=id;
+    b.onclick=async()=>{ const r=await milesPost(b, note, 'Saving...', '/api/miles/mode', {mode:id}); if(r){ if(LN.miles) LN.miles.mode=id; note.textContent=modeBlurb(id, miles.caps); renderLaunchPage(); } };
+    pills.append(b);
+  });
+  const ask=el('button','md-ask','Ask Miles');
+  ask.onclick=()=>{ if(typeof enterChat==='function') enterChat(); };
+  const theme=el('button','md-theme','◑'); theme.title='Theme'; theme.onclick=()=>{ const t=$('#theme'); if(t) t.click(); };
+  const gsel=el('select','md-range');
+  for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===MKT_RANGE) o.selected=true; gsel.append(o); }
+  gsel.onchange=()=>{ MKT_RANGE=gsel.value; };
+  ctrl.append(pills, gsel, ask, theme);
+  head.append(titles, ctrl);
+  box.append(head, note);
+  const setup=el('div','md-setup');
+  const line=el('div');
+  const setupBits=[];
+  if(L.tradeLabel&&L.tradeLabel!=='your trade') setupBits.push(L.tradeLabel);
+  if(L.area&&L.area!=='Not saved') setupBits.push(L.area);
+  setupBits.push('Google Search');
+  if(L.savedCap) setupBits.push('$'+Math.round(L.savedCap)+'/day');
+  line.append(document.createTextNode(setupBits.length>1?('Setup: '+setupBits.join(' · ')):'Setup: Google Search only. Add a trade, market, and daily budget in Profile.'));
+  setup.append(line);
+  const legend=el('span','md-legend'); legend.append(mdSample(), document.createTextNode(' = example numbers until that source connects'));
+  setup.append(legend);
+  const acts=el('div','md-actions');
+  const kill=el('button','md-ghost', miles.caps&&miles.caps.paused?'Resume':'Pause all');
+  const back=el('button','md-ghost','Revert to paused');
+  const edit=el('button','md-link','Edit setup');
+  kill.onclick=async()=>{ const r=await milesPost(kill, note, 'Pausing...', '/api/miles/kill', {paused:!(miles.caps&&miles.caps.paused)}); if(r) openLaunch(); };
+  back.onclick=async()=>{ const r=await milesPost(back, note, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) openLaunch(); };
+  edit.onclick=()=>setPage('profile');
+  acts.append(kill, back, edit);
+  setup.append(acts);
+  box.append(setup);
+
+  const grid=el('div','ln-grid');
+  const main=el('div','ln-main');
+  const shortcut=el('div','ln-shortcut');
+  shortcut.append(el('p',null, L.playbookLine||'Run a ready-made playbook from the list. Meta and Local Services Ads are not launched from there.'));
+  const see=el('button',null,'See playbooks');
+  see.onclick=()=>setPage('skills');
+  shortcut.append(see);
+  main.append(shortcut);
+
+  const step1=el('div','md-card');
+  step1.append(el('div','ln-step','1. What do you want more of?'));
+  const goals=el('div','ln-goals');
+  (L.goals||[{id:'more_calls',title:'More calls',detail:'Ready-to-book homeowners'},{id:'slow_season',title:'Fill a slow season',detail:'Use the seasonal line from your playbook'},{id:'offer',title:'Promote an offer',detail:'Lead with a deal'}]).forEach(g=>{
+    const b=el('button','ln-goal'+(LN.goal===g.id?' on':''));
+    b.append(el('b',null,g.title), el('span',null,g.detail));
+    b.onclick=()=>{ LN.goal=g.id; renderLaunchPage(); };
+    goals.append(b);
+  });
+  step1.append(goals);
+  const fields=el('div','ln-fields');
+  const svc=el('div'); svc.append(el('label',null,'Service'));
+  const sel=el('select');
+  const services=L.services||[];
+  if(!services.length){ const o=el('option',null,'No service saved'); o.value=''; sel.append(o); }
+  services.forEach(name=>{ const o=el('option',null,name); o.value=name; if(name===LN.service) o.selected=true; sel.append(o); });
+  sel.onchange=()=>{ LN.service=sel.value; renderLaunchPage(); };
+  svc.append(sel);
+  const off=el('div'); off.append(el('label',null,'Offer, optional'));
+  const offer=el('input'); offer.placeholder='e.g. 15% off a second room'; offer.value=LN.offer||'';
+  offer.oninput=()=>{ LN.offer=offer.value; };
+  off.append(offer);
+  fields.append(svc, off);
+  step1.append(fields);
+  main.append(step1);
+
+  const step2=el('div','md-card');
+  step2.append(el('div','ln-step','2. Where should it run, and how much?'));
+  const chans=el('div','ln-chans');
+  (L.channels||[]).forEach(c=>{
+    const b=el('button','ln-chan'+(c.id==='google'&&c.selectable?' on':''));
+    b.append(el('b',null,c.label), el('span',null,c.detail));
+    b.onclick=()=>{ if(!c.selectable){ toast(c.detail); return; } };
+    chans.append(b);
+  });
+  step2.append(el('div','appsub','Channel'), chans);
+  step2.append(el('div','appsub','Daily budget'));
+  const buds=el('div','ln-buds');
+  (L.budgets||[]).forEach(b=>{
+    const btn=el('button','ln-bud'+(LN.daily===b.daily?' on':''));
+    btn.dataset.daily=String(b.daily);
+    btn.append(el('b',null,b.label), el('span',null,b.hint));
+    btn.onclick=()=>{ LN.daily=b.daily; renderLaunchPage(); };
+    buds.append(btn);
+  });
+  step2.append(buds);
+  if(!L.savedCap) step2.append(el('p','md-legend','No daily cap is saved yet. Pick a budget. Miles will not assume $0 a day.'));
+  const prof=el('div','ln-profile');
+  const bit=(k,v)=>{ const d=el('div','ln-bit'); d.append(el('div','appsub',k), el('b',null,v||'Not saved')); const ed=el('button','md-link','Edit'); ed.onclick=()=>setPage('profile'); d.append(ed); return d; };
+  prof.append(bit('Area', L.area&&L.area!=='Not saved'?L.area:''), bit('Landing page', L.landingPage||''), bit('Avg job value', L.jobValue||''));
+  step2.append(el('p','md-legend','From your profile. Edit if anything is wrong.'), prof);
+  const fin=el('label'); fin.style.cssText='display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px';
+  const cb=el('input'); cb.type='checkbox'; cb.checked=!!L.financing;
+  cb.onchange=async()=>{ try{ await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({financing:cb.checked?'yes':'no'})}); }catch(e){} };
+  fin.append(cb, document.createTextNode(' We offer financing'));
+  step2.append(fin);
+  main.append(step2);
+
+  const step3=el('div','md-card');
+  const s3h=el('div'); s3h.style.cssText='display:flex;justify-content:space-between;gap:8px;align-items:center';
+  s3h.append(el('div','ln-step','3. Your ads. Miles wrote these'));
+  const rewrite=el('button','md-ghost','Write new ones');
+  rewrite.onclick=()=>lnRewrite(rewrite);
+  s3h.append(rewrite);
+  step3.append(s3h);
+  const ads=el('div','ln-ads');
+  const groups=(LN.spec&&LN.spec.adGroups)||[];
+  const host=L.landingHost;
+  if(!groups.length) ads.append(el('p','md-explain','Miles has not written ads yet. Save a service or a landing page, then write new ones. Nothing here is a live ad.'));
+  groups.slice(0,2).forEach(g=>{
+    const card=el('div','ln-ad');
+    card.append(el('div','host', host?('Sponsored · '+host):'No landing page saved'));
+    card.append(el('h3',null, (g.rsa&&g.rsa.headlines&&g.rsa.headlines[0])||'Draft'));
+    card.append(el('p',null, (g.rsa&&g.rsa.descriptions&&g.rsa.descriptions[0])||''));
+    ads.append(card);
+  });
+  step3.append(ads);
+  const photo=el('div','ln-photo');
+  photo.append(document.createTextNode('Ad photo'));
+  [['miles','Miles makes one'],['mine','Use my photo']].forEach(([id,label])=>{
+    const lab=el('label'); lab.style.cssText='display:flex;gap:6px;align-items:center';
+    const r=el('input'); r.type='radio'; r.name='ln-photo'; r.checked=LN.photo===id;
+    r.onchange=()=>{ LN.photo=id; };
+    lab.append(r, document.createTextNode(label));
+    photo.append(lab);
+  });
+  step3.append(photo);
+  step3.append(el('p','md-legend', L.photoNote||'A photo Miles makes uses monthly media credits. This page does not generate a photo or charge credits.'));
+  main.append(step3);
+  main.append(el('p','md-explain', L.footer||'Miles builds it paused. You will see every setting, then approve it before a dollar is spent.'));
+  const buildWrap=el('div','ln-build');
+  const go=el('button',null,'Build my campaign');
+  go.id='ln-build';
+  go.onclick=()=>lnBuild(go);
+  buildWrap.append(go);
+  main.append(buildWrap);
+  const result=el('div'); result.id='ln-result'; main.append(result);
+  grid.append(main);
+
+  const side=el('div','ln-side');
+  const expect=el('div','ln-expect');
+  expect.append(el('div','k','What to expect'));
+  expect.append(el('h3',null, lnHeadline()));
+  const metrics=el('div','ln-metrics');
+  (L.estimates||[]).forEach(est=>{
+    const cell=el('div');
+    const display=est.label==='Monthly spend' ? (LN.daily?lnMoney(LN.daily*30):'n/a') : est.display;
+    cell.append(el('div','k', est.label), el('div','v', display));
+    if(est.kind!=='empty'){ const tag=el('div','k', est.kind==='saved_goal'?'Saved goal':'Estimate'); cell.append(tag); }
+    metrics.append(cell);
+  });
+  expect.append(metrics);
+  const spendNote=(L.estimates||[]).map(e=>e.note).filter(Boolean)[0]||'';
+  expect.append(el('p',null, [spendNote, L.breakEven].filter(Boolean).join(' ')||'Estimates use your saved budget and goals. They are not live results.'));
+  side.append(expect);
+  const counts=el('div','md-card');
+  counts.append(el('div','ln-step','Miles will build'));
+  const row=(k,v)=>{ const r=el('div','ln-count'); r.append(el('span',null,k), el('b',null,v)); return r; };
+  const C=L.counts||{};
+  const n=v=>v==null?'Not counted yet':String(v);
+  counts.append(row('Ad groups', n(C.adGroups)), row('Keywords', n(C.keywords)), row('Blocked search terms', n(C.blocked)), row('Ads', n(C.ads)), row('Sitelinks and call button', C.call?'Phone on file':(C.sitelinks==null?'Not counted yet':String(C.sitelinks)+' sitelinks')));
+  counts.append(el('p','md-legend', C.note||'You will review every setting before approving.'));
+  side.append(counts);
+  grid.append(side);
+  box.append(grid);
+}
+async function lnRewrite(btn){
+  const L=LN.launch||{};
+  btn.disabled=true; const old=btn.textContent; btn.textContent='Writing...';
+  try{
+    const r=await(await fetch('/api/campaign/autofill',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({dailyBudget:LN.daily||undefined, finalUrl:L.landingPage||undefined, locations:L.area&&L.area!=='Not saved'?[L.area]:undefined})})).json();
+    if(r&&r.spec){ r.spec.status='PAUSED'; LN.spec=r.spec; renderLaunchPage(); toast('New draft copy is ready to review. Nothing was created.'); }
+    else toast('Could not write new ads.');
+  }catch(e){ toast('Could not write new ads.'); btn.disabled=false; btn.textContent=old; }
+}
+async function lnBuild(btn){
+  const L=LN.launch||{};
+  const mode=(LN.miles&&LN.miles.mode)||L.mode||null;
+  const daily=LN.daily;
+  const cap=L.savedCap;
+  const result=$('#ln-result');
+  const say=(t)=>{ if(result) result.innerHTML=''; if(result) result.append(el('p','md-explain', t)); };
+  if(!daily){ say('Pick a daily budget. Nothing was created.'); return; }
+  if(cap && daily>cap+0.001){ say('That is above your $'+Math.round(cap)+'/day cap. Raise the cap in setup, or pick a lower budget. Nothing was created.'); return; }
+  if(mode==='manual'||!mode){ say('Ask me first is on. Miles will not create this campaign. Nothing was created.'); return; }
+  btn.disabled=true;
+  if(mode==='hybrid'){
+    const leads=(LN.miles&&LN.miles.bundle&&LN.miles.bundle.setup&&LN.miles.bundle.setup.leadsPerDay)||1;
+    const saved=await milesPost(btn, result, 'Queuing...', '/api/miles/questions', {goal:LN.offer? (LN.service+' '+LN.offer): (LN.service||'more calls'), dailyBudget:daily, leadsPerDay:leads, mode:'hybrid'});
+    if(!saved){ btn.disabled=false; return; }
+    const queued=await milesPost(btn, result, 'Queuing...', '/api/miles/go', {confirm:true});
+    if(queued) say(queued.created?'Created paused. Nothing was enabled.':'Hybrid is on. This is waiting for your approval. Nothing was created or spent.');
+    btn.disabled=false;
+    return;
+  }
+  try{
+    const draft=await(await fetch('/api/campaign/draft',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({goal:LN.service||'more calls', dailyBudget:daily, finalUrl:L.landingPage||undefined, locations:L.area&&L.area!=='Not saved'?[L.area.split(' + ')[0]]:undefined})})).json();
+    if(!draft||!draft.spec){ say('Could not build the plan. Nothing was created.'); btn.disabled=false; return; }
+    draft.spec.status='PAUSED';
+    const res=await fetch('/api/campaign/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:draft.spec, confirm:true})});
+    const body=await res.json().catch(()=>({}));
+    if(!res.ok||body.ok===false){ say((body.error||body.note||'Nothing was created.')+' It was not enabled.'); btn.disabled=false; return; }
+    say(body.demo||body.live===false?'Nothing was created in Google. The plan stays paused.':'Created paused. This button did not enable it or spend.');
+  }catch(e){ say('Could not create the campaign. Nothing was enabled.'); }
+  btn.disabled=false;
 }
 async function autofillCampaign(btn,opts){
   const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='✨ Writing your campaign…'; }
@@ -3562,7 +4299,7 @@ function ccPanel(title){ const c=el('div','mcard'); c.append(el('div','sect-labe
 
 function ccKpiCard(key){
   const m=CC.metrics[key], entry=ccEntry(key);
-  const c=el('div'); c.style.cssText='background:var(--panel,#fff);border:1px solid var(--line,#e5e7eb);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0';
+  const c=el('div','md-tile'); c.style.cssText='display:flex;flex-direction:column;gap:4px;min-width:0';
   const lab=el('div','appsub',(entry?entry.label:key)); lab.style.whiteSpace='nowrap'; lab.style.overflow='hidden'; lab.style.textOverflow='ellipsis'; c.append(lab);
   const v=el('div',null,m?ccFmt(m.format,m.value):'—'); v.style.cssText='font-size:22px;font-weight:800;letter-spacing:-.02em'; c.append(v);
   if(m){ c.append(ccDelta(m)); c.append(ccSpark(m.series));
@@ -3577,8 +4314,11 @@ function ccSourceTag(source){
 
 function ccFunnelPanel(){
   const c=ccPanel('FUNNEL BY STAGE');
-  const g=k=>CC.metrics[k]?CC.metrics[k].value:0;
-  const stages=[['Impressions',g('google_ads.impressions')+g('meta.impressions')],['Clicks',g('google_ads.clicks')+g('meta.link_clicks')],['Leads',g('calc.blended_leads')],['Qualified',g('crm.qualified_leads')],['Booked Jobs',g('crm.booked_jobs')],['Completed',g('crm.completed_jobs')]];
+  const keys=['google_ads.impressions','google_ads.clicks','calc.blended_leads','crm.qualified_leads','crm.booked_jobs','crm.completed_jobs','crm.job_revenue'];
+  const sample=keys.some(k=>CC.metrics[k]&&CC.metrics[k].source!=='live');
+  if(sample) c.append(el('div','appsub','SAMPLE. Example stage counts until those sources connect. Meta is not included.'));
+  const g=k=>{ const m=CC.metrics[k]; return m?m.value:0; };
+  const stages=[['Impressions',g('google_ads.impressions')],['Clicks',g('google_ads.clicks')],['Leads',g('calc.blended_leads')],['Qualified',g('crm.qualified_leads')],['Booked jobs',g('crm.booked_jobs')],['Completed',g('crm.completed_jobs')]];
   const first=stages[0][1]||1; let worst={drop:0,idx:-1};
   stages.forEach(([name,v],i)=>{
     if(i>1&&stages[i-1][1]>0){ const drop=1-(v/stages[i-1][1]); if(drop>worst.drop){worst={drop,idx:i};} }
@@ -3590,30 +4330,42 @@ function ccFunnelPanel(){
     const pct=el('div','appsub',i>0&&stages[i-1][1]>0?((v/stages[i-1][1])*100).toFixed(0)+'%':''); pct.style.cssText='width:44px;text-align:right'; row.append(pct);
     c.append(row);
   });
-  const rev=el('div','appsub','Revenue attributed: '+ccFmt('currency',g('crm.job_revenue'))); rev.style.marginTop='6px'; c.append(rev);
-  if(worst.idx>0){ const call=el('div',null,'⚠ Biggest leak: '+stages[worst.idx-1][0]+' → '+stages[worst.idx][0]+' ('+((1-worst.drop)*100).toFixed(0)+'% convert). Run the CPL + Funnel Reader for the fix order.'); call.style.cssText='margin-top:8px;font-size:12.5px;color:var(--bad);font-weight:600'; c.append(call); }
+  const rev=el('div','appsub','Revenue attributed: '+ccFmt('currency',g('crm.job_revenue'))+(sample?' (sample)':'')); rev.style.marginTop='6px'; c.append(rev);
+  if(worst.idx>0){ const call=el('div',null,'Biggest leak: '+stages[worst.idx-1][0]+' to '+stages[worst.idx][0]+' ('+((1-worst.drop)*100).toFixed(0)+'% convert)'+(sample?' (sample)':'')+'. Run the CPL + Funnel Reader for the fix order.'); call.style.cssText='margin-top:8px;font-size:12.5px;color:var(--bad);font-weight:600'; c.append(call); }
   return c; }
 
 function ccChannelsPanel(){
   const c=ccPanel('PLACEMENTS & CHANNELS');
-  const g=k=>CC.metrics[k]?CC.metrics[k].value:0;
-  const rows=[
-    ['Google Search',g('google_ads.cost'),g('google_ads.impressions'),g('google_ads.clicks'),g('google_ads.conversions')],
-    ['Google LSA',g('lsa.spend'),g('lsa.impressions'),null,g('lsa.leads_total')],
-    ['Meta',g('meta.spend'),g('meta.impressions'),g('meta.link_clicks'),g('meta.leads')],
-    ['GBP (organic)',0,g('gbp.views_search')+g('gbp.views_maps'),g('gbp.website_clicks'),g('gbp.phone_calls')]
-  ];
+  const live=k=>!!(CC.metrics[k]&&CC.metrics[k].source==='live');
+  const num=k=>live(k)?CC.metrics[k].value:null;
+  const googleLive=['google_ads.cost','google_ads.impressions','google_ads.clicks','google_ads.conversions'].some(live);
+  const gbpLive=['gbp.views_search','gbp.views_maps','gbp.website_clicks','gbp.phone_calls'].some(live);
+  const cell=(v)=>v==null?'n/a':(typeof v==='number'? (v>=1000?Math.round(v).toLocaleString():String(Math.round(v*100)/100)):String(v));
+  const rows=[];
+  if(googleLive){
+    const spend=num('google_ads.cost')||0, impr=num('google_ads.impressions')||0, clicks=num('google_ads.clicks'), leads=num('google_ads.conversions')||0;
+    rows.push(['Google Search', ccFmt('currency',spend), cell(impr), clicks!=null&&impr?((clicks/impr)*100).toFixed(1)+'%':'n/a', cell(leads), leads?ccFmt('currency',spend/leads):'n/a']);
+  } else if(CC.connected.includes('google_ads')){
+    rows.push(['Google Search','Signed in. Numbers stay hidden until the read is live.','','','','']);
+  } else rows.push(['Google Search','Not connected','','','','']);
+  rows.push(['Google LSA','Coming later','','','','']);
+  rows.push(['Meta','Coming later. Not an ad account.','','','','']);
+  if(gbpLive){
+    const impr=(num('gbp.views_search')||0)+(num('gbp.views_maps')||0);
+    const clicks=num('gbp.website_clicks');
+    const leads=num('gbp.phone_calls')||0;
+    rows.push(['Google Profile','$0', cell(impr), clicks!=null&&impr?((clicks/impr)*100).toFixed(1)+'%':'n/a', cell(leads), 'free']);
+  } else rows.push(['Google Profile','Not connected','','','','']);
   const wrap=el('div'); wrap.style.overflowX='auto';
   const t=el('table'); t.style.cssText='width:100%;border-collapse:collapse;font-size:12.5px';
   const head=el('tr'); ['Channel','Spend','Impr','CTR','Leads','CPL'].forEach(h=>{const th=el('th',null,h); th.style.cssText='text-align:right;padding:6px 8px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line,#e5e7eb)'; if(h==='Channel')th.style.textAlign='left'; head.append(th);}); t.append(head);
-  rows.forEach(([name,spend,impr,clicks,leads])=>{
+  rows.forEach(cells=>{
     const tr=el('tr');
-    const cells=[name, spend?ccFmt('currency',spend):'$0', Math.round(impr).toLocaleString(), clicks!=null&&impr?((clicks/impr)*100).toFixed(1)+'%':'—', Math.round(leads).toLocaleString(), leads?ccFmt('currency',spend/leads):(spend?'—':'free')];
     cells.forEach((v,i)=>{const td=el('td',null,String(v)); td.style.cssText='padding:7px 8px;text-align:right;border-bottom:1px solid var(--line,var(--panel-2))'; if(i===0){td.style.textAlign='left';td.style.fontWeight='600';} tr.append(td);});
     t.append(tr);
   });
   wrap.append(t); c.append(wrap);
-  const note=el('div','appsub','Compare channels on cost per BOOKED JOB, not CPL — run the Channel Comparator for the normalized view.'); note.style.marginTop='8px'; c.append(note);
+  const note=el('div','appsub','Spend is shown only for a live read. Meta and Local Services Ads stay empty until those channels exist. Cost per lead is not cost per booked job.'); note.style.marginTop='8px'; c.append(note);
   return c; }
 
 function ccStatusChip(status){
@@ -3633,7 +4385,7 @@ async function ccSkillsPanel(){
   });
   c.append(btns);
   const runs=(d.runs||[]).slice(0,8);
-  if(!runs.length){ c.append(el('p','appsub','No skill runs yet — press a skill above. Every run is a proposal: Miles never changes an ad account without your approval.')); return c; }
+  if(!runs.length){ c.append(el('p','appsub','No skill runs yet. Press a skill above. Every run is a proposal: Miles never changes an ad account without your approval.')); return c; }
   runs.forEach(r=>{
     const row=el('div'); row.style.cssText='padding:8px 0;border-top:1px solid var(--line,var(--panel-2))';
     const top=el('div'); top.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap';
@@ -3696,9 +4448,11 @@ function ccAddModal(){
     b.onclick=()=>{ plat=b.dataset.plat; $('#cca-search').style.display='block'; $('#cca-search').oninput=renderList; renderList(); }; }); }
 
 async function openCmdCenter(){
-  const box=$('#cc-body'); if(!box) return;
-  if(!CC.catalog.length){ box.innerHTML='<p class="appsub">Loading your Command Center…</p>';
-    try{ const r=await(await fetch('/api/metrics/catalog')).json(); CC.catalog=r.metrics||[]; CC.defaults=r.defaults||CC.defaults; CC.connected=r.connected||[]; }catch(e){ box.innerHTML=''; box.append(ovNudge('Command Center runs on the live app.')); return; } }
+  const box=$('#cc-body');
+  const slotted=!!$('#md-trends');
+  if(!box && !slotted) return;
+  if(!CC.catalog.length){ if(box && !slotted) box.innerHTML='<p class="appsub">Loading your Command Center…</p>';
+    try{ const r=await(await fetch('/api/metrics/catalog')).json(); CC.catalog=r.metrics||[]; CC.defaults=r.defaults||CC.defaults; CC.connected=r.connected||[]; }catch(e){ if(box){ box.innerHTML=''; } const host=slotted?$('#md-trends'):box; if(host) host.append(ovNudge('Command Center runs on the live app.')); return; } }
   try{ const r=await(await fetch('/api/dashboard2/layout')).json(); if(r.layout) CC.layout=r.layout; }catch(e){}
   if(!Array.isArray(CC.layout.widgets)) CC.layout.widgets=[];
   const funnelKeys=['google_ads.impressions','meta.impressions','google_ads.clicks','meta.link_clicks','calc.blended_leads','crm.qualified_leads','crm.booked_jobs','crm.completed_jobs','crm.job_revenue','google_ads.cost','lsa.spend','meta.spend','lsa.impressions','lsa.leads_total','meta.leads','gbp.views_search','gbp.views_maps','gbp.website_clicks','gbp.phone_calls','google_ads.conversions'];
@@ -3706,7 +4460,40 @@ async function openCmdCenter(){
   renderCmdCenter();
 }
 async function renderCmdCenter(){
-  const box=$('#cc-body'); if(!box) return; box.innerHTML='';
+  const trends=$('#md-trends'), mid=$('#md-mid'), skills=$('#md-skills'), expSlot=$('#md-experiments'), metrics=$('#md-metrics');
+  if(metrics && !trends){
+    metrics.innerHTML='';
+    const gridCard=ccPanel('YOUR METRICS');
+    const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-top:8px';
+    (CC.layout.widgets||[]).forEach((w,i)=>grid.append(ccWidgetCard(w,i)));
+    const plus=el('button',null,'+ Add any of '+CC.catalog.length+' metrics');
+    plus.style.cssText='border:2px dashed var(--line);border-radius:16px;background:none;color:var(--muted);font-weight:700;cursor:pointer;min-height:72px;grid-column:1/-1';
+    plus.onclick=ccAddModal; grid.append(plus);
+    gridCard.append(grid); metrics.append(gridCard);
+    const old=$('#cc-body'); if(old){ old.innerHTML=''; old.style.display='none'; }
+    return;
+  }
+  const slotted=!!(trends&&mid&&skills&&expSlot&&metrics);
+  if(slotted){
+    trends.className='md-trends'; trends.innerHTML='';
+    (CC.defaults.kpi_strip||[]).forEach(k=>trends.append(ccKpiCard(k)));
+    mid.innerHTML=''; mid.append(ccFunnelPanel(), ccChannelsPanel());
+    skills.innerHTML=''; skills.append(await ccSkillsPanel());
+    expSlot.innerHTML='';
+    const ex=ccPanel('EXPERIMENTS');
+    ex.append(el('p','appsub','No experiments yet. When a skill proposal becomes a test, a budget shift or a new campaign, it shows here with its spend, leads, and a verdict.'));
+    expSlot.append(ex);
+    metrics.innerHTML='';
+    const gridCard=ccPanel('YOUR METRICS - ADD ANY OF '+CC.catalog.length);
+    const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));grid-auto-rows:minmax(96px,auto);gap:10px;margin-top:8px';
+    CC.layout.widgets.forEach((w,i)=>grid.append(ccWidgetCard(w,i)));
+    const plus=el('button',null,'+ Add metric'); plus.style.cssText='border:2px dashed var(--line,var(--line));border-radius:12px;background:none;color:var(--muted);font-weight:700;cursor:pointer;min-height:96px';
+    plus.onclick=ccAddModal; grid.append(plus);
+    gridCard.append(grid); metrics.append(gridCard);
+    const old=$('#cc-body'); if(old){ old.innerHTML=''; old.style.display='none'; }
+    return;
+  }
+  const box=$('#cc-body'); if(!box) return; box.style.display=''; box.innerHTML='';
   const anyLive=Object.values(CC.metrics).some(m=>m.source==='live');
   const bar=el('div'); bar.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap';
   const range=el('select','f'); [['7','Last 7 days'],['30','Last 30 days'],['90','Last 90 days']].forEach(([v,lab])=>{const o=el('option',null,lab);o.value=v;if(Number(v)===CC.days)o.selected=true;range.append(o);});
@@ -7110,7 +7897,7 @@ async function runSiteImport(url,container,noteEl){
 }
 function readProfileForm(container){ const out={}; container.querySelectorAll('[data-k]').forEach(i=>{ let v=(i.value||'').trim(); if(i.type==='number') v=v?Number(v):''; out[i.dataset.k]=v; }); return out; }
 async function saveProfile(vals){ try{ const r=await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(vals)}); return r.ok?(await r.json()).profile:null; }catch(e){ return null; } }
-async function loadProfile(){ if(!REMOTE)return; try{ const r=await fetch('/api/profile'); const d=await r.json(); PROFILE=d.profile||{}; buildProfileForm($('#profile-form'), d.profile||{}); }catch(e){} try{ const miles=await(await fetch('/api/miles/home')).json(); const slot=$('#miles-profile'); if(slot) renderMilesHome(slot, miles, 'profile'); }catch(e){} }
+async function loadProfile(){ if(!REMOTE)return; try{ const r=await fetch('/api/profile'); const d=await r.json(); PROFILE=d.profile||{}; buildProfileForm($('#profile-form'), d.profile||{}); }catch(e){} let miles={}; try{ miles=await(await fetch('/api/miles/home')).json(); const slot=$('#miles-profile'); if(slot) renderMilesHome(slot, miles, 'profile'); }catch(e){} let connections=[]; try{ connections=((await(await fetch('/api/dashboard/operator')).json()).operator||{}).connections||[]; }catch(e){} renderAccountOps(miles, connections); }
 $('#pf-import').onclick=async()=>{ const btn=$('#pf-import'); const url=($('#pf-website').value||'').trim()||($('#profile-form').querySelector('[data-k="website"]')||{}).value||''; if(!url){ $('#pf-import-note').textContent='Enter your website to re-import.'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#profile-form'),$('#pf-import-note')); btn.disabled=false; btn.textContent=old; };
 $('#profile-save').onclick=async()=>{ const btn=$('#profile-save'); btn.disabled=true; const p=await saveProfile(readProfileForm($('#profile-form'))); if(p){ PROFILE=p; applyIdentity(); queueChange('profile','Business profile updated'); } $('#profile-note').textContent=p?'Saved ✓':'Could not save.'; btn.disabled=false; setTimeout(()=>{$('#profile-note').textContent='';},2500); };
 $('#ob-import').onclick=async()=>{ const btn=$('#ob-import'); const url=($('#ob-website').value||'').trim(); if(!url){ $('#ob-import-note').textContent='Enter your website first (or skip and fill it in below).'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#onboard-form'),$('#ob-import-note')); btn.disabled=false; btn.textContent=old; };

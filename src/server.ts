@@ -40,6 +40,8 @@ import { claimableGhlAccount, externalIdCandidates, ghlSlugOf as ghlSlugFromApps
 import { SPEC_PLATFORMS, loadSpec, searchSpecCheck, type SpecPlatform } from './specs/index.js';
 import { metricCatalog, dashboardDefaults } from './metrics/catalog.js';
 import { getMetrics } from './metrics/resolver.js';
+import { buildOperatorView } from './dashboard/operator.js';
+import { buildLaunchView, previewSpec } from './dashboard/launch.js';
 import { appendCrmEvent, amountFrom, crmLiveValues, calcLiveValues, dealsLiveValues } from './metrics/crmledger.js';
 import { buildLocalPresenceAudit, gbpCompletenessScore, type AuditAnswer } from './agents/localpresence.js';
 import { appendApproval, approvalLog, defaultAutonomy, normalizeAutonomy, TOS_VERSION, type ApprovalEntry } from './agents/approvallog.js';
@@ -1872,6 +1874,28 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     };
   };
 
+  const liveReadersFor = async (uid: string, data: Record<string, unknown>, days: number) => {
+    const snap = await getSnapshot(uid, data);
+    const adSpend = snap?.adSpend;
+    const ledger = crmLiveValues(data, days);
+    const jobs = Array.isArray(data.jobMarks) ? (data.jobMarks as JobMark[]) : [];
+    const fromJobs: Record<string, number> = {};
+    if (jobs.length) {
+      const booked = jobs.filter((j) => j.stage === 'booked' || j.stage === 'won').length;
+      const won = jobs.filter((j) => j.stage === 'won');
+      fromJobs['crm.leads_created'] = jobs.length;
+      fromJobs['crm.booked_jobs'] = booked;
+      if (won.length) fromJobs['crm.job_revenue'] = Math.round(won.reduce((s, j) => s + (Number(j.jobValue) || 0), 0) * 100) / 100;
+    }
+    const crm = { ...ledger, ...dealsLiveValues(snap?.deals ?? [], days), ...fromJobs };
+    const lpAnswers = (data.localPresence as Record<string, AuditAnswer>) ?? undefined;
+    const gbpScore = lpAnswers ? { 'gbp.completeness_score': gbpCompletenessScore(buildLocalPresenceAudit(lpAnswers, (data.profile ?? {}) as Record<string, string>)) } : {};
+    const live: import('./metrics/resolver.js').LiveReaders = {
+      values: { ...crm, ...calcLiveValues(crm, adSpend), ...gbpScore, ...(adSpend !== undefined ? { 'google_ads.cost': Math.round(adSpend * 100) / 100 } : {}) },
+    };
+    return { snap, live };
+  };
+
   // Overview dashboard — everything at a glance, from real workspace data. Numbers
   // that need a connected tool say "connect" rather than showing a fake figure.
   app.get<{ Querystring: { range?: string } }>('/api/dashboard', async (req, reply) => {
@@ -1953,6 +1977,75 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       upcomingPosts: posts.filter((x) => x.status === 'scheduled').sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt)).slice(0, 5).map((x) => ({ caption: x.caption, platforms: x.platforms, scheduledAt: x.scheduledAt, kind: x.kind })),
       recentRuns: runs.slice(0, 6).map((r) => ({ title: r.title, ts: r.ts, task: r.task })),
     };
+  });
+
+  // Operator home — the numbered dashboard. Sample figures stay tagged.
+  // Disconnected channels are empty. No extra platform calls beyond the snapshot.
+  app.get('/api/dashboard/operator', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const d = await authStore.getUserData(u.id);
+    const p = (d.profile ?? {}) as Record<string, string>;
+    const miles = milesOf(d);
+    const caps = miles.bundle?.setup.caps ?? null;
+    const { snap, live } = await liveReadersFor(u.id, d, 30);
+    const metricRows = await getMetrics([
+      'calc.blended_leads', 'calc.blended_spend', 'calc.cost_per_booked',
+      'crm.booked_jobs', 'crm.job_revenue',
+    ], 30, live);
+    const google = await googleReadiness(u.id);
+    const ghlNow = await ghlLink(u.id);
+    let linked = new Set<string>();
+    try { linked = new Set((await connector.listAccounts(u.id)).map((a) => a.app)); } catch { /* none */ }
+    const gmbLinked = ['google_my_business', 'gmb'].some((a) => linked.has(a));
+    const socialLinked = ['facebook_pages', 'instagram', 'linkedin'].some((a) => linked.has(a));
+    const reviews = (snap?.reviews ?? []) as { rating?: number }[];
+    const posts = (d.scheduledPosts as ScheduledPost[]) ?? [];
+    const stlOn = !!((d.speedToLead as { enabled?: boolean } | undefined)?.enabled);
+    const recs = buildRecommendations({
+      spend: snap?.campaigns ?? [],
+      deals: (snap?.deals ?? []) as import('./revenue/attribution.js').Deal[],
+      leads: (snap?.leads ?? []) as import('./connectors/types.js').Lead[],
+      reviews: reviews as import('./connectors/types.js').Review[],
+      emails: [],
+      social: (snap?.social ?? null) as import('./connectors/types.js').SocialMetrics | null,
+      scheduledPosts: posts.filter((x) => x.status === 'scheduled').length,
+      targetCpa: Number(p.targetCpa) || null,
+      speedToLeadOn: stlOn,
+    }, new Date());
+    const st = (d.recState as { applied?: Record<string, string>; dismissed?: Record<string, string> }) ?? {};
+    const openRecs = recs.filter((r) => !st.applied?.[r.id] && !st.dismissed?.[r.id]);
+    const market = (miles.bundle?.setup.location || p.serviceAreas || '').split(',')[0]?.trim() || '';
+    const operator = buildOperatorView({
+      mode: miles.bundle?.setup.mode || miles.pendingMode || null,
+      trade: (p.industry || '').trim(),
+      market,
+      dailyBudget: caps ? caps.dailyBudget : null,
+      maxChangePct: caps ? caps.maxChangePct : null,
+      leadsPerDay: miles.bundle ? miles.bundle.setup.leadsPerDay : null,
+      targetCpa: Number(p.targetCpa) || null,
+      sampleConnector: connector.name === 'mock',
+      google: { oauth: google.oauth, ready: google.ready, note: google.note },
+      ghlConnected: ghlNow.connected,
+      ghlDetail: ghlNow.connected
+        ? 'GoHighLevel is connected. Speed to lead sends when it is on and the lead has a phone.'
+        : 'GoHighLevel is not connected. Replies stay drafts. Connect it under Integrations.',
+      socialConnected: socialLinked,
+      gbpConnected: gmbLinked || reviews.length > 0,
+      gbpHasData: reviews.length > 0,
+      paused: !!caps?.paused,
+      hasBundle: !!miles.bundle,
+      playbook: miles.bundle?.playbook
+        ? { title: miles.bundle.playbook.title, season: miles.bundle.playbook.season, splitNote: miles.bundle.playbook.splitNote }
+        : null,
+      reviewOn: !!((d.reviewRequest as { enabled?: boolean } | undefined)?.enabled),
+      speedOn: stlOn,
+      metrics: metricRows.map((m) => ({ key: m.key, value: m.value, prior_value: m.prior_value, source: m.source })),
+      campaigns: (snap?.campaigns ?? []).map((c) => ({ platform: c.platform, name: c.campaign, spend: c.spend || 0, leads: c.conversions || 0 })),
+      recommendations: openRecs,
+      inbox: miles.inbox.filter((row) => row.status === 'queued').map((row) => ({ id: row.id, title: row.title, reason: row.reason })),
+    });
+    return { operator };
   });
 
   // Diagnostic — confirm a connected app actually returns live data (and expose the
@@ -2436,27 +2529,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     // webhook event ledger, blended into the calc.* money metrics only when
     // every input is real.
     const data = await authStore.getUserData(u.id);
-    const snap = await getSnapshot(u.id, data);
-    const adSpend = snap?.adSpend;
-    // CRM live values: webhook ledger first, then the direct deals read
-    // (GHL opportunities) overrides won/revenue — the pipeline is the truth.
-    const ledger = crmLiveValues(data, days);
-    const jobs = Array.isArray(data.jobMarks) ? (data.jobMarks as JobMark[]) : [];
-    const fromJobs: Record<string, number> = {};
-    if (jobs.length) {
-      const booked = jobs.filter((j) => j.stage === 'booked' || j.stage === 'won').length;
-      const won = jobs.filter((j) => j.stage === 'won');
-      fromJobs['crm.leads_created'] = jobs.length;
-      fromJobs['crm.booked_jobs'] = booked;
-      if (won.length) fromJobs['crm.job_revenue'] = Math.round(won.reduce((s, j) => s + (Number(j.jobValue) || 0), 0) * 100) / 100;
-    }
-    const crm = { ...ledger, ...dealsLiveValues(snap?.deals ?? [], days), ...fromJobs };
-    // GBP completeness comes live from the Local Presence audit once taken.
-    const lpAnswers = (data.localPresence as Record<string, AuditAnswer>) ?? undefined;
-    const gbpScore = lpAnswers ? { 'gbp.completeness_score': gbpCompletenessScore(buildLocalPresenceAudit(lpAnswers, (data.profile ?? {}) as Record<string, string>)) } : {};
-    const live: import('./metrics/resolver.js').LiveReaders = {
-      values: { ...crm, ...calcLiveValues(crm, adSpend), ...gbpScore, ...(adSpend !== undefined ? { 'google_ads.cost': Math.round(adSpend * 100) / 100 } : {}) },
-    };
+    const { live } = await liveReadersFor(u.id, data, days);
     return { results: await getMetrics(keys, days, live) };
   });
 
@@ -3175,6 +3248,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       try { await connector.listAdTargets(userId); } catch { /* readiness stays unresolved */ }
     }
     const num = (v?: string) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : undefined; };
+    const milesCap = milesOf(data).bundle?.setup.caps.dailyBudget;
+    const savedDaily = num(p.dailyBudget) || (typeof milesCap === 'number' && milesCap > 0 ? milesCap : undefined);
     const plan = buildLoopPlan({
       profile: {
         businessName: p.businessName,
@@ -3185,7 +3260,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         website: p.website,
         phone: p.phone,
         logoUrl: kit.logoUrl || assets.logo || p.logo,
-        dailyBudget: num(p.dailyBudget),
+        dailyBudget: savedDaily,
         monthlyBudget: num(p.monthlyBudget),
         targetCpl: num(p.targetCpl) || num(p.targetCpa),
         averageJobValue: num(p.averageJobValue) || num(p.avgTicket),
@@ -3208,6 +3283,34 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       pendingPlaybook: 'Akhil will supply an operator playbook. It is not implemented or validated.',
       apps: PIPEDREAM_APPS,
     };
+  });
+
+  app.get('/api/launch/home', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const miles = milesOf(data);
+    const google = await googleReadiness(u.id);
+    const num = (v?: string | number) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null; };
+    const cap = miles.bundle?.setup.caps.dailyBudget;
+    const input = {
+      mode: miles.bundle?.setup.mode || miles.pendingMode || null,
+      trade: String(p.industry || miles.bundle?.profile.industry || ''),
+      market: String(p.serviceAreas || miles.bundle?.setup.location || ''),
+      services: String(p.services || miles.found?.services || miles.bundle?.profile.services || ''),
+      website: String(p.website || miles.bundle?.setup.website || miles.found?.website || ''),
+      phone: String(p.phone || ''),
+      savedCap: (typeof cap === 'number' && cap > 0 ? cap : null) || num(p.dailyBudget),
+      leadsPerDay: miles.bundle ? num(miles.bundle.setup.leadsPerDay) : num(p.leadsPerDay),
+      averageJobValue: num(p.averageJobValue) || num(p.avgTicket),
+      closeRate: num(p.closeRate) != null && num(p.closeRate)! <= 1 ? num(p.closeRate) : null,
+      financing: /^(1|true|yes)$/i.test(String(p.financing || '')),
+      google: { oauth: google.oauth, ready: google.ready, note: google.note },
+      businessName: String(p.businessName || miles.bundle?.setup.businessName || ''),
+    };
+    const spec = previewSpec(input);
+    return { launch: buildLaunchView(input, spec), spec };
   });
 
   app.post<{ Body: { totalDaily?: number; observedAds?: ObservedAd[] } }>('/api/journey/plan', async (req, reply) => {
