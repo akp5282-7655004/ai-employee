@@ -109,13 +109,13 @@
   .nav a.on{background:var(--panel-2);color:var(--ink);font-weight:600;}
   .nav a.sub{margin-left:20px;padding-left:12px;border-left:1.5px solid var(--line);font-size:13px;border-radius:0 8px 8px 0;}
   .nav a.sub .ico{width:15px;height:15px;}
-  .navbadge{background:#c2564d;color:#fff;font-size:10px;font-weight:800;border-radius:10px;padding:1px 7px;margin-left:auto;}
+  .navbadge{background:#1b8552;color:#fff;font-size:10px;font-weight:800;border-radius:10px;padding:1px 7px;margin-left:6px;flex:none;}
   /* Collapsible nav groups — keep the sidebar to a few clear categories. */
   .navgroup{display:flex;flex-direction:column;}
   .navhead{display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:8px;color:var(--muted);font-size:13.5px;cursor:pointer;background:none;border:none;font-family:inherit;text-align:left;width:100%;}
   .navhead:hover{background:var(--panel-2);color:var(--ink);}
   .navhead.active{color:var(--ink);font-weight:600;}
-  .navhead .hlabel{flex:1;}
+  .navhead .hlabel{flex:1;white-space:nowrap;}
   .navhead .chev{width:13px;height:13px;color:var(--faint);transition:transform .15s;}
   .navgroup.open>.navhead .chev{transform:rotate(90deg);}
   .navkids{display:none;flex-direction:column;gap:2px;margin:1px 0 3px;}
@@ -573,7 +573,15 @@
   .side .ws .sq,.side .acct .sq{background:#2a2a30;color:#ddd;border-color:#3a3a42;}
   .side .newtask{background:transparent;border-color:transparent;box-shadow:none;color:#eee;text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;}
   .side .newtask:hover{background:#2a2a30;border-color:transparent;}
+  .side .nav a.top{display:flex;align-items:center;padding:8px 10px;border-radius:8px;color:#eee;font-weight:800;letter-spacing:.08em;text-transform:uppercase;font-size:12px;cursor:pointer;}
+  .side .nav a.top.on,.side .nav a.top:hover{background:#2a2a30;color:#fff;}
   .side .nav a,.side .navhead{color:#b9b9c1;}
+  .md-else{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:8px;}
+  .md-switch{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #f2f2f4;font-size:14px;}
+  .md-on,.md-off{font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px;border:0;cursor:pointer;font-family:inherit;}
+  .md-on{background:#e7f6ee;color:#1b8552;}
+  .md-off{background:#f3f3f5;color:#6e6e76;}
+  @media(max-width:1100px){.md-else{grid-template-columns:1fr;}}
   .side .navhead{text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;}
   .side .nav a:hover,.side .navhead:hover{background:#2a2a30;color:#fff;}
   .side .nav a.on,.side .navhead.active{background:#2a2a30;color:#fff;}
@@ -729,44 +737,38 @@
   <aside class="side">
     <div class="brandrow"><svg class="milesmark" viewBox="0 0 100 100" width="28" height="28" role="img" aria-label="Miles"><rect x="1.5" y="1.5" width="97" height="97" rx="27" fill="#2A2A2E"/><g fill="none" stroke="#fff" stroke-width="8"><path d="M31.6 31.6A26 26 0 0 0 68.4 68.4" stroke-opacity=".35"/><path d="M31.6 31.6A26 26 0 0 1 68.4 68.4"/></g><circle cx="42" cy="50" r="4" fill="#fff"/><circle cx="58" cy="50" r="4" fill="#fff"/></svg><span class="wm"><span class="wm-miles">MILES</span><span class="wm-ai">AI</span></span></div>
     <div class="ws"><span class="sq" id="ws-av">·</span><b id="ws-name">Your Workspace</b><span class="cx"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg></span></div>
-    <div class="newtask" data-ask><svg class="ico" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-9 9c0 1.6.42 3.1 1.15 4.4L3 21l4.8-1.1A9 9 0 1 0 12 3Z"/></svg> Chat with Miles</div>
     <nav class="nav" id="nav">
-      <div class="navgroup open" data-group="run">
-        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0"/><path d="M12 13l4-3"/><path d="M4 13h1M19 13h1M12 3v1"/></svg> Run<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+      <a class="top" data-page="overview" data-pages="overview" data-tabs="Dashboard">Dashboard</a>
+      <div class="newtask" data-ask>Chat with Miles</div>
+      <div class="navgroup" data-group="marketing">
+        <button class="navhead"><span class="hlabel">Marketing</span><svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="navkids">
-          <a data-page="overview" data-pages="overview" data-tabs="Dashboard"><svg class="ico" viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0"/><path d="M12 13l4-3"/><path d="M4 13h1M19 13h1M12 3v1"/></svg> Dashboard</a>
-          <a data-page="launch" data-pages="playbook,launch,fblaunch,adstudio" data-tabs="Plan|Google Ads|Facebook|Ad Copy"><svg class="ico" viewBox="0 0 24 24"><path d="M5 13a8 8 0 0 1 16 0"/><path d="M12 3v2M4 13H2M22 13h-2M12 13l4-4"/><circle cx="12" cy="13" r="1.6"/></svg> Launch</a>
-          <a data-page="studio" data-pages="studio,editor,calendar" data-tabs="Create|Edit|Schedule"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4 3.6L17 19l-5-3-5 3 1-6.4L4 9l5.8-.7Z"/></svg> Studio</a>
-          <a data-page="adsmgr" data-pages="adsmgr" data-tabs="Ads Manager"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 4v16"/></svg> Ads Manager</a>
-          <a data-page="localpresence" data-pages="localpresence" data-tabs="Local Presence"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-7-5.2-7-11a7 7 0 0 1 14 0c0 5.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.6"/></svg> Local Presence</a>
+          <a data-page="launch" data-pages="playbook,launch,fblaunch,adstudio" data-tabs="Plan|Google Ads|Facebook|Ad Copy">Launch</a>
+          <a data-page="studio" data-pages="studio,editor,calendar" data-tabs="Create|Edit|Schedule">Studio</a>
+          <a data-page="adsmgr" data-pages="adsmgr" data-tabs="Ads Manager">Ads Manager</a>
+          <a data-page="localpresence" data-pages="localpresence" data-tabs="Local Presence">Local Presence</a>
         </div>
       </div>
-      <div class="navgroup" data-group="compete">
-        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3M7 9l3 2-3 2V9zM14 9h4M14 13h3"/></svg> Compete<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+      <div class="navgroup" data-group="insights">
+        <button class="navhead"><span class="hlabel">Insights</span><svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="navkids">
-          <a data-page="cads" data-pages="cads,affluence,research" data-tabs="Ads & Market Scan|Market Map|Demographics"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3M7 9l3 2-3 2V9zM14 9h4M14 13h3"/></svg> Competitors</a>
-          <a data-page="audit" data-pages="audit" data-tabs="Site &amp; Competitor Audits"><svg class="ico" viewBox="0 0 24 24"><path d="M4 4h16v12H4z"/><path d="M4 8h16M8 12h6"/><circle cx="17" cy="18" r="3"/><path d="M19.5 20.5L22 23"/></svg> Audits</a>
+          <a data-page="cads" data-pages="cads,affluence,research" data-tabs="Ads & Market Scan|Market Map|Demographics">Competitors</a>
+          <a data-page="audit" data-pages="audit" data-tabs="Site &amp; Competitor Audits">Audits</a>
+          <a data-page="analytics" data-pages="analytics,meters" data-tabs="Analytics|Benchmarks" data-nostrip="1">Analytics</a>
+          <a data-page="recs" data-pages="recs,growth" data-tabs="Recommendations|Growth Autopilot">Recommendations</a>
+          <a data-page="skills" data-pages="skills,market,ghl" data-tabs="Skills|Marketplace|GHL Workflows">Playbooks</a>
         </div>
       </div>
-      <div class="navgroup" data-group="know">
-        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Know<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+      <div class="navgroup" data-group="account">
+        <button class="navhead"><span class="hlabel">Account &amp; setup</span><span class="navbadge" id="setup-badge" hidden></span><svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="navkids">
-          <a data-page="analytics" data-pages="analytics,meters" data-tabs="Analytics|Benchmarks" data-nostrip="1"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Analytics</a>
-          <a data-page="recs" data-pages="recs,growth" data-tabs="Recommendations|Growth Autopilot"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.3 1 2.5h6c0-1.2.3-1.8 1-2.5A6 6 0 0 0 12 3Z"/></svg> Recommendations</a>
-          <a data-page="skills" data-pages="skills,market,ghl" data-tabs="Skills|Marketplace|GHL Workflows"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 2.2 5.6L20 9l-4.3 3.8L17 19l-5-3-5 3 1.3-6.2L4 9l5.8-.4Z"/></svg> Playbooks</a>
-        </div>
-      </div>
-      <div class="navgroup" data-group="set-up">
-        <button class="navhead"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Set up<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
-        <div class="navkids">
-          <a data-page="profile" data-pages="profile,brand,assets" data-tabs="Profile|Brand|Assets"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg> Business Profile</a>
-          <a data-page="integrations" data-pages="integrations" data-tabs="Integrations"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 6h4a2 2 0 0 1 2 2v2M10 18H6a2 2 0 0 1-2-2v-2"/></svg> Integrations</a>
-          <a data-page="autohub" data-pages="autohub,schedules,weather,autopilot,approvals" data-tabs="Plays|Scheduled|Weather|Autonomy|Approvals"><svg class="ico" viewBox="0 0 24 24"><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/><circle cx="12" cy="12" r="3.5"/></svg> Automations</a>
-          <a data-page="settings" data-pages="settings,billing,health,logs" data-tabs="Account|Plan &amp; Credits|System Health|Change Log"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg> Settings</a>
+          <a data-page="profile" data-pages="profile,brand,assets" data-tabs="Profile|Brand|Assets">Business Profile</a>
+          <a data-page="integrations" data-pages="integrations" data-tabs="Integrations">Integrations</a>
+          <a data-page="autohub" data-pages="autohub,schedules,weather,autopilot,approvals" data-tabs="Plays|Scheduled|Weather|Autonomy|Approvals">Automations</a>
+          <a data-page="settings" data-pages="settings,billing,health,logs" data-tabs="Account|Plan &amp; Credits|System Health|Change Log">Settings</a>
         </div>
       </div>
     </nav>
-    <div class="glabel">PROJECTS</div>
     <div class="pill newproj"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New project</div>
     <div class="glabel">ACTIVE PLAYBOOKS</div>
     <div class="pill playbook">Home Services</div>
@@ -1142,6 +1144,7 @@
 
     <!-- BUSINESS PROFILE -->
     <section class="page" id="page-profile">
+      <div id="account-ops" style="max-width:760px;margin-bottom:16px"></div>
       <div id="miles-profile" style="max-width:760px;margin-bottom:16px"></div>
       <div class="mcard" style="max-width:760px">
         <h3>Business Profile</h3>
@@ -3177,24 +3180,7 @@ function renderOverview(d, miles, op){
   ctrl.append(pills, gsel, ask, theme);
   top.append(left, ctrl);
   box.append(top, modeNote);
-
-  const setup=el('div','md-setup');
-  const setupText=el('div',null,'');
-  setupText.append(document.createTextNode('Setup: '+(op&&op.setupLine?op.setupLine:'Google Search only. Add a trade, market, and daily budget in Profile.')));
-  setup.append(setupText);
-  const legend=el('span','md-legend');
-  legend.append(mdSample(), document.createTextNode(' = example numbers until that source connects'));
-  setup.append(legend);
-  const acts=el('div','md-actions');
-  const kill=el('button','md-ghost', miles.caps&&miles.caps.paused?'Resume':'Pause all');
-  const back=el('button','md-ghost','Revert to paused');
-  const edit=el('button','md-link','Edit setup');
-  kill.onclick=async()=>{ const r=await milesPost(kill, modeNote, 'Pausing...', '/api/miles/kill', {paused:!(miles.caps&&miles.caps.paused)}); if(r) await refreshMilesSurface(); };
-  back.onclick=async()=>{ const r=await milesPost(back, modeNote, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) await refreshMilesSurface(); };
-  edit.onclick=()=>setPage('profile');
-  acts.append(kill, back, edit);
-  setup.append(acts);
-  box.append(setup);
+  markSetupBadge(miles);
 
   if(!(miles.placement&&miles.placement.dashboard==='compact')){
     const flow=el('div'); flow.id='miles-flow';
@@ -3402,58 +3388,9 @@ function renderOverview(d, miles, op){
   box.append(bc);
 
   box.append(el('div','md-subhead','Everything else'));
-  box.append(el('div','md-label','Trends'));
-  const trends=el('div'); trends.id='md-trends'; box.append(trends);
-
-  const k=d.kpis||{};
-  box.append(el('div','md-subhead','Activity'));
-  const ag=el('div','md-activity');
-  ag.append(
-    statCard('Pending approvals', k.pendingApprovals||0),
-    statCard('Changes live', k.liveChanges||0),
-    statCard('Agents deployed', k.agentsDeployed||0),
-    statCard('Agent runs', k.agentRuns||0),
-    statCard('Scheduled posts', k.scheduledPosts||0),
-    statCard('Credits used', (k.creditsUsed||0).toLocaleString()),
-    statCard('Weather triggers', k.weatherTriggers||0)
-  );
-  box.append(ag);
-  box.append(el('p','md-legend', d.sample
-    ? 'Approvals, agents, posts, credits, and weather rules are saved on this account. Ad and CRM figures marked SAMPLE are examples.'
-    : 'From your account. Approvals, agents, posts, and weather rules are saved records. Agent runs use the window above. Credits used are this month.'));
-
-  const trio=el('div','md-trio');
-  const stl=el('div'); stl.append(stlCard(d.speedToLead||{})); trio.append(stl);
-  const autos=el('div');
-  autos.append(el('div','md-subhead','Automations via GoHighLevel'));
-  autos.append(reviewCard());
-  autos.append(autoCard());
-  trio.append(autos);
-  const conn=el('div','md-conn');
-  conn.append(el('div','md-subhead','Connections'));
-  ((op&&op.connections)||[]).forEach(c=>{
-    const row=el('div','md-crow');
-    const name=el('div');
-    const dot=el('span','md-dot');
-    dot.style.background=c.state==='on'?'#1b8552':c.state==='hold'?'#86651c':'#c5c5cb';
-    name.append(dot, document.createTextNode(c.name));
-    const detail=el('div','md-legend', c.detail); detail.style.textAlign='right'; detail.style.maxWidth='220px';
-    row.append(name, detail);
-    conn.append(row);
-  });
-  if(op&&op.connections){
-    const g=op.connections.find(c=>c.name==='Google Ads');
-    if(g&&g.state!=='on') conn.append(el('p','md-legend','Until Google Ads resolves, Miles cannot read spend or create campaigns there.'));
-  }
-  trio.append(conn);
-  box.append(trio);
-
-  const mid=el('div','md-split'); mid.id='md-mid'; mid.style.marginTop='14px'; box.append(mid);
-  const low=el('div','md-low');
-  const skills=el('div'); skills.id='md-skills'; low.append(skills);
-  const side=el('div');
-  const exp=el('div'); exp.id='md-experiments'; side.append(exp);
-  const up=el('div','mcard'); up.style.marginTop='12px';
+  const rest=el('div','md-else');
+  rest.append(compactAutosCard(), compactFunnelCard(), compactSkillsCard());
+  const up=el('div','mcard');
   up.append(el('div','md-subhead','Upcoming posts'));
   if((d.upcomingPosts||[]).length){
     for(const post of d.upcomingPosts){
@@ -3462,16 +3399,12 @@ function renderOverview(d, miles, op){
       up.append(r);
     }
   } else {
-    const drafts=(d.recentRuns||[]).length;
-    up.append(el('p','md-explain', drafts
-      ? 'Nothing scheduled. Open the content calendar to queue a post.'
-      : 'Nothing scheduled. Miles does not have posts drafted on this account yet.'));
+    up.append(el('p','md-explain','Nothing scheduled. Open the content calendar when you have a post to queue.'));
     const cal=el('button','md-link','Open content calendar');
     cal.onclick=()=>setPage('calendar');
     up.append(cal);
   }
-  side.append(up);
-  const ra=el('div','mcard'); ra.style.marginTop='12px';
+  const ra=el('div','mcard');
   ra.append(el('div','md-subhead','Recent activity'));
   if((d.recentRuns||[]).length){
     for(const run of d.recentRuns){
@@ -3483,10 +3416,132 @@ function renderOverview(d, miles, op){
   const more=el('button','md-link','See all activity');
   more.onclick=()=>setPage('approvals');
   ra.append(more);
-  side.append(ra);
-  low.append(side);
-  box.append(low);
+  const modeCard=el('div','mcard');
+  modeCard.append(el('div','md-subhead','Miles mode'));
+  modeCard.append(el('p','md-explain', modeBlurb(miles.mode, miles.caps)));
+  modeCard.append(el('p','md-legend','Change it any time with the switch at the top.'));
+  rest.append(up, ra, modeCard);
+  box.append(rest);
   const metrics=el('div'); metrics.id='md-metrics'; metrics.style.marginTop='14px'; box.append(metrics);
+}
+function markSetupBadge(miles){
+  const badge=$('#setup-badge'); if(!badge) return;
+  const crawled=!!(miles&&miles.found&&miles.found.pagesRead);
+  const planned=!!(miles&&miles.bundle);
+  const n=(crawled?0:1)+(planned?0:1);
+  badge.hidden=n===0;
+  badge.textContent=n?String(n):'';
+}
+function compactSwitch(label, on, toggle){
+  const row=el('div','md-switch');
+  row.append(el('span',null,label));
+  const b=el('button', on?'md-on':'md-off', on?'On':'Off');
+  b.onclick=toggle;
+  row.append(b);
+  return row;
+}
+function compactAutosCard(){
+  const card=el('div','mcard');
+  card.append(el('div','md-subhead','Automations'));
+  card.append(el('p','appsub','Loading...'));
+  (async()=>{
+    let stl={}, rev={}, au={};
+    if(REMOTE){
+      try{
+        const r=await Promise.all([fetch('/api/speed-to-lead'), fetch('/api/review-request'), fetch('/api/automations')]);
+        stl=await r[0].json(); rev=await r[1].json(); au=await r[2].json();
+      }catch(e){}
+    }
+    const head=card.querySelector('.md-subhead');
+    card.innerHTML='';
+    if(head) card.append(head); else card.append(el('div','md-subhead','Automations'));
+    const flip=async(url, body)=>{ try{ await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); }catch(e){} openOverview(); };
+    card.append(compactSwitch('Speed-to-lead', !!stl.enabled, ()=>flip('/api/speed-to-lead',{enabled:!stl.enabled})));
+    card.append(compactSwitch('Review requests', !!rev.enabled, ()=>flip('/api/review-request',{enabled:!rev.enabled})));
+    card.append(compactSwitch('No-show recovery', !!(au.noShow&&au.noShow.enabled), ()=>flip('/api/automations',{noShow:{enabled:!(au.noShow&&au.noShow.enabled)}})));
+    card.append(compactSwitch('New customer onboarding', !!(au.onboarding&&au.onboarding.enabled), ()=>flip('/api/automations',{onboarding:{enabled:!(au.onboarding&&au.onboarding.enabled)}})));
+    if(!stl.canSend && !rev.canSend && !(au.canSend)) card.append(el('p','md-legend','GoHighLevel is not connected, so these stay drafts until it is.'));
+  })();
+  return card;
+}
+function compactFunnelCard(){
+  const card=el('div','mcard');
+  card.id='md-funnel';
+  card.append(el('div','md-subhead','Funnel'));
+  card.append(el('p','appsub','Loading...'));
+  (async()=>{
+    let rows=[];
+    try{
+      const r=await(await fetch('/api/metrics/resolve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({keys:['google_ads.clicks','calc.blended_leads','crm.booked_jobs','crm.completed_jobs'], days:30})})).json();
+      rows=r.results||[];
+    }catch(e){}
+    const by={}; rows.forEach(m=>{ by[m.key]=m; });
+    const sample=['google_ads.clicks','calc.blended_leads','crm.booked_jobs','crm.completed_jobs'].some(k=>!by[k]||by[k].source!=='live');
+    card.innerHTML='';
+    const h=el('div','md-subhead','Funnel');
+    if(sample) h.append(document.createTextNode(' '), mdSample());
+    card.append(h);
+    [['Clicks','google_ads.clicks'],['Leads','calc.blended_leads'],['Booked','crm.booked_jobs'],['Completed','crm.completed_jobs']].forEach(([label,key])=>{
+      const row=el('div','md-switch');
+      const v=by[key]?Math.round(by[key].value).toLocaleString():'n/a';
+      row.append(el('span',null,label), el('b',null,v));
+      card.append(row);
+    });
+    if(sample) card.append(el('p','md-legend','Example stage counts until those sources connect.'));
+  })();
+  return card;
+}
+function compactSkillsCard(){
+  const card=el('div','mcard');
+  card.id='skill-activity';
+  card.append(el('div','md-subhead','Skills running'));
+  card.append(el('p','appsub','Loading...'));
+  (async()=>{
+    let deployed=[], available=[];
+    if(REMOTE){
+      try{ const d=await(await fetch('/api/deployments')).json(); deployed=d.skills||[]; available=d.available||[]; }catch(e){}
+    }
+    card.innerHTML='';
+    card.append(el('div','md-subhead','Skills running'));
+    if(!deployed.length) card.append(el('p','md-explain','No skills are on a schedule yet.'));
+    deployed.slice(0,4).forEach(s=>{
+      const meta=available.find(a=>a.key===s.key)||{};
+      const row=el('div','md-switch');
+      const cad=meta.cadence==='daily'?'Daily':meta.cadence==='monthly'?'Monthly':'Weekly';
+      row.append(el('span',null, meta.name||s.key), el('span','md-legend', cad));
+      card.append(row);
+    });
+    const all=el('button','md-link','All skills');
+    all.onclick=()=>setPage('skills');
+    card.append(all);
+  })();
+  return card;
+}
+function renderAccountOps(miles, connections){
+  const host=$('#account-ops'); if(!host) return;
+  host.innerHTML='';
+  const card=el('div','mcard');
+  card.append(el('div','sect-label','ACCOUNT CONTROLS'));
+  card.append(el('p','appsub','Pause, revert, and profile edits live here. They do not spend by themselves.'));
+  const acts=el('div'); acts.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px';
+  const note=el('div','appsub','');
+  const kill=el('button','md-ghost', miles&&miles.caps&&miles.caps.paused?'Resume':'Pause all');
+  const back=el('button','md-ghost','Revert to paused');
+  const edit=el('button','md-link','Edit setup');
+  kill.onclick=async()=>{ const r=await milesPost(kill, note, 'Pausing...', '/api/miles/kill', {paused:!(miles&&miles.caps&&miles.caps.paused)}); if(r) loadProfile(); };
+  back.onclick=async()=>{ const r=await milesPost(back, note, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) loadProfile(); };
+  edit.onclick=()=>{ const form=$('#profile-form'); if(form) form.scrollIntoView({behavior:'smooth', block:'start'}); };
+  acts.append(kill, back, edit);
+  card.append(acts, note);
+  card.append(el('div','sect-label','CONNECTIONS'));
+  (connections||[]).forEach(c=>{
+    const row=el('div','md-switch');
+    row.append(el('b',null,c.name), el('span','md-legend', c.detail||c.state||''));
+    card.append(row);
+  });
+  if(!(connections||[]).length) card.append(el('p','appsub','Connection status loads with your account.'));
+  host.append(card);
+  markSetupBadge(miles);
 }
 // More instant automations — no-show recovery (#7) + new-customer onboarding (#23).
 function autoCard(){
@@ -4406,6 +4461,18 @@ async function openCmdCenter(){
 }
 async function renderCmdCenter(){
   const trends=$('#md-trends'), mid=$('#md-mid'), skills=$('#md-skills'), expSlot=$('#md-experiments'), metrics=$('#md-metrics');
+  if(metrics && !trends){
+    metrics.innerHTML='';
+    const gridCard=ccPanel('YOUR METRICS');
+    const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-top:8px';
+    (CC.layout.widgets||[]).forEach((w,i)=>grid.append(ccWidgetCard(w,i)));
+    const plus=el('button',null,'+ Add any of '+CC.catalog.length+' metrics');
+    plus.style.cssText='border:2px dashed var(--line);border-radius:16px;background:none;color:var(--muted);font-weight:700;cursor:pointer;min-height:72px;grid-column:1/-1';
+    plus.onclick=ccAddModal; grid.append(plus);
+    gridCard.append(grid); metrics.append(gridCard);
+    const old=$('#cc-body'); if(old){ old.innerHTML=''; old.style.display='none'; }
+    return;
+  }
   const slotted=!!(trends&&mid&&skills&&expSlot&&metrics);
   if(slotted){
     trends.className='md-trends'; trends.innerHTML='';
@@ -7830,7 +7897,7 @@ async function runSiteImport(url,container,noteEl){
 }
 function readProfileForm(container){ const out={}; container.querySelectorAll('[data-k]').forEach(i=>{ let v=(i.value||'').trim(); if(i.type==='number') v=v?Number(v):''; out[i.dataset.k]=v; }); return out; }
 async function saveProfile(vals){ try{ const r=await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(vals)}); return r.ok?(await r.json()).profile:null; }catch(e){ return null; } }
-async function loadProfile(){ if(!REMOTE)return; try{ const r=await fetch('/api/profile'); const d=await r.json(); PROFILE=d.profile||{}; buildProfileForm($('#profile-form'), d.profile||{}); }catch(e){} try{ const miles=await(await fetch('/api/miles/home')).json(); const slot=$('#miles-profile'); if(slot) renderMilesHome(slot, miles, 'profile'); }catch(e){} }
+async function loadProfile(){ if(!REMOTE)return; try{ const r=await fetch('/api/profile'); const d=await r.json(); PROFILE=d.profile||{}; buildProfileForm($('#profile-form'), d.profile||{}); }catch(e){} let miles={}; try{ miles=await(await fetch('/api/miles/home')).json(); const slot=$('#miles-profile'); if(slot) renderMilesHome(slot, miles, 'profile'); }catch(e){} let connections=[]; try{ connections=((await(await fetch('/api/dashboard/operator')).json()).operator||{}).connections||[]; }catch(e){} renderAccountOps(miles, connections); }
 $('#pf-import').onclick=async()=>{ const btn=$('#pf-import'); const url=($('#pf-website').value||'').trim()||($('#profile-form').querySelector('[data-k="website"]')||{}).value||''; if(!url){ $('#pf-import-note').textContent='Enter your website to re-import.'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#profile-form'),$('#pf-import-note')); btn.disabled=false; btn.textContent=old; };
 $('#profile-save').onclick=async()=>{ const btn=$('#profile-save'); btn.disabled=true; const p=await saveProfile(readProfileForm($('#profile-form'))); if(p){ PROFILE=p; applyIdentity(); queueChange('profile','Business profile updated'); } $('#profile-note').textContent=p?'Saved ✓':'Could not save.'; btn.disabled=false; setTimeout(()=>{$('#profile-note').textContent='';},2500); };
 $('#ob-import').onclick=async()=>{ const btn=$('#ob-import'); const url=($('#ob-website').value||'').trim(); if(!url){ $('#ob-import-note').textContent='Enter your website first (or skip and fill it in below).'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#onboard-form'),$('#ob-import-note')); btn.disabled=false; btn.textContent=old; };

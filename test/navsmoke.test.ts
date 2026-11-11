@@ -78,6 +78,15 @@ describe('every nav tab loads', () => {
     await page.check('#tos');
     await page.click('#submit');
     await page.waitForSelector('#overview-body', { timeout: 15000 });
+    const nav = await page.locator('#nav').innerText();
+    expect(nav).toMatch(/DASHBOARD/i);
+    expect(nav).toMatch(/MARKETING/i);
+    expect(nav).toMatch(/INSIGHTS/i);
+    expect(nav).toMatch(/ACCOUNT & SETUP/i);
+    const pages = await page.locator('#nav a[data-pages]').evaluateAll((els) => els.map((el) => (el as { dataset?: { pages?: string } }).dataset?.pages || '').join(','));
+    expect(pages).toContain('launch');
+    expect(pages).toContain('skills');
+    expect(pages).toContain('profile');
 
     const seen = watch(page, base);
     const ids = await walk(page);
