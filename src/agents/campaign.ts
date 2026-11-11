@@ -52,6 +52,18 @@ export interface CampaignSpec {
   sitelinks?: Sitelink[]; // 4+ recommended
   callouts?: string[]; // 4–10 recommended, ≤25 each
   structuredSnippet?: StructuredSnippet;
+  /** Defaults from the campaign rulebook. Not a measured benchmark. */
+  targeting?: {
+    presence: 'PRESENCE';
+    radiusMiles: number;
+    searchPartners: false;
+    display: false;
+    schedule: { days: number[]; startHour: number; endHour: number };
+  };
+  /** Launch bid stage. Switches later are proposals, not a silent live change. */
+  bidPlan?: { stage: 'MAXIMIZE_CLICKS' | 'MAXIMIZE_CONVERSIONS' | 'TARGET_CPA'; maxCpc: number; targetCpa?: number };
+  callAsset?: { phone: string } | null;
+  locationAsset?: { gbpUrl: string } | null;
 }
 
 /** Google's fixed structured-snippet headers. */

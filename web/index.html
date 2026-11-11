@@ -2731,7 +2731,7 @@ function renderMilesHome(box, d, place){
     const row=el('div'); row.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-top:10px';
     const planNote=el('div','appsub','');
     const start=el('button','go', d.mode==='automate'?'Start inside my caps':d.mode==='manual'?'Manual mode does not create':'Queue for my approval');
-    start.onclick=async()=>{ const r=await milesPost(start, planNote, 'Starting...', '/api/miles/go', {confirm:true}); if(!r) return; planNote.textContent=r.enabled?'Enabled inside your caps.':(r.demo?'Preview only. Nothing was created in Google.':(r.created?'Created paused.':'Waiting on you.')); await refreshMilesSurface(); };
+    start.onclick=async()=>{ const r=await milesPost(start, planNote, 'Starting...', '/api/miles/go', {confirm:true}); if(!r) return; planNote.textContent=r.note||(r.enabled?'Google reports the campaign, ad groups, and ads as enabled.':(r.demo?'Preview only. Nothing was created in Google.':(r.created?'Created paused.':'Waiting on you.'))); await refreshMilesSurface(); };
     const kill=el('button',null, d.caps&&d.caps.paused?'Resume':'Pause all'); kill.style.cssText='border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;background:var(--panel)';
     kill.onclick=async()=>{ const r=await milesPost(kill, planNote, 'Pausing...', '/api/miles/kill', {paused:!(d.caps&&d.caps.paused)}); if(r) await refreshMilesSurface(); };
     const back=el('button',null,'Revert to paused'); back.style.cssText=kill.style.cssText;

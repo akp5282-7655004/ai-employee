@@ -20,11 +20,14 @@ function appFor(targets: { id: string; label: string }[]) {
           { step: 'Create campaign "Painting" (PAUSED)', ok: true, resource: 'customers/1/campaigns/9' },
           { step: 'Create ad group "Interior painting"', ok: true, resource: 'customers/1/adGroups/3' },
           { step: 'Add 3 keywords to "Interior painting"', ok: true },
-          { step: 'Create responsive search ad in "Interior painting"', ok: true },
+          { step: 'Create responsive search ad in "Interior painting"', ok: true, resource: 'customers/1/ads/8' },
         ],
       };
     },
-    async setGoogleCampaignStatus(_id: string, args: { status: string }) { calls.push('status:' + args.status); return { ok: true, live: true, called: true, note: 'Status set to ' + args.status }; },
+    async setGoogleCampaignStatus(_id: string, args: { status: string }) {
+      calls.push('status:' + args.status);
+      return { ok: true, live: true, called: true, note: 'Status set to ' + args.status, readback: { campaign: 'ENABLED', adGroups: ['ENABLED'], ads: ['ENABLED'], note: 'Read back from the account.' } };
+    },
   } as unknown as Connector;
   const app = buildServer({ authStore: new MemoryStore(), connector });
   return { app, calls };
@@ -51,6 +54,7 @@ describe('Google path at $20 a day', () => {
     expect(planned.json().bundle.playbook.title).toMatch(/painting playbook/i);
     expect(planned.json().bundle.spec.status).toBe('PAUSED');
     expect(planned.json().bundle.channels.find((ch: { id: string }) => ch.id === 'meta').status).toBe('coming_later');
+    await app.inject({ method: 'POST', url: '/api/miles/tracking', headers, payload: { leadConversion: true, ga4Linked: true, method: 'thank_you' } });
     const started = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
     expect(started.statusCode).toBe(200);
     expect(started.json().created).toBe(true);
@@ -71,7 +75,7 @@ describe('Google path at $20 a day', () => {
     const { app, calls } = appFor([{ id: '1', label: 'Painters' }]);
     const c = await cookie(app, 'paint-hybrid@example.com');
     const headers = { cookie: c };
-    await app.inject({ method: 'POST', url: '/api/miles/crawl', headers, payload: { businessName: 'Painters In Philly', location: 'Philadelphia, PA', html } });
+    await app.inject({ method: 'POST', url: '/api/miles/crawl', headers, payload: { businessName: 'Painters In Philly', location: 'Philadelphia, PA', website: 'https://paintersinphilly.com', html } });
     await app.inject({ method: 'POST', url: '/api/miles/questions', headers, payload: { goal: 'get me leads', dailyBudget: 20, leadsPerDay: 1, mode: 'hybrid' } });
     const started = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
     expect(started.json().created).toBe(false);

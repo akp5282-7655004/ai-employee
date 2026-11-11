@@ -29,6 +29,9 @@ import { buildMetaAssets, buildSearchAssets, checkMetaPack, checkSearchPack } fr
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, normalizeSiteUrl, repairCampaignUrls, type CampaignSpec } from './agents/campaign.js';
+import { judgeEnableReadback } from './agents/enablecheck.js';
+import { enforceRulebook, housekeepingProposals } from './agents/rulebook.js';
+import { formatSopLog, runSopGate } from './agents/sopgate.js';
 import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, META_SHARED_ACCOUNT_NOTE, searchLaunchNote } from './agents/googlelaunch.js';
 import { buildLoopPlan, decideLead, ghlUpsertProps, GHL_UPSERT_ACTION, judgeActivation, normalizeLead, type ObservedAd } from './agents/plumberloop.js';
 import { judgeTikTokCreate, planFollowUp, proposeOptimizations, rollupJobs, stageOpportunity, TIKTOK_CREATE_ACTION, type JobMark } from './agents/contractorloop.js';
@@ -464,6 +467,11 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (!phone || !connector.runAppTask) return false;
     const link = await ghlLink(uid);
     if (!link.slug) return false;
+    const data = await authStore.getUserData(uid);
+    const gate = runSopGate('ghl_send', { mode: 'automate', ghl: { phone, message } });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: 'miles', source: 'sop-gate', title: 'ghl_send', detail: formatSopLog(gate) });
+    await authStore.setUserData(uid, data);
+    if (gate.disposition === 'block') return false;
     try { const r = await connector.runAppTask({ externalUserId: link.externalId, app: link.slug, query: verb, params: { message, name, phone, ...(extra ?? {}) } }); return !!r?.ok; } catch { return false; }
   };
 
@@ -1319,6 +1327,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const paused = req.body?.paused !== false;
     miles.bundle.setup.caps.paused = paused;
     if (paused && miles.campaignResource && connector.setGoogleCampaignStatus && connector.name !== 'mock') {
+      const gate = runSopGate('campaign_pause', { mode: miles.bundle?.setup.mode, spec: miles.bundle?.spec });
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'sop-gate', title: 'campaign_pause', detail: formatSopLog(gate) });
       await connector.setGoogleCampaignStatus(u.id, { campaignResource: miles.campaignResource, status: 'PAUSED' });
       miles.activation = 'paused';
     }
@@ -1341,6 +1351,26 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       dailySpend: daily,
       explicitCreate,
     });
+    const savedSite = normalizeSiteUrl(miles.bundle.setup.website || miles.bundle.profile.website || miles.found?.website || (data.profile as { website?: string } | undefined)?.website);
+    if (decisions.create.effect !== 'skip') {
+      if (!savedSite) {
+        return { error: 'Crawl your website first. Miles needs the saved website before it can set the landing page. Open the crawl step, enter the site, and run Crawl again. Nothing was created.', code: 400 as const, created: false };
+      }
+      miles.bundle.setup.website = savedSite;
+      const profile = (data.profile ?? {}) as { phone?: string; industry?: string };
+      const ruled = enforceRulebook(repairCampaignUrls(miles.bundle.spec, { website: savedSite, links: miles.crawl?.links ?? [] }), {
+        trade: profile.industry || miles.bundle.profile.industry,
+        city: miles.bundle.setup.location,
+        phone: profile.phone || miles.bundle.profile.phone,
+        gbpUrl: miles.bundle.setup.gbpUrl,
+      });
+      miles.bundle.spec = forcePausedSearchSpec(ruled.spec);
+      data.miles = miles;
+      if (ruled.blocks.length) {
+        await authStore.setUserData(uid, data);
+        return { error: ruled.blocks.join(' '), code: 400 as const, created: false };
+      }
+    }
     if (decisions.create.effect === 'queue') {
       miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'create', title: 'Create paused Google Search', reason: decisions.create.reason, status: 'queued' });
       miles.phase = 'ready';
@@ -1353,15 +1383,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       await authStore.setUserData(uid, data);
       return { ok: true, decisions, created: false };
     }
-    const savedSite = normalizeSiteUrl(miles.bundle.setup.website || miles.bundle.profile.website || miles.found?.website || (data.profile as { website?: string } | undefined)?.website);
-    if (!savedSite) {
-      return { error: 'Crawl your website first. Miles needs the saved website before it can set the landing page. Open the crawl step, enter the site, and run Crawl again. Nothing was created.', code: 400 as const };
-    }
-    miles.bundle.setup.website = savedSite;
-    miles.bundle.spec = repairCampaignUrls(miles.bundle.spec, { website: savedSite, links: miles.crawl?.links ?? [] });
-    const spec = forcePausedSearchSpec(miles.bundle.spec);
-    miles.bundle.spec = spec;
-    data.miles = miles;
+    const spec = miles.bundle.spec;
     const problems = validateCampaignSpec(spec);
     if (problems.length) {
       await authStore.setUserData(uid, data);
@@ -1382,7 +1404,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       await authStore.setUserData(uid, data);
       return { ok: false, error: 'Google Ads is not connected. Nothing was created.', decisions };
     }
-    const result = await connector.launchCampaign(uid, spec, targets[0]!.id);
+    const createGate = runSopGate('campaign_create', { mode: miles.bundle.setup.mode, spec, trade: (data.profile as { industry?: string } | undefined)?.industry, city: miles.bundle.setup.location, phone: (data.profile as { phone?: string } | undefined)?.phone, gbpUrl: miles.bundle.setup.gbpUrl, tracking: data.trackingProof as { leadConversion?: boolean; ga4Linked?: boolean } | undefined });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: createGate.disposition === 'block' ? 'dismissal' : 'action', actor: 'miles', source: 'sop-gate', title: 'campaign_create', detail: formatSopLog(createGate) });
+    if (createGate.disposition === 'block') {
+      await authStore.setUserData(uid, data);
+      return { error: createGate.blocks.join(' '), code: 400 as const, created: false };
+    }
+    const result = await connector.launchCampaign(uid, createGate.subject.spec || spec, targets[0]!.id);
     const judged = judgeSearchLaunch(result.steps ?? []);
     const demo = connector.name === 'mock';
     const live = !demo && !!result.live;
@@ -1400,19 +1428,61 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     miles.activation = 'paused';
     miles.phase = 'running';
     let enabled = false;
+    let enableNote = '';
     if (decisions.enable.effect === 'apply' && connector.setGoogleCampaignStatus) {
-      const turned = await connector.setGoogleCampaignStatus(uid, { campaignResource: result.campaignResource, status: 'ENABLED' });
-      enabled = !!turned.ok;
+      const adGroupResources = (result.steps ?? []).filter((step) => /create ad group/i.test(step.step) && step.resource).map((step) => step.resource!);
+      const adResources = (result.steps ?? []).filter((step) => /responsive search ad/i.test(step.step) && step.resource).map((step) => step.resource!);
+      const enableGate = runSopGate('campaign_enable', { mode: miles.bundle.setup.mode, spec, tracking: data.trackingProof as { leadConversion?: boolean; ga4Linked?: boolean } | undefined });
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: enableGate.disposition === 'block' ? 'dismissal' : 'action', actor: 'miles', source: 'sop-gate', title: 'campaign_enable', detail: formatSopLog(enableGate) });
+      if (enableGate.disposition === 'block') {
+        enableNote = enableGate.blocks.join(' ');
+        rememberMiles(data, miles, `Created paused. ${enableNote}`);
+        await authStore.setUserData(uid, data);
+        return { ok: true, created: true, enabled: false, note: enableNote, decisions, campaignResource: result.campaignResource };
+      }
+      const turned = await connector.setGoogleCampaignStatus(uid, { campaignResource: result.campaignResource, status: 'ENABLED', adGroupResources, adResources });
+      const verdict = judgeEnableReadback(turned.readback ?? { campaign: 'UNKNOWN', adGroups: [], ads: [], note: turned.note || 'No status was read back from Google.' });
+      enabled = verdict.enabled;
+      enableNote = verdict.reason;
       miles.activation = enabled ? 'enabled' : 'paused';
-      rememberMiles(data, miles, enabled ? `Created and enabled inside the $${daily}/day cap. Logged.` : `Created paused. Enable did not stick: ${turned.note}`);
+      rememberMiles(data, miles, enabled ? `Google reports the campaign, ad groups, and ads are enabled inside the $${daily}/day cap.` : `Created paused. ${verdict.reason}`);
     } else {
       miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'enable', title: 'Enable the Google campaign', reason: decisions.enable.reason, status: 'queued' });
       rememberMiles(data, miles, `Created paused. ${decisions.enable.reason}`);
     }
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: email, source: 'miles', title: enabled ? 'Standing approval enabled Google Search inside caps' : 'Google Search created paused' });
     await authStore.setUserData(uid, data);
-    return { ok: true, created: true, enabled, decisions, campaignResource: result.campaignResource };
+    return { ok: true, created: true, enabled, note: enableNote, decisions, campaignResource: result.campaignResource };
   };
+
+  app.post<{ Body: { leadConversion?: boolean; ga4Linked?: boolean; method?: string } }>('/api/miles/tracking', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const tracking = { leadConversion: req.body?.leadConversion === true, ga4Linked: req.body?.ga4Linked === true, method: req.body?.method };
+    const gate = runSopGate('tracking_setup', { mode: 'manual', tracking });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: u.email, source: 'sop-gate', title: 'tracking_setup', detail: formatSopLog(gate) });
+    if (gate.disposition === 'block') {
+      await authStore.setUserData(u.id, data);
+      return reply.code(400).send({ ok: false, error: gate.blocks.join(' '), log: formatSopLog(gate) });
+    }
+    data.trackingProof = tracking;
+    await authStore.setUserData(u.id, data);
+    return { ok: true, tracking, log: formatSopLog(gate) };
+  });
+
+  app.post<{ Body: { path?: string; title?: string; h1?: string; meta?: string; noindex?: boolean } }>('/api/miles/seo/publish', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const miles = milesOf(data);
+    const gate = runSopGate('seo_publish', { mode: miles.bundle?.setup.mode ?? 'manual', seo: { path: req.body?.path, title: req.body?.title, h1: req.body?.h1, meta: req.body?.meta, noindex: req.body?.noindex }, gbpUrl: miles.bundle?.setup.gbpUrl });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: u.email, source: 'sop-gate', title: 'seo_publish', detail: formatSopLog(gate) });
+    await authStore.setUserData(u.id, data);
+    if (gate.disposition === 'block') return reply.code(400).send({ ok: false, error: gate.blocks.join(' '), log: formatSopLog(gate) });
+    if (gate.disposition !== 'execute') return { ok: true, published: false, disposition: gate.disposition, log: formatSopLog(gate) };
+    return { ok: true, published: true, note: 'Marked ready in Miles. No WordPress publish was sent.', log: formatSopLog(gate) };
+  });
 
   app.post<{ Body: { confirm?: boolean } }>('/api/miles/go', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -1435,6 +1505,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     data.miles = miles;
     await authStore.setUserData(u.id, data);
     if (item.kind === 'enable' && miles.campaignResource && connector.setGoogleCampaignStatus && connector.name !== 'mock') {
+      const gate = runSopGate('campaign_enable', { mode: miles.bundle?.setup.mode, spec: miles.bundle?.spec, tracking: data.trackingProof as { leadConversion?: boolean; ga4Linked?: boolean } | undefined });
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: 'miles', source: 'sop-gate', title: 'campaign_enable', detail: formatSopLog(gate) });
+      if (gate.disposition === 'block') return { ok: false, enabled: false, note: gate.blocks.join(' ') };
       const turned = await connector.setGoogleCampaignStatus(u.id, { campaignResource: miles.campaignResource, status: 'ENABLED' });
       miles.activation = turned.ok ? 'enabled' : miles.activation;
       rememberMiles(data, miles, turned.ok ? 'You approved enable. The campaign is on, inside the cap you set.' : turned.note);
@@ -1458,6 +1531,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       await authStore.setUserData(u.id, data);
       return { ok: true, demo: true, activation: 'paused' };
     }
+    const gate = runSopGate('campaign_pause', { mode: miles.bundle?.setup.mode, spec: miles.bundle?.spec });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'sop-gate', title: 'campaign_pause', detail: formatSopLog(gate) });
     const turned = await connector.setGoogleCampaignStatus(u.id, { campaignResource: miles.campaignResource, status: 'PAUSED' });
     miles.activation = turned.ok ? 'paused' : miles.activation;
     rememberMiles(data, miles, turned.ok ? 'Reverted to paused. Spend stops when Google accepts the pause.' : turned.note);
@@ -1604,6 +1679,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const text = (req.body?.text ?? '').trim();
     if (!text) return reply.code(400).send({ error: 'Nothing to send.' });
     if (!connector.runAppTask) return reply.code(400).send({ error: 'Live actions need the connector — configure Pipedream.' });
+    const data = await authStore.getUserData(u.id);
+    const gate = runSopGate(match.play.push.app === 'gohighlevel' || match.play.push.app === 'highlevel_oauth' ? 'ghl_send' : 'other', { mode: 'manual', ghl: { phone: (req.body?.recipient ?? '').trim(), message: text } });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: u.email, source: 'sop-gate', title: 'skill push', detail: formatSopLog(gate) });
+    await authStore.setUserData(u.id, data);
+    if (gate.disposition === 'block') return reply.code(400).send({ error: gate.blocks.join(' ') });
     const r = await connector.runAppTask({ externalUserId: u.id, app: match.play.push.app, query: match.play.push.verb, params: { message: text, phone: (req.body?.recipient ?? '').trim() } });
     return { ok: !!r.ok, note: r.note || r.summary || (r.ok ? 'Sent.' : 'Could not send.'), held: !r.ok };
   });
@@ -2991,7 +3071,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     } else if (targets.length !== 1) {
       return reply.code(400).send({ ok: false, live: false, status: 'PAUSED', activation: 'disabled', error: 'Pick which Google Ads account should receive this paused campaign. Nothing was created.', targets });
     }
-    const result = await connector.launchCampaign(u.id, spec, chosen!.id);
+    const gate = runSopGate('campaign_create', { mode: 'manual', spec, tracking: savedGoogle.trackingProof as { leadConversion?: boolean; ga4Linked?: boolean } | undefined });
+    appendApproval(savedGoogle, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: u.email, source: 'sop-gate', title: 'campaign_create', detail: formatSopLog(gate) });
+    await authStore.setUserData(u.id, savedGoogle);
+    if (gate.disposition === 'block') return reply.code(400).send({ ok: false, live: false, status: 'PAUSED', error: gate.blocks.join(' ') });
+    const result = await connector.launchCampaign(u.id, gate.subject.spec || spec, chosen!.id);
     const demoRun = connector.name === 'mock' || isDemoAccount(u.email);
     const live = demoRun ? false : !!result.live;
     const judged = judgeSearchLaunch(result.steps ?? []);
@@ -3179,8 +3263,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       if (spec.locations.some((loc) => /united states/i.test(loc))) {
         return reply.code(409).send({ ok: false, live: false, error: 'The plan included a location outside the service area. Nothing was created.' });
       }
+      const gate = runSopGate('campaign_create', { mode: 'manual', spec });
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: u.email, source: 'sop-gate', title: 'campaign_create', detail: formatSopLog(gate) });
+      if (gate.disposition === 'block') return reply.code(400).send({ ok: false, live: false, error: gate.blocks.join(' ') });
       const result = connector.launchCampaign
-        ? await connector.launchCampaign(u.id, spec, chosen!.id)
+        ? await connector.launchCampaign(u.id, gate.subject.spec || spec, chosen!.id)
         : { ok: false, live: false, steps: [{ step: 'Google Ads', ok: false, error: 'This connector cannot create campaigns.' }], note: 'Not created.' };
       const liveOne = demoRun ? false : !!result.live;
       const judged = judgeSearchLaunch(result.steps ?? []);
@@ -3241,6 +3328,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!connector.setGoogleCampaignStatus) {
       return reply.code(409).send({ allowed: false, providerCalled: false, executed: false, reason: 'This connector cannot change a Google campaign status.' });
     }
+    const gate = runSopGate('campaign_enable', { mode: 'manual', tracking: data.trackingProof as { leadConversion?: boolean; ga4Linked?: boolean } | undefined });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: u.email, source: 'sop-gate', title: 'campaign_enable', detail: formatSopLog(gate) });
+    if (gate.disposition === 'block') return reply.code(400).send({ allowed: false, providerCalled: false, executed: false, reason: gate.blocks.join(' ') });
     const result = await connector.setGoogleCampaignStatus(u.id, { campaignResource: resource!, status: 'ENABLED' });
     if (!result.called) return reply.code(409).send({ allowed: false, providerCalled: false, executed: false, reason: result.note });
     if (!result.ok) return reply.code(502).send({ allowed: true, providerCalled: true, executed: false, reason: result.note });
@@ -3265,6 +3355,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       return reply.code(409).send({ ok: false, providerCalled: false, reason: 'Pipedream is blocking production tool calls for this account. Nothing was paused.' });
     }
     if (!connector.setGoogleCampaignStatus) return reply.code(409).send({ ok: false, providerCalled: false, reason: 'This connector cannot change a Google campaign status.' });
+    const gate = runSopGate('campaign_pause', { mode: 'manual' });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: u.email, source: 'sop-gate', title: 'campaign_pause', detail: formatSopLog(gate) });
     const result = await connector.setGoogleCampaignStatus(u.id, { campaignResource: resource, status: 'PAUSED' });
     if (!result.called || !result.ok) return reply.code(result.called ? 502 : 409).send({ ok: false, providerCalled: result.called, reason: result.note });
     const when = new Date().toISOString();
@@ -4362,6 +4454,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         let ok = false;
         if (connector.runAppTask && connectedApps.has(app)) {
           try {
+            const gate = runSopGate('other', { mode: 'automate' });
+            if (gate.disposition === 'block') continue;
             const r = await connector.runAppTask({ externalUserId: userId, app, query: verb || st.instruction, params: { message: lastOut || st.instruction } });
             ok = !!r.ok;
           } catch {
@@ -4594,7 +4688,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       }
       try {
         const r = connector.runAppTask
-          ? await connector.runAppTask({ externalUserId: userId, app: plat.app, query: `Create ${post.kind} post`, params: { caption: post.caption, media: post.assetUrl } })
+          ? await (runSopGate('other', { mode: 'automate' }), connector.runAppTask({ externalUserId: userId, app: plat.app, query: `Create ${post.kind} post`, params: { caption: post.caption, media: post.assetUrl } }))
           : null;
         results.push({ platform: pid, ok: !!r?.ok, note: r?.note || r?.summary || (r?.ok ? 'posted' : 'no publisher available') });
       } catch (err) {
@@ -4643,7 +4737,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const channels: string[] = [];
       if (canSend && lead.phone) {
         try {
-          const r = await connector.runAppTask!({ externalUserId: userId, app: ghlApp!, query: 'Send SMS to new lead', params: { message: smsFromReply(reply), name: lead.name ?? '', phone: lead.phone ?? '' } });
+          const gate = runSopGate('ghl_send', { mode: 'automate', ghl: { phone: lead.phone, message: smsFromReply(reply) } });
+          if (gate.disposition === 'block') { /* held: SOP 076 */ }
+          const r = gate.disposition === 'block' ? { ok: false } : await connector.runAppTask!({ externalUserId: userId, app: ghlApp!, query: 'Send SMS to new lead', params: { message: smsFromReply(reply), name: lead.name ?? '', phone: lead.phone ?? '' } });
           if (r?.ok) channels.push('sms');
         } catch {
           /* held — draft stays ready */
@@ -4799,7 +4895,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       data.followUpDrafts = [{ at: new Date().toISOString(), eventId: lead.eventId, kind: follow.kind, body: follow.body, reason: follow.reason }, ...drafts].slice(0, 100);
     } else if (follow.disposition === 'send' && ghl && connector.runAppTask) {
       try {
-        const sms = await connector.runAppTask({ externalUserId: link.externalId, app: 'highlevel_oauth', query: 'Send SMS', params: { phone: lead.phone || '', name: lead.name || '', message: follow.body } });
+        const gate = runSopGate('ghl_send', { mode: 'automate', ghl: { phone: lead.phone, message: follow.body } });
+        const sms = gate.disposition === 'block' ? { ok: false } : await connector.runAppTask({ externalUserId: link.externalId, app: 'highlevel_oauth', query: 'Send SMS', params: { phone: lead.phone || '', name: lead.name || '', message: follow.body } });
         followedUp = !!sms?.ok;
       } catch { followedUp = false; }
     }
@@ -4985,7 +5082,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const msg = detractorText(ctx);
       sent = await send(msg, 'Send service-recovery SMS');
       // Private recovery task for the team — never the public review link.
-      if (canSend && ghlApp) { try { await connector.runAppTask!({ externalUserId: uid, app: ghlApp, query: 'Create task', params: { title: recoveryTask(pend?.name || name, rating), message: recoveryTask(pend?.name || name, rating), name, phone } }); } catch { /* best effort */ } }
+      if (canSend && ghlApp) { try { const gate = runSopGate('ghl_send', { mode: 'automate', ghl: { phone, message: recoveryTask(pend?.name || name, rating) } }); if (gate.disposition !== 'block') await connector.runAppTask!({ externalUserId: uid, app: ghlApp, query: 'Create task', params: { title: recoveryTask(pend?.name || name, rating), message: recoveryTask(pend?.name || name, rating), name, phone } }); } catch { /* best effort */ } }
       rs.log = [{ name: pend?.name || name || 'Customer', phone, rating, outcome: 'detractor' as const, at: nowISO }, ...rs.log].slice(0, 200);
       appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `⚠︎ Detractor (${rating}/10) — routed to recovery, no public link${name ? ' — ' + name : ''}`, body: msg });
     }
@@ -5363,13 +5460,22 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
               },
             });
             if (decision.effect === 'apply' && key === 'loser-pauser' && milesTick.campaignResource && connector.setGoogleCampaignStatus) {
-              const turned = await connector.setGoogleCampaignStatus(uid, { campaignResource: milesTick.campaignResource, status: 'PAUSED' });
+              const gate = runSopGate('campaign_pause', { mode: milesTick.bundle.setup.mode, spec: milesTick.bundle.spec });
+              const turned = gate.disposition === 'block' ? { ok: false, note: gate.blocks.join(' ') } : await connector.setGoogleCampaignStatus(uid, { campaignResource: milesTick.campaignResource, status: 'PAUSED' });
               if (turned.ok) milesTick.activation = 'paused';
               milesTick.events.unshift({ ts: new Date().toISOString(), text: turned.note });
             } else if (decision.effect === 'queue') {
               milesTick.inbox.unshift({ id: newToken().slice(0, 10), kind: 'skill', title: run.name, reason: `${decision.reason} ${run.summary}`.slice(0, 240), status: 'queued', skill: key });
             }
             changed = true;
+          }
+          if (milesTick.bundle.setup.mode === 'automate' && connector.name !== 'mock') {
+            const ctx = await buildSkillCtx(uid, data);
+            for (const proposal of housekeepingProposals({ searchTerms: ctx.searchTerms, keywords: [] })) {
+              if (milesTick.inbox.some((item) => item.title === proposal.title && item.status === 'queued')) continue;
+              milesTick.inbox.unshift({ id: newToken().slice(0, 10), kind: 'skill', title: proposal.title, reason: proposal.reason, status: 'queued', skill: 'search-term-gold-miner' });
+              changed = true;
+            }
           }
           data.miles = milesTick;
         }
@@ -5537,7 +5643,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     let gmail = false;
     try { gmail = new Set((await connector.listAccounts(u.id)).map((a) => a.app)).has('gmail'); } catch { /* none */ }
     if (gmail && connector.runAppTask) {
-      const r = await connector.runAppTask({ externalUserId: u.id, app: 'gmail', query: 'Send email', params: { to, subject, body, message: body } });
+      const gate = runSopGate('other', { mode: 'manual' });
+      const r = gate.disposition === 'block' ? { ok: false, note: gate.blocks.join(' ') } : await connector.runAppTask({ externalUserId: u.id, app: 'gmail', query: 'Send email', params: { to, subject, body, message: body } });
       if (r?.ok) { await meterUser(u.id, 'agent_run'); await logSend('gmail'); return { ok: true, via: 'gmail', note: `Sent to ${to} from your Gmail.` }; }
       return reply.code(400).send({ error: r?.note || 'Gmail rejected the send — reconnect Gmail in Integrations and try again.' });
     }

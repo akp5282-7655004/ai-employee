@@ -3,6 +3,7 @@
  * Publishing and enabling go through the policy engine, not through this file.
  */
 import { buildCampaignSpec, deriveServiceLines, normalizeSiteUrl, repairCampaignUrls, shortBrand, type CampaignSpec, type PageLinkRef } from './campaign.js';
+import { enforceRulebook } from './rulebook.js';
 import { runAuditChecks, scoreFindings, gradeFor } from '../research/audit.js';
 import { extractPageLinks, parseSiteHtml, type SiteImport } from '../research/site.js';
 import { CHANNELS } from '../research/competitive.js';
@@ -229,7 +230,9 @@ export function buildBundle(input: CrawlInput & SetupAnswers & { mode?: MilesMod
     { goal: input.goal, dailyBudget: googleDaily || daily, finalUrl: website, locations: [city] },
     { business: shortBrand(facts.profile.businessName, trade, city), trade, city, services: services.join(', ') },
   );
-  const spec = repairCampaignUrls(drafted, { website, links });
+  const spec = enforceRulebook(repairCampaignUrls(drafted, { website, links }), {
+    trade, city, phone: facts.profile.phone, gbpUrl: input.gbpUrl,
+  }).spec;
   const feas = feasibility({ dailyBudget: daily, leadsPerDay: input.leadsPerDay, trade, now: input.now });
   const seo: SeoDraft[] = services.slice(0, 3).map((service) => ({
     path: '/' + service.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
