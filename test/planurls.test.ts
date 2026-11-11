@@ -120,6 +120,7 @@ describe('plan URLs come from the crawl', () => {
     expect(spec.finalUrl).toBe('https://paintersinphilly.com/');
     const copy = spec.adGroups.flatMap((g) => [g.name, ...g.keywords.map((k) => k.text), ...g.rsa.headlines]).join(' ');
     expect(copy).not.toMatch(/free custom quote|slide title|\blocation\b/i);
+    await app.inject({ method: 'POST', url: '/api/miles/tracking', headers, payload: { leadConversion: true, ga4Linked: true, method: 'thank_you' } });
     const started = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
     expect(started.statusCode).toBe(200);
     expect(started.json().created).toBe(true);
@@ -171,6 +172,7 @@ describe('plan URLs come from the crawl', () => {
     const loaded = await app.inject({ method: 'GET', url: '/api/miles/home', headers });
     expect(loaded.json().bundle.spec.finalUrl).toBe('https://paintersinphilly.com/');
     expect(validateCampaignSpec(loaded.json().bundle.spec)).toEqual([]);
+    await app.inject({ method: 'POST', url: '/api/miles/tracking', headers, payload: { leadConversion: true, ga4Linked: true, method: 'thank_you' } });
     const started = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
     expect(started.statusCode).toBe(200);
     expect(calls.find((c) => c.op === 'launch')?.finalUrl).toBe('https://paintersinphilly.com/');

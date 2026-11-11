@@ -174,6 +174,8 @@ describe('activation, revert, and honest dashboard', () => {
     expect(yes.statusCode).toBe(200);
     expect(yes.json().status).toBe('PAUSED');
     expect(calls.filter((c) => c.op === 'launch').every((c) => c.status === 'PAUSED' && c.id === id)).toBe(true);
+    const tracking = await app.inject({ method: 'POST', url: '/api/miles/tracking', headers: { cookie }, payload: { leadConversion: true, ga4Linked: true, method: 'thank_you' } });
+    expect(tracking.statusCode).toBe(200);
     const act = await app.inject({ method: 'POST', url: '/api/journey/activate', headers: { cookie }, payload: { confirm: true, campaignResource: 'customers/1/campaigns/9', dailyBudget: 20 } });
     expect(act.statusCode).toBe(200);
     expect(act.json().providerCalled).toBe(true);

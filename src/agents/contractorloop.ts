@@ -124,11 +124,12 @@ export function seasonFocus(trade: string, month: number): { line: string; note:
 
 function keywords(role: 'emergency' | 'planned', service: string, place: string): { text: string; match: 'phrase' | 'exact' }[] {
   const placeBit = place ? ` ${place}` : '';
+  const clean = service.replace(/^emergency\s+/i, '').trim() || service;
   if (role === 'emergency') {
     return [
-      { text: `emergency ${service}${placeBit}`.trim(), match: 'phrase' },
-      { text: `${service} near me`, match: 'phrase' },
-      { text: `24 hour ${service}`, match: 'exact' },
+      { text: `emergency ${clean}${placeBit}`.trim(), match: 'phrase' },
+      { text: `emergency ${clean} near me`, match: 'phrase' },
+      { text: `24 hour emergency ${clean}`, match: 'exact' },
     ];
   }
   return [
@@ -160,7 +161,8 @@ function oneSpec(args: {
   spec.status = 'PAUSED';
   const group = spec.adGroups[0];
   if (group) {
-    group.name = args.role === 'emergency' ? `Emergency ${args.service}` : args.service;
+    const serviceLabel = args.service.replace(/^emergency\s+/i, '').trim() || args.service;
+    group.name = args.role === 'emergency' ? `Emergency ${serviceLabel}` : args.service;
     group.keywords = keywords(args.role, args.service, args.city);
     group.rsa.headlines = [
       `${args.business}`.slice(0, 30),

@@ -54,6 +54,7 @@ describe('Google path at $20 a day', () => {
     expect(planned.json().bundle.playbook.title).toMatch(/painting playbook/i);
     expect(planned.json().bundle.spec.status).toBe('PAUSED');
     expect(planned.json().bundle.channels.find((ch: { id: string }) => ch.id === 'meta').status).toBe('coming_later');
+    await app.inject({ method: 'POST', url: '/api/miles/tracking', headers, payload: { leadConversion: true, ga4Linked: true, method: 'thank_you' } });
     const started = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
     expect(started.statusCode).toBe(200);
     expect(started.json().created).toBe(true);

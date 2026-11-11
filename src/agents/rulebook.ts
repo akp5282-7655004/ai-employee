@@ -161,6 +161,8 @@ export function enforceRulebook(spec: CampaignSpec, ctx: RulebookContext = {}): 
       cityOk ? `${name} in ${cityOk}` : name,
       cityOk ? `Serving ${cityOk}` : 'Local Crew',
       cityOk ? `${cityOk} ${name}` : name,
+      cityOk ? `${cityOk} Crew` : 'Local Crew',
+      cityOk ? `Call ${cityOk}` : 'Call Today',
       'Licensed And Insured', 'Book A Visit', 'Local Crew', 'Call For A Visit', 'Clear Pricing',
       'Schedule A Visit', 'Ask About Timing', 'Request A Visit', 'Talk To The Crew', `${name} Help`, 'Local Team',
     ], d.headlineChars, d.headlines);
