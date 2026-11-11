@@ -197,6 +197,18 @@ async function cachedRead<T>(key: string, fn: () => Promise<T>, empty: T): Promi
  * Provenance stays server-side for checking sales claims.
  */
 const PROVIDER_RE = /searchlight\s*digital|searchlight/gi;
+/** Owner-facing tracking proof. Null until a successful /api/miles/tracking save. */
+export function trackingProofView(raw: unknown): { leadConversion: boolean; ga4Linked: boolean; method: string | null } | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as { leadConversion?: unknown; ga4Linked?: unknown; method?: unknown };
+  const method = typeof row.method === 'string' && row.method.trim() ? row.method.trim() : null;
+  return {
+    leadConversion: row.leadConversion === true,
+    ga4Linked: row.ga4Linked === true,
+    method,
+  };
+}
+
 function publicSafe<T>(value: T): T {
   if (typeof value === 'string') {
     return (PROVIDER_RE.test(value) || value.includes('searchlightdigital.io')
@@ -1742,6 +1754,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       profile: (data.profile ?? {}) as Record<string, string>,
       found: miles.found,
       placement: setupPlacement({ pagesRead: miles.found?.pagesRead ?? 0, hasBundle: !!miles.bundle }),
+      trackingProof: trackingProofView(data.trackingProof),
       brief,
     };
   });
