@@ -19,7 +19,7 @@ import { LSA_TRADES, LSA_BLENDED, LSA_VS_GOOGLE, BENCHMARK_META, BENCHMARK_HUB, 
 import { generateAdCopy, type CreativeRequest } from './creative/creative.js';
 import { falReady, falGenerateImage, falGenerateVideo, falGenerateAudio, type Aspect } from './creative/fal.js';
 import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText, optimizerSystem, type BrandContext } from './creative/studio.js';
-import { resolveKit, kitHasGuidance, type BrandKit } from './brand/kit.js';
+import { resolveKit, kitHasGuidance, parseColors, type BrandKit } from './brand/kit.js';
 import { templatedReady, templatedListTemplates, templatedRender, type RenderLayer } from './creative/templated.js';
 import { buildRecommendations, type Recommendation } from './agents/recommend.js';
 import { competitorAdReport, searchCompetitorAds } from './research/adlibrary.js';
@@ -44,6 +44,7 @@ import { metricCatalog, dashboardDefaults } from './metrics/catalog.js';
 import { getMetrics } from './metrics/resolver.js';
 import { buildOperatorView } from './dashboard/operator.js';
 import { buildLaunchView, previewSpec } from './dashboard/launch.js';
+import { buildBusinessProfile } from './profile/business.js';
 import { appendCrmEvent, amountFrom, crmLiveValues, calcLiveValues, dealsLiveValues } from './metrics/crmledger.js';
 import { buildLocalPresenceAudit, gbpCompletenessScore, type AuditAnswer } from './agents/localpresence.js';
 import { appendApproval, approvalLog, defaultAutonomy, normalizeAutonomy, TOS_VERSION, type ApprovalEntry } from './agents/approvallog.js';
@@ -1214,6 +1215,73 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     data.profile = { ...((data.profile as object) ?? {}), ...((req.body as object) ?? {}), updatedAt: new Date().toISOString() };
     await authStore.setUserData(u.id, data);
     return { ok: true, profile: data.profile };
+  });
+
+  // Your Business. The page renders this payload. Counts and connection pills
+  // come from saved data, not from the operator mock.
+  app.get('/api/profile/business', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const profile = (data.profile ?? {}) as Record<string, unknown>;
+    const stored = (data.brandKit ?? {}) as Partial<BrandKit>;
+    const assets = (data.assets ?? {}) as { logo?: string; photos?: { url?: string }[] };
+    const miles = milesOf(data);
+    const caps = miles.bundle?.setup.caps ?? null;
+    // Same cached account reads as Dashboard. Opening this page must not start
+    // a second Pipedream account list or a second GoHighLevel project scan.
+    const [google, ghlNow, listed] = await Promise.all([
+      googleReadiness(u.id),
+      ghlLink(u.id),
+      accountsOf(u.id),
+    ]);
+    const linked = new Set(listed.accounts.map((a) => a.app));
+    const freshAudit = miles.audits.find((a) => a.id === 'website');
+    const bundledAudit = miles.bundle?.audits?.find((a) => a.id === 'website');
+    const siteAudit = freshAudit?.summary ? freshAudit : (bundledAudit ?? null);
+    const crawlProfile = (miles.crawl?.profile ?? {}) as Record<string, string>;
+    const photos = Array.isArray(assets.photos) ? assets.photos.filter((p) => p && typeof p.url === 'string' && p.url) as { url: string }[] : [];
+    const explicitColors = stored.colors?.length ? stored.colors : parseColors(typeof profile.brandColors === 'string' ? profile.brandColors : '');
+    const bundleLoc = miles.bundle?.setup.location;
+    const market = (bundleLoc && bundleLoc !== 'Your area' ? bundleLoc : '') || (typeof profile.serviceAreas === 'string' ? profile.serviceAreas : '');
+    const profileDaily = Number(profile.dailyBudget);
+    const profileLeads = Number(profile.leadsPerDay);
+    const business = buildBusinessProfile({
+      profile,
+      brand: {
+        tagline: stored.tagline || (typeof profile.tagline === 'string' ? profile.tagline : ''),
+        colors: explicitColors,
+        fonts: stored.fonts || (typeof profile.fonts === 'string' ? profile.fonts : ''),
+        logoUrl: stored.logoUrl || assets.logo || (typeof profile.logo === 'string' ? profile.logo : ''),
+        voice: stored.voice || (typeof profile.brandVoice === 'string' ? profile.brandVoice : ''),
+        audience: stored.audience || (typeof profile.audience === 'string' ? profile.audience : ''),
+        avoid: stored.avoid || (typeof profile.brandAvoid === 'string' ? profile.brandAvoid : ''),
+      },
+      photos,
+      caps,
+      profileDaily: !caps && Number.isFinite(profileDaily) && profileDaily > 0 ? profileDaily : null,
+      goal: miles.bundle?.setup.goal || '',
+      hasBundle: !!miles.bundle,
+      leadsPerDay: miles.bundle
+        ? (miles.bundle.setup.leadsPerDay > 0 ? miles.bundle.setup.leadsPerDay : null)
+        : (Number.isFinite(profileLeads) && profileLeads > 0 ? profileLeads : null),
+      mode: miles.bundle?.setup.mode || miles.pendingMode || null,
+      paused: !!caps?.paused,
+      market,
+      found: miles.found,
+      crawlFound: { logo: crawlProfile.logo, brandColors: crawlProfile.brandColors },
+      websiteAudit: siteAudit ? { summary: siteAudit.summary } : null,
+      google: { oauth: google.oauth, ready: google.ready, note: google.note },
+      ghlConnected: ghlNow.connected,
+      ghlDetail: ghlNow.connected
+        ? 'GoHighLevel is connected. Speed to lead sends when it is on and the lead has a phone.'
+        : 'GoHighLevel is not connected. Replies stay drafts. Connect it under Integrations.',
+      gbpConnected: ['google_my_business', 'gmb'].some((a) => linked.has(a)),
+      facebookConnected: ['facebook_pages', 'facebook'].some((a) => linked.has(a)),
+      instagramConnected: linked.has('instagram'),
+      linkedinConnected: linked.has('linkedin'),
+    });
+    return { business, profile };
   });
 
   type MilesInbox = { id: string; kind: 'create' | 'enable' | 'skill'; title: string; reason: string; status: 'queued' | 'applied' | 'reverted'; skill?: string };
