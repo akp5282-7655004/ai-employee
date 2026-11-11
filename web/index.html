@@ -2703,6 +2703,9 @@ let anMode='results';
 // The live dashboard payload, shared with Analytics so it reads real figures
 // rather than refetching. Null until the dashboard has loaded once.
 let ANDASH=null;
+let MILES_HOME=null;
+let OPERATOR=null;
+let overviewGen=0;
 
 /**
  * Trade ranges behind the signature bar: low / median / high for a trade in a
@@ -3096,13 +3099,23 @@ async function dashQueue(wrap, label){
 }
 
 async function openOverview(){
-  const box=$('#overview-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading your dashboard…</p>';
-  let d={}, miles={}, op=null;
+  const box=$('#overview-body'); if(!box) return;
+  const gen=++overviewGen;
+  // Paint the last dashboard immediately. The refresh below replaces it.
+  if(ANDASH&&ANDASH.kpis) renderOverview(ANDASH, MILES_HOME||{}, OPERATOR);
+  else box.innerHTML='<p class="appsub">Loading your dashboard…</p>';
+  let d=ANDASH||{}, miles=MILES_HOME||{}, op=OPERATOR;
   if(REMOTE){
-    try{ d=await(await fetch('/api/dashboard?range='+encodeURIComponent(MKT_RANGE))).json(); ANDASH=d; }catch(e){}
-    try{ miles=await(await fetch('/api/miles/home')).json(); }catch(e){}
-    try{ op=(await(await fetch('/api/dashboard/operator')).json()).operator||null; }catch(e){}
+    const [dash, home, oper]=await Promise.all([
+      fetch('/api/dashboard?range='+encodeURIComponent(MKT_RANGE)).then(r=>r.json()).catch(()=>null),
+      fetch('/api/miles/home').then(r=>r.json()).catch(()=>null),
+      fetch('/api/dashboard/operator').then(r=>r.json()).catch(()=>null),
+    ]);
+    if(dash&&dash.kpis){ d=dash; ANDASH=dash; }
+    if(home&&typeof home==='object'){ miles=home; MILES_HOME=home; }
+    if(oper&&oper.operator){ op=oper.operator; OPERATOR=oper.operator; }
   }
+  if(gen!==overviewGen) return;
   renderOverview(d, miles, op);
   openCmdCenter();
 }
@@ -7897,7 +7910,18 @@ async function runSiteImport(url,container,noteEl){
 }
 function readProfileForm(container){ const out={}; container.querySelectorAll('[data-k]').forEach(i=>{ let v=(i.value||'').trim(); if(i.type==='number') v=v?Number(v):''; out[i.dataset.k]=v; }); return out; }
 async function saveProfile(vals){ try{ const r=await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(vals)}); return r.ok?(await r.json()).profile:null; }catch(e){ return null; } }
-async function loadProfile(){ if(!REMOTE)return; try{ const r=await fetch('/api/profile'); const d=await r.json(); PROFILE=d.profile||{}; buildProfileForm($('#profile-form'), d.profile||{}); }catch(e){} let miles={}; try{ miles=await(await fetch('/api/miles/home')).json(); const slot=$('#miles-profile'); if(slot) renderMilesHome(slot, miles, 'profile'); }catch(e){} let connections=[]; try{ connections=((await(await fetch('/api/dashboard/operator')).json()).operator||{}).connections||[]; }catch(e){} renderAccountOps(miles, connections); }
+async function loadProfile(){
+  if(!REMOTE) return;
+  const [prof, miles, oper]=await Promise.all([
+    fetch('/api/profile').then(r=>r.json()).catch(()=>null),
+    fetch('/api/miles/home').then(r=>r.json()).catch(()=>null),
+    fetch('/api/dashboard/operator').then(r=>r.json()).catch(()=>null),
+  ]);
+  try{ if(prof){ PROFILE=prof.profile||{}; buildProfileForm($('#profile-form'), prof.profile||{}); } }catch(e){}
+  try{ const slot=$('#miles-profile'); if(slot&&miles) renderMilesHome(slot, miles, 'profile'); }catch(e){}
+  const connections=(oper&&oper.operator&&oper.operator.connections)||[];
+  renderAccountOps(miles||{}, connections);
+}
 $('#pf-import').onclick=async()=>{ const btn=$('#pf-import'); const url=($('#pf-website').value||'').trim()||($('#profile-form').querySelector('[data-k="website"]')||{}).value||''; if(!url){ $('#pf-import-note').textContent='Enter your website to re-import.'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#profile-form'),$('#pf-import-note')); btn.disabled=false; btn.textContent=old; };
 $('#profile-save').onclick=async()=>{ const btn=$('#profile-save'); btn.disabled=true; const p=await saveProfile(readProfileForm($('#profile-form'))); if(p){ PROFILE=p; applyIdentity(); queueChange('profile','Business profile updated'); } $('#profile-note').textContent=p?'Saved ✓':'Could not save.'; btn.disabled=false; setTimeout(()=>{$('#profile-note').textContent='';},2500); };
 $('#ob-import').onclick=async()=>{ const btn=$('#ob-import'); const url=($('#ob-website').value||'').trim(); if(!url){ $('#ob-import-note').textContent='Enter your website first (or skip and fill it in below).'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#onboard-form'),$('#ob-import-note')); btn.disabled=false; btn.textContent=old; };

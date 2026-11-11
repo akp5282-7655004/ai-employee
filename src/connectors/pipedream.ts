@@ -2,6 +2,7 @@ import type { Config } from '../config.js';
 import { META_SHARED_ACCOUNT_NOTE as _META_NOTE } from '../agents/googlelaunch.js';
 import { classifyGadsAccounts, extractCustomerNodes, type GadsAccess } from './gadsAccess.js';
 import { explainPipedreamError, type PipedreamFailure } from './pipedreamErrors.js';
+import { withTimeout } from './readcache.js';
 import { summarizeTask } from './mock.js';
 import type {
   AppInfo,
@@ -62,6 +63,17 @@ export class PipedreamConnector implements Connector {
    *  MCC with many clients reports the business the owner actually works in. */
   private gadsPreferred = new Map<string, string>();
   private static GHL_SLUGS = ['gohighlevel', 'highlevel_oauth', 'highlevel', 'leadconnector'];
+  /** Successful account lists. A page load calls this many times; Pipedream does not. */
+  private accountCache = new Map<string, { ts: number; value: ConnectedAccount[] }>();
+  private accountInflight = new Map<string, Promise<ConnectedAccount[]>>();
+  private accountGen = new Map<string, number>();
+  private projectCache = new Map<string, { ts: number; value: ConnectedAccount[] }>();
+  private projectInflight = new Map<string, Promise<ConnectedAccount[]>>();
+  private projectGen = new Map<string, number>();
+  private static readonly ACCOUNT_TTL_MS = 15_000;
+  private static readonly PROJECT_TTL_MS = 45_000;
+  /** One hung Pipedream list must not pin every later read. */
+  private static readonly LIST_TIMEOUT_MS = 8_000;
 
   /** Order targets so the owner's preferred (last-launched-into) account is tried first. */
   private preferTargets(externalUserId: string, targets: { login: string; client?: string }[]): { login: string; client?: string }[] {
@@ -115,10 +127,72 @@ export class PipedreamConnector implements Connector {
     this.aliases.set(userId, set);
   }
 
-  private async listAccountsOnce(externalUserId: string, app?: string): Promise<ConnectedAccount[]> {
+  private async listAccountsOnce(externalUserId: string): Promise<ConnectedAccount[]> {
     const pd = await this.backend();
-    const res = await pd.accounts.list(app ? { externalUserId, app } : { externalUserId });
+    const res = await pd.accounts.list({ externalUserId });
     return this.mapAccounts(res, externalUserId);
+  }
+
+  private accountKey(externalUserId: string): string {
+    const aliases = [...(this.aliases.get(externalUserId) ?? [])].sort();
+    return `${externalUserId}|${aliases.join(',')}`;
+  }
+
+  /** Full list for this login and its aliases. One live read is shared for a short while. */
+  private listAccountsCached(externalUserId: string): Promise<ConnectedAccount[]> {
+    const key = this.accountKey(externalUserId);
+    const hit = this.accountCache.get(key);
+    if (hit && Date.now() - hit.ts < PipedreamConnector.ACCOUNT_TTL_MS) return Promise.resolve(hit.value);
+    const pending = this.accountInflight.get(key);
+    if (pending) return pending;
+    const gen = this.accountGen.get(key) ?? 0;
+    const p = this.listAccountsLive(externalUserId)
+      .then((value) => {
+        if ((this.accountGen.get(key) ?? 0) === gen) this.accountCache.set(key, { ts: Date.now(), value });
+        return value;
+      })
+      .finally(() => { if (this.accountInflight.get(key) === p) this.accountInflight.delete(key); });
+    this.accountInflight.set(key, p);
+    return p;
+  }
+
+  private async listAccountsLive(externalUserId: string): Promise<ConnectedAccount[]> {
+    const ids = [externalUserId, ...(this.aliases.get(externalUserId) ?? [])];
+    // Alias lookups used to run one after another. Walk them together so one
+    // slow id does not add its full latency to every other id.
+    const rows = await Promise.all(ids.map(async (id, index) => {
+      try { return await withTimeout(this.listAccountsOnce(id), PipedreamConnector.LIST_TIMEOUT_MS); }
+      catch { return index === 0 ? null : []; }
+    }));
+    if (rows[0] == null) throw new Error('Pipedream account list did not finish');
+    const seen = new Set<string>();
+    const out: ConnectedAccount[] = [];
+    for (const batch of rows) {
+      for (const row of batch ?? []) {
+        if (seen.has(row.id)) continue;
+        seen.add(row.id);
+        out.push(row);
+      }
+    }
+    return out;
+  }
+
+  private dropAccountCache(externalUserId?: string): void {
+    const bump = (key: string) => {
+      this.accountGen.set(key, (this.accountGen.get(key) ?? 0) + 1);
+      this.accountInflight.delete(key);
+    };
+    if (!externalUserId) {
+      for (const key of new Set([...this.accountCache.keys(), ...this.accountInflight.keys()])) bump(key);
+      this.accountCache.clear();
+      return;
+    }
+    for (const key of new Set([...this.accountCache.keys(), ...this.accountInflight.keys()])) {
+      if (key === externalUserId || key.startsWith(`${externalUserId}|`)) {
+        bump(key);
+        this.accountCache.delete(key);
+      }
+    }
   }
 
   private mapAccounts(res: any, fallbackUserId: string): ConnectedAccount[] {
@@ -136,22 +210,28 @@ export class PipedreamConnector implements Connector {
   }
 
   async listAccounts(externalUserId: string, app?: string): Promise<ConnectedAccount[]> {
-    const ids = [externalUserId, ...(this.aliases.get(externalUserId) ?? [])];
-    const seen = new Set<string>();
-    const out: ConnectedAccount[] = [];
-    for (const id of ids) {
-      let rows: ConnectedAccount[] = [];
-      try { rows = await this.listAccountsOnce(id, app); } catch { rows = []; }
-      for (const row of rows) {
-        if (seen.has(row.id)) continue;
-        seen.add(row.id);
-        out.push(row);
-      }
-    }
-    return out;
+    const all = await this.listAccountsCached(externalUserId);
+    return app ? all.filter((a) => a.app === app) : all;
   }
 
   async listProjectAccounts(app?: string): Promise<ConnectedAccount[]> {
+    const key = app ?? '*';
+    const hit = this.projectCache.get(key);
+    if (hit && Date.now() - hit.ts < PipedreamConnector.PROJECT_TTL_MS) return hit.value;
+    const pending = this.projectInflight.get(key);
+    if (pending) return pending;
+    const gen = this.projectGen.get(key) ?? 0;
+    const p = withTimeout(this.listProjectAccountsLive(app), PipedreamConnector.LIST_TIMEOUT_MS)
+      .then((value) => {
+        if ((this.projectGen.get(key) ?? 0) === gen) this.projectCache.set(key, { ts: Date.now(), value });
+        return value;
+      })
+      .finally(() => { if (this.projectInflight.get(key) === p) this.projectInflight.delete(key); });
+    this.projectInflight.set(key, p);
+    return p;
+  }
+
+  private async listProjectAccountsLive(app?: string): Promise<ConnectedAccount[]> {
     const pd = await this.backend();
     const res = await pd.accounts.list(app ? { app, limit: 100 } : { limit: 100 });
     return this.mapAccounts(res, '');
@@ -1088,6 +1168,12 @@ export class PipedreamConnector implements Connector {
       else if (typeof pd?.deleteAccount === 'function') await pd.deleteAccount({ id: accountId });
       else return { ok: false, note: 'This connector build cannot delete accounts.' };
       this.gadsCache.delete(externalUserId);
+      this.dropAccountCache(externalUserId);
+      this.projectGen.forEach((_v, key) => {
+        this.projectGen.set(key, (this.projectGen.get(key) ?? 0) + 1);
+        this.projectInflight.delete(key);
+      });
+      this.projectCache.clear();
       return { ok: true };
     } catch (err) {
       return { ok: false, note: `Pipedream rejected the disconnect: ${String((err as Error).message)}` };

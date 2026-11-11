@@ -9,6 +9,8 @@ import { Agent, newSession } from './agent/index.js';
 import { MockInterpreter } from './agent/intent.js';
 import { LlmInterpreter } from './agent/llm.js';
 import { getConnector, type Connector } from './connectors/index.js';
+import type { ConnectedAccount } from './connectors/types.js';
+import { createReadThrough, withTimeout } from './connectors/readcache.js';
 import { withUserDataCache } from './db/cache.js';
 import { buildSnapshot, readSnapshot, snapshotAgeMs, spendRowsOf, STALE_MS, type PlatformSnapshot } from './metrics/snapshot.js';
 import { loadConfig, pipedreamReady } from './config.js';
@@ -347,12 +349,15 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
 
   /**
    * Snapshot accessor used by every read path. Stale-while-revalidate:
-   *   - no snapshot yet  -> build one now (a new account still sees real data)
+   *   - no snapshot yet  -> start a build; wait briefly so a fast read still
+   *     lands in this response, then serve whatever is saved and let the rest
+   *     finish behind the page
    *   - stale snapshot   -> serve it immediately, refresh behind the request
    *   - fresh snapshot   -> serve it
-   * Requests therefore never wait on Pipedream/Google except on the very first
-   * load of a brand-new account.
+   * A slow platform read does not hold the page for tens of seconds. Numbers
+   * appear after the build finishes; nothing is filled in ahead of that read.
    */
+  const SNAPSHOT_WAIT_MS = 1_500;
   // One refresh per account at a time. A caller arriving mid-refresh joins the
   // running one rather than starting a second (or being handed nothing).
   const snapshotRefreshing = new Map<string, Promise<PlatformSnapshot | undefined>>();
@@ -385,7 +390,17 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const d = data ?? (await authStore.getUserData(userId));
     const snap = readSnapshot(d);
     const age = snapshotAgeMs(snap);
-    if (!snap) return refreshSnapshot(userId); // first ever load pays once
+    if (!snap) {
+      const built = refreshSnapshot(userId);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const raced = await Promise.race([
+        built,
+        new Promise<undefined>((resolve) => { timer = setTimeout(() => resolve(undefined), SNAPSHOT_WAIT_MS); }),
+      ]);
+      clearTimeout(timer);
+      if (raced) return raced;
+      return readSnapshot(await authStore.getUserData(userId));
+    }
     if (age > STALE_MS) void refreshSnapshot(userId); // refresh behind the response
     return snap;
   }
@@ -430,39 +445,103 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   // slug the user actually connected; `sendGhl` runs an action on it.
   const ghlSlugOf = ghlSlugFromApps;
   /**
+   * Page loads were waiting on a live Pipedream account list, and — when
+   * GoHighLevel was not on this login — on one project-wide scan per GHL slug,
+   * and those handlers ran that work again for every API call on the page.
+   * Confirmed reads are reused for a short window. A request with nothing
+   * confirmed waits at most `waitMs`, then paints. The live call keeps going
+   * and fills the cache. A timeout is not stored as "not connected".
+   */
+  const reads = createReadThrough();
+  const ACCOUNT_READ = { freshMs: 12_000, staleMs: 3 * 60_000, waitMs: 1_000, errorBackoffMs: 10_000 };
+  const GHL_READ = { freshMs: 45_000, staleMs: 5 * 60_000, waitMs: 1_000, errorBackoffMs: 15_000 };
+  const GOOGLE_READ = { freshMs: 30_000, staleMs: 5 * 60_000, waitMs: 1_000, errorBackoffMs: 10_000 };
+  const DESCRIBE_READ = { freshMs: 30_000, staleMs: 5 * 60_000, waitMs: 1_000, errorBackoffMs: 10_000 };
+  const GHL_SCAN_TIMEOUT_MS = 6_000;
+
+  const forgetConnectionReads = (uid: string) => {
+    reads.forgetPrefix(`accounts:${uid}:`);
+    reads.forget(`ghl:${uid}`);
+    reads.forget(`google:${uid}`);
+    reads.forget(`describe:${uid}`);
+  };
+
+  const accountsOf = async (uid: string): Promise<{ accounts: ConnectedAccount[]; confirmed: boolean }> => {
+    const user = await authStore.getUserById(uid);
+    const data = await authStore.getUserData(uid);
+    const saved = Array.isArray(data.pipedreamExternalIds) ? (data.pipedreamExternalIds as string[]) : [];
+    const extras = externalIdCandidates({ id: uid, email: user?.email }, saved).filter((id) => id !== uid);
+    connector.rememberExternalIds?.(uid, extras);
+    const key = `accounts:${uid}:${[...extras].sort().join(',')}`;
+    const hit = await reads.read(key, () => connector.listAccounts(uid), ACCOUNT_READ);
+    return { accounts: hit.value ?? [], confirmed: hit.confirmed };
+  };
+
+  const accountsList = async (uid: string, app?: string): Promise<ConnectedAccount[]> => {
+    const { accounts } = await accountsOf(uid);
+    return app ? accounts.filter((a) => a.app === app) : accounts;
+  };
+
+  const describeOf = async (uid: string) => {
+    if (!connector.describeConnections) return [];
+    const hit = await reads.read(`describe:${uid}`, () => connector.describeConnections!(uid), DESCRIBE_READ);
+    return hit.value ?? [];
+  };
+
+  /**
+   * Project-wide GoHighLevel lookup. Runs the slug scans together, once, and
+   * only caches a finished scan. A slug that times out does not become proof
+   * that GoHighLevel is absent.
+   */
+  const scanProjectGhl = async (uid: string): Promise<{ connected: boolean; slug?: string; externalId: string }> => {
+    const lists = await Promise.all(GHL_SLUGS.map(async (app) => {
+      try { return await withTimeout(connector.listProjectAccounts!(app), GHL_SCAN_TIMEOUT_MS); }
+      catch { return null; }
+    }));
+    const project: { app: string; externalId?: string; healthy?: boolean; dead?: boolean }[] = [];
+    let missed = false;
+    for (const rows of lists) {
+      if (!rows) { missed = true; continue; }
+      for (const a of rows) project.push({ app: a.app, externalId: a.externalUserId, healthy: a.healthy });
+    }
+    const others = (await authStore.listUsers()).map((u) => u.id).filter((id) => id !== uid);
+    const claim = claimableGhlAccount({ selfId: uid, otherUserIds: others, accounts: project });
+    if (!claim && missed) throw new Error('ghl project scan incomplete');
+    if (claim) {
+      const data = await authStore.getUserData(uid);
+      const saved = Array.isArray(data.pipedreamExternalIds) ? (data.pipedreamExternalIds as string[]) : [];
+      const next = [...new Set([...saved, claim.externalId])];
+      data.pipedreamExternalIds = next;
+      connector.rememberExternalIds?.(uid, next.filter((id) => id !== uid));
+      await authStore.setUserData(uid, data);
+      reads.forgetPrefix(`accounts:${uid}:`);
+      return { connected: true, slug: claim.slug, externalId: claim.externalId };
+    }
+    return { connected: false, externalId: uid };
+  };
+
+  /**
    * The same GoHighLevel answer for the leads card, System Health, and Analytics.
    * Looks up this login, its email, and any external id already saved on the
    * account. A single healthy highlevel_oauth that belongs to nobody else in
    * this project is remembered so the next read finds it on this login.
+   * The project-wide scan is not repeated on every request.
    */
   const ghlLink = async (uid: string): Promise<{ connected: boolean; slug?: string; externalId: string }> => {
-    const user = await authStore.getUserById(uid);
-    const data = await authStore.getUserData(uid);
-    const saved = Array.isArray(data.pipedreamExternalIds) ? (data.pipedreamExternalIds as string[]) : [];
-    const candidates = externalIdCandidates({ id: uid, email: user?.email }, saved);
-    connector.rememberExternalIds?.(uid, candidates.filter((id) => id !== uid));
-    let accounts: { app: string; externalUserId: string }[] = [];
-    try { accounts = await connector.listAccounts(uid); } catch { accounts = []; }
-    let slug = ghlSlugOf(accounts.map((a) => a.app));
-    let externalId = uid;
-    if (slug) externalId = accounts.find((a) => ghlSlugOf([a.app]) === slug)?.externalUserId || uid;
-    if (!slug && connector.listProjectAccounts) {
-      const project: { app: string; externalId?: string; healthy?: boolean; dead?: boolean }[] = [];
-      for (const app of GHL_SLUGS) {
-        try { project.push(...(await connector.listProjectAccounts(app)).map((a) => ({ app: a.app, externalId: a.externalUserId, healthy: a.healthy }))); } catch { /* one slug failing does not hide the others */ }
-      }
-      const others = (await authStore.listUsers()).map((u) => u.id).filter((id) => id !== uid);
-      const claim = claimableGhlAccount({ selfId: uid, otherUserIds: others, accounts: project });
-      if (claim) {
-        slug = claim.slug;
-        externalId = claim.externalId;
-        const next = [...new Set([...saved, claim.externalId])];
-        data.pipedreamExternalIds = next;
-        connector.rememberExternalIds?.(uid, next.filter((id) => id !== uid));
-        await authStore.setUserData(uid, data);
+    const { accounts, confirmed } = await accountsOf(uid);
+    if (confirmed) {
+      const slug = ghlSlugOf(accounts.map((a) => a.app));
+      if (slug) {
+        const externalId = accounts.find((a) => ghlSlugOf([a.app]) === slug)?.externalUserId || uid;
+        return { connected: true, slug, externalId };
       }
     }
-    return { connected: !!slug, slug, externalId };
+    if (!connector.listProjectAccounts) return { connected: false, externalId: uid };
+    // Own accounts are still in flight. Don't block this page on the project
+    // scan, and don't treat "not finished" as a stored "not connected".
+    const hit = await reads.read(`ghl:${uid}`, () => scanProjectGhl(uid), confirmed ? GHL_READ : { ...GHL_READ, waitMs: 0 });
+    if (hit.confirmed && hit.value) return hit.value;
+    return { connected: false, externalId: uid };
   };
   const ghlAppFor = async (uid: string): Promise<string | undefined> => (await ghlLink(uid)).slug;
   const sendGhl = async (uid: string, phone: string, name: string, message: string, verb: string, extra?: Record<string, string>): Promise<boolean> => {
@@ -1852,24 +1931,42 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return { status: deliveryStatus() };
   });
 
-  const googleReadiness = async (userId: string) => {
-    let oauth = false;
-    try { oauth = (await connector.listAccounts(userId)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
-    let customers = 0;
-    let block: { message: string; providerMessage?: string } | null = null;
-    if (oauth && connector.listAdTargets) {
-      try { customers = (await connector.listAdTargets(userId)).length; } catch { customers = 0; }
-      block = connector.googleAdsBlock?.(userId) ?? null;
-    }
+  const googleNote = (oauth: boolean, customers: number, block: { message: string; providerMessage?: string } | null) => {
     const mock = connector.name === 'mock';
+    if (mock && oauth) return 'Demo mode. A sample Google Ads link is not a resolved customer id, and nothing is created in Google Ads.';
+    if (block) return `${block.message} Provider said: ${block.providerMessage ?? ''}`.trim();
+    if (oauth && !customers) return 'Google is signed in. The ad customer id is not resolved, so Miles cannot read spend or create a campaign yet.';
+    return '';
+  };
+
+  const googleReadiness = async (userId: string) => {
+    const { accounts, confirmed } = await accountsOf(userId);
+    const oauth = confirmed && accounts.some((a) => a.app === 'google_ads');
+    if (!confirmed || !oauth || !connector.listAdTargets) {
+      return { oauth, ready: false, note: googleNote(oauth, 0, null), metaAds: false as const };
+    }
+    // Customer-id discovery is a pile of Pipedream action runs. Reuse the last
+    // finished discovery. Don't sit on it for every dashboard click, and don't
+    // call the account ready until that discovery actually returns.
+    const hit = await reads.read(`google:${userId}`, async () => {
+      const customers = (await connector.listAdTargets!(userId)).length;
+      const block = connector.googleAdsBlock?.(userId) ?? null;
+      const mock = connector.name === 'mock';
+      return {
+        oauth: true,
+        ready: !mock && customers > 0 && !block,
+        note: googleNote(true, customers, block),
+        metaAds: false as const,
+      };
+    }, GOOGLE_READ);
+    if (hit.confirmed && hit.value) return hit.value;
+    // The discovery has not finished. Signed in is already known; ready is not.
     return {
-      oauth,
-      ready: !mock && oauth && customers > 0 && !block,
-      note: mock && oauth
+      oauth: true,
+      ready: false,
+      note: connector.name === 'mock'
         ? 'Demo mode. A sample Google Ads link is not a resolved customer id, and nothing is created in Google Ads.'
-        : block
-          ? `${block.message} Provider said: ${block.providerMessage ?? ''}`.trim()
-          : (oauth && !customers ? 'Google is signed in. The ad customer id is not resolved, so Miles cannot read spend or create a campaign yet.' : ''),
+        : 'Google is signed in. The ad customer id is still being checked, so Miles cannot read spend or create a campaign yet.',
       metaAds: false as const,
     };
   };
@@ -1921,9 +2018,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       return { start: nowMs - days * 86_400_000, end: nowMs };
     })();
     const inWin = (ts?: string) => { const t = Date.parse(ts || ''); return Number.isFinite(t) && t >= win.start && t <= win.end; };
-    // Served from the background snapshot — no platform round-trips in the
-    // request path (see refreshSnapshot / the scheduler).
-    const snap = await getSnapshot(u.id, d);
+    // Snapshot and connection reads overlap. Neither one waits out a slow
+    // Pipedream call on every navigation (see getSnapshot / accountsOf).
+    const [snap, listed, google, ghlNow] = await Promise.all([
+      getSnapshot(u.id, d),
+      accountsOf(u.id),
+      googleReadiness(u.id),
+      ghlLink(u.id),
+    ]);
     const spend = snap?.campaigns ?? [];
     const deals = (snap?.deals ?? []) as import('./revenue/attribution.js').Deal[];
     const leads = (snap?.leads ?? []) as import('./connectors/types.js').Lead[];
@@ -1935,20 +2037,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const revenue = deals.filter((x) => x.won && inWin(x.createdAt)).reduce((s, x) => s + (x.value || 0), 0);
     // Which apps are actually LINKED (OAuth done) — separate from whether data has
     // synced yet, so a connected-but-empty card says "connected, syncing", not "connect".
-    let linked = new Set<string>();
-    try {
-      linked = new Set((await connector.listAccounts(u.id)).map((a) => a.app));
-    } catch {
-      /* none */
-    }
+    const linked = new Set(listed.accounts.map((a) => a.app));
     const has = (...apps: string[]) => apps.some((a) => linked.has(a));
-    const google = await googleReadiness(u.id);
     const googleOauth = google.oauth;
     const platforms = {
       googleAds: { oauth: google.oauth, customerResolved: google.ready, ready: google.ready, note: google.note },
       metaAds: { oauth: false, ready: false, note: 'Meta Ads is not connected. A Facebook Page is not an ad account, and there is no verified Pipedream Meta campaign app.' },
     };
-    const ghlNow = await ghlLink(u.id);
     const crmLinked = ghlNow.connected;
     const gmbLinked = has('google_my_business', 'gmb');
     const socialLinked = has('facebook_pages', 'instagram', 'linkedin');
@@ -1988,15 +2083,17 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const p = (d.profile ?? {}) as Record<string, string>;
     const miles = milesOf(d);
     const caps = miles.bundle?.setup.caps ?? null;
-    const { snap, live } = await liveReadersFor(u.id, d, 30);
+    const [{ snap, live }, google, ghlNow, listed] = await Promise.all([
+      liveReadersFor(u.id, d, 30),
+      googleReadiness(u.id),
+      ghlLink(u.id),
+      accountsOf(u.id),
+    ]);
     const metricRows = await getMetrics([
       'calc.blended_leads', 'calc.blended_spend', 'calc.cost_per_booked',
       'crm.booked_jobs', 'crm.job_revenue',
     ], 30, live);
-    const google = await googleReadiness(u.id);
-    const ghlNow = await ghlLink(u.id);
-    let linked = new Set<string>();
-    try { linked = new Set((await connector.listAccounts(u.id)).map((a) => a.app)); } catch { /* none */ }
+    const linked = new Set(listed.accounts.map((a) => a.app));
     const gmbLinked = ['google_my_business', 'gmb'].some((a) => linked.has(a));
     const socialLinked = ['facebook_pages', 'instagram', 'linkedin'].some((a) => linked.has(a));
     const reviews = (snap?.reviews ?? []) as { rating?: number }[];
@@ -2056,7 +2153,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const app = (req.query?.app || 'google_ads').toString();
     let linked: string[] = [];
     try {
-      linked = [...new Set((await connector.listAccounts(u.id)).map((a) => a.app))];
+      linked = [...new Set((await accountsList(u.id)).map((a) => a.app))];
     } catch {
       /* none */
     }
@@ -2108,7 +2205,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
     let connected = false, hasCrm = false;
-    try { const apps = new Set((await connector.listAccounts(u.id)).map((a) => a.app)); connected = apps.has('google_ads'); hasCrm = ['gohighlevel', 'hubspot', 'salesforce_rest_api', 'servicetitan', 'jobber', 'housecall_pro'].some((a) => apps.has(a)); } catch { /* none */ }
+    try { const apps = new Set((await accountsList(u.id)).map((a) => a.app)); connected = apps.has('google_ads'); hasCrm = ['gohighlevel', 'hubspot', 'salesforce_rest_api', 'servicetitan', 'jobber', 'housecall_pro'].some((a) => apps.has(a)); } catch { /* none */ }
     const won = deals.filter((d) => d.won && (d.value || 0) > 0);
     const eligible = eligibleDeals(deals);
     const mask = (d: import('./revenue/attribution.js').Deal) => d.gclid ? 'Google Click ID' : d.email ? `${d.email[0]}•••@${d.email.split('@')[1] ?? ''}` : d.phone ? `•••${d.phone.slice(-4)}` : '—';
@@ -2430,7 +2527,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const ctx = { business: p.businessName, trade: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), services: p.services, offers: p.currentOffers };
     const spec = buildCampaignSpec({ goal: req.body?.goal, dailyBudget: req.body?.dailyBudget, finalUrl: req.body?.finalUrl || p.website, locations: req.body?.locations }, ctx);
     let gadsConnected = false;
-    try { gadsConnected = (await connector.listAccounts(u.id)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
+    try { gadsConnected = (await accountsList(u.id)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
     return { ok: true, spec, summary: campaignSummary(spec), gadsConnected };
   });
 
@@ -2477,7 +2574,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       }
     }
     let gadsConnected = false;
-    try { gadsConnected = (await connector.listAccounts(u.id)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
+    try { gadsConnected = (await accountsList(u.id)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
     // Meter only when the LLM actually generated copy — a deterministic
     // build is monitoring-grade and stays free.
     if (aiUsed) { chargeCredits(data, 'ai_autofill', 'Campaign auto-fill'); await authStore.setUserData(u.id, data); }
@@ -2516,7 +2613,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     let connected: string[] = [];
-    try { connected = [...new Set((await connector.listAccounts(u.id)).map((a) => a.app))]; } catch { /* none */ }
+    try { connected = [...new Set((await accountsList(u.id)).map((a) => a.app))]; } catch { /* none */ }
     return { metrics: metricCatalog(), defaults: dashboardDefaults(), connected };
   });
 
@@ -3242,7 +3339,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const kit = (data.brandKit ?? {}) as { logoUrl?: string };
     const assets = (data.assets ?? {}) as { logo?: string };
     let apps: string[] = [];
-    try { apps = (await connector.listAccounts(userId)).map((a) => a.app); } catch { apps = []; }
+    try { apps = (await accountsList(userId)).map((a) => a.app); } catch { apps = []; }
     const googleOn = apps.includes('google_ads');
     if (googleOn && connector.listAdTargets) {
       try { await connector.listAdTargets(userId); } catch { /* readiness stays unresolved */ }
@@ -3476,7 +3573,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     let gadsConnected = false;
-    try { gadsConnected = (await connector.listAccounts(u.id)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
+    try { gadsConnected = (await accountsList(u.id)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
     return { drafts: (data.campaignDrafts as any[]) ?? [], gadsConnected };
   });
   app.post<{ Body: { spec?: CampaignSpec } }>('/api/campaign/drafts', async (req, reply) => {
@@ -4003,7 +4100,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     // from the session cookie, never from a query parameter.
     let connectedApps: string[] = [];
     try {
-      const accts = await connector.listAccounts(u.id);
+      const accts = await accountsList(u.id);
       connectedApps = [...new Set(accts.map((a) => a.app))];
     } catch {
       /* leave empty on any error */
@@ -4020,7 +4117,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const cfg = loadConfig();
     const savedChoice = await authStore.getUserData(u.id);
     if (typeof savedChoice.googleAdsCustomerId === 'string') connector.rememberGoogleCustomer?.(u.id, savedChoice.googleAdsCustomerId);
-    const details = connector.describeConnections ? await connector.describeConnections(u.id) : [];
+    const details = await describeOf(u.id);
     return { connector: connector.name, hub: { ready: pipedreamReady(cfg), env: cfg.pipedream.environment }, details };
   });
 
@@ -4042,6 +4139,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     saved.googleAdsCustomerId = customerId;
     await authStore.setUserData(u.id, saved);
     connector.rememberGoogleCustomer?.(u.id, customerId);
+    forgetConnectionReads(u.id);
     return { ok: true, customerId };
   });
 
@@ -4053,6 +4151,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!connector.disconnectAccount) return reply.code(400).send({ error: 'This connector cannot disconnect accounts.' });
     const r = await connector.disconnectAccount(u.id, accountId);
     if (!r.ok) return reply.code(400).send({ error: r.note || 'Could not disconnect.' });
+    forgetConnectionReads(u.id);
     return { ok: true };
   });
 
@@ -4063,17 +4162,19 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    let apps = new Set<string>();
-    try { apps = new Set((await connector.listAccounts(u.id)).map((a) => a.app)); } catch { /* none */ }
-    const ghlNow = await ghlLink(u.id);
+    const [listed, ghlNow] = await Promise.all([accountsOf(u.id), ghlLink(u.id)]);
+    const apps = new Set(listed.accounts.map((a) => a.app));
     const ghlApp = ghlNow.slug;
     const ghl = ghlNow.connected;
     const gads = apps.has('google_ads');
 
-    const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
-    const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
-    const leads = await safeConn(connector.getLeads ? () => connector.getLeads!(u.id) : undefined, [] as import('./connectors/types.js').Lead[]);
-    const reviews = await safeConn(connector.getReviews ? () => connector.getReviews!(u.id) : undefined, [] as import('./connectors/types.js').Review[]);
+    // Same snapshot the dashboard paints from. A health open does not start
+    // another live Google/CRM pull.
+    const snap = await getSnapshot(u.id, data);
+    const spend = snap?.campaigns ?? [];
+    const deals = (snap?.deals ?? []) as import('./revenue/attribution.js').Deal[];
+    const leads = (snap?.leads ?? []) as import('./connectors/types.js').Lead[];
+    const reviews = (snap?.reviews ?? []) as import('./connectors/types.js').Review[];
 
     const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     const rev = (data.reviewRequest as ReviewRequestState) ?? emptyReviewState();
@@ -4110,7 +4211,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
 
     const liveAuto = automations.filter((a) => a.status === 'live').length;
     return {
-      connections: connector.describeConnections ? await connector.describeConnections(u.id) : [],
+      connections: await describeOf(u.id),
       automations,
       dataSources,
       keys,
@@ -4520,7 +4621,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   async function runAgentSteps(steps: AgentStep[], userId: string, business: string, title: string): Promise<{ title: string; body: string }> {
     let connectedApps = new Set<string>();
     try {
-      connectedApps = new Set((await connector.listAccounts(userId)).map((a) => a.app));
+      connectedApps = new Set((await accountsList(userId)).map((a) => a.app));
     } catch {
       /* nothing connected */
     }
@@ -4702,7 +4803,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const caption = (await generateText({ system: sa.system, user: sa.user, maxTokens: 400 })) ?? agentFallback('social_content', ctx);
       let accts: Array<{ app: string }> = [];
       try {
-        accts = (await connector.listAccounts(userId)) as Array<{ app: string }>;
+        accts = (await accountsList(userId)) as Array<{ app: string }>;
       } catch {
         /* none */
       }
@@ -4776,7 +4877,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   async function publishPost(userId: string, post: ScheduledPost): Promise<ScheduledPost> {
     let connectedApps = new Set<string>();
     try {
-      const accts = await connector.listAccounts(userId);
+      const accts = await accountsList(userId);
       connectedApps = new Set(accts.map((a) => a.app));
     } catch {
       /* treat as nothing connected */
@@ -4825,7 +4926,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     };
     let connectedApps = new Set<string>();
     try {
-      connectedApps = new Set((await connector.listAccounts(userId)).map((a) => a.app));
+      connectedApps = new Set((await accountsList(userId)).map((a) => a.app));
     } catch {
       /* nothing connected */
     }
@@ -5073,7 +5174,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     let connected = false;
     let authId = '';
     try {
-      const accounts = await connector.listAccounts(u.id, 'tiktok_ads_manager');
+      const accounts = await accountsList(u.id, 'tiktok_ads_manager');
       const mine = accounts.find((a) => a.app === 'tiktok_ads_manager' && a.externalUserId === u.id && a.healthy);
       connected = !!mine;
       authId = mine?.id ?? '';
@@ -5322,7 +5423,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(u.id);
     let connected: string[] = [];
     try {
-      connected = [...new Set((await connector.listAccounts(u.id)).map((a) => a.app))];
+      connected = [...new Set((await accountsList(u.id)).map((a) => a.app))];
     } catch {
       /* none */
     }
@@ -5722,7 +5823,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       subject = subject || `A quick note from ${p.businessName || 'us'}`;
       body = body || `Hi,\n\n${request || 'Just reaching out — let me know if I can help.'}\n\nBest,\n${p.businessName || 'The team'}`;
     }
-    return { ok: true, to, subject, body, gmailConnected: (await (async () => { try { return new Set((await connector.listAccounts(u.id)).map((a) => a.app)).has('gmail'); } catch { return false; } })()) };
+    return { ok: true, to, subject, body, gmailConnected: (await (async () => { try { return new Set((await accountsList(u.id)).map((a) => a.app)).has('gmail'); } catch { return false; } })()) };
   });
 
   // Actually send the email via the owner's connected Gmail. Confirm-gated.
@@ -5744,7 +5845,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       await authStore.setUserData(u.id, data);
     };
     let gmail = false;
-    try { gmail = new Set((await connector.listAccounts(u.id)).map((a) => a.app)).has('gmail'); } catch { /* none */ }
+    try { gmail = new Set((await accountsList(u.id)).map((a) => a.app)).has('gmail'); } catch { /* none */ }
     if (gmail && connector.runAppTask) {
       const gate = runSopGate('other', { mode: 'manual' });
       const r = gate.disposition === 'block' ? { ok: false, note: gate.blocks.join(' ') } : await connector.runAppTask({ externalUserId: u.id, app: 'gmail', query: 'Send email', params: { to, subject, body, message: body } });
