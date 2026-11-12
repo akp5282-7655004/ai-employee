@@ -69,11 +69,30 @@ export function fixAdCapitalization(input: string): string {
   });
 }
 
+/** Pull a start and end hour out of a phrase such as "Monday 8am to 5pm". */
+export function hoursRange(text: string | undefined): { startHour: number; endHour: number } | null {
+  const match = (text || '').match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:to|-)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+  if (!match) return null;
+  const to24 = (hour: number, ap?: string) => {
+    if (!ap) return hour;
+    const mark = ap.toLowerCase();
+    if (mark === 'pm' && hour < 12) return hour + 12;
+    if (mark === 'am' && hour === 12) return 0;
+    return hour;
+  };
+  const start = to24(Number(match[1]), match[3]);
+  const end = to24(Number(match[4]), match[6] || match[3]);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || start < 0 || end > 24) return null;
+  return { startHour: start, endHour: end };
+}
+
 export interface RulebookContext {
   trade?: string;
   city?: string;
   phone?: string;
   gbpUrl?: string;
+  /** Saved business hours, such as "Monday 8am to 5pm". */
+  hours?: string;
 }
 
 export interface RulebookResult {
@@ -125,6 +144,8 @@ export function enforceRulebook(spec: CampaignSpec, ctx: RulebookContext = {}): 
   const fixes: string[] = [];
   const blocks: string[] = [];
   const city = (ctx.city || spec.locations?.[0] || '').split(',')[0]?.trim() || '';
+  const hours = hoursRange(ctx.hours);
+  const savedSchedule = spec.targeting?.schedule;
   const next: CampaignSpec = {
     ...spec,
     networks: ['Google Search'],
@@ -134,7 +155,11 @@ export function enforceRulebook(spec: CampaignSpec, ctx: RulebookContext = {}): 
       radiusMiles: d.radiusMiles,
       searchPartners: false,
       display: false,
-      schedule: { days: [0, 1, 2, 3, 4, 5, 6], startHour: d.scheduleStartHour, endHour: d.scheduleEndHour },
+      schedule: {
+        days: savedSchedule?.days?.length ? savedSchedule.days : [0, 1, 2, 3, 4, 5, 6],
+        startHour: hours?.startHour ?? savedSchedule?.startHour ?? d.scheduleStartHour,
+        endHour: hours?.endHour ?? savedSchedule?.endHour ?? d.scheduleEndHour,
+      },
     },
     bidPlan: { stage: 'MAXIMIZE_CLICKS', maxCpc: d.maxCpc },
     callAsset: ctx.phone && /\d{7,}/.test(ctx.phone.replace(/\D/g, '')) ? { phone: ctx.phone } : null,
@@ -166,15 +191,16 @@ export function enforceRulebook(spec: CampaignSpec, ctx: RulebookContext = {}): 
       .filter((row) => !stem || row.text.includes(stem));
     const seenKw = new Set<string>();
     keywords = keywords.filter((row) => {
-      if (!row.text || seenKw.has(row.text)) return false;
-      seenKw.add(row.text);
+      const key = `${row.match}:${row.text}`;
+      if (!row.text || seenKw.has(key)) return false;
+      seenKw.add(key);
       return true;
     }).slice(0, d.maxKeywordsPerAdGroup);
     if (keywords.length !== group.keywords.length) fixes.push(`Keywords for ${name} were limited to close ${keywords.length ? 'phrase and exact' : ''} variants.`);
     if (!keywords.length) blocks.push(`${name} has no close-variant keywords left. Miles will not create a mixed or empty ad group.`);
 
     const cityOk = city && city.length <= 20 ? city : '';
-    const headlines = pad(group.rsa?.headlines ?? [], [
+    let headlines = pad(group.rsa?.headlines ?? [], [
       name,
       cityOk ? `${name} in ${cityOk}` : name,
       cityOk ? `Serving ${cityOk}` : 'Local Crew',
@@ -184,6 +210,20 @@ export function enforceRulebook(spec: CampaignSpec, ctx: RulebookContext = {}): 
       'Licensed And Insured', 'Book A Visit', 'Local Crew', 'Call For A Visit', 'Clear Pricing',
       'Schedule A Visit', 'Ask About Timing', 'Request A Visit', 'Talk To The Crew', `${name} Help`, 'Local Team',
     ], d.headlineChars, d.headlines);
+    if (cityOk) {
+      const citySeeds = [`Serving ${cityOk}`, `${cityOk} Crew`, `Call ${cityOk}`, `${cityOk} Team`].map((line) => fit(line, d.headlineChars)).filter(Boolean);
+      const cityCount = () => headlines.filter((line) => line.toLowerCase().includes(cityOk.toLowerCase())).length;
+      for (const seed of citySeeds) {
+        if (cityCount() >= d.headlinesWithCity) break;
+        if (headlines.some((line) => line.toLowerCase() === seed.toLowerCase())) continue;
+        let replaceAt = -1;
+        for (let i = headlines.length - 1; i >= 0; i--) {
+          if (!headlines[i]!.toLowerCase().includes(cityOk.toLowerCase())) { replaceAt = i; break; }
+        }
+        if (replaceAt >= 0) headlines[replaceAt] = seed;
+        else if (headlines.length < d.headlines) headlines.push(seed);
+      }
+    }
     const descriptions = pad(group.rsa?.descriptions ?? [], [
       cityOk ? `${name} in ${cityOk}. Call to schedule a visit.` : `${name}. Call to schedule a visit.`,
       'Licensed and insured. You approve before anything spends.',

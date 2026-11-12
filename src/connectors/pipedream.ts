@@ -1,6 +1,8 @@
 import type { Config } from '../config.js';
 import { META_SHARED_ACCOUNT_NOTE as _META_NOTE } from '../agents/googlelaunch.js';
 import { collectReadIds, googleResourceMissing, listCampaignRows, parseGoogleStatuses, retryReadback } from '../agents/enablecheck.js';
+import { actionPayload, customerPair, plainGoogleError, statusReportProps } from './gadsread.js';
+import { areaTerms, chooseGeoHits, geoReportProps, locationCriterion, locationReadbackOk, parseGeoTargets, parseLocationCriteria, resolveAreas, type GeoTarget } from '../agents/geotarget.js';
 import { plainStepErrors } from '../agents/googlelaunch.js';
 import { classifyGadsAccounts, extractCustomerNodes, type GadsAccess } from './gadsAccess.js';
 import { explainPipedreamError, type PipedreamFailure } from './pipedreamErrors.js';
@@ -690,9 +692,8 @@ export class PipedreamConnector implements Connector {
     } else {
       const rows = await this.listComponents('google_ads');
       const comp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-campaign-report') ?? pickComponent(rows, 'create campaign report');
-      if (!comp) return out;
-      key = comp.key ?? comp.id ?? comp.componentKey;
-      const props = await this.componentProps(comp, key);
+      key = comp ? (comp.key ?? comp.id ?? comp.componentKey) : '';
+      const props = comp ? await this.componentProps(comp, key) : [];
       appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
       targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
       if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return out;
@@ -701,41 +702,99 @@ export class PipedreamConnector implements Connector {
       if (!targets.length || access?.kind === 'none' || access?.kind === 'manager_only' || access?.kind === 'error' || access?.kind === 'choose') return out;
       this.gadsCache.set(externalUserId, { key, appName, ids: targets.map((t) => t.client ?? t.login).filter((id) => /^\d{10}$/.test(id)), targets, ts: Date.now() });
     }
-    // Self-healing: try the known metric/field formats until one returns rows,
-    // then remember it so later loads use just that one. If a format is already
-    // cached, try it alone first.
-    const shapes = cachedShape ? [cachedShape, ...GADS_SHAPES.filter((s) => s.tag !== cachedShape.tag)] : GADS_SHAPES;
-    for (const t of this.preferTargets(externalUserId, targets).slice(0, 8)) {
-      for (const shape of shapes) {
-        const configuredProps: Record<string, unknown> = { [appName]: { authProvisionId: account.id }, dateRange: range, fields: shape.fields, metrics: shape.metrics };
-        if (t.login) configuredProps.accountId = t.login; // report "as" the login/manager
-        if (t.client) configuredProps.customerClientId = t.client; // the client that runs ads
-        let raw: unknown;
-        try {
-          const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
-          raw = res?.ret ?? res?.exports ?? res ?? null;
-        } catch (err) {
-          const failure = explainPipedreamError(err);
-          if (failure.kind === 'connect_production_unavailable') {
-            this.gadsBlock.set(externalUserId, failure);
-            return out;
+    const preferred = this.preferTargets(externalUserId, targets).slice(0, 8);
+    const listed = await this.listGoogleCampaigns(externalUserId, account.id, preferred);
+    const metrics = new Map<string, { name: string; spend: number; clicks: number; conversions: number }>();
+    // Metrics are optional. A date-window report omits campaigns with no impressions.
+    // The list above is the source of campaign rows. Metrics fill in spend when present.
+    if (key) {
+      const shapes = cachedShape ? [cachedShape, ...GADS_SHAPES.filter((s) => s.tag !== cachedShape.tag)] : GADS_SHAPES;
+      let matched = false;
+      for (const t of preferred) {
+        if (matched) break;
+        for (const shape of shapes) {
+          const configuredProps: Record<string, unknown> = { [appName]: { authProvisionId: account.id }, dateRange: range, fields: shape.fields, metrics: shape.metrics, segments: ['segments.date'] };
+          if (t.login) configuredProps.accountId = t.login;
+          if (t.client) configuredProps.customerClientId = t.client;
+          let raw: unknown;
+          try {
+            const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
+            raw = actionPayload(res);
+          } catch (err) {
+            const failure = explainPipedreamError(err);
+            if (failure.kind === 'connect_production_unavailable') {
+              this.gadsBlock.set(externalUserId, failure);
+              return listed;
+            }
+            continue;
           }
-          continue; // bad account/format — try the next
-        }
-        const before = out.length;
-        for (const r of asRows(raw)) {
-          const name = r?.campaign?.name ?? r.campaignName ?? r.name ?? 'Google campaign';
-          const spend = num(r?.metrics?.costMicros ?? r?.metrics?.cost_micros) / 1e6 || num(r.cost ?? r.spend);
-          const clicks = num(r?.metrics?.clicks ?? r.clicks);
-          const conv = num(r?.metrics?.conversions ?? r.conversions);
-          if (spend || clicks || conv) out.push({ platform: 'google_ads', campaign: name, utm: '', spend: Math.round(spend), clicks, conversions: Math.round(conv) });
-        }
-        if (out.length > before) {
+          const rows = asRows(raw);
+          if (!rows.length) continue;
+          matched = true;
+          for (const r of rows) {
+            const name = String(r?.campaign?.name ?? r.campaignName ?? r.name ?? 'Google campaign');
+            const spend = num(r?.metrics?.costMicros ?? r?.metrics?.cost_micros) / 1e6 || num(r.cost ?? r.spend);
+            const clicks = num(r?.metrics?.clicks ?? r.clicks);
+            const conv = num(r?.metrics?.conversions ?? r.conversions);
+            const keyName = name.toLowerCase();
+            const prev = metrics.get(keyName) ?? { name, spend: 0, clicks: 0, conversions: 0 };
+            metrics.set(keyName, { name: prev.name, spend: prev.spend + spend, clicks: prev.clicks + clicks, conversions: prev.conversions + conv });
+          }
           const prev = this.gadsCache.get(externalUserId);
           if (prev) this.gadsCache.set(externalUserId, { ...prev, shape });
-          return out; // found real data with this format — done
+          break;
         }
       }
+    }
+    if (listed.length) {
+      return listed.map((row) => {
+        const hit = metrics.get((row.campaign || '').toLowerCase());
+        return { ...row, spend: Math.round(hit?.spend || 0), clicks: hit?.clicks || 0, conversions: Math.round(hit?.conversions || 0) };
+      });
+    }
+    for (const hit of metrics.values()) {
+      out.push({ platform: 'google_ads', campaign: hit.name, utm: '', spend: Math.round(hit.spend), clicks: hit.clicks, conversions: Math.round(hit.conversions) });
+    }
+    return out;
+  }
+
+  /** Every non-removed campaign on the client account, including paused and zero-spend. */
+  private async listGoogleCampaigns(externalUserId: string, authId: string, targets: { login: string; client?: string }[]): Promise<import('../revenue/attribution.js').CampaignSpend[]> {
+    const out: import('../revenue/attribution.js').CampaignSpend[] = [];
+    try {
+      const pd = await this.backend();
+      const rows = await this.listComponents('google_ads');
+      const listComp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-list-campaigns');
+      const report = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-campaign-report');
+      const comp = listComp ?? report;
+      if (!comp) return out;
+      const key = comp.key ?? comp.id ?? comp.componentKey;
+      const props = await this.componentProps(comp, key);
+      const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+      const seen = new Set<string>();
+      for (const t of targets) {
+        const pair = customerPair({ login: t.login, client: t.client });
+        const configuredProps: Record<string, unknown> = listComp
+          ? { [appName]: { authProvisionId: authId }, accountId: pair.accountId, ...(pair.customerClientId ? { customerClientId: pair.customerClientId } : {}) }
+          : statusReportProps({ appName, authId, pair, resource: 'campaign', ids: [] });
+        const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
+        for (const row of listCampaignRows(actionPayload(res))) {
+          if (seen.has(row.id) || row.status === 'UNKNOWN' && !row.name) continue;
+          seen.add(row.id);
+          out.push({
+            platform: 'google_ads',
+            campaign: row.name || `Campaign ${row.id}`,
+            utm: '',
+            spend: 0,
+            clicks: 0,
+            conversions: 0,
+            status: row.status,
+          });
+        }
+        if (out.length) break;
+      }
+    } catch {
+      /* the metrics report is still attempted */
     }
     return out;
   }
@@ -889,6 +948,20 @@ export class PipedreamConnector implements Connector {
     const fmtCid = (id?: string) => id && /^\d{10}$/.test(id) ? `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` : id ?? '';
     if (customerId) steps.push({ step: `Target account: ${fmtCid(customerId)}${target?.client && target.login !== target.client ? ` (client under manager ${fmtCid(target.login)})` : ''}`, ok: true });
 
+    const pair = customerPair({ login: target?.login, client: target?.client });
+    const indexed = spec.geoTargets?.length ? spec.geoTargets : resolveAreas(spec.locations).targets;
+    let geos: GeoTarget[] = indexed;
+    try {
+      const live = await this.lookupLiveGeo(externalUserId, account.id, pair, spec.locations || []);
+      if (live.length) geos = live;
+    } catch {
+      /* the published geo list still applies */
+    }
+    if (!geos.length) {
+      const block = resolveAreas(spec.locations).block;
+      return { ok: false, live: true, steps: [{ step: 'Add location targeting', ok: false, error: block }], note: block };
+    }
+
     // 1) Budget — micros ($1 = 1_000_000). Budget names must be UNIQUE across
     // the account (Google rejects a re-launch with DUPLICATE_NAME), so stamp
     // each launch's budget with the launch time.
@@ -908,6 +981,9 @@ export class PipedreamConnector implements Connector {
     // the "required field was not present" error), and a bidding strategy.
     // "Maximize Clicks" is the TARGET_SPEND enum, not "MAXIMIZE_CLICKS".
     const biddingEnum = spec.biddingStrategy === 'MAXIMIZE_CLICKS' ? 'TARGET_SPEND' : spec.biddingStrategy;
+    const ceiling = biddingEnum === 'TARGET_SPEND'
+      ? String(Math.round((spec.bidPlan?.maxCpc || 4) * 1_000_000))
+      : undefined;
     const campaign = budget.resource
       ? await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign', account.id, {}, {
           ...acct,
@@ -917,6 +993,11 @@ export class PipedreamConnector implements Connector {
           campaignBudget: budget.resource,
           status: 'PAUSED', // client status is ignored — Miles never enables a campaign
           biddingStrategyType: biddingEnum,
+          ...(ceiling ? { cpcBidCeilingMicros: ceiling } : {}),
+          additionalFields: {
+            networkSettings: { targetGoogleSearch: true, targetSearchNetwork: false, targetContentNetwork: false },
+            geoTargetTypeSetting: { positiveGeoTargetType: 'PRESENCE', negativeGeoTargetType: 'PRESENCE' },
+          },
           containsEuPoliticalAdvertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING',
         })
       : { ok: false as const, resource: undefined, error: 'Skipped — Google requires a budget on every campaign and the budget step failed above.', detail: undefined };
@@ -927,6 +1008,27 @@ export class PipedreamConnector implements Connector {
     // resource paths themselves, so extract the id from each resource name.
     const campaignNumId = (campaign.resource?.match(/campaigns\/(\d+)/) || [])[1];
     if (campaign.resource && campaignNumId) {
+      let located = 0;
+      let locateErr: string | undefined;
+      for (const geo of geos) {
+        const placed = await this.writeComponent(externalUserId, 'google_ads-create-or-remove-campaign-criteria', account.id, {}, {
+          ...acct,
+          operationType: 'create',
+          campaignId: campaignNumId,
+          negative: false,
+          additionalFields: { location: locationCriterion(geo) },
+        });
+        if (placed.ok) located++;
+        else locateErr = locateErr ?? placed.error;
+      }
+      const read = await this.readLocationCriteria(externalUserId, account.id, pair, campaignNumId, rows);
+      const check = locationReadbackOk(geos, read.found, read.presence);
+      const locationOk = located === geos.length && check.ok;
+      steps.push({
+        step: 'Add location targeting',
+        ok: locationOk,
+        error: locationOk ? undefined : (locateErr || check.reason || 'Location targeting did not read back from Google.'),
+      });
       for (const g of spec.adGroups) {
         const ag = await this.writeComponent(externalUserId, 'google_ads-create-or-update-ad-group', account.id, {}, {
           ...acct,
@@ -962,6 +1064,50 @@ export class PipedreamConnector implements Connector {
         });
         steps.push({ step: `Create responsive search ad in "${g.name}"`, ok: rsa.ok, resource: rsa.resource, error: rsa.error });
       }
+      const negatives = (spec.negatives || []).map((text) => text.trim()).filter(Boolean).slice(0, 40);
+      let blocked = 0;
+      let blockErr: string | undefined;
+      for (const text of negatives) {
+        const neg = await this.writeComponent(externalUserId, 'google_ads-create-or-remove-campaign-criteria', account.id, {}, {
+          ...acct,
+          operationType: 'create',
+          campaignId: campaignNumId,
+          negative: true,
+          keywordText: text,
+          keywordMatchType: 'PHRASE',
+        });
+        if (neg.ok) blocked++;
+        else blockErr = blockErr ?? neg.error;
+      }
+      if (negatives.length) {
+        steps.push({ step: `Block wasted searches (${blocked}/${negatives.length})`, ok: blocked === negatives.length, error: blockErr ? `${blocked}/${negatives.length} blocked. First failure: ${blockErr}` : undefined });
+      }
+      const schedule = spec.targeting?.schedule;
+      const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+      const wantedDays = schedule?.days?.length ? schedule.days : [0, 1, 2, 3, 4, 5, 6];
+      let scheduled = 0;
+      let scheduleErr: string | undefined;
+      for (const day of wantedDays) {
+        const name = days[day];
+        if (!name) continue;
+        const slot = await this.writeComponent(externalUserId, 'google_ads-create-or-remove-campaign-criteria', account.id, {}, {
+          ...acct,
+          operationType: 'create',
+          campaignId: campaignNumId,
+          additionalFields: {
+            adSchedule: {
+              dayOfWeek: name,
+              startHour: schedule?.startHour ?? 7,
+              startMinute: 'ZERO',
+              endHour: schedule?.endHour ?? 20,
+              endMinute: 'ZERO',
+            },
+          },
+        });
+        if (slot.ok) scheduled++;
+        else scheduleErr = scheduleErr ?? slot.error;
+      }
+      steps.push({ step: 'Set ad schedule', ok: scheduled === wantedDays.length, error: scheduleErr ? `${scheduled}/${wantedDays.length} days set. First failure: ${scheduleErr}` : undefined });
     }
 
     // Honest success: a campaign with no ads can't serve, so require the campaign
@@ -998,7 +1144,8 @@ export class PipedreamConnector implements Connector {
       steps.push({ step: 'Verify campaign in Google Ads', ok: verifyAttempted ? verified : true, error: verifyAttempted && !verified ? 'Not found in your account — treat as NOT launched.' : verifyAttempted ? undefined : 'Could not independently verify (verification unavailable).' });
     }
 
-    const structureOk = campaignCreated && adGroupCreated && rsaCreated;
+    const locationOk = steps.some((step) => /location targeting/i.test(step.step) && step.ok);
+    const structureOk = campaignCreated && adGroupCreated && rsaCreated && locationOk;
     const ok = structureOk && (verifyAttempted ? verified : true);
     const link = campaign.resource && customerId ? `https://ads.google.com/aw/campaigns?ocid=&campaignId=${(campaign.resource.match(/campaigns\/(\d+)/) || [])[1] ?? ''}` : undefined;
     const errors = plainStepErrors(steps);
@@ -1008,43 +1155,131 @@ export class PipedreamConnector implements Connector {
         ? `Miles could not find this campaign in your Google Ads account afterward. ${errors || 'Treat it as not launched.'} Nothing was charged.`
         : !structureOk
           ? `A paused campaign was created, but it is not complete. ${errors || 'The ad groups or ads did not finish.'} Nothing was charged for a step Google rejected.`
-          : `Paused Search campaign created in Google Ads account ${customerId ? `${customerId.slice(0, 3)}-${customerId.slice(3, 6)}-${customerId.slice(6)}` : ''}${verifyAttempted ? '' : ' (structure confirmed; independent verification unavailable)'}. It is PAUSED. Miles does not enable it and does not spend. Turn it on only in Google Ads after you review it.`;
+          : `Paused Search campaign created in Google Ads account ${customerId ? `${customerId.slice(0, 3)}-${customerId.slice(3, 6)}-${customerId.slice(6)}` : ''}${verifyAttempted ? '' : ' (structure confirmed; independent verification unavailable)'}. It is PAUSED. Miles does not enable it and does not spend. Turn it on only in Google Ads after you review it. ${planGaps(spec)}`.trim();
     return { ok, live: true, campaignResource: campaign.resource, link, steps, note };
   }
 
   /**
-   * Campaign status comes from the campaign list. Ad group and ad status do not.
-   * Those are read with a GAQL report (ad_group.status and ad_group_ad.status).
+   * Ask Google for geo_target_constant rows. create-report rejects that
+   * resource today, so a thrown call returns [] and the published list is used.
    */
-  private async readEnablePayload(externalUserId: string, accountId: string, acct: Record<string, unknown>, campaignId: string, rows: any[]): Promise<{ payload: unknown; queriedGroups: boolean }> {
+  private async lookupLiveGeo(externalUserId: string, authId: string, pair: { accountId: string; customerClientId?: string }, areas: string[]): Promise<GeoTarget[]> {
+    const terms = areaTerms(areas);
+    if (!terms.length) return [];
+    const pd = await this.backend();
+    const rows = await this.listComponents('google_ads');
+    const report = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-report');
+    if (!report) return [];
+    const key = report.key ?? report.id ?? report.componentKey;
+    const props = await this.componentProps(report, key);
+    const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+    const queryProp = props.find((p: any) => p?.name === 'query' && /gaql|select/i.test(`${p.label ?? ''} ${p.description ?? ''}`));
+    const hits: GeoTarget[] = [];
+    for (const term of terms) {
+      try {
+        const configured = geoReportProps({ appName, authId, accountId: pair.accountId, customerClientId: pair.customerClientId, term });
+        if (!queryProp) delete configured.query;
+        const res = await pd.actions.run({ externalUserId, id: key, configuredProps: configured });
+        const picked = chooseGeoHits(term, parseGeoTargets(actionPayload(res)));
+        if (picked && picked !== 'ambiguous') hits.push(picked);
+      } catch {
+        return [];
+      }
+    }
+    return hits;
+  }
+
+  /** Read location criteria and the campaign presence setting back from Google. */
+  private async readLocationCriteria(externalUserId: string, authId: string, pair: { accountId: string; customerClientId?: string }, campaignId: string, rows: any[]): Promise<{ found: { id: string; negative: boolean }[]; presence?: string }> {
+    const pd = await this.backend();
+    const acct: Record<string, unknown> = { accountId: pair.accountId };
+    if (pair.customerClientId) acct.customerClientId = pair.customerClientId;
+    let found: { id: string; negative: boolean }[] = [];
+    let presence: string | undefined;
+    const list = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-list-campaign-criteria');
+    if (list) {
+      try {
+        const key = list.key ?? list.id ?? list.componentKey;
+        const props = await this.componentProps(list, key);
+        const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+        const res = await pd.actions.run({ externalUserId, id: key, configuredProps: { [appName]: { authProvisionId: authId }, ...acct } });
+        found = parseLocationCriteria(actionPayload(res)).filter((row) => row.id);
+      } catch {
+        found = [];
+      }
+    }
+    const report = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-report');
+    if (report) {
+      try {
+        const key = report.key ?? report.id ?? report.componentKey;
+        const props = await this.componentProps(report, key);
+        const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+        const res = await pd.actions.run({
+          externalUserId,
+          id: key,
+          configuredProps: {
+            ...statusReportProps({ appName, authId, pair, resource: 'campaign', ids: [campaignId] }),
+            fields: ['geo_target_type_setting.positive_geo_target_type'],
+          },
+        });
+        const payload = actionPayload(res);
+        const text = JSON.stringify(payload ?? {});
+        const match = text.match(/positiveGeoTargetType"\s*:\s*"([A-Z_]+)"/i) || text.match(/PRESENCE|PRESENCE_OR_INTEREST|SEARCH_INTEREST/);
+        presence = match?.[1] || match?.[0];
+      } catch {
+        presence = undefined;
+      }
+    }
+    return { found, presence };
+  }
+
+  /**
+   * Read campaign.status, ad_group.status, and ad_group_ad.status by id.
+   * The report action builds GAQL from fields. Segments are empty and there
+   * is no date range, so a paused campaign with no impressions still returns.
+   * accountId is the manager (login-customer-id). customerClientId is the client.
+   */
+  private async readEnablePayload(externalUserId: string, authId: string, pair: { accountId: string; customerClientId?: string }, campaignId: string, adGroupIds: string[], adIds: string[], rows: any[]): Promise<{ payload: unknown; queriedGroups: boolean }> {
     const pd = await this.backend();
     const chunks: unknown[] = [];
     let queriedGroups = false;
+    const run = async (key: string, configuredProps: Record<string, unknown>) => {
+      const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
+      chunks.push(actionPayload(res));
+    };
     const listComp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-list-campaigns');
     if (listComp) {
       const lkey = listComp.key ?? listComp.id ?? listComp.componentKey;
       const lprops = await this.componentProps(listComp, lkey);
       const lapp = lprops.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
-      const res = await pd.actions.run({ externalUserId, id: lkey, configuredProps: { [lapp]: { authProvisionId: accountId }, ...acct } });
-      chunks.push(res?.ret ?? res?.exports ?? res ?? {});
+      try {
+        await run(lkey, {
+          [lapp]: { authProvisionId: authId },
+          accountId: pair.accountId,
+          ...(pair.customerClientId ? { customerClientId: pair.customerClientId } : {}),
+        });
+      } catch {
+        /* the status report still runs */
+      }
     }
-    const report = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-report');
+    const report = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-report')
+      ?? rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-campaign-report');
     if (report) {
       const key = report.key ?? report.id ?? report.componentKey;
       const props = await this.componentProps(report, key);
       const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
-      const queries = [
-        `SELECT campaign.id, campaign.status, ad_group.id, ad_group.status FROM ad_group WHERE campaign.id = ${campaignId}`,
-        `SELECT campaign.id, campaign.status, ad_group.id, ad_group.status, ad_group_ad.ad.id, ad_group_ad.status FROM ad_group_ad WHERE campaign.id = ${campaignId}`,
+      const reads: { resource: 'campaign' | 'ad_group' | 'ad_group_ad'; ids: string[] }[] = [
+        { resource: 'campaign', ids: campaignId ? [campaignId] : [] },
+        { resource: 'ad_group', ids: adGroupIds },
+        { resource: 'ad_group_ad', ids: adIds },
       ];
-      for (const query of queries) {
-        const res = await pd.actions.run({
-          externalUserId,
-          id: key,
-          configuredProps: { [appName]: { authProvisionId: accountId }, ...acct, query },
-        });
-        chunks.push(res?.ret ?? res?.exports ?? res ?? {});
-        queriedGroups = true;
+      for (const read of reads) {
+        try {
+          await run(key, statusReportProps({ appName, authId, pair, resource: read.resource, ids: read.ids }));
+          if (read.resource !== 'campaign') queriedGroups = true;
+        } catch {
+          /* one resource can fail without hiding the others */
+        }
       }
     }
     return { payload: chunks, queriedGroups };
@@ -1074,9 +1309,9 @@ export class PipedreamConnector implements Connector {
       return { ok: false, live: false, called: false, note: this.gadsBlock.get(externalUserId)!.message };
     }
     const target = this.preferTargets(externalUserId, targets)[0];
-    const acct: Record<string, unknown> = {};
-    if (target?.login) acct.accountId = target.login;
-    if (target?.client) acct.customerClientId = target.client;
+    const pair = customerPair({ resource: args.campaignResource, login: target?.login, client: target?.client });
+    const acct: Record<string, unknown> = { accountId: pair.accountId };
+    if (pair.customerClientId) acct.customerClientId = pair.customerClientId;
     const cleared = 'That campaign is no longer in the Google Ads account. Miles cleared the saved campaign. Nothing was changed.';
     const result = await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign', account.id, {}, {
       ...acct,
@@ -1121,7 +1356,7 @@ export class PipedreamConnector implements Connector {
     const passedGroups = (args.adGroupResources ?? []).map((resource) => resource.split('/').pop() || '').filter(Boolean);
     const passedAds = (args.adResources ?? []).map((resource) => resource.split('/').pop() || '').filter(Boolean);
     const readOnce = async (): Promise<import('../agents/enablecheck.js').EnableReadback> => {
-      const { payload, queriedGroups } = await this.readEnablePayload(externalUserId, account.id, acct, campaignId, rows);
+      const { payload, queriedGroups } = await this.readEnablePayload(externalUserId, account.id, pair, campaignId, passedGroups, passedAds, rows);
       const discovered = collectReadIds(payload);
       const readback = parseGoogleStatuses(payload, {
         campaignId,
@@ -1129,6 +1364,7 @@ export class PipedreamConnector implements Connector {
         adIds: passedAds.length ? passedAds : discovered.adIds,
       });
       if (!queriedGroups) readback.note = 'The campaign list does not include ad group status. Miles could not read ad groups back from Google.';
+      if (readback.campaign !== 'UNKNOWN') readback.note = readback.note.replace(/UNKNOWN/g, '').trim();
       return readback;
     };
     let readback: import('../agents/enablecheck.js').EnableReadback = {
@@ -1148,13 +1384,19 @@ export class PipedreamConnector implements Connector {
       ? readback.campaign === 'ENABLED' && readback.adGroups.length > 0 && readback.adGroups.every((status) => status === 'ENABLED') && readback.ads.length > 0 && readback.ads.every((status) => status === 'ENABLED')
       : readback.campaign === 'PAUSED';
     const extra = writeErrors.filter(Boolean).join(' ');
+    const googleSaid = plainGoogleError(extra);
+    const readSentence = readback.campaign === 'UNKNOWN'
+      ? ''
+      : `The campaign reads as ${readback.campaign}.`;
     const note = googleResourceMissing(extra)
       ? cleared
-      : ready
-        ? (args.status === 'ENABLED'
-          ? 'Google reports the campaign, its ad groups, and its ads as enabled.'
-          : 'Google reports the campaign as PAUSED.')
-        : [extra, readback.note].filter(Boolean).join(' ');
+      : googleSaid
+        ? [googleSaid, readSentence].filter(Boolean).join(' ')
+        : ready
+          ? (args.status === 'ENABLED'
+            ? 'Google reports the campaign, its ad groups, and its ads as enabled.'
+            : 'Google reports the campaign as PAUSED.')
+          : [readSentence, readback.note].filter(Boolean).join(' ');
     return {
       ok: result.ok && (args.status === 'PAUSED' ? readback.campaign !== 'UNKNOWN' || result.ok : ready) && !googleResourceMissing(extra),
       live: true,
@@ -1185,9 +1427,9 @@ export class PipedreamConnector implements Connector {
         return { live: false, called: false, sample: false, note: again.message, campaigns: [] };
       }
       const target = this.preferTargets(externalUserId, targets)[0];
-      const acct: Record<string, unknown> = {};
-      if (target?.login) acct.accountId = target.login;
-      if (target?.client) acct.customerClientId = target.client;
+      const pair = customerPair({ resource: campaignResource, login: target?.login, client: target?.client });
+      const acct: Record<string, unknown> = { accountId: pair.accountId };
+      if (pair.customerClientId) acct.customerClientId = pair.customerClientId;
       const listComp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-list-campaigns');
       if (!listComp) {
         return { live: false, called: false, sample: false, note: 'google_ads-list-campaigns is not available on this connection, so Miles could not read campaign status.', campaigns: [] };
@@ -1197,7 +1439,7 @@ export class PipedreamConnector implements Connector {
       const lprops = await this.componentProps(listComp, lkey);
       const lapp = lprops.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
       const res = await pd.actions.run({ externalUserId, id: lkey, configuredProps: { [lapp]: { authProvisionId: account.id }, ...acct } });
-      const payload = res?.ret ?? res?.exports ?? res ?? {};
+      const payload = actionPayload(res) ?? {};
       const campaignId = (campaignResource?.match(/campaigns\/(\d+)/) || [])[1];
       const readback = parseGoogleStatuses(payload, { campaignId, adGroupIds: [], adIds: [] });
       const campaigns = listCampaignRows(payload);
@@ -1610,6 +1852,19 @@ export class PipedreamConnector implements Connector {
     }
     return [];
   }
+}
+
+function planGaps(spec: import('../agents/campaign.js').CampaignSpec): string {
+  // Checked 2026-11-12 against Pipedream's google_ads actions. There is no
+  // generic mutate or API-request action, and no call, sitelink, or callout
+  // action. Those stay on the plan only.
+  const places = (spec.geoTargets || []).map((target) => target.name).join(', ');
+  const parts = [
+    places ? `Location targeting is Presence only for ${places}.` : '',
+    spec.callAsset?.phone ? 'The call number is on the plan. This connection has no call asset action, so the call button was not created.' : '',
+    (spec.sitelinks?.length || spec.callouts?.length) ? 'Sitelinks and callouts are on the plan. This connection has no asset action, so they were not created in Google.' : '',
+  ].filter(Boolean);
+  return parts.join(' ');
 }
 
 const lower = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);

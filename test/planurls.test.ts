@@ -48,6 +48,7 @@ function appFor() {
           { step: 'Create ad group "Interior Painting"', ok: true, resource: 'customers/DEMO/adGroups/3' },
           { step: 'Add 3 keywords to "Interior Painting"', ok: true },
           { step: 'Create responsive search ad in "Interior Painting"', ok: true, resource: 'customers/DEMO/ads/8' },
+          { step: 'Add location targeting', ok: true },
         ],
       };
     },
@@ -121,7 +122,7 @@ describe('plan URLs come from the crawl', () => {
     const copy = spec.adGroups.flatMap((g) => [g.name, ...g.keywords.map((k) => k.text), ...g.rsa.headlines]).join(' ');
     expect(copy).not.toMatch(/free custom quote|slide title|\blocation\b/i);
     await app.inject({ method: 'POST', url: '/api/miles/tracking', headers, payload: { leadConversion: true, ga4Linked: true, method: 'thank_you' } });
-    const started = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
+    const started = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true, plan: spec } });
     expect(started.statusCode).toBe(200);
     expect(started.json().created).toBe(true);
     expect(started.json().enabled).toBe(true);
@@ -148,6 +149,7 @@ describe('plan URLs come from the crawl', () => {
             { step: 'Create ad group "Interior Painting"', ok: true, resource: 'customers/DEMO/adGroups/3' },
             { step: 'Add 3 keywords to "Interior Painting"', ok: true },
             { step: 'Create responsive search ad in "Interior Painting"', ok: true, resource: 'customers/DEMO/ads/8' },
+            { step: 'Add location targeting', ok: true },
           ],
         };
       },
@@ -173,7 +175,7 @@ describe('plan URLs come from the crawl', () => {
     expect(loaded.json().bundle.spec.finalUrl).toBe('https://paintersinphilly.com/');
     expect(validateCampaignSpec(loaded.json().bundle.spec)).toEqual([]);
     await app.inject({ method: 'POST', url: '/api/miles/tracking', headers, payload: { leadConversion: true, ga4Linked: true, method: 'thank_you' } });
-    const started = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
+    const started = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true, plan: loaded.json().bundle.spec } });
     expect(started.statusCode).toBe(200);
     expect(calls.find((c) => c.op === 'launch')?.finalUrl).toBe('https://paintersinphilly.com/');
     expect(calls.find((c) => c.op === 'status')?.status).toBe('ENABLED');
@@ -185,6 +187,8 @@ describe('plan URLs come from the crawl', () => {
     await hybrid.app.inject({ method: 'POST', url: '/api/miles/crawl', headers: h, payload: { businessName: 'Painters In Philly', location: 'Philadelphia, PA', website: 'https://paintersinphilly.com', html } });
     await hybrid.app.inject({ method: 'POST', url: '/api/miles/questions', headers: h, payload: { goal: 'get me leads', dailyBudget: 20, leadsPerDay: 1, mode: 'hybrid' } });
     const queued = await hybrid.app.inject({ method: 'POST', url: '/api/miles/go', headers: h, payload: { confirm: true } });
+    expect(queued.statusCode).toBe(400);
+    expect(queued.json().needsPlan).toBe(true);
     expect(queued.json().created).toBe(false);
     expect(hybrid.calls).toEqual([]);
     const manual = appFor();

@@ -28,6 +28,7 @@ export function forcePausedSearchSpec<T extends { status?: string }>(spec: T): T
 export function judgeSearchLaunch(steps: CampaignLaunchStep[]): { ok: boolean; partial: boolean; missing: string[]; adsMissing: { name: string; adGroupResource?: string; error?: string }[] } {
   const succeeded = (re: RegExp) => steps.some((s) => re.test(s.step) && s.ok);
   const missing: string[] = [];
+  if (!succeeded(/location targeting/i)) missing.push('location targeting');
   if (!succeeded(/budget/i)) missing.push('daily budget');
   if (!succeeded(/create campaign/i)) missing.push('campaign');
   if (!succeeded(/ad group/i)) missing.push('ad group');

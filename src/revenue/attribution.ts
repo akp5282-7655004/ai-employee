@@ -15,6 +15,8 @@ export interface CampaignSpend {
   spend: number;
   clicks?: number;
   conversions?: number;
+  /** Google campaign status when the row came from a status read. */
+  status?: 'ENABLED' | 'PAUSED' | 'UNKNOWN';
 }
 
 export interface Deal {

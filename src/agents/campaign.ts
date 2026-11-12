@@ -64,6 +64,8 @@ export interface CampaignSpec {
   bidPlan?: { stage: 'MAXIMIZE_CLICKS' | 'MAXIMIZE_CONVERSIONS' | 'TARGET_CPA'; maxCpc: number; targetCpa?: number };
   callAsset?: { phone: string } | null;
   locationAsset?: { gbpUrl: string } | null;
+  /** Google geo target constants for the service area. Presence only. */
+  geoTargets?: { id: string; name: string; targetType: 'City' | 'County' | 'Postal Code'; resourceName: string }[];
 }
 
 /** Google's fixed structured-snippet headers. */
@@ -300,15 +302,18 @@ function keywordsFor(theme: string, ctx: CampaignCtx, negatives: string[]): Keyw
   const t = theme.toLowerCase();
   const city = (ctx.city || '').split(',')[0]?.trim().toLowerCase() || '';
   const drafts: KeywordSpec[] = [
-    { text: `${t} near me`, match: 'phrase' },
-    { text: city ? `${t} ${city}` : `${t} near me`, match: 'phrase' },
+    { text: city ? `${t} ${city}` : t, match: 'phrase' },
+    { text: city ? `${t} ${city}` : t, match: 'exact' },
+    { text: t, match: 'phrase' },
     { text: t, match: 'exact' },
+    { text: `${t} near me`, match: 'phrase' },
   ];
   const seen = new Set<string>();
   return drafts.filter((row) => {
     const text = row.text.replace(/\s+/g, ' ').trim();
-    if (!text || seen.has(text) || !keywordAllowed(text, negatives)) return false;
-    seen.add(text);
+    const key = `${row.match}:${text}`;
+    if (!text || seen.has(key) || !keywordAllowed(text, negatives)) return false;
+    seen.add(key);
     row.text = text;
     return true;
   });

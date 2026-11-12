@@ -56,6 +56,7 @@ function harness() {
           { step: 'Add 4 keywords to "Repairs"', ok: true },
           { step: 'Create responsive search ad in "Repairs"', ok: true },
           { step: 'Verify campaign in Google Ads', ok: true },
+          { step: 'Add location targeting', ok: true },
         ],
       };
     },
@@ -85,6 +86,7 @@ describe('judgeSearchLaunch', () => {
       { step: 'Create ad group "Repairs"', ok: true, resource: 'customers/1/adGroups/3' },
       { step: 'Add 4 keywords to "Repairs"', ok: true },
       { step: 'Create responsive search ad in "Repairs"', ok: true },
+      { step: 'Add location targeting', ok: true },
     ]);
     expect(full.ok).toBe(true);
     expect(full.missing).toEqual([]);
