@@ -137,12 +137,12 @@ describe('every nav tab loads', () => {
     await page.locator('#campaign-plan').waitFor();
     for (let i = 0; i < 12; i++) {
       const text = await page.locator('#campaign-plan').innerText();
-      if (text.includes('Approve and launch')) break;
+      if (text.includes('Ready to launch')) break;
       const input = page.locator('#campaign-plan input[type="text"]');
       if (await input.count()) {
         if (/website/i.test(text)) await input.fill('https://painters.example');
-        else if (/phone/i.test(text)) await input.fill('2155550199');
-        else if (!(await input.inputValue()).trim()) await input.fill('Philadelphia');
+        else if (/city/i.test(text)) await input.fill('Philadelphia, PA');
+        else if (!(await input.inputValue()).trim()) await input.fill('Philadelphia, PA');
       }
       const before = text;
       await page.getByRole('button', { name: 'Use this answer' }).click();
@@ -153,10 +153,15 @@ describe('every nav tab loads', () => {
       }, before);
     }
     const planText = await page.locator('#campaign-plan').innerText();
-    expect(planText).toMatch(/Approve and launch/);
+    expect(planText).toMatch(/Confirm and launch/);
+    expect(planText).toMatch(/Miles will build and launch Google Search/);
     expect(planText).toMatch(/Cancel/);
-    expect(planText).toMatch(/Locations/);
+    expect(planText).not.toMatch(/match type|RSA/i);
     expect(planText).not.toContain('\u2014');
+    await page.getByRole('button', { name: 'See details', exact: true }).click();
+    const details = await page.locator('#campaign-plan').innerText();
+    expect(details).toMatch(/Where the ads show/);
+    expect(details).not.toContain('\u2014');
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.locator('#campaign-plan').waitFor({ state: 'detached' });
     expect(seen.errors.slice(before), seen.errors.join('\n')).toEqual([]);

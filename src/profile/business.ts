@@ -100,6 +100,9 @@ export interface BusinessDraft {
   goal: string;
   dailyBudget: string;
   leadsPerDay: string;
+  budgetPeriod: string;
+  leadGoal: string;
+  leadPeriod: string;
   targetCpa: string;
   idealCustomer: string;
   runningAds: string;
@@ -345,6 +348,8 @@ export function buildBusinessProfile(input: BusinessProfileInput): BusinessProfi
     ? (monthNum ? `${money(dailyNum)}/day · ${money(monthNum)}/mo` : `${money(dailyNum)}/day`)
     : '';
   const leadsNum = posNum(input.leadsPerDay);
+  const savedLeadGoal = posNum(p.leadGoal);
+  const savedLeadPeriod = text(p.leadPeriod) === 'week' ? 'week' : 'month';
   const goalText = text(p.goal) || (input.hasBundle ? text(input.goal) : '');
   const avgRaw = text(p.avgTicket) || text(p.averageJobValue);
   const avgNum = posNum(avgRaw);
@@ -384,7 +389,13 @@ export function buildBusinessProfile(input: BusinessProfileInput): BusinessProfi
 
   put('goals', { id: 'goal', label: 'Goal', filled: !!goalText, value: goalText, hint: hintFor('goal') });
   put('goals', { id: 'dailyBudget', label: 'Daily ad budget', filled: !!dailyValue, value: dailyValue, hint: hintFor('dailyBudget') });
-  put('goals', { id: 'leadsPerDay', label: 'Leads you want', filled: !!leadsNum, value: leadsNum ? `${leadsNum}/day` : '', hint: hintFor('leadsPerDay') });
+  put('goals', {
+    id: 'leadsPerDay',
+    label: 'Leads you want',
+    filled: !!savedLeadGoal || !!leadsNum,
+    value: savedLeadGoal ? `${Math.round(savedLeadGoal)} a ${savedLeadPeriod}` : (leadsNum ? `${leadsNum}/day` : ''),
+    hint: hintFor('leadsPerDay'),
+  });
   put('goals', { id: 'targetCpa', label: "Most you'll pay per lead", filled: !!targetNum, value: targetNum ? money(targetNum) : '', hint: hintFor('targetCpa') });
   put('goals', { id: 'idealCustomer', label: 'Ideal customer', filled: !!text(p.idealCustomer), value: text(p.idealCustomer), hint: hintFor('idealCustomer') });
   put('goals', { id: 'runningAds', label: 'Ads running before Miles', filled: !!text(p.runningAds), value: text(p.runningAds), hint: hintFor('runningAds') });
@@ -497,6 +508,9 @@ export function buildBusinessProfile(input: BusinessProfileInput): BusinessProfi
     goal: goalText,
     dailyBudget: dailyNum ? String(Math.round(dailyNum)) : '',
     leadsPerDay: leadsNum ? String(leadsNum) : '',
+    budgetPeriod: text(p.budgetPeriod) === 'month' ? 'month' : 'day',
+    leadGoal: savedLeadGoal ? String(Math.round(savedLeadGoal)) : '',
+    leadPeriod: text(p.leadPeriod) === 'week' ? 'week' : 'month',
     targetCpa: targetNum ? String(Math.round(targetNum)) : '',
     idealCustomer: text(p.idealCustomer),
     runningAds: text(p.runningAds),

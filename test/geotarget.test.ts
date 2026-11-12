@@ -120,7 +120,7 @@ describe('geo target resolution', () => {
       jobsToAvoid: 'jobs',
       keywordFocus: 'interior painting',
     }, serviceAreas: 'Nowhereville, ZZ' });
-    expect(blocked.locationBlock).toMatch(/Approve and launch stays off/);
+    expect(blocked.locationBlock).toMatch(/will not launch until a city matches/);
     expect(blocked.spec.geoTargets).toEqual([]);
   });
 });

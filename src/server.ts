@@ -33,7 +33,8 @@ import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt,
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, normalizeSiteUrl, repairCampaignUrls, type CampaignSpec } from './agents/campaign.js';
 import { googleResourceMissing, judgeEnableReadback } from './agents/enablecheck.js';
 import { housekeepingProposals } from './agents/rulebook.js';
-import { acceptApprovedPlan, applyPlanAnswer, buildSearchPlan, type PlanProfile } from './agents/campaignplan.js';
+import { acceptApprovedPlan, applyPlanAnswer, areaGuess, buildSearchPlan, type PlanProfile } from './agents/campaignplan.js';
+import { choiceById, goalCheck, LAUNCH_LINE, MONTH_DAYS, type BudgetPeriod, type GoalChoiceId, type LeadPeriod } from './agents/goalcheck.js';
 import { resolveAreas } from './agents/geotarget.js';
 import { formatSopLog, runSopGate } from './agents/sopgate.js';
 import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, META_SHARED_ACCOUNT_NOTE, plainStepErrors, resourcesFromSteps, searchLaunchNote } from './agents/googlelaunch.js';
@@ -1517,7 +1518,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       businessName: profile.businessName || setup?.businessName || saved.businessName,
       trade: profile.industry || saved.industry,
       services: profile.services || saved.services,
-      serviceAreas: profile.serviceAreas || setup?.location,
+      serviceAreas: areaGuess(profile, setup?.location),
       phone: profile.phone || saved.phone,
       website: setup?.website || profile.website || saved.website,
       hours: profile.hours || miles.bundle?.hours || saved.hours,
@@ -1765,6 +1766,49 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return { ok: true, published: true, note: 'Marked ready in Miles. No WordPress publish was sent.', log: formatSopLog(gate) };
   });
 
+  const goalSaved = (data: Record<string, unknown>, miles: MilesFile) => {
+    const profile = (data.profile ?? {}) as Record<string, string>;
+    const caps = miles.bundle?.setup.caps;
+    const period: BudgetPeriod = profile.budgetPeriod === 'month' ? 'month' : 'day';
+    const leadPeriod: LeadPeriod = profile.leadPeriod === 'week' ? 'week' : 'month';
+    const storedBudget = Number(profile.budgetAmount);
+    const storedDaily = Number(profile.dailyBudget);
+    const capDaily = caps && caps.dailyBudget > 0 ? caps.dailyBudget : 0;
+    const amount = storedBudget > 0 ? storedBudget : (storedDaily > 0 ? storedDaily : capDaily);
+    const storedGoal = Number(profile.leadGoal);
+    const perDay = Number(profile.leadsPerDay) || miles.bundle?.setup.leadsPerDay || 0;
+    const leadGoal = storedGoal > 0 ? Math.round(storedGoal) : (perDay > 0 ? Math.max(1, Math.round(perDay * (leadPeriod === 'week' ? 7 : MONTH_DAYS))) : 0);
+    const trade = profile.industry || miles.bundle?.profile?.industry || '';
+    const city = (areaGuess(profile, miles.bundle?.setup.location) || '').split(',')[0]?.trim() || '';
+    return {
+      trade,
+      city,
+      budgetAmount: amount > 0 ? amount : 0,
+      budgetPeriod: storedBudget > 0 ? period : 'day' as BudgetPeriod,
+      leadGoal,
+      leadPeriod: storedGoal > 0 ? leadPeriod : 'month' as LeadPeriod,
+      confirmed: profile.goalConfirmed === 'yes',
+      caps: {
+        daily: caps && caps.dailyBudget > 0 ? caps.dailyBudget : null,
+        monthly: caps && caps.monthlyCeiling > 0 ? caps.monthlyCeiling : null,
+      },
+    };
+  };
+  const goalPayload = (data: Record<string, unknown>, miles: MilesFile) => {
+    const saved = goalSaved(data, miles);
+    const check = saved.budgetAmount > 0 && saved.leadGoal > 0
+      ? goalCheck({
+        trade: saved.trade,
+        city: saved.city,
+        budgetAmount: saved.budgetAmount,
+        budgetPeriod: saved.budgetPeriod,
+        leadGoal: saved.leadGoal,
+        leadPeriod: saved.leadPeriod,
+        caps: saved.caps,
+      })
+      : null;
+    return { ...saved, check, confirmation: LAUNCH_LINE };
+  };
   const searchPlanFor = (data: Record<string, unknown>, miles: MilesFile) => {
     const mode = miles.bundle?.setup.mode || miles.pendingMode;
     const preapproved = mode === 'automate' && miles.planApproved === true && !!miles.approvedPlan;
@@ -1777,7 +1821,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const miles = milesOf(data);
     if (!miles.bundle) return reply.code(400).send({ error: 'Save the three questions first. Nothing was created.' });
     const plan = searchPlanFor(data, miles);
-    return { ok: true, ...plan, planApproved: miles.planApproved === true };
+    return publicSafe({ ok: true, ...plan, planApproved: miles.planApproved === true, goal: goalPayload(data, miles), confirmation: LAUNCH_LINE });
   });
   app.post<{ Body: { id?: string; value?: string } }>('/api/miles/plan/answer', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -1816,7 +1860,110 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     data.miles = miles;
     await authStore.setUserData(u.id, data);
     const plan = searchPlanFor(data, miles);
-    return { ok: true, ...plan };
+    return publicSafe({ ok: true, ...plan, goal: goalPayload(data, miles), confirmation: LAUNCH_LINE });
+  });
+
+  app.get('/api/miles/goal', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return publicSafe({ ok: true, ...goalPayload(data, milesOf(data)) });
+  });
+
+  app.post<{ Body: { budgetAmount?: number; budgetPeriod?: BudgetPeriod; leadGoal?: number; leadPeriod?: LeadPeriod } }>('/api/miles/goal', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const saved = goalSaved(data, milesOf(data));
+    const body = req.body ?? {};
+    const check = goalCheck({
+      trade: saved.trade,
+      city: saved.city,
+      budgetAmount: Number(body.budgetAmount) || 0,
+      budgetPeriod: body.budgetPeriod === 'month' ? 'month' : 'day',
+      leadGoal: Number(body.leadGoal) || 0,
+      leadPeriod: body.leadPeriod === 'week' ? 'week' : 'month',
+      caps: saved.caps,
+    });
+    return publicSafe({ ok: true, check, confirmation: LAUNCH_LINE });
+  });
+
+  app.post<{ Body: { budgetAmount?: number; budgetPeriod?: BudgetPeriod; leadGoal?: number; leadPeriod?: LeadPeriod; choice?: GoalChoiceId } }>('/api/miles/goal/confirm', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const choice = req.body?.choice;
+    if (choice !== 'keep_budget' && choice !== 'raise_budget') {
+      return reply.code(400).send({ error: 'Choose keep the budget or raise the budget. Nothing was saved.' });
+    }
+    const data = await authStore.getUserData(u.id);
+    const miles = milesOf(data);
+    const saved = goalSaved(data, miles);
+    const body = req.body ?? {};
+    const check = goalCheck({
+      trade: saved.trade,
+      city: saved.city,
+      budgetAmount: Number(body.budgetAmount) || 0,
+      budgetPeriod: body.budgetPeriod === 'month' ? 'month' : 'day',
+      leadGoal: Number(body.leadGoal) || 0,
+      leadPeriod: body.leadPeriod === 'week' ? 'week' : 'month',
+      caps: saved.caps,
+    });
+    const picked = choiceById(check, choice);
+    if (!picked) return reply.code(400).send({ error: 'That choice is not available for this budget and goal. Nothing was saved.' });
+    if (picked.id === 'keep_budget' && saved.caps.daily != null && picked.daily > saved.caps.daily + 0.001) {
+      return reply.code(400).send({ error: 'Keeping the budget cannot go above your daily cap. Nothing was saved.' });
+    }
+    const profile = { ...((data.profile as Record<string, string>) ?? {}) };
+    const days = picked.leadPeriod === 'week' ? 7 : MONTH_DAYS;
+    profile.dailyBudget = String(picked.daily);
+    profile.budgetAmount = String(check.budgetPeriod === 'month' ? picked.daily * MONTH_DAYS : picked.daily);
+    profile.budgetPeriod = check.budgetPeriod;
+    profile.leadGoal = String(picked.leadGoal);
+    profile.leadPeriod = picked.leadPeriod;
+    profile.goalChoice = picked.id;
+    profile.goalConfirmed = 'yes';
+    profile.leadsPerDay = String(Math.round((picked.leadGoal / days) * 1000) / 1000);
+    if (!profile.goal) profile.goal = 'Get more calls';
+    data.profile = profile;
+    const leadsPerDay = picked.leadGoal / days;
+    if (!miles.bundle) {
+      miles.bundle = buildBundle({
+        businessName: profile.businessName,
+        location: areaGuess(profile),
+        email: profile.email,
+        website: profile.website,
+        gbpUrl: profile.gbpUrl,
+        html: '',
+        links: miles.crawl?.links,
+        goal: profile.goal,
+        dailyBudget: picked.daily,
+        leadsPerDay,
+        googleShare: 1,
+        mode: miles.pendingMode || 'hybrid',
+        caps: { dailyBudget: picked.daily, monthlyCeiling: picked.monthly, maxChangePct: 10, paused: false },
+      });
+    }
+    miles.bundle.setup.caps.dailyBudget = picked.daily;
+    miles.bundle.setup.caps.monthlyCeiling = picked.monthly;
+    miles.bundle.setup.leadsPerDay = leadsPerDay;
+    miles.bundle.setup.goal = profile.goal;
+    if (profile.serviceAreas || profile.city) miles.bundle.setup.location = areaGuess(profile, miles.bundle.setup.location).split(',')[0]?.trim() || miles.bundle.setup.location;
+    const google = miles.bundle.channels.find((c) => c.id === 'google');
+    if (google) google.daily = picked.daily;
+    miles.bundle.profile = { ...miles.bundle.profile, ...profile };
+    data.miles = miles;
+    const plan = searchPlanFor(data, miles);
+    miles.bundle.spec = plan.spec;
+    data.miles = miles;
+    const periodWord = picked.leadPeriod === 'week' ? 'week' : 'month';
+    const title = picked.raisesCap
+      ? `Confirmed $${picked.daily}/day and ${picked.leadGoal} leads a ${periodWord}. Raised the daily cap.`
+      : `Confirmed $${picked.daily}/day and ${picked.leadGoal} leads a ${periodWord}.`;
+    miles.events = [{ ts: new Date().toISOString(), text: title }, ...miles.events].slice(0, 40);
+    data.miles = miles;
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'goal-check', title, detail: `${picked.label} ${check.assumption}` });
+    await authStore.setUserData(u.id, data);
+    return publicSafe({ ok: true, dailyCap: picked.daily, raisedCap: picked.raisesCap, choice: picked.id, ...plan, goal: goalPayload(data, miles), confirmation: LAUNCH_LINE });
   });
 
   app.post<{ Body: { confirm?: boolean; plan?: CampaignSpec } }>('/api/miles/go', async (req, reply) => {
@@ -2394,6 +2541,17 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       dailyBudget: caps ? caps.dailyBudget : null,
       maxChangePct: caps ? caps.maxChangePct : null,
       leadsPerDay: miles.bundle ? miles.bundle.setup.leadsPerDay : null,
+      leadGoalCount: p.goalConfirmed === 'yes' && Number(p.leadGoal) > 0 ? Math.round(Number(p.leadGoal)) : null,
+      leadGoalPeriod: p.leadPeriod === 'week' ? 'week' : (p.goalConfirmed === 'yes' ? 'month' : null),
+      runningLeads: (() => {
+        if (connector.name === 'mock') return null;
+        const googleRows = (snap?.campaigns ?? []).filter((c) => c.platform === 'google_ads');
+        const enabled = googleRows.filter((c) => c.status === 'ENABLED');
+        const running = enabled.length > 0 || miles.activation === 'enabled';
+        if (!running) return null;
+        const rows = enabled.length ? enabled : googleRows;
+        return rows.reduce((sum, row) => sum + (row.conversions || 0), 0);
+      })(),
       targetCpa: Number(p.targetCpa) || null,
       sampleConnector: connector.name === 'mock',
       google: { oauth: google.oauth, ready: google.ready, note: google.note },

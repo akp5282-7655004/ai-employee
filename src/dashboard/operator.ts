@@ -44,6 +44,14 @@ export interface OperatorInput {
   dailyBudget: number | null;
   maxChangePct: number | null;
   leadsPerDay: number | null;
+  /** Confirmed lead goal. Null until the owner confirms one. */
+  leadGoalCount?: number | null;
+  leadGoalPeriod?: 'week' | 'month' | null;
+  /**
+   * Leads from enabled Google campaigns in the trailing 30 day read.
+   * Null until a campaign is actually running. Sample rows stay null.
+   */
+  runningLeads?: number | null;
   /** Saved cost-per-job goal from the profile. Null when unset. */
   targetCpa: number | null;
   /** Preview connector. Campaign rows from it are examples, not a live account. */
@@ -106,6 +114,8 @@ export interface OperatorView {
     costBar: number | null;
     explain: string;
     action: { title: string; body: string; decisionId: string } | null;
+    /** Goal versus actual leads. Shown only once a campaign is running. */
+    leadPace: { headline: string; actual: string; goal: string; bar: number | null } | null;
   };
   money: {
     tone: 'positive' | 'negative' | 'sample' | 'unknown';
@@ -273,6 +283,7 @@ function onTrack(input: OperatorInput, decisions: OperatorDecision[]): OperatorV
     headline = `${Math.round(booked.value)} booked jobs. No lead goal is saved.`;
   }
 
+  const pace = leadPaceOf(input);
   const first = decisions[0];
   return {
     headline: plain(headline),
@@ -290,6 +301,25 @@ function onTrack(input: OperatorInput, decisions: OperatorDecision[]): OperatorV
     action: first
       ? { title: first.title, body: first.detail, decisionId: first.id }
       : null,
+    leadPace: pace,
+  };
+}
+
+function leadPaceOf(input: OperatorInput): OperatorView['onTrack']['leadPace'] {
+  const goal = pos(input.leadGoalCount);
+  const actual = input.runningLeads;
+  if (!goal || input.leadGoalPeriod !== 'week' && input.leadGoalPeriod !== 'month' || actual == null) return null;
+  const period = input.leadGoalPeriod === 'week' ? 'week' : 'month';
+  const noun = goal === 1 ? 'lead' : 'leads';
+  const count = Math.round(actual);
+  const headline = period === 'month'
+    ? `${count} ${count === 1 ? 'lead' : 'leads'} in the last 30 days. Your goal is ${goal} ${noun} a month.`
+    : `${count} ${count === 1 ? 'lead' : 'leads'} in the last 30 days. Your goal is ${goal} ${noun} a week. This read is 30 days, not one week.`;
+  return {
+    headline: plain(headline),
+    actual: String(count),
+    goal: `${goal} a ${period}`,
+    bar: Math.max(0, Math.min(100, (actual / goal) * 100)),
   };
 }
 
