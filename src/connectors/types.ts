@@ -202,6 +202,11 @@ export interface Connector {
   /** Ad spend by campaign from connected ad platforms — for revenue attribution.
    *  `range` is a Google-Ads-style preset (e.g. LAST_30_DAYS); defaults to 30d. */
   getAdSpend?(externalUserId: string, range?: string): Promise<CampaignSpend[]>;
+  /** Campaign, ad group, keyword, and search-term rows for one date window. Reads only. */
+  readMarketingAds?(externalUserId: string, query: { dateRange: string; startDate: string; endDate: string; metaPreset: string }): Promise<{
+    google: { connected: boolean; note: string; rows: import('./gadsread.js').AdsPerformanceRow[] };
+    meta: { connected: boolean; note: string; rows: import('./gadsread.js').AdsPerformanceRow[] };
+  }>;
   /** Create a full Google Ads Search campaign (budget → campaign → ad groups →
    *  keywords → RSAs) on the user's behalf. The owner has already approved every
    *  setting; this performs the live write-chain and reports each step.

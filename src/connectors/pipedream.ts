@@ -2,7 +2,7 @@ import type { Config } from '../config.js';
 import { META_SHARED_ACCOUNT_NOTE as _META_NOTE } from '../agents/googlelaunch.js';
 import { discoverMetaAccount, launchPausedMeta, META_GRAPH_BASE, META_NOT_CONNECTED, META_PAGE_ONLY, readMetaCampaign, type MetaGraph } from '../agents/metalaunch.js';
 import { collectReadIds, googleResourceMissing, listCampaignRows, parseGoogleStatuses, retryReadback } from '../agents/enablecheck.js';
-import { actionPayload, customerPair, mergeCampaignMetrics, metricRowHasNumbers, plainGoogleError, statusReportProps } from './gadsread.js';
+import { actionPayload, customerPair, marketingReportProps, mergeCampaignMetrics, metricRowHasNumbers, parseAdsPerformanceRow, plainGoogleError, statusReportProps, type AdsPerformanceRow, type AdsReportLevel } from './gadsread.js';
 import { areaTerms, chooseGeoHits, geoReportProps, locationCriterion, locationReadbackOk, parseGeoTargets, parseLocationCriteria, resolveAreas, type GeoTarget } from '../agents/geotarget.js';
 import { plainStepErrors } from '../agents/googlelaunch.js';
 import { classifyGadsAccounts, extractCustomerNodes, type GadsAccess } from './gadsAccess.js';
@@ -870,6 +870,109 @@ export class PipedreamConnector implements Connector {
       /* the metrics report is still attempted */
     }
     return out;
+  }
+
+  async readMarketingAds(externalUserId: string, query: { dateRange: string; startDate: string; endDate: string; metaPreset: string }): Promise<{
+    google: { connected: boolean; note: string; rows: AdsPerformanceRow[] };
+    meta: { connected: boolean; note: string; rows: AdsPerformanceRow[] };
+  }> {
+    const [google, meta] = await Promise.all([
+      this.googlePerformance(externalUserId, query),
+      this.metaPerformance(externalUserId, query),
+    ]);
+    return { google, meta };
+  }
+
+  private async googlePerformance(externalUserId: string, query: { dateRange: string; startDate: string; endDate: string }): Promise<{ connected: boolean; note: string; rows: AdsPerformanceRow[] }> {
+    const empty = { connected: false, note: 'Google Ads is not connected. Connect it under Integrations. Nothing here is a sample.', rows: [] as AdsPerformanceRow[] };
+    try {
+      const pd = await this.backend();
+      const accts = await this.listAccounts(externalUserId, 'google_ads');
+      const account = accts.find((row) => row.healthy) ?? accts[0];
+      if (!account) return empty;
+      if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') {
+        return { connected: false, note: 'Google Ads is signed in, but this workspace cannot run a report yet. Nothing here is a sample.', rows: [] };
+      }
+      const components = await this.listComponents('google_ads');
+      const report = components.find((row) => (row.key ?? row.id ?? row.componentKey) === 'google_ads-create-report')
+        ?? components.find((row) => (row.key ?? row.id ?? row.componentKey) === 'google_ads-create-campaign-report');
+      if (!report) return { connected: true, note: 'Google Ads is connected, but no performance report action is available. Campaign tables stay empty.', rows: [] };
+      const key = report.key ?? report.id ?? report.componentKey;
+      const props = await this.componentProps(report, key);
+      const appName = props.find((prop: { type?: string; name?: string }) => prop?.type === 'app')?.name ?? 'googleAds';
+      let targets = await this.resolveGadsTargets(externalUserId, account.id, components);
+      targets = (targets ?? []).filter((target) => /^\d{10}$/.test(target.client || target.login));
+      if (!targets.length) {
+        const remembered = this.rememberedTarget(externalUserId);
+        if (remembered) targets = [remembered];
+      }
+      const target = this.preferTargets(externalUserId, targets)[0];
+      if (!target) return { connected: true, note: 'Google Ads is signed in, but the ad account is not selected. Pick it under Integrations. Nothing here is a sample.', rows: [] };
+      const pair = customerPair({ login: target.login, client: target.client });
+      const levels: AdsReportLevel[] = ['campaign', 'ad_group', 'keyword', 'search_term'];
+      const rows: AdsPerformanceRow[] = [];
+      for (const level of levels) {
+        const configuredProps = marketingReportProps({
+          appName, authId: account.id, pair, level, dateRange: query.dateRange, startDate: query.startDate, endDate: query.endDate,
+        });
+        try {
+          const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
+          const payload = actionPayload(res);
+          const list = Array.isArray(payload) ? payload : (payload && typeof payload === 'object' && Array.isArray((payload as { results?: unknown[] }).results) ? (payload as { results: unknown[] }).results : []);
+          for (const row of list) {
+            const parsed = parseAdsPerformanceRow(row, level);
+            if (parsed) rows.push(parsed);
+          }
+        } catch {
+          /* this breakdown stays empty */
+        }
+      }
+      const found = levels.filter((level) => rows.some((row) => row.level === level));
+      const note = found.length
+        ? `Read from Google Ads for ${query.startDate} to ${query.endDate}.`
+        : `Google Ads is connected. No performance rows came back for ${query.startDate} to ${query.endDate}.`;
+      return { connected: true, note, rows };
+    } catch {
+      return empty;
+    }
+  }
+
+  private async metaPerformance(externalUserId: string, query: { startDate: string; endDate: string; metaPreset: string }): Promise<{ connected: boolean; note: string; rows: AdsPerformanceRow[] }> {
+    const wired = await this.metaGraph(externalUserId);
+    if (!('graph' in wired)) {
+      return { connected: false, note: wired.error || META_NOT_CONNECTED, rows: [] };
+    }
+    const found = await discoverMetaAccount(wired.graph);
+    if (!found.account) return { connected: false, note: found.error || META_NOT_CONNECTED, rows: [] };
+    const act = found.account.adAccountId.startsWith('act_') ? found.account.adAccountId : `act_${found.account.adAccountId}`;
+    const fields = 'campaign_name,adset_name,impressions,clicks,spend,actions,reach,frequency';
+    const rows: AdsPerformanceRow[] = [];
+    const pull = async (level: 'campaign' | 'adset', reportLevel: AdsReportLevel, time: boolean) => {
+      const params: Record<string, string> = {
+        level,
+        fields,
+        time_range: JSON.stringify({ since: query.startDate, until: query.endDate }),
+      };
+      if (time) params.time_increment = '1';
+      const body = await wired.graph.get(`${act}/insights`, params);
+      const list = body && typeof body === 'object' && Array.isArray((body as { data?: unknown[] }).data) ? (body as { data: unknown[] }).data : [];
+      for (const row of list) {
+        const parsed = parseAdsPerformanceRow(row, reportLevel);
+        if (parsed) rows.push(parsed);
+      }
+    };
+    try {
+      await pull('campaign', 'campaign', true);
+      await pull('adset', 'ad_group', false);
+    } catch (err) {
+      return { connected: true, note: (err as Error).message || 'Miles could not read Facebook insights.', rows };
+    }
+    const name = found.account.adAccountName || 'your Facebook ad account';
+    return {
+      connected: true,
+      note: rows.length ? `Read from ${name}.` : `${name} is connected. Meta returned no ad rows for this period.`,
+      rows,
+    };
   }
 
   async getAdSpend(externalUserId: string, range = 'LAST_30_DAYS'): Promise<import('../revenue/attribution.js').CampaignSpend[]> {

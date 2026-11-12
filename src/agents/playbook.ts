@@ -122,6 +122,13 @@ export function playbookCplBand(trade?: string): PlaybookCplBand | null {
   return { key, low: row.cplLow, high: row.cplHigh };
 }
 
+/** Typical job value from the playbook for this trade. Null when the trade is not listed. */
+export function playbookTicket(trade?: string): number | null {
+  const band = playbookCplBand(trade);
+  if (!band) return null;
+  return TRADE[band.key]?.ticket ?? null;
+}
+
 function engineerOffer(raw: string, financing: boolean, season: string): CampaignPlaybook['offer'] {
   const base = (raw || '$500 off a new roof').trim();
   const now = new Date();

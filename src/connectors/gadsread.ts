@@ -330,6 +330,137 @@ export function mergeCampaignMetrics(listed: ListedCampaignSpend[], metricRows: 
   return merged;
 }
 
+export type AdsReportLevel = 'campaign' | 'ad_group' | 'keyword' | 'search_term';
+
+export interface AdsPerformanceRow {
+  level: AdsReportLevel;
+  date?: string;
+  campaign: string;
+  adGroup?: string;
+  keyword?: string;
+  searchTerm?: string;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  spend: number;
+  reach?: number;
+  frequency?: number;
+  status?: string;
+}
+
+const METRICS = ['metrics.impressions', 'metrics.clicks', 'metrics.cost_micros', 'metrics.conversions'];
+
+/** Props for a dated performance read. Campaign rows include segments.date. */
+export function marketingReportProps(args: {
+  appName: string;
+  authId: string;
+  pair: AdsCustomerPair;
+  level: AdsReportLevel;
+  dateRange: string;
+  startDate?: string;
+  endDate?: string;
+}): Record<string, unknown> {
+  const resource = args.level === 'campaign' ? 'campaign'
+    : args.level === 'ad_group' ? 'ad_group'
+      : args.level === 'keyword' ? 'keyword_view'
+        : 'search_term_view';
+  const fields = args.level === 'campaign'
+    ? ['campaign.id', 'campaign.name', 'campaign.status']
+    : args.level === 'ad_group'
+      ? ['campaign.name', 'ad_group.id', 'ad_group.name']
+      : args.level === 'keyword'
+        ? ['campaign.name', 'ad_group.name', 'ad_group_criterion.keyword.text']
+        : ['campaign.name', 'ad_group.name', 'search_term_view.search_term'];
+  const props: Record<string, unknown> = {
+    [args.appName]: { authProvisionId: args.authId },
+    accountId: args.pair.accountId,
+    resource,
+    fields,
+    metrics: METRICS,
+    segments: args.level === 'campaign' ? ['segments.date'] : [],
+    dateRange: args.dateRange,
+  };
+  if (args.pair.customerClientId) props.customerClientId = args.pair.customerClientId;
+  if (args.startDate && args.endDate) {
+    props.startDate = args.startDate;
+    props.endDate = args.endDate;
+  }
+  return props;
+}
+
+function nestedName(value: unknown, key: string): string {
+  if (!value || typeof value !== 'object') return '';
+  const row = value as Record<string, unknown>;
+  const direct = row[key];
+  return typeof direct === 'string' ? direct.trim() : '';
+}
+
+function leadActions(rec: Record<string, unknown>): number | null {
+  if (!Array.isArray(rec.actions)) return null;
+  let total = 0;
+  let found = false;
+  for (const action of rec.actions) {
+    if (!action || typeof action !== 'object') continue;
+    const type = String((action as { action_type?: string }).action_type || '');
+    if (!/lead/i.test(type)) continue;
+    found = true;
+    total += metricNumber((action as { value?: unknown }).value);
+  }
+  return found ? total : null;
+}
+
+/** One Google or Meta performance row. Returns null when the row has no name. */
+export function parseAdsPerformanceRow(row: unknown, level: AdsReportLevel): AdsPerformanceRow | null {
+  if (!row || typeof row !== 'object') return null;
+  const rec = row as Record<string, unknown>;
+  const named = typeof rec.campaign_name === 'string'
+    ? { ...rec, name: rec.name || rec.campaign_name, campaign: rec.campaign || { name: rec.campaign_name } }
+    : rec;
+  const metric = parseCampaignMetric(named);
+  if (!metric) return null;
+  const segments = rec.segments && typeof rec.segments === 'object' ? rec.segments as Record<string, unknown> : {};
+  const adGroup = rec.adGroup && typeof rec.adGroup === 'object' ? rec.adGroup as Record<string, unknown>
+    : rec.ad_group && typeof rec.ad_group === 'object' ? rec.ad_group as Record<string, unknown> : {};
+  const criterion = rec.adGroupCriterion && typeof rec.adGroupCriterion === 'object' ? rec.adGroupCriterion as Record<string, unknown>
+    : rec.ad_group_criterion && typeof rec.ad_group_criterion === 'object' ? rec.ad_group_criterion as Record<string, unknown> : {};
+  const keyword = criterion.keyword && typeof criterion.keyword === 'object' ? criterion.keyword as Record<string, unknown> : {};
+  const termView = rec.searchTermView && typeof rec.searchTermView === 'object' ? rec.searchTermView as Record<string, unknown>
+    : rec.search_term_view && typeof rec.search_term_view === 'object' ? rec.search_term_view as Record<string, unknown> : {};
+  const campaign = rec.campaign && typeof rec.campaign === 'object' ? rec.campaign as Record<string, unknown> : {};
+  const date = typeof segments.date === 'string' ? segments.date
+    : typeof rec.date_start === 'string' ? rec.date_start : undefined;
+  const adGroupName = nestedName(adGroup, 'name') || (typeof rec.adset_name === 'string' ? rec.adset_name : '');
+  const keywordText = typeof keyword.text === 'string' ? keyword.text
+    : typeof rec.keyword === 'string' ? rec.keyword : '';
+  const searchTerm = typeof termView.searchTerm === 'string' ? termView.searchTerm
+    : typeof termView.search_term === 'string' ? termView.search_term
+      : typeof rec.search_term === 'string' ? rec.search_term : '';
+  const name = metric.name || (typeof rec.campaign_name === 'string' ? rec.campaign_name : '');
+  if (level === 'keyword' && !keywordText) return null;
+  if (level === 'search_term' && !searchTerm) return null;
+  if (level === 'ad_group' && !adGroupName) return null;
+  const leads = leadActions(rec);
+  const metrics = rec.metrics && typeof rec.metrics === 'object' ? rec.metrics as Record<string, unknown> : rec;
+  const reach = metrics.reach != null ? metricNumber(metrics.reach) : undefined;
+  const frequency = metrics.frequency != null ? metricNumber(metrics.frequency) : undefined;
+  const status = typeof campaign.status === 'string' ? campaign.status : undefined;
+  return {
+    level,
+    date,
+    campaign: name || adGroupName || keywordText || searchTerm,
+    adGroup: adGroupName || undefined,
+    keyword: keywordText || undefined,
+    searchTerm: searchTerm || undefined,
+    impressions: metric.impressions,
+    clicks: metric.clicks,
+    conversions: leads != null ? leads : metric.conversions,
+    spend: Math.round(metric.spend * 100) / 100,
+    reach,
+    frequency,
+    status,
+  };
+}
+
 /** Last 30 days of one live campaign, split by day the way a segmented report returns it. */
 export const PIPEDREAM_METRICS_WINDOW = {
   query: 'SELECT campaign.id, campaign.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM campaign WHERE segments.date DURING LAST_30_DAYS',
