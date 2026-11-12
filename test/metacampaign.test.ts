@@ -4,11 +4,16 @@ import { buildMetaCampaignSpec, validateMetaCampaignSpec } from '../src/agents/m
 describe('buildMetaCampaignSpec', () => {
   it('builds a complete, paused, playbook-driven Meta campaign', () => {
     const spec = buildMetaCampaignSpec(
-      { offer: '$500 off a new roof', website: 'phillyroofingco.com', financing: true },
+      { offer: '$500 off a new roof', website: 'phillyroofingco.com', financing: true, imageUrl: 'https://cdn.example/roof.jpg' },
       { business: 'Philly Roofing Co', industry: 'Roofing', serviceAreas: 'Philadelphia, 19116, 19115', city: 'Philadelphia' },
     );
-    expect(spec.status).toBe('PAUSED'); // always paused — money-safe
-    expect(spec.objective).toBe('OUTCOME_TRAFFIC');
+    expect(spec.status).toBe('PAUSED');
+    expect(spec.objective).toBe('OUTCOME_LEADS');
+    expect(spec.optimizationGoal).toBe('LEAD_GENERATION');
+    expect(spec.placements).toEqual(['facebook', 'instagram']);
+    expect(spec.name).not.toMatch(/\u2014|\u2013/);
+    expect(spec.ad.primaryText).not.toMatch(/\u2014|\u2013/);
+    expect(spec.ad.headline).not.toMatch(/\u2014|\u2013/);
     expect(spec.dailyBudget).toBeGreaterThan(0);
     expect(spec.geo.zips).toEqual(['19116', '19115']); // parsed from service areas
     expect(spec.website).toBe('https://phillyroofingco.com'); // normalized

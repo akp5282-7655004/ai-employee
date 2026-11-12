@@ -39,7 +39,7 @@ import { expectationReadout, liveDaysFromEvents, projectBudget, readExpectation,
 import { buildSkillsBoard } from './dashboard/skillsboard.js';
 import { resolveAreas } from './agents/geotarget.js';
 import { formatSopLog, runSopGate } from './agents/sopgate.js';
-import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, META_SHARED_ACCOUNT_NOTE, plainStepErrors, resourcesFromSteps, searchLaunchNote } from './agents/googlelaunch.js';
+import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, plainStepErrors, resourcesFromSteps, searchLaunchNote } from './agents/googlelaunch.js';
 import { buildLoopPlan, decideLead, ghlUpsertProps, GHL_UPSERT_ACTION, judgeActivation, normalizeLead, type ObservedAd } from './agents/plumberloop.js';
 import { judgeTikTokCreate, planFollowUp, proposeOptimizations, rollupJobs, stageOpportunity, TIKTOK_CREATE_ACTION, type JobMark } from './agents/contractorloop.js';
 import { PIPEDREAM_APPS, pipedreamConfigPresence, CATALOG_READ_ON } from './connectors/pipedreamCatalog.js';
@@ -77,6 +77,7 @@ import { planGo } from './agents/milesrun.js';
 import { decidePolicy } from './agents/policy.js';
 import { dueSkills, periodKey } from './agents/skillclock.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
+import { facebookDaily, META_NOT_CONNECTED, publicImage } from './agents/metalaunch.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
 import { emptyReviewState, reviewAskText, parseRating, routeRating, promoterText, detractorText, recoveryTask, type ReviewRequestState } from './agents/reviewrequest.js';
 import { emptyAutomationsState, noShowText, onboardingText, type AutomationsState } from './agents/automations.js';
@@ -3892,45 +3893,155 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     });
   });
 
-  // ── Launch on Facebook (Meta) — build a paused draft from business + offer ──
-  // Whether a Meta ad account is connected (three Render env vars).
-  app.get('/api/meta/status', async (req, reply) => {
+  // Facebook and Instagram. Built paused. Created only after confirm, inside the
+  // owner's caps, through the connected Facebook account. Never a shared token.
+  const metaAccountStatus = async (userId: string, campaignId?: string) => {
+    if (connector.metaStatus) return connector.metaStatus(userId, campaignId);
+    if (connector.name === 'mock') return { ready: false, note: 'Preview mode. No Facebook ad account is connected. Nothing was created.' };
+    return { ready: false, note: META_NOT_CONNECTED };
+  };
+
+  app.get<{ Querystring: { campaign?: string } }>('/api/meta/status', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    return { ready: false, note: META_SHARED_ACCOUNT_NOTE };
+    return metaAccountStatus(u.id, typeof req.query?.campaign === 'string' ? req.query.campaign : undefined);
   });
 
-  // Build (but do not launch) the Meta campaign spec from profile + offer, so the
-  // owner reviews every setting before anything is created.
+  // Build (but do not launch) the Facebook plan from the profile, the saved
+  // channel split, and Creative Studio copy and image.
   app.post<{ Body: { offer?: string; website?: string; dailyBudget?: number; ticket?: number; financing?: boolean } }>('/api/meta/build', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const p = (data.profile ?? {}) as Record<string, string>;
+    const miles = milesOf(data);
+    const cap = miles.bundle?.setup.caps.dailyBudget || Number(p.dailyBudget) || 0;
+    const share = miles.bundle?.setup.googleShare;
+    const typed = Number(req.body?.dailyBudget);
+    const explicit = Number.isFinite(typed) && typed > 0 ? Math.round(typed) : undefined;
+    let daily: number | undefined = explicit;
+    let budgetNote = '';
+    if (daily == null && share != null && cap > 0) {
+      daily = facebookDaily(cap, share);
+      budgetNote = share >= 1
+        ? `Your saved split puts the whole $${cap} daily cap on Google. Set a Facebook daily amount. It cannot go above that cap.`
+        : `Your saved split leaves ${Math.round((1 - share) * 100)}% of the $${cap} daily cap for Facebook, so this plan uses $${daily} a day.`;
+    } else if (daily == null) {
+      budgetNote = 'No channel split is saved yet. This plan uses the playbook test budget until you set a daily cap.';
+    } else if (cap > 0 && daily > cap) {
+      budgetNote = `That daily amount is above your $${cap} daily cap. Lower it before you approve.`;
+    }
+    const city = (p.serviceAreas || p.city || '').split(',')[0]?.trim();
+    const offer = (req.body?.offer || p.currentOffers || '').trim();
+    const trade = p.industry || 'home services';
+    const services = (p.services || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const pack = buildMetaAssets({ trade, city, businessName: p.businessName, offer: offer || undefined, services });
+    const studio = generateAdCopy({
+      vertical: p.vertical || p.industry || undefined,
+      category: p.category || p.industry || undefined,
+      offer: offer || undefined,
+      businessName: p.businessName,
+      city,
+      services: p.services,
+    })[0];
+    const strip = (s: string) => s.replace(/[ \t]*\u2014[ \t]*/g, ', ').replace(/\u2013/g, '-').replace(/\u2019/g, "'").trim();
+    const assets = (data.assets ?? {}) as { photos?: { url?: string }[] };
+    const photo = (assets.photos || []).map((row) => row?.url || '').find((url) => publicImage(url)) || '';
     const spec = buildMetaCampaignSpec(
-      { offer: req.body?.offer || p.currentOffers, website: req.body?.website || p.website, dailyBudget: Number(req.body?.dailyBudget) || undefined, ticket: Number(req.body?.ticket) || undefined, financing: !!req.body?.financing },
-      { business: p.businessName, industry: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), serviceAreas: p.serviceAreas, services: p.services },
+      {
+        offer: offer || undefined,
+        website: req.body?.website || p.website,
+        dailyBudget: daily,
+        ticket: Number(req.body?.ticket) || undefined,
+        financing: !!req.body?.financing,
+        imageUrl: photo || undefined,
+        headline: pack.headlines[0] || (studio ? strip(studio.headline) : undefined),
+        primaryText: pack.primaryTexts[0] || (studio ? strip(studio.body) : undefined),
+        description: pack.descriptions[0],
+      },
+      { business: p.businessName, industry: p.industry, city, serviceAreas: p.serviceAreas, services: p.services },
     );
-    return { ok: true, spec, issues: validateMetaCampaignSpec(spec), status: { ready: false, note: META_SHARED_ACCOUNT_NOTE } };
+    const issues = validateMetaCampaignSpec(spec);
+    if (cap > 0 && spec.dailyBudget > cap) issues.push(`Daily budget $${spec.dailyBudget} is above your $${cap} daily cap.`);
+    const monthly = miles.bundle?.setup.caps.monthlyCeiling || 0;
+    if (monthly > 0 && spec.dailyBudget * 30 > monthly) issues.push(`$${spec.dailyBudget} a day is about $${spec.dailyBudget * 30} a month, above your $${monthly} monthly cap.`);
+    const status = await metaAccountStatus(u.id);
+    return {
+      ok: true,
+      spec,
+      issues,
+      budgetNote,
+      plan: {
+        objective: 'Leads',
+        audience: `People ${spec.ageMin} to ${spec.ageMax}${city ? ` near ${city}` : ''}`,
+        geo: spec.geo.zips.length ? spec.geo.zips.join(', ') : (spec.geo.cities.join(', ') || 'United States'),
+        placements: 'Facebook and Instagram feeds',
+        budget: spec.dailyBudget,
+        budgetNote,
+        headline: spec.ad.headline,
+        primaryText: spec.ad.primaryText,
+        imageUrl: spec.imageUrl || '',
+      },
+      status,
+    };
   });
 
-  // Meta writes from META_* would land in one shared ad account for every
-  // tenant. This slice does not create them. The route refuses before any
-  // connector call so a confirm cannot spend or create.
   app.post<{ Body: { spec?: MetaCampaignSpec; confirm?: boolean } }>('/api/meta/launch', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    const spec = req.body?.spec;
-    if (!spec || typeof spec !== 'object') return reply.code(400).send({ error: 'spec is required' });
-    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Explicit confirm required — nothing is created without it.' });
-    return reply.code(409).send({
+    const incoming = req.body?.spec;
+    if (!incoming || typeof incoming !== 'object') return reply.code(400).send({ error: 'spec is required' });
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Confirm the plan first. Nothing was created.' });
+    const spec: MetaCampaignSpec = { ...incoming, status: 'PAUSED', objective: 'OUTCOME_LEADS', optimizationGoal: 'LEAD_GENERATION' };
+    spec.imageUrl = publicImage(spec.imageUrl) || undefined;
+    const problems = validateMetaCampaignSpec(spec);
+    const data = await authStore.getUserData(u.id);
+    const miles = milesOf(data);
+    const caps = miles.bundle?.setup.caps;
+    const profileDaily = Number((data.profile as Record<string, string> | undefined)?.dailyBudget) || 0;
+    const capDaily = caps && caps.dailyBudget > 0 ? caps.dailyBudget : profileDaily;
+    const monthly = caps?.monthlyCeiling || 0;
+    if (caps?.paused) problems.push('Your account is paused. Nothing was created.');
+    if (capDaily > 0 && spec.dailyBudget > capDaily) problems.push(`That daily budget is above your $${capDaily} daily cap. Nothing was created.`);
+    if (monthly > 0 && spec.dailyBudget * 30 > monthly) problems.push(`That daily budget is above your $${monthly} monthly cap. Nothing was created.`);
+    const blocked = (error: string) => reply.code(409).send({
       ok: false,
       live: false,
       status: 'PAUSED',
       activation: 'disabled',
-      error: META_SHARED_ACCOUNT_NOTE,
-      note: META_SHARED_ACCOUNT_NOTE,
-      steps: [{ step: 'Meta ad account', ok: false, error: META_SHARED_ACCOUNT_NOTE }],
+      error,
+      note: error,
+      steps: [{ step: 'Facebook campaign', ok: false, error }],
+    });
+    if (problems.length) return blocked(problems[0]!);
+    if (isDemoAccount(u.email) && connector.name !== 'mock') {
+      return reply.code(403).send({ ok: false, live: false, status: 'PAUSED', activation: 'disabled', error: 'The public demo cannot create a campaign in a live ad account.' });
+    }
+    if (await denyAdSpend(u.id, reply)) return;
+    if (!connector.launchMetaCampaign) return blocked(META_NOT_CONNECTED);
+    if (connector.name === 'mock') return blocked('Preview mode. No Facebook ad account is connected. Nothing was created.');
+    if (connector.metaStatus) {
+      const ready = await connector.metaStatus(u.id);
+      if (!ready.ready) return blocked(ready.note || META_NOT_CONNECTED);
+    }
+    const result = await connector.launchMetaCampaign(u.id, spec);
+    const created = (result.steps ?? []).some((step) => step.ok && !!step.resource);
+    const note = result.note || (created
+      ? 'Created paused. Nothing is spending. Turn it on in Meta Ads Manager when you want it to run.'
+      : META_NOT_CONNECTED);
+    if (!created) return blocked(note);
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'meta-launcher', title: `Approved paused Facebook campaign "${spec.name}" at $${spec.dailyBudget}/day` });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'meta-launcher', title: `${result.ok ? 'Created PAUSED' : 'Create failed'}, "${spec.name}"`, detail: note });
+    await authStore.setUserData(u.id, data);
+    return reply.code(result.ok ? 200 : 409).send({
+      ok: result.ok,
+      live: false,
+      status: 'PAUSED',
+      activation: 'disabled',
+      note,
+      link: result.ok ? result.link : undefined,
+      campaignResource: result.campaignResource,
+      steps: result.steps ?? [],
     });
   });
 

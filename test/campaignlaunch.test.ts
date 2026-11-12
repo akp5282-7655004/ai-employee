@@ -235,7 +235,7 @@ describe('Google Search create is signed-in, paused, and honest', () => {
     await app.close();
   });
 
-  it('does not call Meta even when the client confirms', async () => {
+  it('refuses an incomplete Facebook plan before any write', async () => {
     const h = harness();
     const app = buildServer({ authStore: new MemoryStore(), connector: h.connector });
     const c = await cookie(app, 'meta@example.com');
@@ -243,7 +243,7 @@ describe('Google Search create is signed-in, paused, and honest', () => {
     expect(r.statusCode).toBe(409);
     expect(r.json().ok).toBe(false);
     expect(r.json().live).toBe(false);
-    expect(r.json().error).toMatch(/META_ADS_ACCESS_TOKEN/);
+    expect(r.json().error).toMatch(/Nothing was created|website|image/i);
     expect(h.calls.some((x) => x.op === 'meta')).toBe(false);
     await app.close();
   });
