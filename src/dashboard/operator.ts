@@ -71,6 +71,15 @@ export interface OperatorInput {
   campaigns: OperatorCampaign[];
   recommendations: Recommendation[];
   inbox: { id: string; title: string; reason: string }[];
+  /** Live budget readout. Omitted in unit fixtures; the view then shows the empty state. */
+  expectation?: ExpectationBlock;
+}
+
+export interface ExpectationBlock {
+  state: 'empty' | 'saved' | 'waiting' | 'live' | 'sample';
+  headline: string;
+  detail: string;
+  lines: { label: string; value: string }[];
 }
 
 export interface OperatorDecision {
@@ -150,6 +159,7 @@ export interface OperatorView {
     rows: { name: string; spend: string; leads: string; jobs: string; cost: string; status: string | null }[];
   };
   connections: { name: string; state: 'on' | 'off' | 'hold' | 'later'; detail: string }[];
+  expectation: ExpectationBlock;
 }
 
 function plain(s: string): string {
@@ -616,6 +626,12 @@ export function buildOperatorView(input: OperatorInput): OperatorView {
     channels: channelsOf(input),
     breakdown: breakdownOf(input),
     connections: connectionsOf(input),
+    expectation: input.expectation ?? {
+      state: 'empty',
+      headline: 'No budget projection is saved yet.',
+      detail: 'Set a budget on the launch page before Miles builds anything. Miles will show what that budget should bring.',
+      lines: [],
+    },
   };
 }
 
@@ -640,6 +656,7 @@ export function operatorCopy(view: OperatorView): string[] {
   walk(view.channels);
   walk(view.breakdown);
   walk(view.connections);
+  walk(view.expectation);
   view.modes.forEach((m) => out.push(m.label));
   return out;
 }

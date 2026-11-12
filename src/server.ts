@@ -34,7 +34,9 @@ import { buildCampaignSpec, validateCampaignSpec, campaignSummary, normalizeSite
 import { googleResourceMissing, judgeEnableReadback } from './agents/enablecheck.js';
 import { housekeepingProposals } from './agents/rulebook.js';
 import { acceptApprovedPlan, applyPlanAnswer, areaGuess, buildSearchPlan, type PlanProfile } from './agents/campaignplan.js';
-import { choiceById, goalCheck, LAUNCH_LINE, MONTH_DAYS, type BudgetPeriod, type GoalChoiceId, type LeadPeriod } from './agents/goalcheck.js';
+import { choiceById, goalCheck, LAUNCH_LINE, MONTH_DAYS, type BudgetPeriod, type GoalChannel, type GoalChoiceId, type GoalCheck, type LeadPeriod } from './agents/goalcheck.js';
+import { expectationReadout, liveDaysFromEvents, projectBudget, readExpectation, storeExpectation } from './agents/budgetexpect.js';
+import { buildSkillsBoard } from './dashboard/skillsboard.js';
 import { resolveAreas } from './agents/geotarget.js';
 import { formatSopLog, runSopGate } from './agents/sopgate.js';
 import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, META_SHARED_ACCOUNT_NOTE, plainStepErrors, resourcesFromSteps, searchLaunchNote } from './agents/googlelaunch.js';
@@ -1767,6 +1769,28 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return { ok: true, published: true, note: 'Marked ready in Miles. No WordPress publish was sent.', log: formatSopLog(gate) };
   });
 
+  const tenantChannel = (data: Record<string, unknown>): GoalChannel => {
+    const profile = (data.profile ?? {}) as Record<string, string>;
+    const flag = (profile.adChannel || '').toLowerCase();
+    if (flag === 'lsa' || flag === 'google_lsa' || flag === 'local_services') return 'lsa';
+    const snap = readSnapshot(data);
+    const lsaLive = (snap?.campaigns ?? []).some((row) => /lsa|local_service/i.test(row.platform || '') && row.status === 'ENABLED');
+    return lsaLive ? 'lsa' : 'google_ads';
+  };
+  const expectationLocked = (miles: MilesFile) => !!miles.campaignResource || miles.activation === 'enabled' || miles.activation === 'paused';
+  const monthlyFrom = (amount: number, period: BudgetPeriod) => (period === 'month' ? amount : amount * MONTH_DAYS);
+  const projectionMonthly = (statedMonthly: number, pickedDaily: number) => {
+    const fromCap = pickedDaily * MONTH_DAYS;
+    const roundedDaily = Math.max(1, Math.round(statedMonthly / MONTH_DAYS));
+    if (pickedDaily === roundedDaily && Math.abs(fromCap - statedMonthly) <= MONTH_DAYS / 2) return statedMonthly;
+    if (fromCap + 0.001 < statedMonthly) return fromCap;
+    return statedMonthly;
+  };
+  const attachProjection = (check: GoalCheck, trade: string, city: string, channel: GoalChannel) => {
+    const monthly = monthlyFrom(check.budgetAmount, check.budgetPeriod);
+    const projection = monthly > 0 ? projectBudget({ trade, city, monthlyBudget: monthly, channel }) : null;
+    return { ...check, projection };
+  };
   const goalSaved = (data: Record<string, unknown>, miles: MilesFile) => {
     const profile = (data.profile ?? {}) as Record<string, string>;
     const caps = miles.bundle?.setup.caps;
@@ -1797,8 +1821,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   };
   const goalPayload = (data: Record<string, unknown>, miles: MilesFile) => {
     const saved = goalSaved(data, miles);
+    const channel = tenantChannel(data);
     const check = saved.budgetAmount > 0 && saved.leadGoal > 0
-      ? goalCheck({
+      ? attachProjection(goalCheck({
         trade: saved.trade,
         city: saved.city,
         budgetAmount: saved.budgetAmount,
@@ -1806,9 +1831,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         leadGoal: saved.leadGoal,
         leadPeriod: saved.leadPeriod,
         caps: saved.caps,
-      })
+        channel,
+      }), saved.trade, saved.city, channel)
       : null;
-    return { ...saved, check, confirmation: LAUNCH_LINE };
+    return { ...saved, check, expectation: readExpectation(data), confirmation: LAUNCH_LINE };
   };
   const searchPlanFor = (data: Record<string, unknown>, miles: MilesFile) => {
     const mode = miles.bundle?.setup.mode || miles.pendingMode;
@@ -1875,9 +1901,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    const saved = goalSaved(data, milesOf(data));
+    const miles = milesOf(data);
+    const saved = goalSaved(data, miles);
     const body = req.body ?? {};
-    const check = goalCheck({
+    const channel = tenantChannel(data);
+    const check = attachProjection(goalCheck({
       trade: saved.trade,
       city: saved.city,
       budgetAmount: Number(body.budgetAmount) || 0,
@@ -1885,8 +1913,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       leadGoal: Number(body.leadGoal) || 0,
       leadPeriod: body.leadPeriod === 'week' ? 'week' : 'month',
       caps: saved.caps,
-    });
-    return publicSafe({ ok: true, check, confirmation: LAUNCH_LINE });
+      channel,
+    }), saved.trade, saved.city, channel);
+    if (check.projection) {
+      const stored = storeExpectation(data, check.projection, expectationLocked(miles));
+      if (stored.wrote) {
+        data.miles = miles;
+        await authStore.setUserData(u.id, data);
+      }
+    }
+    return publicSafe({ ok: true, check, expectation: readExpectation(data), confirmation: LAUNCH_LINE });
   });
 
   app.post<{ Body: { budgetAmount?: number; budgetPeriod?: BudgetPeriod; leadGoal?: number; leadPeriod?: LeadPeriod; choice?: GoalChoiceId } }>('/api/miles/goal/confirm', async (req, reply) => {
@@ -1900,6 +1936,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const miles = milesOf(data);
     const saved = goalSaved(data, miles);
     const body = req.body ?? {};
+    const channel = tenantChannel(data);
     const check = goalCheck({
       trade: saved.trade,
       city: saved.city,
@@ -1908,6 +1945,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       leadGoal: Number(body.leadGoal) || 0,
       leadPeriod: body.leadPeriod === 'week' ? 'week' : 'month',
       caps: saved.caps,
+      channel,
     });
     const picked = choiceById(check, choice);
     if (!picked) return reply.code(400).send({ error: 'That choice is not available for this budget and goal. Nothing was saved.' });
@@ -1916,8 +1954,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }
     const profile = { ...((data.profile as Record<string, string>) ?? {}) };
     const days = picked.leadPeriod === 'week' ? 7 : MONTH_DAYS;
+    const statedMonthly = monthlyFrom(check.budgetAmount, check.budgetPeriod);
+    const keptMonthly = projectionMonthly(statedMonthly, picked.daily);
     profile.dailyBudget = String(picked.daily);
-    profile.budgetAmount = String(check.budgetPeriod === 'month' ? picked.daily * MONTH_DAYS : picked.daily);
+    profile.budgetAmount = String(check.budgetPeriod === 'month' ? keptMonthly : picked.daily);
     profile.budgetPeriod = check.budgetPeriod;
     profile.leadGoal = String(picked.leadGoal);
     profile.leadPeriod = picked.leadPeriod;
@@ -1963,6 +2003,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     miles.events = [{ ts: new Date().toISOString(), text: title }, ...miles.events].slice(0, 40);
     data.miles = miles;
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'goal-check', title, detail: `${picked.label} ${check.assumption}` });
+    const confirmedProjection = projectBudget({ trade: saved.trade, city: saved.city, monthlyBudget: keptMonthly, channel });
+    if (confirmedProjection) storeExpectation(data, confirmedProjection, expectationLocked(miles));
     await authStore.setUserData(u.id, data);
     return publicSafe({ ok: true, dailyCap: picked.daily, raisedCap: picked.raisesCap, choice: picked.id, ...plan, goal: goalPayload(data, miles), confirmation: LAUNCH_LINE });
   });
@@ -2567,6 +2609,35 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const st = (d.recState as { applied?: Record<string, string>; dismissed?: Record<string, string> }) ?? {};
     const openRecs = recs.filter((r) => !st.applied?.[r.id] && !st.dismissed?.[r.id]);
     const market = (miles.bundle?.setup.location || p.serviceAreas || '').split(',')[0]?.trim() || '';
+    const sampleConnector = connector.name === 'mock';
+    const googleRows = (snap?.campaigns ?? []).filter((row) => row.platform === 'google_ads');
+    const campaignLive = !sampleConnector && (miles.activation === 'enabled' || googleRows.some((row) => row.status === 'ENABLED'));
+    const crm = crmLiveValues(d, 30);
+    const trackedFromSnap = (() => {
+      const rows = Array.isArray(snap?.leads) ? snap.leads : [];
+      if (!rows.length) return null;
+      const cutoff = Date.now() - 30 * 86_400_000;
+      let n = 0;
+      for (const row of rows) {
+        if (!row || typeof row !== 'object') continue;
+        const ts = Date.parse(String((row as { createdAt?: string }).createdAt || ''));
+        if (!Number.isFinite(ts) || ts >= cutoff) n += 1;
+      }
+      return n;
+    })();
+    const trackedLeads = sampleConnector
+      ? null
+      : (crm['crm.leads_created'] !== undefined ? crm['crm.leads_created'] : trackedFromSnap);
+    const trackedSpend = !sampleConnector && snap && (googleRows.length || snap.adSpend !== undefined)
+      ? Math.round(googleRows.reduce((sum, row) => sum + (row.spend || 0), 0) * 100) / 100
+      : null;
+    const expectation = expectationReadout(readExpectation(d), {
+      live: campaignLive,
+      sample: sampleConnector,
+      spend: trackedSpend,
+      leads: trackedLeads,
+      liveDays: campaignLive ? liveDaysFromEvents(miles.events, miles.activation) : null,
+    });
     const operator = buildOperatorView({
       mode: miles.bundle?.setup.mode || miles.pendingMode || null,
       trade: (p.industry || '').trim(),
@@ -2606,6 +2677,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       campaigns: (snap?.campaigns ?? []).map((c) => ({ platform: c.platform, name: c.campaign, spend: c.spend || 0, leads: c.conversions || 0, status: c.status })),
       recommendations: openRecs,
       inbox: miles.inbox.filter((row) => row.status === 'queued').map((row) => ({ id: row.id, title: row.title, reason: row.reason })),
+      expectation,
     });
     return { operator };
   });
@@ -2748,6 +2820,37 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         speedTotal: stats.total,
       }),
     };
+  });
+
+  app.get('/api/marketing/library', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const miles = milesOf(data);
+    const listed = await accountsOf(u.id);
+    const linked = new Set(listed.accounts.map((account) => account.app));
+    const posts = Array.isArray(data.scheduledPosts) ? data.scheduledPosts as { status?: string }[] : [];
+    const weather = Array.isArray(data.weatherRules) ? data.weatherRules as { enabled?: boolean }[] : [];
+    const autos = (data.automations ?? {}) as { noShow?: { enabled?: boolean }; onboarding?: { enabled?: boolean } };
+    const ghlNow = await ghlLink(u.id);
+    const presence = data.localPresence && typeof data.localPresence === 'object' ? Object.keys(data.localPresence as object).length > 0 : false;
+    return publicSafe(buildSkillsBoard({
+      trade: p.industry,
+      installed: Array.isArray(data.skills) ? data.skills as string[] : [],
+      deployed: normalizeDeployed(data.deployedSkills).map((row) => row.key),
+      speedOn: !!((data.speedToLead as { enabled?: boolean } | undefined)?.enabled),
+      reviewOn: !!((data.reviewRequest as { enabled?: boolean } | undefined)?.enabled),
+      hasSearchPlan: !!miles.bundle,
+      activation: miles.activation,
+      socialConnected: ['facebook_pages', 'facebook', 'instagram', 'linkedin'].some((app) => linked.has(app)),
+      scheduledPosts: posts.filter((row) => row.status === 'scheduled').length,
+      ghlConnected: ghlNow.connected,
+      localPresenceStarted: presence,
+      weatherRulesOn: weather.filter((row) => row.enabled).length,
+      noShowOn: !!autos.noShow?.enabled,
+      onboardingOn: !!autos.onboarding?.enabled,
+    }));
   });
 
   // GoHighLevel Automation Playbook — the 32-recipe workflow library, tailored to

@@ -944,6 +944,7 @@
       <div class="navgroup" data-group="marketing">
         <button class="navhead"><span class="hlabel">Marketing</span><svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="navkids">
+          <a data-page="library" data-pages="library" data-tabs="Skills &amp; Playbooks">Skills &amp; Playbooks</a>
           <a data-page="launch" data-pages="playbook,launch,fblaunch,adstudio" data-tabs="Plan|Google Ads|Facebook|Ad Copy">Launch</a>
           <a data-page="studio" data-pages="studio,editor,calendar" data-tabs="Create|Edit|Schedule">Studio</a>
           <a data-page="adsmgr" data-pages="adsmgr" data-tabs="Ads Manager">Ads Manager</a>
@@ -1132,6 +1133,10 @@
 
     <section class="page" id="page-playbook">
       <div id="playbook-body" style="max-width:900px"></div>
+    </section>
+
+    <section class="page" id="page-library">
+      <div id="library-body" style="max-width:900px"></div>
     </section>
 
     <!-- LAUNCH A CAMPAIGN (build → review every setting → approve & go live) -->
@@ -1799,7 +1804,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',playdetail:'Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',approvals:'Approvals & Autonomy',billing:'Plan & Credits',fblaunch:'Facebook, coming later',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',library:'Skills and Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',playdetail:'Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',approvals:'Approvals & Autonomy',billing:'Plan & Credits',fblaunch:'Facebook, coming later',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 // A destination can own several pages, Launch owns the plan, both channel
 // launchers and the ad-copy writer. The nav lists the destination; its pages
 // become a tab strip, so a four-step job stops looking like four unrelated
@@ -1890,6 +1895,7 @@ function setPage(id){
   $('#page-schedules').classList.toggle('on',id==='schedules');
   $('#page-wireframe').classList.toggle('on',id==='wireframe');
   $('#page-skills').classList.toggle('on',id==='skills');
+  $('#page-library').classList.toggle('on',id==='library');
   $('#page-market').classList.toggle('on',id==='market');
   $('#page-meters').classList.toggle('on',id==='meters');
   $('#page-recs').classList.toggle('on',id==='recs');
@@ -1931,6 +1937,7 @@ function setPage(id){
   if(id==='schedules') openSchedules();
   if(id==='wireframe') openWireframe();
   if(id==='skills') openSkills();
+  if(id==='library') openLibrary();
   if(id==='market') openMarket();
   if(id==='meters') renderMeters();
   if(id==='recs') openRecs();
@@ -3112,6 +3119,7 @@ function renderLaunchConfirm(sheet, plan, btn, note){
   const card=el('div','mcard');
   const goal=plan.goal&&plan.goal.check;
   card.append(el('h2',null,'Ready to launch'));
+  if(goal&&goal.projection&&goal.projection.copy) card.append(el('p',null, goal.projection.copy));
   if(goal&&goal.verdict) card.append(el('p',null,goal.verdict));
   const daily=(plan.spec&&plan.spec.dailyBudget)||(goal&&goal.daily)||0;
   if(daily) card.append(el('p','appsub','Budget: $'+Math.round(daily)+'/day. That becomes the daily cap.'));
@@ -3776,6 +3784,12 @@ function renderOverview(d, miles, op){
     if(track.leadPace){
       card.append(el('p','md-explain', track.leadPace.headline));
       card.append(row('Leads', track.leadPace.actual, track.leadPace.goal, false, track.leadPace.bar));
+    }
+    const expectRead=op&&op.expectation;
+    if(expectRead){
+      card.append(el('p','md-explain', expectRead.headline));
+      if(expectRead.detail) card.append(el('p','md-explain', expectRead.detail));
+      (expectRead.lines||[]).forEach(line=>card.append(row(line.label, line.value, null, false, null)));
     }
     card.append(row(track.bookedLabel, track.bookedValue, track.bookedGoal, track.bookedSample, track.bookedBar));
     card.append(row(track.costLabel, track.costValue, track.costGoal, track.costSample, track.costBar));
@@ -4463,7 +4477,8 @@ function mountGoalCard(host, opts){
   function drawResult(){
     result.innerHTML='';
     const check=state.check;
-    if(check&&check.verdict){
+    if(check&&check.projection&&check.projection.copy) result.append(el('p',null, check.projection.copy));
+    if(check&&check.verdict && Number(state.leadGoal)>0){
       result.append(el('p',null,check.verdict));
       if(check.assumption) result.append(el('p','appsub', check.assumption));
     }
@@ -4512,7 +4527,7 @@ function mountGoalCard(host, opts){
   async function refreshCheck(){
     const amount=Number(state.budgetAmount);
     const goal=Number(state.leadGoal);
-    if(!(amount>0)||!(goal>0)){ state.check=null; drawResult(); return; }
+    if(!(amount>0)){ state.check=null; drawResult(); return; }
     try{
       const res=await fetch('/api/miles/goal',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({budgetAmount:amount,budgetPeriod:state.budgetPeriod,leadGoal:goal,leadPeriod:state.leadPeriod})});
       const body=await res.json();
@@ -9101,6 +9116,45 @@ function handleBillingReturn(){
 // init
 let ACTIVE_PLAYS=[];
 let PLAY_DETAIL=null;
+let LIBRARY_FOCUS='';
+async function openLibrary(){
+  const box=$('#library-body'); if(!box) return;
+  box.innerHTML='<p class="appsub">Loading skills and playbooks...</p>';
+  const res=await fetchJson('/api/marketing/library', null, 8000);
+  const board=res&&res.data;
+  box.innerHTML='';
+  if(!board||!board.cards){
+    box.append(el('p','mdesc','Skills and playbooks did not load. Nothing was invented in their place.'));
+    return;
+  }
+  box.append(el('h2',null, board.title||'Skills and playbooks'));
+  box.append(el('p','mdesc', board.intro||''));
+  [['playbook','Playbooks'],['pack','Packs'],['skill','What Miles runs'],['schedule','Scheduled skills'],['toolkit','Toolkits']].forEach(([id,label])=>{
+    const rows=(board.cards||[]).filter(c=>c.group===id);
+    if(!rows.length) return;
+    box.append(el('div','sect-label', label));
+    rows.forEach(card=>{
+      const wrap=el('div','mcard');
+      wrap.id='lib-'+card.id;
+      wrap.style.marginTop='12px';
+      const head=el('div');
+      head.style.cssText='display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap';
+      head.append(el('h3',null, card.title));
+      const st=el('span','appsub', card.status||'');
+      head.append(st);
+      wrap.append(head);
+      (card.lines||[]).forEach(line=>{
+        wrap.append(el('div','sect-label', line.label));
+        wrap.append(el('p',null, line.text));
+      });
+      box.append(wrap);
+    });
+  });
+  if(LIBRARY_FOCUS){
+    const hit=document.getElementById('lib-'+LIBRARY_FOCUS);
+    if(hit&&hit.scrollIntoView) hit.scrollIntoView({block:'start'});
+  }
+}
 async function loadActivePlaybooks(){
   const host=$('#active-playbooks'); if(!host) return;
   host.innerHTML='';
@@ -9108,13 +9162,13 @@ async function loadActivePlaybooks(){
   ACTIVE_PLAYS=(res.data&&res.data.playbooks)||[];
   if(!ACTIVE_PLAYS.length){
     const b=el('div','pill playbook','No playbooks yet');
-    b.onclick=()=>setPage('skills');
+    b.onclick=()=>{ LIBRARY_FOCUS=''; setPage('library'); };
     host.append(b);
     return;
   }
   ACTIVE_PLAYS.forEach(p=>{
     const b=el('div','pill playbook', p.title);
-    b.onclick=()=>{ PLAY_DETAIL=p.id; setPage('playdetail'); };
+    b.onclick=()=>{ LIBRARY_FOCUS=p.id; setPage('library'); };
     host.append(b);
   });
 }
@@ -9127,7 +9181,7 @@ function openPlayDetail(){
   if(!p){
     card.append(el('h3',null,'Playbook'));
     card.append(el('p','mdesc','No playbook is saved for this account yet. Open Playbooks to see what Miles can run for a home services business.'));
-    const go=el('button','go','Open playbooks'); go.type='button'; go.onclick=()=>setPage('skills'); card.append(go);
+    const go=el('button','go','Open playbooks'); go.type='button'; go.onclick=()=>{ LIBRARY_FOCUS=''; setPage('library'); }; card.append(go);
     box.append(card);
     return;
   }
