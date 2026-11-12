@@ -1,24 +1,20 @@
 /**
  * Goal check for an owner who is not a marketer.
  *
- * Expected leads are budget divided by a published Google Ads cost per lead.
- * A published Google Ads row in src/packs/benchmarks.ts wins when one exists.
- * Those dollars are copied from that file, not averaged. When the file has
- * no row, the only other figure Miles may use is the playbook band in
- * src/agents/playbook.ts (for painting, $40 to $90). That band is labeled
- * as a playbook planning range, not as a published Google Ads study.
- * The midpoint is only the middle of those two ends. No other number is added.
+ * Expected leads are budget divided by a published cost per lead for the
+ * channel being run. Current tenants run Google Ads Search, so that file's
+ * Google Ads rows win. Those dollars are copied from src/packs/benchmarks.ts,
+ * not averaged. When the trade has no row, Miles uses the published blended
+ * and non-brand Google Ads figures and says they are an estimate from
+ * similar home-services trades. The playbook planning band is not used here.
  *
- * The benchmark file has no city rows and no Google Ads CPC or click
- * conversion rate for these trades. A city always uses the trade's national
- * figures, and the copy says so. Book rate is a share of leads that book,
- * not a click conversion rate, so it is not used to invent a cost per lead.
- *
- * A month is 30 days. A week is 7 days.
+ * The benchmark file has no city rows. A city always uses the national
+ * figures, and the copy says so. Book rate is not used to invent a cost per
+ * lead. A month is 30 days. A week is 7 days.
  */
-import { BENCHMARK_HUB, BENCHMARK_META } from '../packs/benchmarks.js';
-import { playbookCplBand } from './playbook.js';
+import { BENCHMARK_HUB, BENCHMARK_META, LSA_BLENDED, LSA_TRADES, LSA_VS_GOOGLE } from '../packs/benchmarks.js';
 import { tradeKey } from './feasibility.js';
+import { homeServicesPack } from '../packs/homeServices.js';
 
 export const MONTH_DAYS = 30;
 export const WEEK_DAYS = 7;
@@ -26,6 +22,13 @@ export const WEEK_DAYS = 7;
 export type BudgetPeriod = 'day' | 'month';
 export type LeadPeriod = 'week' | 'month';
 export type GoalChoiceId = 'keep_budget' | 'raise_budget';
+export type GoalChannel = 'google_ads' | 'lsa';
+
+export interface ChannelEnd {
+  cpl: number;
+  bookRatePct: number;
+  costPerCustomer: number;
+}
 
 /** Non-brand Google Search cost per lead, taken only from the benchmark file. */
 interface BandSpec {
@@ -54,8 +57,9 @@ export interface CplBand {
   typical: number;
   high: number;
   single: boolean;
-  /** published = benchmark file. playbook = the planning band, not a Google Ads study. */
-  source: 'published' | 'playbook';
+  /** published = a row for this trade. similar = the general study, not this trade. */
+  source: 'published' | 'similar';
+  channel: GoalChannel;
 }
 
 export interface GoalCaps {
@@ -144,6 +148,88 @@ function citedInRow(amount: number, value: number | null, note: string): boolean
   return note.includes(`$${amount}`);
 }
 
+function parseMoney(raw: string): number | null {
+  const match = raw.replace(/,/g, '').match(/\$(\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function parsePct(raw: string): number | null {
+  const match = raw.match(/(\d+(?:\.\d+)?)%/);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function channelRow(metric: string) {
+  return LSA_VS_GOOGLE.find((row) => row.metric === metric) ?? null;
+}
+
+/**
+ * Blended and non-brand Google Ads figures from the channel comparison.
+ * Null when a cited dollar is no longer in that row or in the hub row that
+ * carries the same cost per lead (fail closed).
+ */
+export function googleAdsEnds(): { blended: ChannelEnd; nonBrand: ChannelEnd } | null {
+  const cpl = channelRow('Cost Per Lead');
+  const book = channelRow('Book Rate');
+  const cost = channelRow('Cost / Customer');
+  if (!cpl || !book || !cost) return null;
+  const blendedCpl = parseMoney(cpl.google);
+  const nonBrandCpl = parseMoney(cpl.googleNonBrand);
+  const blendedBook = parsePct(book.google);
+  const nonBrandBook = parsePct(book.googleNonBrand);
+  const blendedCost = parseMoney(cost.google);
+  const nonBrandCost = parseMoney(cost.googleNonBrand);
+  if (blendedCpl == null || nonBrandCpl == null || blendedBook == null || nonBrandBook == null || blendedCost == null || nonBrandCost == null) return null;
+  const hub = googleEntry('HVAC & Plumbing');
+  if (!hub || hub.value !== blendedCpl) return null;
+  if (!(hub.note || '').includes(`$${nonBrandCpl}`)) return null;
+  return {
+    blended: { cpl: blendedCpl, bookRatePct: blendedBook, costPerCustomer: blendedCost },
+    nonBrand: { cpl: nonBrandCpl, bookRatePct: nonBrandBook, costPerCustomer: nonBrandCost },
+  };
+}
+
+export function tradeLabelFor(trade: string): string {
+  const key = tradeKey(trade);
+  const cat = homeServicesPack.categories.find((row) => row.id === key);
+  if (cat) return cat.label;
+  const text = trade.trim();
+  if (!text) return 'this trade';
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function lsaHubCpl(tradeName: string): number | null {
+  const channel = BENCHMARK_HUB.find((row) => row.id === 'lsa');
+  const entry = channel?.entries.find((row) => row.trade === tradeName && row.metric === 'CPL' && row.value != null);
+  return entry?.value ?? null;
+}
+
+/** Local Services Ads cost per lead. Fallback is the blended study, labeled similar. */
+export function lsaBandForGoal(trade: string): CplBand | null {
+  const key = tradeKey(trade);
+  const label = tradeLabelFor(trade);
+  const named = LSA_TRADES.find((row) => row.trade.toLowerCase() === label.toLowerCase());
+  if (named) {
+    return { key: key || 'lsa', label: named.trade, low: named.cpl, typical: named.cpl, high: named.cpl, single: true, source: 'published', channel: 'lsa' };
+  }
+  if (key === 'roofing') {
+    const cpl = lsaHubCpl('Roofing');
+    if (cpl == null) return null;
+    return { key, label: 'Roofing', low: cpl, typical: cpl, high: cpl, single: true, source: 'published', channel: 'lsa' };
+  }
+  if (key === 'garage_door') {
+    const cpl = lsaHubCpl('Garage Door');
+    if (cpl == null) return null;
+    return { key, label: 'Garage Door', low: cpl, typical: cpl, high: cpl, single: true, source: 'published', channel: 'lsa' };
+  }
+  const cpl = LSA_BLENDED.cpl;
+  if (!(cpl > 0)) return null;
+  return { key: key || 'similar', label, low: cpl, typical: cpl, high: cpl, single: true, source: 'similar', channel: 'lsa' };
+}
+
 /**
  * National non-brand Google Ads cost per lead for a trade.
  * Returns null when the benchmark file has no row, or when a cited dollar
@@ -165,25 +251,41 @@ export function nationalSearchCpl(trade: string): CplBand | null {
     high: spec.high,
     single: spec.low === spec.high,
     source: 'published',
+    channel: 'google_ads',
   };
 }
 
-/** Published Google Ads row when the benchmark file has one, otherwise the playbook band. */
-export function cplBandForGoal(trade: string): CplBand | null {
+function similarGoogleBand(trade: string): CplBand | null {
+  const ends = googleAdsEnds();
+  if (!ends) return null;
+  const key = tradeKey(trade);
+  return {
+    key: key || 'similar',
+    label: tradeLabelFor(trade),
+    low: ends.blended.cpl,
+    typical: ends.nonBrand.cpl,
+    high: ends.nonBrand.cpl,
+    single: ends.blended.cpl === ends.nonBrand.cpl,
+    source: 'similar',
+    channel: 'google_ads',
+  };
+}
+
+/** Published row for this trade and channel, otherwise the general study for that channel. */
+export function cplBandForGoal(trade: string, channel: GoalChannel = 'google_ads'): CplBand | null {
+  if (channel === 'lsa') return lsaBandForGoal(trade);
   const published = nationalSearchCpl(trade);
   if (published) return published;
-  const band = playbookCplBand(trade);
-  if (!band) return null;
-  const typical = Math.round((band.low + band.high) / 2);
-  const label = band.key.charAt(0).toUpperCase() + band.key.slice(1);
+  return similarGoogleBand(trade);
+}
+
+/** Lead counts for a budget already scaled to the goal's period. Low is fewer leads. */
+export function leadCountsForBudget(periodBudget: number, band: CplBand): { low: number; typical: number; high: number } {
+  if (!(periodBudget > 0)) return { low: 0, typical: 0, high: 0 };
   return {
-    key: band.key,
-    label,
-    low: band.low,
-    typical,
-    high: band.high,
-    single: band.low === band.high,
-    source: 'playbook',
+    low: roundCount(periodBudget / band.high),
+    typical: roundCount(periodBudget / band.typical),
+    high: roundCount(periodBudget / band.low),
   };
 }
 
@@ -196,22 +298,23 @@ function cityLine(tradeLabel: string, city: string, single: boolean): string {
 
 function assumptionFor(band: CplBand | null, tradeLabel: string, cityNote: string): string {
   if (!band) {
-    return plain(`${cityNote} The published study has no Google Ads cost per lead for ${tradeLabel}, and the playbook has no band either. Miles will not guess one. Source: ${BENCHMARK_META.source}.`);
-  }
-  if (band.source === 'playbook') {
-    const middle = band.single
-      ? ''
-      : ` The middle figure, ${money(band.typical)}, is the midpoint of ${money(band.low)} and ${money(band.high)}, not a separate published cost.`;
-    const figures = band.single ? money(band.typical) : `${money(band.low)} to ${money(band.high)}`;
-    return plain(`Cost per lead used here: ${figures}. That is the home services playbook band for ${tradeLabel}, not a published Google Ads study.${middle} ${cityNote} Source: home services playbook.`);
+    return plain(`${cityNote} Miles does not have a cost per lead for ${tradeLabel}, so it will not guess one. Source: ${BENCHMARK_META.source}.`);
   }
   const source = `Source: ${BENCHMARK_META.source}.`;
+  if (band.source === 'similar') {
+    const figures = band.single ? money(band.typical) : `${money(Math.min(band.low, band.high))} to ${money(Math.max(band.low, band.high))}`;
+    const which = band.channel === 'lsa'
+      ? `${tradeLabel} has no Local Services Ads row, so this is an estimate from similar home-services trades.`
+      : `${money(Math.min(band.low, band.high))} includes people who search a company by name, and ${money(Math.max(band.low, band.high))} is for everyone else. ${tradeLabel} has no Google Ads row, so this is an estimate from similar home-services trades.`;
+    return plain(`Cost per lead used here: ${figures}. ${which} ${cityNote} ${source}`);
+  }
+  const channelName = band.channel === 'lsa' ? 'Local Services Ads' : 'non-brand Google Ads';
   const figures = band.single
     ? `${money(band.typical)}`
     : `${money(band.low)}, ${money(band.typical)}, and ${money(band.high)}`;
   const spread = band.single
-    ? `The published study lists one non-brand Google Ads figure for ${tradeLabel}, not a spread.`
-    : `Those are the published non-brand Google Ads figures for ${tradeLabel}. The middle one is the figure the study lists for the trade.`;
+    ? `The published study lists one ${channelName} figure for ${tradeLabel}, not a spread.`
+    : `Those are the published ${channelName} figures for ${tradeLabel}. The middle one is the figure the study lists for the trade.`;
   return plain(`Cost per lead used here: ${figures}. ${spread} ${cityNote} ${source}`);
 }
 
@@ -223,6 +326,7 @@ export interface GoalInput {
   leadGoal?: number;
   leadPeriod?: LeadPeriod;
   caps?: GoalCaps | null;
+  channel?: GoalChannel;
 }
 
 export function goalCheck(input: GoalInput): GoalCheck {
@@ -234,22 +338,24 @@ export function goalCheck(input: GoalInput): GoalCheck {
   const daily = roundDaily(dailyExact);
   const trade = (input.trade || '').trim();
   const city = (input.city || '').trim();
-  const band = trade ? cplBandForGoal(trade) : null;
+  const channel: GoalChannel = input.channel === 'lsa' ? 'lsa' : 'google_ads';
+  const band = trade ? cplBandForGoal(trade, channel) : null;
   const tradeLabel = band?.label || trade || 'this trade';
   const place = city.trim();
+  const channelWord = channel === 'lsa' ? 'Local Services Ads' : 'Google Ads';
   const cityNote = !band
     ? (place
-      ? `No published cost per lead for ${tradeLabel} in ${place}, and the playbook has no band for ${tradeLabel} either.`
-      : `No city is saved, and there is no Google Ads figure or playbook band for ${tradeLabel}.`)
-    : band.source === 'playbook'
+      ? `No published cost per lead for ${tradeLabel} in ${place}.`
+      : `No city is saved, and there is no published cost per lead for ${tradeLabel}.`)
+    : band.source === 'similar'
       ? (place
-        ? `No published Google Ads cost per lead for ${tradeLabel} in ${place}. This uses the home services playbook band, not a city figure.`
-        : `No city is saved. This uses the home services playbook band for ${tradeLabel}, not a city figure.`)
+        ? `No published ${channelWord} cost per lead for ${tradeLabel} in ${place}. This uses a national estimate from similar home-services trades, not a city figure.`
+        : `No city is saved. This uses a national estimate from similar home-services trades for ${tradeLabel}, not a city figure.`)
       : cityLine(tradeLabel, city, band.single);
   const caps = input.caps ?? { daily: null, monthly: null };
   const savedDaily = caps.daily != null && caps.daily > 0 ? caps.daily : null;
   const savedMonthly = caps.monthly != null && caps.monthly > 0 ? caps.monthly : null;
-  const sourceLabel = band?.source === 'playbook' ? 'Home services playbook' : BENCHMARK_META.source;
+  const sourceLabel = BENCHMARK_META.source;
 
   const base = {
     trade: tradeLabel,
@@ -288,14 +394,13 @@ export function goalCheck(input: GoalInput): GoalCheck {
 
   const days = periodDays(leadPeriod);
   const per = periodPhrase(leadPeriod);
-  const counts = (dollars: number) => {
-    const periodBudget = dollars * days;
-    return {
-      low: roundCount(periodBudget / band.high),
-      typical: roundCount(periodBudget / band.typical),
-      high: roundCount(periodBudget / band.low),
-    };
+  const monthlyExact = budgetPeriod === 'month' ? budgetAmount : dailyExact * MONTH_DAYS;
+  const budgetForDaily = (dollars: number) => {
+    if (leadPeriod === 'week') return dollars * WEEK_DAYS;
+    if (budgetPeriod === 'month' && Math.abs(dollars - dailyExact) < 0.000001) return monthlyExact;
+    return dollars * MONTH_DAYS;
   };
+  const counts = (dollars: number) => leadCountsForBudget(budgetForDaily(dollars), band);
   const leads = counts(dailyExact);
   const span = aboutLeads(leads.low, leads.high);
   const yes = leadGoal <= leads.high;

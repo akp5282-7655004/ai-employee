@@ -75,22 +75,23 @@ describe('goal check math', () => {
     expect(nationalSearchCpl('Electrical')).toMatchObject({ low: 128, typical: 163, high: 163 });
   });
 
-  it('uses the painting playbook band when the benchmark file has no Google Ads row', () => {
+  it('uses the published Google Ads range for painting, not the playbook band', () => {
     expect(nationalSearchCpl('painting')).toBeNull();
     expect(googleCpl('Painting')).toBeNull();
     expect(playbookCplBand('Painting')).toEqual({ key: 'painting', low: 40, high: 90 });
-    expect(cplBandForGoal('painting')).toMatchObject({ source: 'playbook', low: 40, typical: 65, high: 90 });
+    expect(cplBandForGoal('painting')).toMatchObject({ source: 'similar', channel: 'google_ads', low: 104, typical: 149, high: 149 });
     const check = goalCheck({ trade: 'Painting', city: 'Philadelphia', budgetAmount: 20, budgetPeriod: 'day', leadGoal: 10, leadPeriod: 'month' });
-    expect(check.likely).toBe('yes');
-    expect(check.leads).toEqual({ low: 7, typical: 9, high: 15 });
-    expect(check.verdict).toBe('Yes, $20/day should bring about 7 to 15 leads a month.');
-    expect(check.sourceLabel).toBe('Home services playbook');
-    expect(check.assumption).toMatch(/\$40 to \$90/);
-    expect(check.assumption).toMatch(/midpoint/);
-    expect(check.assumption).toMatch(/not a published Google Ads study/);
+    expect(check.likely).toBe('not_likely');
+    expect(check.leads).toEqual({ low: 4, typical: 4, high: 6 });
+    expect(check.verdict).toBe('Not likely. For 10 leads a month you would need about $50/day, or at $20/day expect about 4 to 6 leads.');
+    expect(check.sourceLabel).toBe('Industry benchmarks, aggregated from public sources');
+    expect(check.assumption).toMatch(/\$104/);
+    expect(check.assumption).toMatch(/\$149/);
+    expect(check.assumption).toMatch(/similar home-services trades/);
     expect(check.assumption).toMatch(/Philadelphia/);
+    expect(check.assumption).not.toMatch(/\$40 to \$90/);
     expect(check.assumption).not.toMatch(/searchlight/i);
-    expect(check.assumption).not.toMatch(/\$42/);
+    expect(check.verdict).not.toContain('\u2014');
   });
 });
 

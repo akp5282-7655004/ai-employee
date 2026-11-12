@@ -72,10 +72,45 @@ export interface PlaybookCplBand {
   high: number;
 }
 
+export interface PlaybookTrade {
+  key: string;
+  label: string;
+  season: string;
+  cplLow: number;
+  cplHigh: number;
+  /** roof = two prospecting groups. core = one prospecting group. Both add retargeting. */
+  structure: 'roof' | 'core';
+}
+
+const TRADE_LABEL: Record<keyof typeof TRADE, string> = {
+  roofing: 'Roofing',
+  hvac: 'HVAC',
+  plumbing: 'Plumbing',
+  painting: 'Painting',
+  solar: 'Solar',
+  electrical: 'Electrical',
+  landscaping: 'Landscaping',
+};
+
+/** Every trade the campaign playbook actually stores. No fallback to roofing. */
+export function playbookTrades(): PlaybookTrade[] {
+  return (Object.keys(TRADE) as (keyof typeof TRADE)[]).map((key) => {
+    const row = TRADE[key]!;
+    return {
+      key,
+      label: TRADE_LABEL[key] ?? key,
+      season: row.season,
+      cplLow: row.cplLow,
+      cplHigh: row.cplHigh,
+      structure: row.segments === 'roof' ? 'roof' : 'core',
+    };
+  });
+}
+
 /**
  * The playbook's cost-per-lead band when the trade actually names one.
- * Does not fall back to roofing. These two numbers are the only painting
- * figures in the product. They are a planning band, not a published Google Ads study.
+ * Does not fall back to roofing. This is a planning range for the Meta
+ * playbook, not a published Google Ads study. The budget check does not use it.
  */
 export function playbookCplBand(trade?: string): PlaybookCplBand | null {
   const t = (trade || '').toLowerCase();
