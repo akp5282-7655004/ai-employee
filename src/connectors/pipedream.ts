@@ -2,7 +2,7 @@ import type { Config } from '../config.js';
 import { META_SHARED_ACCOUNT_NOTE as _META_NOTE } from '../agents/googlelaunch.js';
 import { discoverMetaAccount, launchPausedMeta, META_GRAPH_BASE, META_NOT_CONNECTED, META_PAGE_ONLY, readMetaCampaign, type MetaGraph } from '../agents/metalaunch.js';
 import { collectReadIds, googleResourceMissing, listCampaignRows, parseGoogleStatuses, retryReadback } from '../agents/enablecheck.js';
-import { actionPayload, customerPair, marketingReportProps, mergeCampaignMetrics, metricRowHasNumbers, parseAdsPerformanceRow, plainGoogleError, statusReportProps, type AdsPerformanceRow, type AdsReportLevel } from './gadsread.js';
+import { actionPayload, customerPair, googleReadOutcome, httpStatusOf, marketingReportProps, mergeCampaignMetrics, metricRowHasNumbers, parseAdsPerformanceRow, plainGoogleError, publicGoogleError, statusReportProps, type AdsPerformanceRow, type AdsReportLevel } from './gadsread.js';
 import { areaTerms, chooseGeoHits, geoReportProps, locationCriterion, locationReadbackOk, parseGeoTargets, parseLocationCriteria, resolveAreas, type GeoTarget } from '../agents/geotarget.js';
 import { plainStepErrors } from '../agents/googlelaunch.js';
 import { classifyGadsAccounts, extractCustomerNodes, type GadsAccess } from './gadsAccess.js';
@@ -545,8 +545,11 @@ export class PipedreamConnector implements Connector {
     });
     const savedClient = (this.gadsPreferred.get(externalUserId) || '').replace(/[^\d]/g, '');
     const savedLogin = (this.gadsLogin.get(externalUserId) || '').replace(/[^\d]/g, '');
-    if ((access.kind === 'manager_only' || access.kind === 'none') && /^\d{10}$/.test(savedClient)) {
-      const login = /^\d{10}$/.test(savedLogin) ? savedLogin : (access.loginCustomerId || savedClient);
+    const loginForSaved = /^\d{10}$/.test(savedLogin) ? savedLogin : (access.loginCustomerId || '');
+    const savedIsClient = /^\d{10}$/.test(savedClient) && savedClient !== loginForSaved;
+    const selectedIsLogin = access.kind === 'ready' && !!access.selectedId && access.selectedId === (access.loginCustomerId || access.selectedId);
+    if ((access.kind === 'manager_only' || access.kind === 'none' || selectedIsLogin) && savedIsClient) {
+      const login = loginForSaved || savedClient;
       const name = this.gadsNames.get(savedClient);
       const label = name ? `${name} (${fmtId(savedClient)})` : fmtId(savedClient);
       access = {
@@ -643,6 +646,13 @@ export class PipedreamConnector implements Connector {
   /** Last tool-call failure for this external user only. */
   googleAdsBlock(externalUserId: string): PipedreamFailure | null {
     return this.gadsBlock.get(externalUserId) ?? null;
+  }
+
+  /** Last Google campaign read that failed. Empty when the list returned rows. */
+  private gadsReadError = new Map<string, string>();
+
+  googleAdsReadError(externalUserId: string): string | null {
+    return this.gadsReadError.get(externalUserId) ?? null;
   }
 
   /**
@@ -785,6 +795,7 @@ export class PipedreamConnector implements Connector {
     // is the source of rows, including paused and zero-impression campaigns.
     // Metrics are summed onto that list for LAST_30_DAYS (or the requested range).
     let metricRows: unknown[] = [];
+    let metricError = '';
     if (key) {
       const shapes = cachedShape ? [cachedShape, ...GADS_SHAPES.filter((s) => s.tag !== cachedShape.tag)] : GADS_SHAPES;
       let matched = false;
@@ -794,19 +805,24 @@ export class PipedreamConnector implements Connector {
           const configuredProps: Record<string, unknown> = { [appName]: { authProvisionId: account.id }, dateRange: range, fields: shape.fields, metrics: shape.metrics, segments: ['segments.date'] };
           if (t.login) configuredProps.accountId = t.login;
           if (t.client) configuredProps.customerClientId = t.client;
-          let raw: unknown;
+          let outcome: ReturnType<typeof googleReadOutcome>;
           try {
             const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
-            raw = actionPayload(res);
+            outcome = googleReadOutcome(res);
           } catch (err) {
             const failure = explainPipedreamError(err);
             if (failure.kind === 'connect_production_unavailable') {
               this.gadsBlock.set(externalUserId, failure);
-              return listed;
+              return listed.rows;
             }
+            metricError = metricError || publicGoogleError(failure.message);
             continue;
           }
-          const rows = asRows(raw);
+          if (outcome.error) {
+            metricError = metricError || outcome.error;
+            continue;
+          }
+          const rows = outcome.rows;
           if (!rows.length || !rows.some((row) => metricRowHasNumbers(row))) continue;
           matched = true;
           metricRows = rows;
@@ -816,7 +832,7 @@ export class PipedreamConnector implements Connector {
         }
       }
     }
-    return mergeCampaignMetrics(listed, metricRows).map((row) => ({
+    const merged = mergeCampaignMetrics(listed.rows, metricRows).map((row) => ({
       platform: row.platform || 'google_ads',
       campaign: row.campaign,
       utm: row.utm || '',
@@ -827,49 +843,80 @@ export class PipedreamConnector implements Connector {
       status: row.status,
       id: row.id,
     }));
+    if (merged.length) this.gadsReadError.delete(externalUserId);
+    else if (listed.error || metricError) this.gadsReadError.set(externalUserId, publicGoogleError(`Google Ads could not be read. ${listed.error || metricError}`));
+    else this.gadsReadError.delete(externalUserId);
+    return merged;
   }
 
   /** Every non-removed campaign on the client account, including paused and zero-spend. */
-  private async listGoogleCampaigns(externalUserId: string, authId: string, targets: { login: string; client?: string }[]): Promise<import('../revenue/attribution.js').CampaignSpend[]> {
-    const out: import('../revenue/attribution.js').CampaignSpend[] = [];
+  private async listGoogleCampaigns(externalUserId: string, authId: string, targets: { login: string; client?: string }[]): Promise<{
+    rows: import('../revenue/attribution.js').CampaignSpend[];
+    error: string;
+    httpStatus: number | null;
+    customerId: string | null;
+    loginCustomerId: string | null;
+  }> {
+    const empty = { rows: [] as import('../revenue/attribution.js').CampaignSpend[], error: '', httpStatus: null as number | null, customerId: null as string | null, loginCustomerId: null as string | null };
     try {
       const pd = await this.backend();
       const rows = await this.listComponents('google_ads');
       const listComp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-list-campaigns');
       const report = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-campaign-report');
       const comp = listComp ?? report;
-      if (!comp) return out;
+      if (!comp) return { ...empty, error: 'google_ads-list-campaigns is not available on this connection.' };
       const key = comp.key ?? comp.id ?? comp.componentKey;
       const props = await this.componentProps(comp, key);
       const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
       const seen = new Set<string>();
+      const out: import('../revenue/attribution.js').CampaignSpend[] = [];
+      let error = '';
+      let httpStatus: number | null = null;
+      let customerId: string | null = null;
+      let loginCustomerId: string | null = null;
       for (const t of targets) {
         const pair = customerPair({ login: t.login, client: t.client });
+        customerId = pair.customerClientId || pair.accountId || null;
+        loginCustomerId = pair.accountId || null;
         const configuredProps: Record<string, unknown> = listComp
           ? { [appName]: { authProvisionId: authId }, accountId: pair.accountId, ...(pair.customerClientId ? { customerClientId: pair.customerClientId } : {}) }
           : statusReportProps({ appName, authId, pair, resource: 'campaign', ids: [] });
-        const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
-        for (const row of listCampaignRows(actionPayload(res))) {
-          if (seen.has(row.id) || row.status === 'UNKNOWN' && !row.name) continue;
-          seen.add(row.id);
-          out.push({
-            platform: 'google_ads',
-            campaign: row.name || `Campaign ${row.id}`,
-            utm: '',
-            spend: 0,
-            clicks: 0,
-            conversions: 0,
-            impressions: 0,
-            status: row.status,
-            id: row.id,
-          });
+        try {
+          const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
+          const outcome = googleReadOutcome(res);
+          httpStatus = outcome.httpStatus;
+          if (outcome.error) {
+            error = outcome.error;
+            continue;
+          }
+          for (const row of listCampaignRows(outcome.rows)) {
+            if (seen.has(row.id) || row.status === 'UNKNOWN' && !row.name) continue;
+            seen.add(row.id);
+            out.push({
+              platform: 'google_ads',
+              campaign: row.name || `Campaign ${row.id}`,
+              utm: '',
+              spend: 0,
+              clicks: 0,
+              conversions: 0,
+              impressions: 0,
+              status: row.status,
+              id: row.id,
+            });
+          }
+          if (out.length) {
+            error = '';
+            break;
+          }
+        } catch (err) {
+          httpStatus = httpStatusOf(err);
+          error = publicGoogleError((err as Error).message || 'Google Ads rejected the campaign list.');
         }
-        if (out.length) break;
       }
-    } catch {
-      /* the metrics report is still attempted */
+      return { rows: out, error: out.length ? '' : error, httpStatus, customerId, loginCustomerId };
+    } catch (err) {
+      return { ...empty, error: publicGoogleError((err as Error).message || 'Google Ads could not be read.'), httpStatus: httpStatusOf(err) };
     }
-    return out;
   }
 
   async readMarketingAds(externalUserId: string, query: { dateRange: string; startDate: string; endDate: string; metaPreset: string }): Promise<{
@@ -911,27 +958,36 @@ export class PipedreamConnector implements Connector {
       const pair = customerPair({ login: target.login, client: target.client });
       const levels: AdsReportLevel[] = ['campaign', 'ad_group', 'keyword', 'search_term'];
       const rows: AdsPerformanceRow[] = [];
+      const errors: string[] = [];
       for (const level of levels) {
         const configuredProps = marketingReportProps({
           appName, authId: account.id, pair, level, dateRange: query.dateRange, startDate: query.startDate, endDate: query.endDate,
         });
         try {
           const res = await pd.actions.run({ externalUserId, id: key, configuredProps });
-          const payload = actionPayload(res);
-          const list = Array.isArray(payload) ? payload : (payload && typeof payload === 'object' && Array.isArray((payload as { results?: unknown[] }).results) ? (payload as { results: unknown[] }).results : []);
-          for (const row of list) {
+          const outcome = googleReadOutcome(res);
+          if (outcome.error) {
+            errors.push(outcome.error);
+            continue;
+          }
+          for (const row of outcome.rows) {
             const parsed = parseAdsPerformanceRow(row, level);
             if (parsed) rows.push(parsed);
           }
-        } catch {
-          /* this breakdown stays empty */
+        } catch (err) {
+          errors.push(publicGoogleError((err as Error).message || 'Google Ads rejected the report.'));
         }
       }
       const found = levels.filter((level) => rows.some((row) => row.level === level));
+      const failure = errors.find(Boolean) || '';
       const note = found.length
         ? `Read from Google Ads for ${query.startDate} to ${query.endDate}.`
-        : `Google Ads is connected. No performance rows came back for ${query.startDate} to ${query.endDate}.`;
-      return { connected: true, note, rows };
+        : failure
+          ? `Google Ads could not be read. ${failure}`
+          : `Google Ads is connected. No performance rows came back for ${query.startDate} to ${query.endDate}.`;
+      if (!rows.length && failure) this.gadsReadError.set(externalUserId, publicGoogleError(note));
+      else if (rows.length) this.gadsReadError.delete(externalUserId);
+      return { connected: true, note: publicGoogleError(note), rows };
     } catch {
       return empty;
     }
@@ -979,8 +1035,9 @@ export class PipedreamConnector implements Connector {
     const out: import('../revenue/attribution.js').CampaignSpend[] = [];
     try {
       out.push(...(await this.googleAdsSpend(externalUserId, range)));
-    } catch {
-      /* Google Ads not connected or shape differs */
+    } catch (err) {
+      const text = publicGoogleError((err as Error).message || 'Google Ads could not be read.');
+      if (text) this.gadsReadError.set(externalUserId, text.startsWith('Google Ads could not be read') ? text : `Google Ads could not be read. ${text}`);
     }
     try {
       const f = await this.runRead('facebook', 'insights campaign spend', externalUserId, {});
@@ -1615,20 +1672,60 @@ export class PipedreamConnector implements Connector {
       const lprops = await this.componentProps(listComp, lkey);
       const lapp = lprops.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
       const res = await pd.actions.run({ externalUserId, id: lkey, configuredProps: { [lapp]: { authProvisionId: account.id }, ...acct } });
-      const payload = actionPayload(res) ?? {};
+      const outcome = googleReadOutcome(res);
+      const payload = outcome.rows.length ? outcome.rows : (actionPayload(res) ?? {});
       const campaignId = (campaignResource?.match(/campaigns\/(\d+)/) || [])[1];
       const readback = parseGoogleStatuses(payload, { campaignId, adGroupIds: [], adIds: [] });
       const campaigns = listCampaignRows(payload);
+      const note = outcome.error
+        ? publicGoogleError(`Google Ads could not be read. ${outcome.error}`)
+        : campaigns.length ? 'Read from Google Ads just now.' : readback.note;
       return {
         live: true,
         called: true,
         sample: false,
-        note: campaigns.length ? 'Read from Google Ads just now.' : readback.note,
+        note,
         readback,
         campaigns,
       };
-    } catch {
-      return { live: false, called: false, sample: false, note: 'Miles could not read campaign status from Google.', campaigns: [] };
+    } catch (err) {
+      return { live: false, called: false, sample: false, note: publicGoogleError(`Google Ads could not be read. ${(err as Error).message || 'Miles could not read campaign status from Google.'}`), campaigns: [] };
+    }
+  }
+
+  /**
+   * One campaign-list read for the signed-in tenant. The result is safe to
+   * show an admin: customer ids, HTTP status, row count, and error text.
+   * Tokens and auth provision ids are not included.
+   */
+  async diagnoseGoogleCampaigns(externalUserId: string): Promise<{ customerId: string | null; loginCustomerId: string | null; httpStatus: number | null; rowCount: number; error: string }> {
+    const blank = { customerId: null, loginCustomerId: null, httpStatus: null, rowCount: 0, error: '' };
+    try {
+      const accts = await this.listAccounts(externalUserId, 'google_ads');
+      const account = accts.find((row) => row.healthy) ?? accts[0];
+      if (!account) return { ...blank, error: 'Google Ads is not connected for this account.' };
+      const rows = await this.listComponents('google_ads');
+      let targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
+      targets = (targets ?? []).filter((target) => /^\d{10}$/.test(target.client || target.login));
+      if (!targets.length) {
+        const remembered = this.rememberedTarget(externalUserId);
+        if (remembered) targets = [remembered];
+      }
+      const preferred = this.preferTargets(externalUserId, targets).slice(0, 8);
+      if (!preferred.length) {
+        const access = this.gadsAccess.get(externalUserId);
+        return { ...blank, error: access?.reason || 'The ad customer id is not resolved, so the campaign list was not run.' };
+      }
+      const listed = await this.listGoogleCampaigns(externalUserId, account.id, preferred);
+      return {
+        customerId: listed.customerId,
+        loginCustomerId: listed.loginCustomerId,
+        httpStatus: listed.httpStatus,
+        rowCount: listed.rows.length,
+        error: listed.error ? publicGoogleError(listed.error) : '',
+      };
+    } catch (err) {
+      return { ...blank, httpStatus: httpStatusOf(err), error: publicGoogleError((err as Error).message || 'Google Ads could not be read.') };
     }
   }
 

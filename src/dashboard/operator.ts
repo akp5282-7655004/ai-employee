@@ -58,7 +58,7 @@ export interface OperatorInput {
   targetCpa: number | null;
   /** Preview connector. Campaign rows from it are examples, not a live account. */
   sampleConnector: boolean;
-  google: { oauth: boolean; ready: boolean; note: string };
+  google: { oauth: boolean; ready: boolean; note: string; readError?: string };
   ghlConnected: boolean;
   ghlDetail: string;
   socialConnected: boolean;
@@ -484,6 +484,17 @@ function channelsOf(input: OperatorInput): OperatorChannel[] {
       foot: 'Signed in',
       verdict: plain(input.google.note || 'Google is signed in. The ad customer id is not resolved, so Miles cannot read spend or create a campaign yet.'),
     };
+  } else if (!rows.length && input.google.readError) {
+    google = {
+      id: 'google',
+      name: 'Google Search',
+      state: 'hold',
+      grade: null,
+      cost: null,
+      jobs: null,
+      foot: 'Read failed',
+      verdict: plain(input.google.readError),
+    };
   } else if (!rows.length) {
     google = {
       id: 'google',
@@ -559,7 +570,9 @@ function breakdownOf(input: OperatorInput): OperatorView['breakdown'] {
       ? 'No campaign rows. Connect Google Ads to see spend, leads, and status.'
       : !input.google.ready
         ? plain(input.google.note || 'Google is signed in. The ad customer id is not resolved, so there are no campaign rows.')
-        : 'No campaigns on this account.';
+        : input.google.readError
+          ? plain(input.google.readError)
+          : 'No campaigns on this account.';
     return {
       sample: false,
       empty,

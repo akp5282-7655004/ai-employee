@@ -1107,6 +1107,25 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return { isAdmin: true, adminId: await adminUserId(), users: await authStore.listUsers(), settings: await getAdminSettings(), invites };
   });
 
+  // Owner-only. One campaign list for the signed-in tenant, with no tokens.
+  app.get('/api/admin/google-ads', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (!(await isAdmin(u))) return reply.code(403).send({ error: 'owner only' });
+    await hydrateGoogle(u.id);
+    if (!connector.diagnoseGoogleCampaigns) {
+      return { customerId: null, loginCustomerId: null, httpStatus: null, rowCount: 0, error: 'This connector cannot read Google Ads.' };
+    }
+    const result = await connector.diagnoseGoogleCampaigns(u.id);
+    return {
+      customerId: result.customerId,
+      loginCustomerId: result.loginCustomerId,
+      httpStatus: result.httpStatus,
+      rowCount: result.rowCount,
+      error: result.error,
+    };
+  });
+
   // Owner-only: mint a shareable sign-up invite link. Optionally lock it to one
   // email, cap its uses, or set an expiry (days). Works whether or not sign-ups
   // are invite-only — a valid link always admits the holder.
@@ -2426,6 +2445,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!access || access.kind !== 'ready' || !access.selectedId) return;
     const data = await authStore.getUserData(userId);
     const login = access.loginCustomerId || access.selectedId;
+    const saved = savedGoogleIds(data);
+    if (saved.id && saved.id !== login && access.selectedId === login) return;
     if (data.googleAdsCustomerId === access.selectedId && data.googleAdsLoginCustomerId === login) return;
     data.googleAdsCustomerId = access.selectedId;
     data.googleAdsLoginCustomerId = login;
@@ -2662,7 +2683,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       })(),
       targetCpa: Number(p.targetCpa) || null,
       sampleConnector: connector.name === 'mock',
-      google: { oauth: google.oauth, ready: google.ready, note: google.note },
+      google: { oauth: google.oauth, ready: google.ready, note: google.note, readError: connector.googleAdsReadError?.(u.id) || '' },
       ghlConnected: ghlNow.connected,
       ghlDetail: ghlNow.connected
         ? 'GoHighLevel is connected. Speed to lead sends when it is on and the lead has a phone.'
@@ -4053,6 +4074,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const profile = (data.profile ?? {}) as Record<string, string>;
+    await hydrateGoogle(u.id);
     const range = reportRangeId(req.query?.range);
     const current = reportWindow(range);
     const blank = { connected: false, note: 'This connector cannot read ad performance. Nothing here is a sample.', rows: [] as import('./connectors/gadsread.js').AdsPerformanceRow[] };

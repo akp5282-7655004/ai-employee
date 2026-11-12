@@ -345,7 +345,8 @@ function channel(title: string, read: ChannelRead, sample: boolean, kind: 'googl
   if (!read.rows.some((row) => row.level === 'ad_group')) emptyBits.push(kind === 'google' ? 'no ad group rows' : 'no ad set rows');
   if (kind === 'google' && !read.rows.some((row) => row.level === 'keyword')) emptyBits.push('no keyword rows');
   if (kind === 'google' && !read.rows.some((row) => row.level === 'search_term')) emptyBits.push('no search term rows');
-  const note = emptyBits.length
+  const failed = /could not be read/i.test(read.note);
+  const note = !failed && emptyBits.length
     ? `${read.note} Missing for this period: ${emptyBits.join(', ')}. Those tables stay empty instead of using a sample.`
     : read.note;
   return {

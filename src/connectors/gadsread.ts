@@ -95,12 +95,122 @@ export function actionPayload(res: unknown): unknown {
   return res;
 }
 
+export interface GoogleReadOutcome {
+  rows: unknown[];
+  error: string;
+  httpStatus: number | null;
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+/** A Google Ads search or searchStream batch. Campaign rows are not batches. */
+function isSearchBatch(value: unknown): value is { results: unknown[] } {
+  const row = asObject(value);
+  if (!row || !Array.isArray(row.results)) return false;
+  if (row.campaign || row.metrics || row.customerClient || row.customer_client || row.adGroup || row.ad_group) return false;
+  return true;
+}
+
+/**
+ * Rows from a Google Ads search body. The live API returns either
+ * `{ results: [row, ...] }` or a searchStream array of batches
+ * `[{ results, fieldMask, requestId }, ...]`. A batch is not a campaign.
+ */
+export function flattenGoogleRows(payload: unknown): unknown[] {
+  if (payload == null) return [];
+  if (typeof payload === 'string') {
+    const text = payload.trim();
+    if (text.startsWith('{') || text.startsWith('[')) {
+      try { return flattenGoogleRows(JSON.parse(text)); } catch { return []; }
+    }
+    return [];
+  }
+  if (Array.isArray(payload)) {
+    const out: unknown[] = [];
+    for (const item of payload) {
+      if (isSearchBatch(item)) out.push(...flattenGoogleRows(item.results));
+      else out.push(item);
+    }
+    return out;
+  }
+  const row = asObject(payload);
+  if (!row) return [];
+  if (Array.isArray(row.results)) return flattenGoogleRows(row.results);
+  if (row.campaign || row.metrics || row.customerClient || row.customer_client || row.adGroup || row.ad_group) return [payload];
+  return [];
+}
+
+function nestedGoogleMessage(value: unknown): string {
+  const text = typeof value === 'string' ? value : JSON.stringify(value ?? '');
+  const messages = [...text.matchAll(/"message"\s*:\s*"([^"]+)"/g)].map((match) => match[1] || '');
+  return messages.sort((a, b) => b.length - a.length)[0] || '';
+}
+
+/** Google error body, including a 200 response whose JSON is `{ error: { code, message } }`. */
+export function googleErrorOf(payload: unknown): { error: string; httpStatus: number | null } | null {
+  const row = asObject(payload);
+  const err = row ? asObject(row.error) : null;
+  if (!err) return null;
+  const code = Number(err.code);
+  const httpStatus = Number.isFinite(code) && code >= 100 && code < 600 ? code : null;
+  const nested = nestedGoogleMessage(err.details ?? err);
+  const message = nested || (typeof err.message === 'string' ? err.message : '');
+  return { error: plainGoogleError(message) || 'Google Ads returned an error.', httpStatus };
+}
+
+function unwrapRun(payload: unknown): unknown {
+  const body = actionPayload(payload);
+  const empty = body && typeof body === 'object' && !Array.isArray(body) && Object.keys(body as object).length === 0;
+  if (body != null && !empty) return body;
+  const run = asObject(payload);
+  const exp = run ? asObject(run.exports) : null;
+  if (!exp) return body;
+  const rest = { ...exp };
+  delete rest.$summary;
+  const values = Object.values(rest);
+  if (values.length === 1) return values[0];
+  return values.length ? rest : body;
+}
+
+/**
+ * One Google Ads action result. SearchStream batches are flattened to rows.
+ * An error object stays an error, so an empty list is not invented from it.
+ */
+export function googleReadOutcome(payload: unknown): GoogleReadOutcome {
+  const body = unwrapRun(payload);
+  const failure = googleErrorOf(body);
+  if (failure) return { rows: [], error: failure.error, httpStatus: failure.httpStatus };
+  const rows = flattenGoogleRows(body);
+  return { rows, error: '', httpStatus: body == null ? null : 200 };
+}
+
+/** HTTP status from a thrown Pipedream or Google error. */
+export function httpStatusOf(err: unknown): number | null {
+  const code = Number((err as { statusCode?: number })?.statusCode);
+  if (Number.isFinite(code) && code >= 100 && code < 600) return code;
+  const text = err instanceof Error ? err.message : String(err ?? '');
+  const match = text.match(/\b([45]\d{2})\b/);
+  return match ? Number(match[1]) : null;
+}
+
 export function plainGoogleError(raw: string | undefined): string {
   const text = (raw || '').replace(/\s+/g, ' ').trim();
   if (!text) return '';
   const quoted = text.match(/"message"\s*:\s*"([^"]+)"/i);
   const picked = (quoted?.[1] || text).replace(/\\n/g, ' ').replace(/_/g, ' ');
   return picked.length > 280 ? `${picked.slice(0, 277)}...` : picked;
+}
+
+/** Owner-facing Google error. Tokens and auth provision ids are removed. */
+export function publicGoogleError(raw: string | undefined): string {
+  const stripped = (raw || '')
+    .replace(/bearer\s+\S+/gi, '[redacted]')
+    .replace(/ya29\.[A-Za-z0-9._\-]+/g, '[redacted]')
+    .replace(/\bapn_[A-Za-z0-9]+\b/g, '[redacted]')
+    .replace(/client_secret["']?\s*[:=]\s*["'][^"']+/gi, '[redacted]');
+  return plainGoogleError(stripped);
 }
 
 /**

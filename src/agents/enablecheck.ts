@@ -183,7 +183,8 @@ export function listCampaignRows(payload: unknown): ListedCampaign[] {
     }
     const row = node as Record<string, unknown>;
     const campaign = row.campaign && typeof row.campaign === 'object' ? row.campaign as Record<string, unknown> : undefined;
-    const rawId = String(row.resourceName ?? row.id ?? campaign?.resourceName ?? campaign?.id ?? '');
+    const resource = String(row.resourceName ?? row.resource_name ?? campaign?.resourceName ?? campaign?.resource_name ?? '');
+    const rawId = String(resource || row.id || campaign?.id || '');
     const bare = rawId.split('/').pop() || '';
     const rawStatus = String(row.status ?? campaign?.status ?? '');
     const removed = /^removed$/i.test(rawStatus) || rawStatus === '4';
