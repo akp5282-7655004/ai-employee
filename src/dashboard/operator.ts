@@ -91,6 +91,8 @@ export interface OperatorDecision {
   impact: string | null;
   kind: 'recommendation' | 'inbox';
   canSkip: boolean;
+  /** False when the card is a note, not a move the owner can approve. */
+  canApprove: boolean;
   rec?: Recommendation;
 }
 
@@ -124,7 +126,7 @@ export interface OperatorView {
     costSample: boolean;
     costBar: number | null;
     explain: string;
-    action: { title: string; body: string; decisionId: string } | null;
+    action: { title: string; body: string; decisionId: string; canApprove: boolean } | null;
     /** Goal versus actual leads. Shown only once a campaign is running. */
     leadPace: { headline: string; actual: string; goal: string; bar: number | null } | null;
   };
@@ -241,15 +243,36 @@ function setupLine(input: OperatorInput): string {
   });
 }
 
+const NO_SPEND_SHIFT = 'No budget changes to suggest until your campaigns are spending.';
+
+/** A budget shift with nothing spent is a note. It is not an approval. */
+function noSpendShift(title: string, reason: string): boolean {
+  return /budget shifter/i.test(title) && /no campaign spend|no budget move|no budget changes|until your campaigns are spending/i.test(reason);
+}
+
 function decisionsOf(input: OperatorInput): OperatorDecision[] {
-  const inbox = input.inbox.map((item) => ({
-    id: item.id,
-    title: plain(item.title),
-    detail: plain(item.reason),
-    impact: impactOf(`${item.title} ${item.reason}`),
-    kind: 'inbox' as const,
-    canSkip: false,
-  }));
+  const inbox = input.inbox.map((item) => {
+    if (noSpendShift(item.title, item.reason)) {
+      return {
+        id: item.id,
+        title: 'Budget Shifter',
+        detail: NO_SPEND_SHIFT,
+        impact: null,
+        kind: 'inbox' as const,
+        canSkip: false,
+        canApprove: false,
+      };
+    }
+    return {
+      id: item.id,
+      title: plain(item.title),
+      detail: plain(item.reason),
+      impact: impactOf(`${item.title} ${item.reason}`),
+      kind: 'inbox' as const,
+      canSkip: false,
+      canApprove: true,
+    };
+  });
   const recs = input.recommendations.map((rec) => ({
     id: rec.id,
     title: plain(rec.title),
@@ -257,6 +280,7 @@ function decisionsOf(input: OperatorInput): OperatorDecision[] {
     impact: impactOf(`${rec.title} ${rec.why} ${rec.action}`),
     kind: 'recommendation' as const,
     canSkip: true,
+    canApprove: true,
     rec,
   }));
   return [...inbox, ...recs];
@@ -272,46 +296,37 @@ function onTrack(input: OperatorInput, decisions: OperatorDecision[]): OperatorV
   const costSample = !cost || cost.source !== 'live';
   const bookedValue = booked ? String(Math.round(booked.value)) : 'n/a';
   const costValue = cost ? money(cost.value) : 'n/a';
-  const parts: string[] = [];
-  if (monthlyLeads && leadsPerDay) {
-    parts.push(`Your saved goal is ${leadsPerDay} lead${leadsPerDay === 1 ? '' : 's'} a day, about ${monthlyLeads} leads a month. That is a lead goal, not a booked-job target.`);
-  } else {
-    parts.push('No monthly job goal is saved. Miles will not invent one.');
-  }
-  if (target) parts.push(`Your saved cost goal is ${money(target)} per job.`);
-  else parts.push('No cost-per-job goal is saved.');
-  if (bookedSample) parts.push('The booked-job count here is an example until your CRM connects.');
-  if (costSample) parts.push('Cost per booked job is an example until ad spend and booked jobs are both live.');
-
-  let headline = 'Add a goal to track this.';
-  if (monthlyLeads && !bookedSample && booked) {
-    const gap = monthlyLeads - Math.round(booked.value);
-    headline = gap > 0
-      ? `${Math.round(booked.value)} booked jobs. Your lead goal is ${monthlyLeads} a month.`
-      : `${Math.round(booked.value)} booked jobs, at or above your ${monthlyLeads} lead goal.`;
-  } else if (monthlyLeads) {
-    headline = 'Goal saved. The job count is not live yet.';
-  } else if (!bookedSample && booked) {
-    headline = `${Math.round(booked.value)} booked jobs. No lead goal is saved.`;
-  }
-
   const pace = leadPaceOf(input);
+  const liveJobs = !!(booked && !bookedSample);
+
+  let headline = 'These numbers are an example.';
+  let explain = 'Set a budget and connect your CRM to see your own booked jobs.';
+  if (liveJobs && booked) {
+    headline = `${Math.round(booked.value)} booked jobs`;
+    const bits: string[] = [];
+    if (target) bits.push(`Your saved cost goal is ${money(target)} per booked job.`);
+    if (!pace && monthlyLeads && leadsPerDay) {
+      bits.push(`Your lead goal is ${leadsPerDay} lead${leadsPerDay === 1 ? '' : 's'} a day, about ${monthlyLeads} leads a month.`);
+    }
+    explain = bits.slice(0, 2).join(' ') || 'Booked jobs are from your CRM.';
+  }
+
   const first = decisions[0];
   return {
     headline: plain(headline),
     bookedLabel: 'Booked jobs',
     bookedValue,
-    bookedGoal: monthlyLeads ? `${monthlyLeads} lead goal` : null,
+    bookedGoal: null,
     bookedSample,
-    bookedBar: booked && monthlyLeads ? Math.max(0, Math.min(100, (booked.value / monthlyLeads) * 100)) : null,
+    bookedBar: null,
     costLabel: 'Cost per booked job',
     costValue,
     costGoal: target ? `under ${money(target)} goal` : null,
     costSample,
     costBar: cost && target ? Math.max(0, Math.min(100, (Math.min(cost.value, target) / target) * 100)) : null,
-    explain: plain(parts.join(' ')),
+    explain: plain(explain),
     action: first
-      ? { title: first.title, body: first.detail, decisionId: first.id }
+      ? { title: first.title, body: first.detail, decisionId: first.id, canApprove: first.canApprove }
       : null,
     leadPace: pace,
   };

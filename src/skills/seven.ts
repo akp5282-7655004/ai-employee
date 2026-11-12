@@ -135,12 +135,18 @@ export async function runSevenSkill(key: string, ctx: SkillCtx): Promise<Omit<Sk
       const ranked = [...ctx.spendRows].sort((a, b) => (b.conversions ?? 0) - (a.conversions ?? 0));
       const winner = ranked[0]?.campaign ?? 'Best performer';
       const loser = ranked[ranked.length - 1]?.campaign ?? 'Worst performer';
+      const spending = ctx.spendRows.some((row) => row.cost > 0);
+      if (!spending) {
+        return {
+          skill: key, name: def.name, status: 'read_only', approvable: false, source: 'live',
+          summary: 'No budget changes to suggest until your campaigns are spending.',
+          details: [],
+        };
+      }
       return {
         skill: key, name: def.name, status: 'needs_approval', approvable: true, source,
         approve_disabled_reason: noWrite,
-        summary: liveSpend
-          ? `Shift up to 20% of daily budget from "${loser}" to "${winner}". Caps: max 20% a day, and never above the approved total.`
-          : 'No campaign spend is on file, so there is no budget move to propose.',
+        summary: `Shift up to 20% of daily budget from "${loser}" to "${winner}". Caps: max 20% a day, and never above the approved total.`,
         details: [
           'Why: winners are budget-limited while losers burn the same dollars at worse cost per booked job.',
           'Guardrails: never below the floor, never more than the daily cap, monthly ceiling respected.',
