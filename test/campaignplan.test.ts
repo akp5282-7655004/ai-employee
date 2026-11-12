@@ -52,15 +52,20 @@ describe('campaign plan generation', () => {
     expect(plan.sections.every((section) => section.reason && !section.reason.includes('\u2014'))).toBe(true);
   });
 
-  it('asks one gap at a time and saves the answer onto the profile', () => {
-    const first = planQuestions({ trade: 'Painting', businessName: 'Painters' });
-    expect(first[0]?.id).toBe('website');
-    expect(first[0]?.suggested).toBe('');
-    const saved = applyPlanAnswer({ trade: 'Painting' }, 'services', 'Interior painting, Cabinet painting');
-    expect(saved.services).toBe('Interior painting, Cabinet painting');
+  it('asks only when launch cannot happen, then fills the rest from the playbook', () => {
+    const blocked = planQuestions({ trade: 'Painting', businessName: 'Painters', website: 'https://painters.example' });
+    expect(blocked.map((q) => q.id)).toEqual(['areas']);
+    expect(blocked[0]?.prompt).toMatch(/city/i);
+    expect(blocked[0]?.prompt).not.toMatch(/match type|negative|RSA/i);
+    expect(blocked[0]?.suggested).toBe('');
+    const saved = applyPlanAnswer({ trade: 'Painting', website: 'https://painters.example' }, 'areas', 'Philadelphia, PA');
+    expect(saved.serviceAreas).toBe('Philadelphia, PA');
     const next = buildSearchPlan(saved);
-    expect(next.questions.map((q) => q.id)).not.toContain('services');
-    expect(next.spec.adGroups.map((group) => group.name)).toEqual(expect.arrayContaining(['Interior Painting', 'Cabinet Painting']));
+    expect(next.questions).toEqual([]);
+    expect(next.spec.adGroups.map((group) => group.name)).toEqual(expect.arrayContaining(['Interior Painting', 'Exterior Painting', 'Cabinet Painting']));
+    const site = planQuestions({ trade: 'Painting', serviceAreas: 'Philadelphia, PA' });
+    expect(site.map((q) => q.id)).toEqual(['website']);
+    expect(site[0]?.suggested).toBe('');
   });
 });
 

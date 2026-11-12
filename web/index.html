@@ -3082,11 +3082,82 @@ function renderPlanQuestion(sheet, plan, btn, note){
   card.append(row);
   sheet.append(card);
 }
+function plainSectionTitle(id){
+  if(id==='locations') return 'Where the ads show';
+  if(id==='keywords') return 'What people might search';
+  if(id==='negatives') return 'Searches Miles will skip';
+  if(id==='ads') return 'The ads';
+  if(id==='assets') return 'Phone and extra links';
+  if(id==='budget') return 'Budget';
+  return id;
+}
+function plainSectionBody(section){
+  return String(section.body||'')
+    .replace(/\s*\((phrase|exact|broad)\)/gi,'')
+    .replace(/Maximize Clicks with a \$[0-9.]+ cap\.?/gi,'Miles sets the bid.')
+    .replace(/Maximize Conversions/gi,'Miles aims for calls and form fills')
+    .replace(/Presence only/gi,'People in the area');
+}
+function renderLaunchConfirm(sheet, plan, btn, note){
+  const card=el('div','mcard');
+  const goal=plan.goal&&plan.goal.check;
+  card.append(el('h2',null,'Ready to launch'));
+  if(goal&&goal.verdict) card.append(el('p',null,goal.verdict));
+  const daily=(plan.spec&&plan.spec.dailyBudget)||(goal&&goal.daily)||0;
+  if(daily) card.append(el('p','appsub','Budget: $'+Math.round(daily)+'/day. That becomes the daily cap.'));
+  card.append(el('p','appsub', plan.confirmation||'Miles will build and launch Google Search for you.'));
+  if(goal&&goal.assumption) card.append(el('p','appsub', goal.assumption));
+  const row=el('div','plan-actions');
+  const go=el('button','go','Confirm and launch');
+  const details=el('button','md-link','See details');
+  const cancel=el('button','md-ghost','Cancel');
+  go.type='button'; details.type='button'; cancel.type='button';
+  if(plan.locationBlock){ go.disabled=true; go.title=plan.locationBlock; }
+  cancel.onclick=()=>closeCampaignPlan();
+  details.onclick=()=>{ plan._details=true; renderCampaignPlan(sheet, plan, btn, note); };
+  const status=el('div','appsub', plan.locationBlock||'');
+  go.onclick=async()=>{
+    const r=await startMilesGoNow(go, status, plan.spec);
+    if(note && status.textContent) note.textContent=status.textContent;
+    if(r && !r.skipped) closeCampaignPlan();
+  };
+  row.append(go, details, cancel);
+  card.append(row, status);
+  sheet.append(card);
+}
 function renderPlanSummary(sheet, plan, btn, note){
   const spec=JSON.parse(JSON.stringify(plan.spec||{}));
   const card=el('div','mcard');
+  const goal=plan.goal&&plan.goal.check;
   card.append(el('h2',null,'Campaign plan'));
-  card.append(el('p','appsub','Review this plan. Approve and launch sends this exact plan. Cancel leaves Google unchanged.'));
+  if(goal&&goal.verdict) card.append(el('p',null,goal.verdict));
+  card.append(el('p','appsub','Miles already filled this in. Confirm and launch uses it. Cancel leaves Google unchanged.'));
+  if(!plan._editing){
+    (plan.sections||[]).forEach((section)=>{
+      const block=el('div'); block.style.marginTop='14px';
+      block.append(el('b',null, plainSectionTitle(section.id)));
+      block.append(el('p','appsub', plainSectionBody(section)));
+      card.append(block);
+    });
+    const row=el('div','plan-actions');
+    const edit=el('button','md-ghost','Edit');
+    const go=el('button','go','Confirm and launch');
+    const cancel=el('button','md-ghost','Cancel');
+    edit.type='button'; go.type='button'; cancel.type='button';
+    if(plan.locationBlock){ go.disabled=true; go.title=plan.locationBlock; }
+    edit.onclick=()=>{ plan._editing=true; renderCampaignPlan(sheet, plan, btn, note); };
+    cancel.onclick=()=>closeCampaignPlan();
+    const status=el('div','appsub', plan.locationBlock||'');
+    go.onclick=async()=>{
+      const r=await startMilesGoNow(go, status, plan.spec);
+      if(note && status.textContent) note.textContent=status.textContent;
+      if(r && !r.skipped) closeCampaignPlan();
+    };
+    row.append(go, edit, cancel);
+    card.append(row, status);
+    sheet.append(card);
+    return;
+  }
   if(plan.preapproved) card.append(el('p','appsub','Automate already has your approval from the first launch. You can launch this saved plan again.'));
   (plan.sections||[]).forEach((section)=>{
     const block=el('div'); block.style.marginTop='14px';
@@ -3144,7 +3215,7 @@ function renderPlanSummary(sheet, plan, btn, note){
     card.append(block);
   });
   const row=el('div','plan-actions');
-  const go=el('button','go','Approve and launch');
+  const go=el('button','go','Confirm and launch');
   const cancel=el('button','md-ghost','Cancel');
   cancel.type='button'; go.type='button';
   if(plan.locationBlock){ go.disabled=true; go.title=plan.locationBlock; }
@@ -3163,7 +3234,8 @@ function renderPlanSummary(sheet, plan, btn, note){
 function renderCampaignPlan(sheet, plan, btn, note){
   sheet.innerHTML='';
   if(plan && plan.questions && plan.questions.length) renderPlanQuestion(sheet, plan, btn, note);
-  else renderPlanSummary(sheet, plan||{}, btn, note);
+  else if(plan && plan._details) renderPlanSummary(sheet, plan, btn, note);
+  else renderLaunchConfirm(sheet, plan||{}, btn, note);
 }
 function openCampaignPlan(btn, note, plan){
   closeCampaignPlan();
@@ -3689,6 +3761,10 @@ function renderOverview(d, miles, op){
     return wrap;
   };
   if(track){
+    if(track.leadPace){
+      card.append(el('p','md-explain', track.leadPace.headline));
+      card.append(row('Leads', track.leadPace.actual, track.leadPace.goal, false, track.leadPace.bar));
+    }
     card.append(row(track.bookedLabel, track.bookedValue, track.bookedGoal, track.bookedSample, track.bookedBar));
     card.append(row(track.costLabel, track.costValue, track.costGoal, track.costSample, track.costBar));
     card.append(el('p','md-explain', track.explain||''));
@@ -4320,6 +4396,125 @@ function openAdStudio(){ const apply=()=>{ renderAdVpick(); fillAdCats(); render
 let LAUNCH={spec:null,connected:false};
 function lchField(label,ph,val,type){ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.placeholder=ph||''; if(val!=null)i.value=val; if(type)i.type=type; i.style.width='100%'; w.append(i); return {w,i}; }
 let LN={launch:null,spec:null,miles:null,goal:'more_calls',service:'',offer:'',daily:null,photo:'miles'};
+function periodPills(current, options, onPick){
+  const wrap=el('div','md-pills');
+  options.forEach(([id,label])=>{
+    const b=el('button', current===id?'on':'', label);
+    b.type='button';
+    b.style.height='36px';
+    b.onclick=()=>onPick(id);
+    wrap.append(b);
+  });
+  return wrap;
+}
+function mountGoalCard(host, opts){
+  const card=el('div','md-card');
+  card.style.marginTop='12px';
+  host.append(card);
+  const state={budgetAmount:'', budgetPeriod:'day', leadGoal:'', leadPeriod:'month', check:null, confirmed:null, timer:0};
+  card.append(el('h2','md-h','Budget and lead goal'));
+  card.append(el('p','appsub', opts&&opts.launch ? 'Your business details are already saved. Type a budget and a lead goal, nothing else.' : 'Type a budget and a lead goal. Miles uses the business details already saved.'));
+  const numInput=()=>{
+    const i=el('input');
+    i.type='number'; i.min='1'; i.inputMode='decimal';
+    i.style.cssText='height:36px;width:140px;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:0 12px;font:inherit;background:var(--card);color:var(--ink)';
+    return i;
+  };
+  const budgetInput=numInput();
+  const goalInput=numInput();
+  const budgetPills=el('div');
+  const goalPills=el('div');
+  const budgetRow=el('div'); budgetRow.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px';
+  budgetRow.append(el('b',null,'Budget'), budgetInput, budgetPills);
+  const goalRow=el('div'); goalRow.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px';
+  goalRow.append(el('b',null,'Lead goal'), goalInput, goalPills);
+  const result=el('div'); result.style.marginTop='12px';
+  card.append(budgetRow, goalRow, result);
+  function drawPills(){
+    budgetPills.replaceChildren(periodPills(state.budgetPeriod, [['day','Per day'],['month','Per month']], (id)=>{ state.budgetPeriod=id; drawPills(); schedule(); }));
+    goalPills.replaceChildren(periodPills(state.leadPeriod, [['week','Per week'],['month','Per month']], (id)=>{ state.leadPeriod=id; drawPills(); schedule(); }));
+  }
+  function drawResult(){
+    result.innerHTML='';
+    const check=state.check;
+    if(check&&check.verdict){
+      result.append(el('p',null,check.verdict));
+      if(check.assumption) result.append(el('p','appsub', check.assumption));
+    }
+    const choices=(check&&check.choices)||[];
+    if(choices.length && !state.confirmed){
+      const row=el('div','plan-actions');
+      choices.forEach((choice)=>{
+        const b=el('button','pagetab', choice.label);
+        b.type='button';
+        b.onclick=async()=>{
+          const status=el('p','appsub','');
+          result.append(status);
+          const r=await milesPost(b, status, 'Saving...', '/api/miles/goal/confirm', {budgetAmount:Number(state.budgetAmount), budgetPeriod:state.budgetPeriod, leadGoal:Number(state.leadGoal), leadPeriod:state.leadPeriod, choice:choice.id});
+          if(!r) return;
+          state.confirmed=r;
+          state.check=r.goal&&r.goal.check;
+          drawResult();
+        };
+        row.append(b);
+      });
+      result.append(row);
+    }
+    const saved=state.confirmed;
+    if(saved&&saved.ok){
+      const again=saved.goal&&saved.goal.check;
+      if(again&&again.verdict) result.append(el('p',null, again.verdict));
+      if(saved.dailyCap) result.append(el('p','appsub','Budget: $'+Math.round(saved.dailyCap)+'/day. That is the daily cap.'));
+      result.append(el('p','appsub', saved.confirmation||'Miles will build and launch Google Search for you.'));
+      const row=el('div','plan-actions');
+      const go=el('button','go','Confirm and launch');
+      const details=el('button','md-link','See details');
+      go.type='button'; details.type='button';
+      const status=el('div','appsub','');
+      if(saved.questions&&saved.questions.length) go.textContent='Answer one question';
+      if(saved.locationBlock){ go.disabled=true; go.title=saved.locationBlock; status.textContent=saved.locationBlock; }
+      go.onclick=async()=>{
+        if(saved.questions&&saved.questions.length){ openCampaignPlan(go, status, saved); return; }
+        const r=await startMilesGoNow(go, status, saved.spec);
+        if(r) status.textContent=goResultText(r);
+      };
+      details.onclick=()=>openCampaignPlan(details, status, Object.assign({}, saved, {_details:true}));
+      row.append(go, details);
+      result.append(row, status);
+    }
+  }
+  async function refreshCheck(){
+    const amount=Number(state.budgetAmount);
+    const goal=Number(state.leadGoal);
+    if(!(amount>0)||!(goal>0)){ state.check=null; drawResult(); return; }
+    try{
+      const res=await fetch('/api/miles/goal',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({budgetAmount:amount,budgetPeriod:state.budgetPeriod,leadGoal:goal,leadPeriod:state.leadPeriod})});
+      const body=await res.json();
+      if(res.ok) state.check=body.check;
+    }catch(e){}
+    drawResult();
+  }
+  function schedule(){
+    state.confirmed=null;
+    clearTimeout(state.timer);
+    state.timer=setTimeout(refreshCheck, 250);
+  }
+  budgetInput.oninput=()=>{ state.budgetAmount=budgetInput.value; schedule(); };
+  goalInput.oninput=()=>{ state.leadGoal=goalInput.value; schedule(); };
+  drawPills();
+  if(typeof REMOTE!=='undefined' && REMOTE){
+    fetch('/api/miles/goal').then(r=>r.json()).then((d)=>{
+      if(!d||d.error) return;
+      if(d.budgetAmount){ state.budgetAmount=String(Math.round(Number(d.budgetAmount))); budgetInput.value=state.budgetAmount; }
+      if(d.budgetPeriod==='month'||d.budgetPeriod==='day') state.budgetPeriod=d.budgetPeriod;
+      if(d.leadGoal){ state.leadGoal=String(d.leadGoal); goalInput.value=state.leadGoal; }
+      if(d.leadPeriod==='week'||d.leadPeriod==='month') state.leadPeriod=d.leadPeriod;
+      state.check=d.check||null;
+      drawPills();
+      drawResult();
+    }).catch(()=>{});
+  }
+}
 async function openLaunch(){
   const box=$('#launch-body'); if(!box) return;
   box.innerHTML='<p class="appsub">Loading launch...</p>';
@@ -4373,7 +4568,7 @@ function renderLaunchPage(){
   gsel.onchange=()=>{ MKT_RANGE=gsel.value; };
   ctrl.append(pills, gsel, ask, theme);
   headRow.append(ctrl);
-  head.append(headRow, el('p','ln-sub','Tell Miles what you want. It builds the campaign. You approve.'), note);
+  head.append(headRow, el('p','ln-sub','Set a budget and how many leads you want. Miles checks the math, then builds Google Search.'), note);
   box.append(head);
   const setup=el('div','md-setup ln-setup');
   const meta=el('div','ln-setup-meta');
@@ -4400,140 +4595,7 @@ function renderLaunchPage(){
   setup.append(meta, band);
   box.append(setup);
 
-  const grid=el('div','ln-grid');
-  const main=el('div','ln-main');
-  const shortcut=el('div','ln-shortcut');
-  shortcut.append(el('p',null, L.playbookLine||'Run a ready-made playbook from the list. Meta and Local Services Ads are not launched from there.'));
-  const see=el('button',null,'See playbooks');
-  see.onclick=()=>setPage('skills');
-  shortcut.append(see);
-  main.append(shortcut);
-
-  const step1=el('div','md-card');
-  step1.append(el('div','ln-step','1. What do you want more of?'));
-  const goals=el('div','ln-goals');
-  (L.goals||[{id:'more_calls',title:'More calls',detail:'Ready-to-book homeowners'},{id:'slow_season',title:'Fill a slow season',detail:'Use the seasonal line from your playbook'},{id:'offer',title:'Promote an offer',detail:'Lead with a deal'}]).forEach(g=>{
-    const b=el('button','ln-goal'+(LN.goal===g.id?' on':''));
-    b.append(el('b',null,g.title), el('span',null,g.detail));
-    b.onclick=()=>{ LN.goal=g.id; renderLaunchPage(); };
-    goals.append(b);
-  });
-  step1.append(goals);
-  const fields=el('div','ln-fields');
-  const svc=el('div'); svc.append(el('label',null,'Service'));
-  const sel=el('select');
-  const services=L.services||[];
-  if(!services.length){ const o=el('option',null,'No service saved'); o.value=''; sel.append(o); }
-  services.forEach(name=>{ const o=el('option',null,name); o.value=name; if(name===LN.service) o.selected=true; sel.append(o); });
-  sel.onchange=()=>{ LN.service=sel.value; renderLaunchPage(); };
-  svc.append(sel);
-  const off=el('div'); off.append(el('label',null,'Offer, optional'));
-  const offer=el('input'); offer.placeholder='e.g. 15% off a second room'; offer.value=LN.offer||'';
-  offer.oninput=()=>{ LN.offer=offer.value; };
-  off.append(offer);
-  fields.append(svc, off);
-  step1.append(fields);
-  main.append(step1);
-
-  const step2=el('div','md-card');
-  step2.append(el('div','ln-step','2. Where should it run, and how much?'));
-  const chans=el('div','ln-chans');
-  (L.channels||[]).forEach(c=>{
-    const b=el('button','ln-chan'+(c.id==='google'&&c.selectable?' on':''));
-    b.append(el('b',null,c.label), el('span',null,c.detail));
-    b.onclick=()=>{ if(!c.selectable){ toast(c.detail); return; } };
-    chans.append(b);
-  });
-  step2.append(el('div','appsub','Channel'), chans);
-  step2.append(el('div','appsub','Daily budget'));
-  const buds=el('div','ln-buds');
-  (L.budgets||[]).forEach(b=>{
-    const btn=el('button','ln-bud'+(LN.daily===b.daily?' on':''));
-    btn.dataset.daily=String(b.daily);
-    btn.append(el('b',null,b.label), el('span',null,b.hint));
-    btn.onclick=()=>{ LN.daily=b.daily; renderLaunchPage(); };
-    buds.append(btn);
-  });
-  step2.append(buds);
-  if(!L.savedCap) step2.append(el('p','md-legend','No daily cap is saved yet. Pick a budget. Miles will not assume $0 a day.'));
-  const prof=el('div','ln-profile');
-  const bit=(k,v)=>{ const d=el('div','ln-bit'); d.append(el('div','appsub',k), el('b',null,v||'Not saved')); const ed=el('button','md-link','Edit'); ed.onclick=()=>setPage('profile'); d.append(ed); return d; };
-  prof.append(bit('Area', L.area&&L.area!=='Not saved'?L.area:''), bit('Landing page', L.landingPage||''), bit('Avg job value', L.jobValue||''));
-  step2.append(el('p','md-legend','From your profile. Edit if anything is wrong.'), prof);
-  const fin=el('label'); fin.style.cssText='display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px';
-  const cb=el('input'); cb.type='checkbox'; cb.checked=!!L.financing;
-  cb.onchange=async()=>{ try{ await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({financing:cb.checked?'yes':'no'})}); }catch(e){} };
-  fin.append(cb, document.createTextNode(' We offer financing'));
-  step2.append(fin);
-  main.append(step2);
-
-  const step3=el('div','md-card');
-  const s3h=el('div'); s3h.style.cssText='display:flex;justify-content:space-between;gap:8px;align-items:center';
-  s3h.append(el('div','ln-step','3. Your ads. Miles wrote these'));
-  const rewrite=el('button','md-ghost','Write new ones');
-  rewrite.onclick=()=>lnRewrite(rewrite);
-  s3h.append(rewrite);
-  step3.append(s3h);
-  const ads=el('div','ln-ads');
-  const groups=(LN.spec&&LN.spec.adGroups)||[];
-  const host=L.landingHost;
-  if(!groups.length) ads.append(el('p','md-explain','Miles has not written ads yet. Save a service or a landing page, then write new ones. Nothing here is a live ad.'));
-  groups.slice(0,2).forEach(g=>{
-    const card=el('div','ln-ad');
-    card.append(el('div','host', host?('Sponsored · '+host):'No landing page saved'));
-    card.append(el('h3',null, (g.rsa&&g.rsa.headlines&&g.rsa.headlines[0])||'Draft'));
-    card.append(el('p',null, (g.rsa&&g.rsa.descriptions&&g.rsa.descriptions[0])||''));
-    ads.append(card);
-  });
-  step3.append(ads);
-  const photo=el('div','ln-photo');
-  photo.append(document.createTextNode('Ad photo'));
-  [['miles','Miles makes one'],['mine','Use my photo']].forEach(([id,label])=>{
-    const lab=el('label'); lab.style.cssText='display:flex;gap:6px;align-items:center';
-    const r=el('input'); r.type='radio'; r.name='ln-photo'; r.checked=LN.photo===id;
-    r.onchange=()=>{ LN.photo=id; };
-    lab.append(r, document.createTextNode(label));
-    photo.append(lab);
-  });
-  step3.append(photo);
-  step3.append(el('p','md-legend', L.photoNote||'A photo Miles makes uses monthly media credits. This page does not generate a photo or charge credits.'));
-  main.append(step3);
-  main.append(el('p','md-explain', L.footer||'Miles builds it paused. You will see every setting, then approve it before a dollar is spent.'));
-  const buildWrap=el('div','ln-build');
-  const go=el('button',null,'Build my campaign');
-  go.id='ln-build';
-  go.onclick=()=>lnBuild(go);
-  buildWrap.append(go);
-  main.append(buildWrap);
-  const result=el('div'); result.id='ln-result'; main.append(result);
-  grid.append(main);
-
-  const side=el('div','ln-side');
-  const expect=el('div','ln-expect');
-  expect.append(el('div','k','What to expect'));
-  expect.append(el('h3',null, lnHeadline()));
-  const metrics=el('div','ln-metrics');
-  (L.estimates||[]).forEach(est=>{
-    const cell=el('div');
-    const display=est.label==='Monthly spend' ? (LN.daily?lnMoney(LN.daily*30):'n/a') : est.display;
-    cell.append(el('div','k', est.label), el('div','v', display));
-    if(est.kind!=='empty'){ const tag=el('div','k', est.kind==='saved_goal'?'Saved goal':'Estimate'); cell.append(tag); }
-    metrics.append(cell);
-  });
-  expect.append(metrics);
-  const spendNote=(L.estimates||[]).map(e=>e.note).filter(Boolean)[0]||'';
-  expect.append(el('p',null, [spendNote, L.breakEven].filter(Boolean).join(' ')||'Estimates use your saved budget and goals. They are not live results.'));
-  side.append(expect);
-  const counts=el('div','md-card');
-  counts.append(el('div','ln-step','Miles will build'));
-  const row=(k,v)=>{ const r=el('div','ln-count'); r.append(el('span',null,k), el('b',null,v)); return r; };
-  const C=L.counts||{};
-  const n=v=>v==null?'Not counted yet':String(v);
-  counts.append(row('Ad groups', n(C.adGroups)), row('Keywords', n(C.keywords)), row('Blocked search terms', n(C.blocked)), row('Ads', n(C.ads)), row('Sitelinks and call button', C.call?'Phone on file':(C.sitelinks==null?'Not counted yet':String(C.sitelinks)+' sitelinks')));
-  counts.append(el('p','md-legend', C.note||'You will review every setting before approving.'));
-  side.append(counts);
-  grid.append(side);
-  box.append(grid);
+  mountGoalCard(box, {launch:true});
 }
 async function lnRewrite(btn){
   const L=LN.launch||{};
@@ -8663,6 +8725,7 @@ function renderSection(sec){
     grid.append(cell);
   });
   card.append(grid);
+  if(sec.id==='goals'){ const slot=el('div'); card.append(slot); mountGoalCard(slot); }
   if(sec.id==='brand') card.append(renderPreview(YB.view.preview));
   return card;
 }

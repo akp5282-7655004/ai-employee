@@ -177,7 +177,9 @@ describe('Run and Start show the result', () => {
     expect(page).toContain("btn.type='button'");
     const play = page.slice(page.indexOf('function runPlaybook'), page.indexOf('async function actDecision'));
     expect(play).toContain('startMilesGo');
-    expect(page).toContain('Approve and launch');
+    expect(page).toContain('Confirm and launch');
+    expect(page).toContain('See details');
+    expect(page).toContain('Miles will build and launch Google Search for you.');
     expect(page).toContain('openCampaignPlan');
     expect(page).toContain("md-ghost','Cancel'");
     expect(play).not.toContain("r.enabled?'Enabled inside your caps.'");

@@ -284,7 +284,7 @@ export function resolveAreas(input: string | string[] | undefined): GeoResolutio
     }
   }
   if (!targets.length) {
-    return { targets: [], block: `${problems[0] || 'No Google location matched this service area.'} Approve and launch stays off until one matches.` };
+    return { targets: [], block: `${problems[0] || 'No Google location matched this service area.'} Miles will not launch until a city matches.` };
   }
   return { targets, block: '' };
 }

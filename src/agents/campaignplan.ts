@@ -6,10 +6,15 @@
  * question, with Miles' suggestion already filled in. New answers are saved
  * back onto the profile so they are not asked again.
  *
- * Automate rule: the plan is not pre-approved until the owner approves the
+ * Automate rule: the plan is not pre-approved until the owner confirms the
  * first launch. After that, Automate reuses the saved plan and a later Run
- * can launch it without asking again. Hybrid and Manual always open the plan.
- * Approving in those modes does not become a standing yes for Automate.
+ * can launch it without asking again. Hybrid and Manual always open the
+ * confirmation. Confirming in those modes does not become a standing yes
+ * for Automate.
+ *
+ * The owner is not asked to review keywords, skipped searches, ads, or
+ * bidding. Miles fills those from the playbook. The full plan stays available
+ * as an optional read.
  */
 import {
   buildCampaignSpec,
@@ -20,7 +25,7 @@ import {
   type PageLinkRef,
 } from './campaign.js';
 import { resolveAreas } from './geotarget.js';
-import { enforceRulebook, fixAdCapitalization, hoursRange, RULEBOOK_DEFAULTS, STANDARD_NEGATIVES } from './rulebook.js';
+import { enforceRulebook, fixAdCapitalization, hoursRange, RULEBOOK_DEFAULTS } from './rulebook.js';
 
 export const AUTOMATE_PLAN_RULE =
   'Automate reuses the saved plan only after the owner approves the first launch. Until that approval, and in Hybrid and Manual, Run opens the plan first.';
@@ -64,7 +69,7 @@ export interface SearchPlan {
   sections: PlanSection[];
   /** True only in Automate after the first approved launch. */
   preapproved: boolean;
-  /** Set when the service area did not match a Google location. Approve and launch stays off. */
+  /** Set when the service area did not match a Google location. Launch stays off. */
   locationBlock: string;
 }
 
@@ -114,84 +119,44 @@ function splitList(value: string | undefined): string[] {
   return [...new Set((value || '').split(/[\n,]/).map((part) => part.trim()).filter((part) => part.length > 1))];
 }
 
+/**
+ * Miles fills services, hours, keywords, and skipped searches from the crawl
+ * and the playbook. The owner is asked only when launch cannot happen:
+ * the service area does not match a Google location, or there is no website.
+ * One question at a time, with the best saved answer already filled in.
+ */
 export function planQuestions(profile: PlanProfile): PlanQuestion[] {
-  const questions: PlanQuestion[] = [];
-  const city = (profile.serviceAreas || '').split(',')[0]?.trim() || '';
-  if (!normalizeSiteUrl(profile.website)) {
-    questions.push({
-      id: 'website',
-      prompt: 'What is the website the ads should open?',
-      suggested: profile.website || '',
-      reason: 'Every ad needs a real landing page. Miles will not invent one.',
-    });
-  }
-  if (!/\d{7,}/.test((profile.phone || '').replace(/\D/g, ''))) {
-    questions.push({
-      id: 'phone',
-      prompt: 'What phone number should the call button use?',
-      suggested: profile.phone || '',
-      reason: 'The call asset uses the number on your profile.',
-    });
-  }
-  if (blank(profile.serviceAreas)) {
-    questions.push({
+  const geo = resolveAreas(profile.serviceAreas);
+  if (!geo.targets.length) {
+    return [{
       id: 'areas',
-      prompt: 'Which areas should these ads target?',
-      suggested: city || '',
-      reason: 'Miles targets people in the service area, presence only.',
-    });
+      prompt: 'Which city should the ads run in?',
+      suggested: (profile.serviceAreas || '').trim(),
+      reason: geo.block || 'Miles needs a city it can match before the ads can run there.',
+    }];
   }
-  if (!servicesFromCrawl(profile.services, profile.trade)) {
-    questions.push({
-      id: 'services',
-      prompt: 'Which services should the ads push?',
-      suggested: suggestedServices(profile.trade),
-      reason: 'Each service gets its own ad group. Miles will not guess from a slogan.',
-    });
+  if (!normalizeSiteUrl(profile.website)) {
+    return [{
+      id: 'website',
+      prompt: 'What is your website?',
+      suggested: (profile.website || '').trim(),
+      reason: 'The ad has to open a real page. Miles will not invent one.',
+    }];
   }
-  if (!(profile.dailyBudget && profile.dailyBudget > 0)) {
-    questions.push({
-      id: 'budget',
-      prompt: 'What is the daily budget?',
-      suggested: '20',
-      reason: 'The default cap is $20 a day until you set another.',
-    });
+  return [];
+}
+
+/** City and state already on the profile, when the service area line is missing the state. */
+export function areaGuess(profile: { serviceAreas?: string; city?: string; state?: string }, fallback?: string): string {
+  const areas = (profile.serviceAreas || '').trim();
+  const city = (profile.city || '').trim();
+  const state = (profile.state || '').trim();
+  if (areas && city && state && areas.toLowerCase().includes(city.toLowerCase()) && !areas.toLowerCase().includes(state.toLowerCase())) {
+    return `${areas}, ${state}`;
   }
-  if (blank(profile.goal)) {
-    questions.push({
-      id: 'goal',
-      prompt: 'What should this campaign do?',
-      suggested: 'Get more calls from homeowners',
-      reason: 'The goal is saved on the profile so the next plan starts there.',
-    });
-  }
-  if (!hoursRange(profile.hours)) {
-    questions.push({
-      id: 'hours',
-      prompt: 'What hours should the ads run?',
-      suggested: '7am to 8pm',
-      reason: 'The default schedule is 7:00 to 20:00, all week, until your hours are saved.',
-    });
-  }
-  if (blank(profile.jobsToAvoid)) {
-    questions.push({
-      id: 'avoid',
-      prompt: 'Which jobs or searches should the ads avoid?',
-      suggested: STANDARD_NEGATIVES.slice(0, 12).join(', '),
-      reason: 'This blocks jobs, DIY, retail, and other clicks that do not book work.',
-    });
-  }
-  if (blank(profile.keywordFocus)) {
-    const service = deriveServiceLines(profile.services, profile.trade)[0] || suggestedServices(profile.trade).split(',')[0]?.trim() || 'local service';
-    const place = city || 'your city';
-    questions.push({
-      id: 'keywords',
-      prompt: 'Which keywords should Miles prioritize?',
-      suggested: `${service.toLowerCase()} ${place !== 'your city' ? place.toLowerCase() : ''}`.trim(),
-      reason: 'These are added as phrase and exact match, with the city when it is known.',
-    });
-  }
-  return questions;
+  if (areas) return areas;
+  if (city && state) return `${city}, ${state}`;
+  return (fallback || '').trim();
 }
 
 export function applyPlanAnswer(profile: PlanProfile, id: PlanQuestion['id'], value: string): PlanProfile {
@@ -279,8 +244,9 @@ export function buildSearchPlan(profile: PlanProfile, opts?: { preapproved?: boo
     ? profile.services
     : (profile.services || suggestedServices(profile.trade));
   const daily = profile.dailyBudget && profile.dailyBudget > 0 ? profile.dailyBudget : 20;
+  const goal = blank(profile.goal) ? 'Get more calls' : profile.goal;
   const drafted = buildCampaignSpec(
-    { goal: profile.goal, dailyBudget: daily, finalUrl: profile.website || '', locations: blank(profile.serviceAreas) ? [city] : [profile.serviceAreas || city] },
+    { goal, dailyBudget: daily, finalUrl: profile.website || '', locations: blank(profile.serviceAreas) ? [city] : [profile.serviceAreas || city] },
     { business: profile.businessName, trade: profile.trade, city, services },
   );
   if (profile.jobsToAvoid) drafted.negatives = splitList(profile.jobsToAvoid);

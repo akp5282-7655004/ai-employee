@@ -75,6 +75,19 @@ describe('operator honesty', () => {
     expect(text.toLowerCase()).not.toContain('searchlight');
   });
 
+  it('shows the lead goal against actual leads only when a count is running', () => {
+    const hidden = buildOperatorView(base({ leadGoalCount: 8, leadGoalPeriod: 'month' }));
+    expect(hidden.onTrack.leadPace).toBeNull();
+    const shown = buildOperatorView(base({ leadGoalCount: 8, leadGoalPeriod: 'month', runningLeads: 4 }));
+    expect(shown.onTrack.leadPace?.actual).toBe('4');
+    expect(shown.onTrack.leadPace?.goal).toBe('8 a month');
+    expect(shown.onTrack.leadPace?.headline).toMatch(/4 leads in the last 30 days/);
+    expect(shown.onTrack.leadPace?.headline).toMatch(/8 leads a month/);
+    expect(shown.onTrack.leadPace?.headline).not.toMatch(/\u2014/);
+    const week = buildOperatorView(base({ leadGoalCount: 2, leadGoalPeriod: 'week', runningLeads: 4 }));
+    expect(week.onTrack.leadPace?.headline).toMatch(/not one week/);
+  });
+
   it('derives a lead goal from saved leads per day and a cost goal only when saved', () => {
     const view = buildOperatorView(base({
       sampleConnector: false,
