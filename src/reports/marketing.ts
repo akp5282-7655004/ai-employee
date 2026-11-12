@@ -10,6 +10,7 @@ import type { BudgetExpectation } from '../agents/budgetexpect.js';
 import type { AdsPerformanceRow } from '../connectors/gadsread.js';
 import type { CrmEvent } from '../metrics/crmledger.js';
 import type { ResponderLog } from '../agents/speed_to_lead.js';
+import { buildReportCharts, samplePlan, type ReportCharts } from './charts.js';
 
 export type ReportRangeId = '7' | '30' | '90' | 'mtd' | 'last_month';
 
@@ -29,6 +30,9 @@ export interface ReportKpi {
   label: string;
   value: string;
   compare: string;
+  sample: boolean;
+  delta: 'up' | 'down' | 'flat' | 'none';
+  spark: number[];
 }
 
 export interface ReportTableRow {
@@ -81,6 +85,9 @@ export interface MarketingReport {
   };
   summary: { happened: string; next: string };
   shareNote: string;
+  /** Null when every chart on the page is from a real read. */
+  sampleBanner: string | null;
+  charts: ReportCharts;
 }
 
 export interface ChannelRead {
@@ -104,6 +111,8 @@ export interface MarketingReportInput {
   events: CrmEvent[];
   replies: ResponderLog[];
   speedOn: boolean;
+  /** Saved daily cap. Sample charts use $20 when this is empty. */
+  dailyBudget?: number | null;
   google: ChannelRead;
   meta: ChannelRead;
 }
@@ -196,6 +205,16 @@ function count(n: number): string {
 function pct(part: number, whole: number): string {
   if (!(whole > 0)) return 'n/a';
   return `${Math.round((part / whole) * 1000) / 10}%`;
+}
+
+function kpi(label: string, value: string, compareText: string, current: number | null, previous: number | null, spark: number[], sample: boolean): ReportKpi {
+  let delta: ReportKpi['delta'] = 'none';
+  if (!sample && previous != null && current != null) {
+    if (current > previous) delta = 'up';
+    else if (current < previous) delta = 'down';
+    else delta = 'flat';
+  }
+  return { label, value, compare: compareText, sample, delta, spark };
 }
 
 function compare(current: number, previous: number | null): string {
@@ -300,17 +319,20 @@ function channel(title: string, read: ChannelRead, sample: boolean, kind: 'googl
   }
   const now = totals(read.rows);
   const before = read.previousKnown ? totals(read.previousRows) : null;
+  const dailySpend = trend(read.rows).map((point) => point.spend);
+  const dailyClicks = trend(read.rows).map((point) => point.clicks);
+  const dailyImpressions = trend(read.rows).map((point) => point.impressions);
   const tiles: ReportKpi[] = [
-    { label: 'Spend', value: money(now.spend), compare: compare(now.spend, before ? before.spend : null) },
-    { label: 'Impressions', value: count(now.impressions), compare: compare(now.impressions, before ? before.impressions : null) },
-    { label: 'Clicks', value: count(now.clicks), compare: compare(now.clicks, before ? before.clicks : null) },
-    { label: 'CTR', value: pct(now.clicks, now.impressions), compare: 'Clicks divided by impressions.' },
-    { label: 'CPC', value: now.clicks > 0 ? money(now.spend / now.clicks) : 'n/a', compare: 'Spend divided by clicks.' },
-    { label: 'Conversions', value: count(now.conversions), compare: compare(now.conversions, before ? before.conversions : null) },
-    { label: 'Conversion rate', value: pct(now.conversions, now.clicks), compare: 'Conversions divided by clicks.' },
+    kpi('Spend', money(now.spend), compare(now.spend, before ? before.spend : null), now.spend, before ? before.spend : null, dailySpend, false),
+    kpi('Impressions', count(now.impressions), compare(now.impressions, before ? before.impressions : null), now.impressions, before ? before.impressions : null, dailyImpressions, false),
+    kpi('Clicks', count(now.clicks), compare(now.clicks, before ? before.clicks : null), now.clicks, before ? before.clicks : null, dailyClicks, false),
+    kpi('CTR', pct(now.clicks, now.impressions), 'Clicks divided by impressions.', null, null, [], false),
+    kpi('CPC', now.clicks > 0 ? money(now.spend / now.clicks) : 'n/a', 'Spend divided by clicks.', null, null, [], false),
+    kpi('Conversions', count(now.conversions), compare(now.conversions, before ? before.conversions : null), now.conversions, before ? before.conversions : null, [], false),
+    kpi('Conversion rate', pct(now.conversions, now.clicks), 'Conversions divided by clicks.', null, null, [], false),
   ];
   if (kind === 'meta' && now.reach != null) {
-    tiles.push({ label: 'Reach', value: count(now.reach), compare: 'Unique people Meta reported. This is not impressions.' });
+    tiles.push(kpi('Reach', count(now.reach), 'Unique people Meta reported. This is not impressions.', null, null, [], false));
   }
   const groups = rollup(read.rows.filter((row) => row.level === 'ad_group'), (row) => row.adGroup || '', (row) => row.campaign);
   const terms = kind === 'google'
@@ -367,13 +389,15 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
   const adSpendPrev = spendPrevKnown
     ? (input.google.previousKnown ? totals(input.google.previousRows).spend : 0) + (input.meta.previousKnown ? totals(input.meta.previousRows).spend : 0)
     : null;
+  const plan = samplePlan({ trade: input.trade, dailyBudget: input.dailyBudget ?? null, start: window.start, end: window.end });
+  const realSpendSpark = adsConnected ? sparkFrom(google.trend, meta.trend, 'spend') : [];
   const tiles: ReportKpi[] = [];
-  if (adsConnected) tiles.push({ label: 'Spend', value: money(adSpend), compare: compare(adSpend, adSpendPrev) });
-  else tiles.push({ label: 'Spend', value: 'Not connected', compare: 'Connect Google Ads or a Facebook ad account to see spend.' });
-  if (hasLedger) tiles.push({ label: 'Leads', value: count(leadsNow), compare: compare(leadsNow, leadsPrev) });
-  else tiles.push({ label: 'Leads', value: 'No lead tracking yet', compare: 'Leads are counted from your CRM ledger, not from ad conversions.' });
-  if (adsConnected && hasLedger && leadsNow > 0) tiles.push({ label: 'Cost per lead', value: money(adSpend / leadsNow), compare: 'Spend divided by tracked leads. Ad conversions are not used.' });
-  else tiles.push({ label: 'Cost per lead', value: 'n/a', compare: 'Needs connected ad spend and at least one tracked lead in this period.' });
+  if (adsConnected) tiles.push(kpi('Spend', money(adSpend), compare(adSpend, adSpendPrev), adSpend, adSpendPrev, realSpendSpark, false));
+  else tiles.push(kpi('Spend', money(plan.totalSpend), 'Sample data. This is not your ad account.', null, null, plan.days.map((day) => day.spend), true));
+  if (hasLedger) tiles.push(kpi('Leads', count(leadsNow), compare(leadsNow, leadsPrev), leadsNow, leadsPrev, [], false));
+  else tiles.push(kpi('Leads', count(plan.totalLeads), 'Sample data. Tracked leads replace this when your CRM sends events.', null, null, plan.days.map((day) => day.leads), true));
+  if (adsConnected && hasLedger && leadsNow > 0) tiles.push(kpi('Cost per lead', money(adSpend / leadsNow), 'Spend divided by tracked leads. Ad conversions are not used.', null, null, [], false));
+  else tiles.push(kpi('Cost per lead', money(plan.cpl), 'Sample data. This is not your cost per lead.', null, null, [], true));
   const factor = window.days / 30;
   let projection = 'No budget projection is saved yet. Save one on the campaign plan before this can compare booked jobs with the plan.';
   let projectedJobsLow: number | null = null;
@@ -384,15 +408,9 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
     const actual = hasLedger ? `${wonNow} won job${wonNow === 1 ? '' : 's'} in this period` : 'no won jobs are tracked yet';
     projection = `Your saved projection is for a month. Scaled to these ${window.days} days, that is about ${projectedJobsLow} to ${projectedJobsHigh} booked jobs. This period shows ${actual}. Won jobs are the closest tracked stand-in for a booked job.`;
   }
-  tiles.push({
-    label: 'Booked jobs',
-    value: hasLedger ? count(wonNow) : 'n/a',
-    compare: input.expectation
-      ? `Projected ${projectedJobsLow} to ${projectedJobsHigh} for this period.`
-      : hasLedger
-        ? compare(wonNow, wonPrev)
-        : 'Won jobs show up after your CRM records them.',
-  });
+  tiles.push(hasLedger
+    ? kpi('Booked jobs', count(wonNow), input.expectation ? `Projected ${projectedJobsLow} to ${projectedJobsHigh} for this period.` : compare(wonNow, wonPrev), wonNow, wonPrev, [], false)
+    : kpi('Booked jobs', jobsLabel(plan.totalJobs), 'Sample data. Won jobs replace this when your CRM records them. This is not your saved projection.', null, null, [], true));
   const ticketBit = input.ticket != null ? `${input.ticketSource} of ${money(input.ticket)}` : 'no job value is saved';
   let revenue = `No revenue estimate yet, because ${ticketBit === 'no job value is saved' ? 'no job value is saved' : 'there is no saved projection'}.`;
   if (input.expectation && input.ticket != null && projectedJobsLow != null && projectedJobsHigh != null) {
@@ -411,13 +429,17 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
   }
   const bySource = [...sources.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
   const leadTiles: ReportKpi[] = hasLedger ? [
-    { label: 'Leads', value: count(leadsNow), compare: compare(leadsNow, leadsPrev) },
-    { label: 'Missed calls', value: count(missedNow), compare: compare(missedNow, missedPrev) },
-    { label: 'Won jobs', value: count(wonNow), compare: compare(wonNow, wonPrev) },
-  ] : [];
+    kpi('Leads', count(leadsNow), compare(leadsNow, leadsPrev), leadsNow, leadsPrev, [], false),
+    kpi('Missed calls', count(missedNow), compare(missedNow, missedPrev), missedNow, missedPrev, [], false),
+    kpi('Won jobs', count(wonNow), compare(wonNow, wonPrev), wonNow, wonPrev, [], false),
+  ] : [
+    kpi('Leads', count(plan.totalLeads), 'Sample data. Tracked leads replace this when your CRM sends events.', null, null, [], true),
+    kpi('Missed calls', count(plan.totalLeads * 0.22), 'Sample data. Answered calls are not tracked.', null, null, [], true),
+    kpi('Won jobs', jobsLabel(plan.totalJobs), 'Sample data. This is not your saved projection.', null, null, [], true),
+  ];
   const happenedParts: string[] = [];
   if (adsConnected) happenedParts.push(`Ads spent ${money(adSpend)} with ${count((google.connected ? totals(input.google.rows).clicks : 0) + (meta.connected ? totals(input.meta.rows).clicks : 0))} clicks.`);
-  else happenedParts.push('No ad account is connected, so this report does not show spend.');
+  else happenedParts.push('No ad account is connected, so the spend charts are sample data until you connect one.');
   if (hasLedger) happenedParts.push(`${count(leadsNow)} tracked leads came in, including ${count(missedNow)} missed calls, and ${count(wonNow)} jobs were marked won.`);
   else happenedParts.push('Lead tracking has no events yet.');
   const nextParts: string[] = [];
@@ -429,11 +451,28 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
   else if (input.speedOn) nextParts.push('Speed to lead is on. No timed reply was saved in this period.');
   nextParts.push('Scheduled email of this report is not set up. Print or save as PDF to share it.');
   const googleNote = input.sample
-    ? 'Preview mode. Google Ads numbers are hidden.'
-    : input.google.connected ? input.google.note : 'Google Ads is not connected. Connect it under Integrations. Nothing here is a sample.';
+    ? 'Preview mode. Demo spend is not shown. Charts stay sample data until a live account is connected.'
+    : input.google.connected ? input.google.note : 'Google Ads is not connected. Connect it under Integrations. The charts are sample data until a real read comes back.';
   const metaNote = input.sample
-    ? 'Preview mode. Facebook and Instagram numbers are hidden.'
-    : input.meta.connected ? input.meta.note : (input.meta.note || 'No Facebook ad account is connected. A Page by itself is not an ad account. Nothing here is a sample.');
+    ? 'Preview mode. Demo spend is not shown. Charts stay sample data until a live account is connected.'
+    : input.meta.connected ? input.meta.note : (input.meta.note || 'No Facebook ad account is connected. A Page by itself is not an ad account. The charts are sample data until a real read comes back.');
+  const charts = buildReportCharts({
+    trade: input.trade,
+    dailyBudget: input.dailyBudget ?? null,
+    start: window.start,
+    end: window.end,
+    googleConnected: google.connected,
+    metaConnected: meta.connected,
+    googleRows: google.connected ? input.google.rows : [],
+    metaRows: meta.connected ? input.meta.rows : [],
+    hasLedger,
+    events,
+    leads: leadsNow,
+    missed: missedNow,
+    won: wonNow,
+    sources: bySource,
+    projectedJobs: projectedJobsLow != null && projectedJobsHigh != null ? { low: projectedJobsLow, high: projectedJobsHigh } : null,
+  });
   return {
     window,
     business: input.business || 'Your business',
@@ -467,6 +506,19 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
       happened: plain(`${window.label}, ${window.start} to ${window.end}. ${happenedParts.join(' ')}`),
       next: plain(nextParts.join(' ')),
     },
-    shareNote: 'Print or save as PDF to share this report. Scheduled email is the next step. Miles can send other email when a key is set, but this report is not on a schedule.',
+    shareNote: 'Print or save as PDF to share this report. Charts are included. Sample cards stay marked Sample data on the printed page. Scheduled email is the next step. Miles can send other email when a key is set, but this report is not on a schedule.',
+    sampleBanner: charts.banner,
+    charts,
   };
+}
+
+function jobsLabel(n: number): string {
+  const rounded = Math.round(n * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function sparkFrom(googleTrend: { date: string; spend: number }[], metaTrend: { date: string; spend: number }[], key: 'spend'): number[] {
+  const map = new Map<string, number>();
+  for (const point of [...googleTrend, ...metaTrend]) map.set(point.date, (map.get(point.date) || 0) + point[key]);
+  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map((entry) => Math.round(entry[1] * 100) / 100);
 }
