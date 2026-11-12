@@ -4,7 +4,7 @@
  * from the snapshot, so chat does not fall back to a generic assistant.
  */
 import type { AccountSnapshot } from './snapshot.js';
-import { acceptReply, fallbackAnswer, milesSystemPrompt } from './prompt.js';
+import { acceptReply, asksMode, asksSpendOrLeads, fallbackAnswer, milesSystemPrompt, modeAnswer, spendLeadAnswer, type LiveSpendRead } from './prompt.js';
 import type { ChatModel, ChatWireMessage } from './model.js';
 import { CHAT_TOOLS, runChatTool, type ChatReaders } from './tools.js';
 
@@ -31,6 +31,12 @@ export async function answerChat(args: {
       content: message.text!.trim().slice(0, 4000),
     }));
   const question = [...history].reverse().find((message) => message.role === 'user')?.content || '';
+  if (asksMode(question)) return { text: modeAnswer(args.snapshot), live: false, mode };
+  if (asksSpendOrLeads(question) && args.readers.liveSpend) {
+    let read: LiveSpendRead | null = null;
+    try { read = await args.readers.liveSpend(); } catch { read = null; }
+    if (read && read.connected && !read.sample) return { text: spendLeadAnswer(read), live: false, mode };
+  }
   const system = milesSystemPrompt(args.snapshot);
   let modelRan = false;
   const wire = history.length ? history : [{ role: 'user' as const, content: 'The owner just opened the chat.' }];

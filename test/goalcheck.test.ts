@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BENCHMARK_HUB } from '../src/packs/benchmarks.js';
-import { choiceById, goalCheck, nationalSearchCpl } from '../src/agents/goalcheck.js';
+import { choiceById, cplBandForGoal, goalCheck, nationalSearchCpl } from '../src/agents/goalcheck.js';
+import { playbookCplBand } from '../src/agents/playbook.js';
 import { buildServer } from '../src/server.js';
 import { MemoryStore } from '../src/db/index.js';
 import type { Connector } from '../src/connectors/types.js';
@@ -74,16 +75,22 @@ describe('goal check math', () => {
     expect(nationalSearchCpl('Electrical')).toMatchObject({ low: 128, typical: 163, high: 163 });
   });
 
-  it('does not invent a painting cost per lead when the trade has no national row', () => {
+  it('uses the painting playbook band when the benchmark file has no Google Ads row', () => {
     expect(nationalSearchCpl('painting')).toBeNull();
     expect(googleCpl('Painting')).toBeNull();
+    expect(playbookCplBand('Painting')).toEqual({ key: 'painting', low: 40, high: 90 });
+    expect(cplBandForGoal('painting')).toMatchObject({ source: 'playbook', low: 40, typical: 65, high: 90 });
     const check = goalCheck({ trade: 'Painting', city: 'Philadelphia', budgetAmount: 20, budgetPeriod: 'day', leadGoal: 10, leadPeriod: 'month' });
-    expect(check.likely).toBe('unknown');
-    expect(check.leads).toBeNull();
-    expect(check.verdict).toMatch(/will not guess/);
-    expect(check.cityNote).toMatch(/no national Google Ads figure/i);
-    expect(check.assumption).not.toMatch(/\$40|\$90|\$42/);
-    expect(check.choices.map((choice) => choice.id)).toEqual(['keep_budget']);
+    expect(check.likely).toBe('yes');
+    expect(check.leads).toEqual({ low: 7, typical: 9, high: 15 });
+    expect(check.verdict).toBe('Yes, $20/day should bring about 7 to 15 leads a month.');
+    expect(check.sourceLabel).toBe('Home services playbook');
+    expect(check.assumption).toMatch(/\$40 to \$90/);
+    expect(check.assumption).toMatch(/midpoint/);
+    expect(check.assumption).toMatch(/not a published Google Ads study/);
+    expect(check.assumption).toMatch(/Philadelphia/);
+    expect(check.assumption).not.toMatch(/searchlight/i);
+    expect(check.assumption).not.toMatch(/\$42/);
   });
 });
 

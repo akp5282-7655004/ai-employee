@@ -130,7 +130,7 @@ describe('ad copy screen does not claim Meta from a Google login', () => {
   it('selects the profile trade and does not say Google and Meta are connected', () => {
     const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
     expect(html).toContain('function tradeCategory');
-    expect(html).toContain('Signed in — not ready to read or create');
+    expect(html).toContain('Signed in, not ready to read or create');
     expect(html).not.toContain('Google Ads / Meta');
   });
 });

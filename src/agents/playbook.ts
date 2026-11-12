@@ -66,6 +66,27 @@ function tradeKey(trade?: string): keyof typeof TRADE {
   return (Object.keys(TRADE) as (keyof typeof TRADE)[]).find((k) => t.includes(k.replace('ing', '')) || t.includes(k)) ?? 'roofing';
 }
 
+export interface PlaybookCplBand {
+  key: string;
+  low: number;
+  high: number;
+}
+
+/**
+ * The playbook's cost-per-lead band when the trade actually names one.
+ * Does not fall back to roofing. These two numbers are the only painting
+ * figures in the product. They are a planning band, not a published Google Ads study.
+ */
+export function playbookCplBand(trade?: string): PlaybookCplBand | null {
+  const t = (trade || '').toLowerCase();
+  if (!t.trim()) return null;
+  const key = (Object.keys(TRADE) as (keyof typeof TRADE)[]).find((k) => t.includes(k) || t.includes(k.replace('ing', '')));
+  if (!key) return null;
+  const row = TRADE[key];
+  if (!row) return null;
+  return { key, low: row.cplLow, high: row.cplHigh };
+}
+
 function engineerOffer(raw: string, financing: boolean, season: string): CampaignPlaybook['offer'] {
   const base = (raw || '$500 off a new roof').trim();
   const now = new Date();

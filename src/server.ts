@@ -80,6 +80,7 @@ import { emptyReviewState, reviewAskText, parseRating, routeRating, promoterText
 import { emptyAutomationsState, noShowText, onboardingText, type AutomationsState } from './agents/automations.js';
 import { buildGrowthPlan } from './agents/growth.js';
 import { buildPlaybook } from './agents/playbook.js';
+import { activePlaybooks } from './agents/activeplaybooks.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { answerChat } from './chat/ask.js';
 import { chatEmptyLine, chatSuggestions } from './chat/prompt.js';
@@ -2360,7 +2361,32 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return '';
   };
 
+  const savedGoogleIds = (data: Record<string, unknown>) => {
+    const id = typeof data.googleAdsCustomerId === 'string' ? data.googleAdsCustomerId.replace(/\D/g, '') : '';
+    const login = typeof data.googleAdsLoginCustomerId === 'string' ? data.googleAdsLoginCustomerId.replace(/\D/g, '') : '';
+    return {
+      id: /^\d{10}$/.test(id) ? id : '',
+      login: /^\d{10}$/.test(login) ? login : '',
+    };
+  };
+  const hydrateGoogle = async (userId: string) => {
+    const data = await authStore.getUserData(userId);
+    const saved = savedGoogleIds(data);
+    if (saved.id) connector.rememberGoogleCustomer?.(userId, saved.id, saved.login || undefined);
+    return data;
+  };
+  const persistGoogle = async (userId: string) => {
+    const access = connector.googleAdsAccess?.(userId);
+    if (!access || access.kind !== 'ready' || !access.selectedId) return;
+    const data = await authStore.getUserData(userId);
+    const login = access.loginCustomerId || access.selectedId;
+    if (data.googleAdsCustomerId === access.selectedId && data.googleAdsLoginCustomerId === login) return;
+    data.googleAdsCustomerId = access.selectedId;
+    data.googleAdsLoginCustomerId = login;
+    await authStore.setUserData(userId, data);
+  };
   const googleReadiness = async (userId: string) => {
+    await hydrateGoogle(userId);
     const { accounts, confirmed } = await accountsOf(userId);
     const oauth = confirmed && accounts.some((a) => a.app === 'google_ads');
     if (!confirmed || !oauth || !connector.listAdTargets) {
@@ -2380,7 +2406,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         metaAds: false as const,
       };
     }, GOOGLE_READ);
-    if (hit.confirmed && hit.value) return hit.value;
+    if (hit.confirmed && hit.value) {
+      if (hit.value.ready) await persistGoogle(userId);
+      return hit.value;
+    }
+    const saved = savedGoogleIds(await authStore.getUserData(userId));
+    if (saved.id && connector.name !== 'mock') {
+      return { oauth: true, ready: true, note: '', metaAds: false as const };
+    }
     // The discovery has not finished. Signed in is already known; ready is not.
     return {
       oauth: true,
@@ -2687,6 +2720,34 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const zips = Array.isArray(req.body?.zips) ? req.body!.zips! : ((req.body?.zips as unknown as string) || (p.serviceAreas || '')).toString().match(/\b\d{5}\b/g) || [];
     const playbook = buildPlaybook({ offer: req.body?.offer || p.currentOffers, ticket: Number(req.body?.ticket) || undefined, financing: !!req.body?.financing, zips, channel: req.body?.channel }, ctx);
     return { ok: true, playbook };
+  });
+
+  app.get('/api/playbooks/active', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const miles = milesOf(data);
+    const caps = miles.bundle?.setup.caps ?? null;
+    const snap = readSnapshot(data);
+    const googleRows = (snap?.campaigns ?? []).filter((row) => row.platform === 'google_ads');
+    const st = (data.speedToLead as { enabled?: boolean } | undefined) ?? {};
+    const stats = responderStats(data.speedToLead as SpeedToLeadState | undefined, new Date().toISOString());
+    return {
+      playbooks: activePlaybooks({
+        trade: p.industry,
+        business: p.businessName,
+        planTitle: miles.bundle?.playbook?.title || null,
+        activation: miles.activation,
+        dailyBudget: caps?.dailyBudget ?? null,
+        monthlyCeiling: caps?.monthlyCeiling ?? null,
+        spend: googleRows.length ? googleRows.reduce((sum, row) => sum + (row.spend || 0), 0) : null,
+        leads: googleRows.length ? googleRows.reduce((sum, row) => sum + (row.conversions || 0), 0) : null,
+        speedOn: !!st.enabled,
+        speedToday: stats.today,
+        speedTotal: stats.total,
+      }),
+    };
   });
 
   // GoHighLevel Automation Playbook — the 32-recipe workflow library, tailored to
@@ -3085,9 +3146,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    const snapB = await getSnapshot(u.id, data);
+    // Local only. A platform read here has no bound and left this page on
+    // Loading until the browser gave up. Spend for the band comes from the
+    // snapshot already stored on the account.
+    const snapB = readSnapshot(data);
     const spendKnown = (snapB?.campaigns ?? []).length > 0;
     const spend30 = Math.round((snapB?.adSpend ?? 0) * 100) / 100;
+    const usage = summarizeUsage(data.usage as Usage | undefined, new Date());
     const credits = creditState(data);
     const sub = billingState(data);
     const paymentsConnected = stripeReady();
@@ -3100,6 +3165,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       impliedBand: bandForSpend(spend30),
       bands: BANDS.map((b) => ({ ...b, checkoutReady: !!priceIdForBand(b.key as PaidBand) })),
       credits: { granted: credits.granted, spent: credits.spent, remaining: credits.remaining },
+      usage,
       ledger: credits.ledger.slice(0, 50),
       workCosts: WORK_COSTS,
       // What credits actually buy, so nobody has to divide in their head.
@@ -6260,7 +6326,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // One signed-in tenant. Journey rows owned by anyone else are left out.
   async function chatSnapshotFor(uid: string) {
     const data = await authStore.getUserData(uid);
-    if (typeof data.googleAdsCustomerId === 'string') connector.rememberGoogleCustomer?.(uid, data.googleAdsCustomerId);
+    const savedGoogle = savedGoogleIds(data);
+    if (savedGoogle.id) connector.rememberGoogleCustomer?.(uid, savedGoogle.id, savedGoogle.login || undefined);
     const miles = milesOf(data);
     const [business, google, ghlNow, listed, snap] = await Promise.all([
       businessProfileFor(uid, data),
@@ -6378,6 +6445,22 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           events: miles.events.slice(0, 20).map((event) => ({ ts: event.ts, text: event.text.slice(0, 240) })),
           approvals: approvalLog(data).slice(0, 20).map((entry) => ({ ts: entry.ts, kind: entry.kind, title: entry.title, source: entry.source })),
         };
+      },
+      liveSpend: async () => {
+        const period = 'the last 30 days';
+        const google = await googleReadiness(uid);
+        if (connector.name === 'mock' || !google.ready || !connector.getAdSpend) {
+          return { connected: connector.name !== 'mock' && google.ready, sample: connector.name === 'mock', period, readOk: false, spend: null, leads: null };
+        }
+        try {
+          const rows = await withTimeout(connector.getAdSpend(uid, 'LAST_30_DAYS'), 8_000);
+          const googleRows = rows.filter((row) => row.platform === 'google_ads');
+          const spend = Math.round(googleRows.reduce((sum, row) => sum + (row.spend || 0), 0) * 100) / 100;
+          const leads = googleRows.reduce((sum, row) => sum + (row.conversions || 0), 0);
+          return { connected: true, sample: false, period, readOk: true, spend, leads };
+        } catch {
+          return { connected: true, sample: false, period, readOk: false, spend: null, leads: null };
+        }
       },
     };
   }

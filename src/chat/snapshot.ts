@@ -334,7 +334,8 @@ export function renderSnapshot(snapshot: AccountSnapshot): string {
   lines.push(`Website: ${b.website || 'not set'}. Google Business Profile: ${b.gbp || 'not set'}. Phone: ${b.phone || 'not set'}.`);
   lines.push(`Profile completeness: ${b.completeness.percent}% (${b.completeness.filled} of ${b.completeness.total}). Missing: ${b.missing.length ? b.missing.join(', ') : 'none'}.`);
   const caps = snapshot.miles.caps;
-  lines.push(`Miles phase: ${snapshot.miles.phase}. Mode: ${snapshot.miles.mode || 'not set'}. Kill switch: ${snapshot.miles.paused ? 'on, Miles is paused' : 'off'}.`);
+  const modeLabel = snapshot.miles.mode === 'automate' ? 'Do everything' : snapshot.miles.mode === 'manual' ? 'Ask me first' : snapshot.miles.mode === 'hybrid' ? 'Hybrid' : 'not set';
+  lines.push(`Miles phase: ${snapshot.miles.phase}. Mode: ${modeLabel}. Kill switch: ${snapshot.miles.paused ? 'on, Miles is paused' : 'off'}.`);
   lines.push(caps
     ? `Caps: ${money(caps.dailyBudget)}/day, max change ${caps.maxChangePct}% a day, monthly ceiling ${money(caps.monthlyCeiling)}.`
     : 'Caps: not set. Miles will not spend until a daily cap, max change, and monthly ceiling are saved.');
