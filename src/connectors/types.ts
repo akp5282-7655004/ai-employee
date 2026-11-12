@@ -222,6 +222,10 @@ export interface Connector {
   readGoogleCampaignStatus?(externalUserId: string, campaignResource?: string): Promise<import('../agents/enablecheck.js').GoogleCampaignRead>;
   /** Why Google customer-id resolution failed for this external user, if it did. */
   googleAdsBlock?(externalUserId: string): { kind: string; message: string; providerMessage: string } | null;
+  /** Last Google campaign read error for this tenant. Null when the list returned rows. */
+  googleAdsReadError?(externalUserId: string): string | null;
+  /** Campaign list for this tenant. No tokens. Admin diagnostics only. */
+  diagnoseGoogleCampaigns?(externalUserId: string): Promise<{ customerId: string | null; loginCustomerId: string | null; httpStatus: number | null; rowCount: number; error: string }>;
   /** Last customer-id resolution for this external user, after a list or describe. */
   googleAdsAccess?(externalUserId: string): { kind: string; reason: string; customers: { id: string; login: string; label: string }[]; selectedId?: string; loginCustomerId?: string } | null;
   /** Remember which customer id this tenant picked. Does not call Google. */

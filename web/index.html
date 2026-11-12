@@ -7640,6 +7640,22 @@ async function setAdmin(box){
   let d={}; if(REMOTE){ const admin=await fetchJson('/api/admin', null, 8000); if(admin.data) d=admin.data; if(!admin.ok){ box.innerHTML=''; box.append(el('p','md-explain','The user list did not load. Try again.')); return; } }
   box.innerHTML='';
   if(!d.isAdmin){ box.append(el('div','verdict tight','Only the workspace owner can manage users here.')); return; }
+  const diag=el('div','mcard'); diag.style.maxWidth='760px';
+  diag.innerHTML='<h3>Google Ads read</h3><p class="mdesc">Runs the campaign list for this signed-in account. Shows the customer id, the login customer id, the HTTP status, the row count, and the error text. No tokens.</p>';
+  const diagBtn=el('button','go','Check Google Ads read');
+  const diagOut=el('div','verdict tight',''); diagOut.style.display='none';
+  diagBtn.onclick=async()=>{
+    diagBtn.disabled=true;
+    try{
+      const r=await fetch('/api/admin/google-ads');
+      const body=await r.json().catch(()=>({}));
+      diagOut.style.display='block';
+      if(!r.ok) diagOut.textContent=body.error||'Could not run the Google Ads read.';
+      else diagOut.textContent='Customer id '+(body.customerId||'none')+'. Login customer id '+(body.loginCustomerId||'none')+'. HTTP '+(body.httpStatus==null?'none':body.httpStatus)+'. Rows '+body.rowCount+'. '+(body.error||'No error.');
+    }catch(e){ diagOut.style.display='block'; diagOut.textContent='Could not run the Google Ads read.'; }
+    diagBtn.disabled=false;
+  };
+  diag.append(diagBtn, diagOut); box.append(diag);
   let allowed=((d.settings&&d.settings.allowed)||[]).slice();
   let inviteOnly=!!(d.settings&&d.settings.inviteOnly);
   const save=async()=>{ if(!REMOTE) return; try{ await fetch('/api/admin/settings',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({inviteOnly,allowed})}); }catch(e){} };

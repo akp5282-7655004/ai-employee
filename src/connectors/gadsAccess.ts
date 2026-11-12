@@ -63,11 +63,14 @@ export function classifyGadsAccounts(args: {
       for (const child of children) customers.push({ id: child.id, login: login.id, name: child.name, label: labelOf(child, login.id) });
       continue;
     }
-    if (login.manager || clients.some((c) => c.id === login.id && c.manager)) {
+    const self = clients.find((c) => c.id === login.id);
+    // listAccessibleCustomers returns the manager id and nothing else. An empty
+    // client list is that manager, not proof the manager itself runs ads.
+    if (login.manager || self?.manager === true || clients.length === 0) {
       managerLogins.push(login.id);
       continue;
     }
-    customers.push({ id: login.id, login: login.id, name: login.name, label: labelOf(login, login.id) });
+    customers.push({ id: login.id, login: login.id, name: self?.name || login.name, label: labelOf(self ?? login, login.id) });
   }
   const unique = new Map<string, AdCustomer>();
   for (const c of customers) if (!unique.has(c.id)) unique.set(c.id, c);

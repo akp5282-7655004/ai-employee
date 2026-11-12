@@ -14,6 +14,25 @@ describe('Google customer id resolution', () => {
     expect(access.reason).toMatch(/no accessible Google Ads customer ids/);
   });
 
+  it('does not treat a bare login with an empty client list as the ad account', () => {
+    const access = classifyGadsAccounts({
+      logins: [{ id: '3519644891' }],
+      clientsByLogin: { '3519644891': [] },
+    });
+    expect(access.kind).toBe('manager_only');
+    expect(access.loginCustomerId).toBe('3519644891');
+    expect(access.customers).toEqual([]);
+  });
+
+  it('keeps a direct account whose client row says it is not a manager', () => {
+    const access = classifyGadsAccounts({
+      logins: [{ id: '1234567890', name: 'Shop' }],
+      clientsByLogin: { '1234567890': [{ id: '1234567890', manager: false, name: 'Shop' }] },
+    });
+    expect(access.kind).toBe('ready');
+    expect(access.selectedId).toBe('1234567890');
+  });
+
   it('says when the login is only a manager account', () => {
     const access = classifyGadsAccounts({
       logins: [{ id: '1111111111', manager: true, name: 'MCC' }],
