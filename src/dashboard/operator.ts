@@ -32,6 +32,8 @@ export interface OperatorCampaign {
   name: string;
   spend: number;
   leads: number;
+  impressions?: number;
+  clicks?: number;
   /** Google Ads status when the row was listed, including paused and zero spend. */
   status?: 'ENABLED' | 'PAUSED' | 'UNKNOWN';
 }
@@ -156,7 +158,7 @@ export interface OperatorView {
     sample: boolean;
     empty: string | null;
     note: string;
-    rows: { name: string; spend: string; leads: string; jobs: string; cost: string; status: string | null }[];
+    rows: { name: string; spend: string; impressions: string; clicks: string; leads: string; jobs: string; cost: string; status: string | null }[];
   };
   connections: { name: string; state: 'on' | 'off' | 'hold' | 'later'; detail: string }[];
   expectation: ExpectationBlock;
@@ -457,6 +459,8 @@ function channelsOf(input: OperatorInput): OperatorChannel[] {
   const rows = googleCampaigns(input);
   const spend = rows.reduce((s, r) => s + (r.spend || 0), 0);
   const leads = rows.reduce((s, r) => s + (r.leads || 0), 0);
+  const impressions = rows.reduce((s, r) => s + (r.impressions || 0), 0);
+  const clicks = rows.reduce((s, r) => s + (r.clicks || 0), 0);
   let google: OperatorChannel;
   if (!rows.length && !input.google.oauth) {
     google = {
@@ -502,7 +506,7 @@ function channelsOf(input: OperatorInput): OperatorChannel[] {
       jobs: null,
       foot: sample
         ? `SAMPLE. ${money(spend)} example spend. ${Math.round(leads)} example leads.`
-        : `${money(spend)} spent. ${Math.round(leads)} leads. Booked jobs are not split by channel.`,
+        : `${money(spend)} spent. ${Math.round(impressions)} impressions. ${Math.round(clicks)} clicks. ${Math.round(leads)} conversions. Booked jobs are not split by channel.`,
       verdict: sample
         ? 'Example rows from the preview connector. Not a live grade.'
         : spend === 0 && leads === 0
@@ -568,10 +572,12 @@ function breakdownOf(input: OperatorInput): OperatorView['breakdown'] {
     empty: null,
     note: input.sampleConnector
       ? 'SAMPLE. These rows are from the preview connector, not a live ad account. Ad groups are not in this read. Status uses cost per lead against your saved cost goal when you have one.'
-      : 'Live Google Ads campaigns. Ad groups are not in this read. Status uses cost per lead against your saved cost goal when you have one. It is not cost per booked job.',
+      : 'Live Google Ads campaigns for the last 30 days. Paused campaigns and campaigns with no impressions stay in this list. Conversions are Google\'s count. Cost per lead is spend divided by those conversions. It is not cost per booked job.',
     rows: rows.map((r) => ({
       name: plain(r.name),
       spend: money(r.spend || 0),
+      impressions: String(Math.round(r.impressions || 0)),
+      clicks: String(Math.round(r.clicks || 0)),
       leads: String(Math.round(r.leads || 0)),
       jobs: 'n/a',
       cost: r.leads > 0 ? money(r.spend / r.leads) : 'n/a',
