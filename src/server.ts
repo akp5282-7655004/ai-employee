@@ -325,7 +325,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       'content-security-policy',
       [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-inline'",
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com data:",
         "img-src 'self' data: blob: https:",
@@ -4072,11 +4072,15 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const bookTicket = playbookTicket(profile.industry);
     const ticket = Number.isFinite(savedTicket) && savedTicket > 0 ? savedTicket : bookTicket;
     const replies = ((data.speedToLead as { log?: import('./agents/speed_to_lead.js').ResponderLog[] } | undefined)?.log) || [];
+    const milesCap = milesOf(data).bundle?.setup.caps.dailyBudget;
+    const profileDaily = Number(profile.dailyBudget);
+    const dailyBudget = milesCap && milesCap > 0 ? milesCap : (Number.isFinite(profileDaily) && profileDaily > 0 ? profileDaily : null);
     const report = buildMarketingReport({
       range,
       business: profile.businessName || '',
       trade: profile.industry || '',
       sample: connector.name === 'mock',
+      dailyBudget,
       expectation: readExpectation(data),
       ticket,
       ticketSource: Number.isFinite(savedTicket) && savedTicket > 0 ? 'your saved average job value' : (bookTicket != null ? `the playbook job value for ${profile.industry || 'this trade'}` : 'no saved job value'),

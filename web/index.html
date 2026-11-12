@@ -11,6 +11,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap" media="print" onload="this.media='all';this.onload=null">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-funnel@4.2.0/build/index.umd.min.js"></script>
 </head>
 <body>
 <style>
@@ -717,11 +719,31 @@
   .rep-tile{background:#fff;border:1px solid #ececef;border-radius:18px;padding:14px 16px;box-shadow:0 1px 2px rgba(16,16,20,.04);min-width:0;}
   .rep-tile b{display:block;font-size:22px;letter-spacing:-.03em;margin:4px 0;}
   .rep-tile span{display:block;color:var(--muted);font-size:12.5px;line-height:1.35;}
-  .rep-chart{display:flex;align-items:flex-end;gap:4px;height:120px;margin:8px 0 4px;}
-  .rep-chart i{display:block;flex:1;background:#111;border-radius:6px 6px 2px 2px;min-height:2px;opacity:.85;}
-  .rep-table{width:100%;border-collapse:collapse;font-size:13px;}
-  .rep-table th,.rep-table td{text-align:left;padding:8px 6px;border-bottom:1px solid #ececef;vertical-align:top;}
-  .rep-table th{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  .rep-tile .up{color:#1b8552;}
+  .rep-tile .down{color:#b42318;}
+  .rep-banner{background:#fff4d6;border:1px solid #f0d48a;color:#6b4a00;border-radius:14px;padding:10px 14px;margin:0 0 14px;font-size:13.5px;line-height:1.4;}
+  .rep-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;align-items:stretch;}
+  .rep-widget{grid-column:span 3;background:#fff;border:1px solid #ececef;border-radius:18px;padding:14px 14px 10px;box-shadow:0 1px 2px rgba(16,16,20,.04);min-width:0;display:flex;flex-direction:column;}
+  .rep-widget.span-2{grid-column:span 2;}
+  .rep-widget.span-3{grid-column:span 3;}
+  .rep-widget.span-4{grid-column:span 4;}
+  .rep-widget.span-6{grid-column:span 6;}
+  .rep-whead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;}
+  .rep-whead b{font-size:14px;letter-spacing:-.01em;}
+  .rep-sample{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;background:#fff4d6;color:#8a5a00;border-radius:999px;padding:3px 8px;white-space:nowrap;}
+  .rep-chartbox{position:relative;width:100%;height:240px;min-height:240px;}
+  .rep-chartbox canvas{display:block;width:100% !important;height:100% !important;}
+  .rep-spark{width:88px;height:32px;display:block;}
+  .rep-widget .appsub{margin:6px 0 0;}
+  @media(max-width:900px){
+    .rep-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .rep-widget,.rep-widget.span-2,.rep-widget.span-3,.rep-widget.span-4,.rep-widget.span-6{grid-column:span 1;}
+  }
+  @media(max-width:640px){
+    .rep-grid{grid-template-columns:1fr;}
+    .rep-tiles{grid-template-columns:1fr 1fr;}
+    .rep-chartbox{height:220px;min-height:220px;}
+  }
   .rep-secs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px;}
   .rep-secs button{border:1px solid #ececef;background:#fff;border-radius:999px;padding:7px 12px;font:inherit;cursor:pointer;}
   .rep-secs button.on{background:#111;color:#fff;border-color:#111;}
@@ -9231,6 +9253,8 @@ async function openReports(){
   renderReport(body&&body.report);
 }
 function renderReport(report){
+  if(window.__reportCharts){ window.__reportCharts.forEach(c=>{ try{ c.destroy(); }catch(e){} }); }
+  window.__reportCharts=[];
   const box=$('#reports-body'); if(!box) return; box.innerHTML='';
   if(!report){ box.append(el('p','appsub','Miles could not load this report.')); return; }
   const bar=el('div','rep-bar');
@@ -9243,6 +9267,10 @@ function renderReport(report){
   print.onclick=()=>window.print();
   bar.append(print);
   box.append(bar);
+  if(report.sampleBanner){
+    const banner=el('div','rep-banner', report.sampleBanner);
+    box.append(banner);
+  }
   const intro=el('div','mcard');
   intro.append(el('h3',null,report.business||'Your business'));
   intro.append(el('p','mdesc',report.window.label+', '+report.window.start+' to '+report.window.end+'. Compared with '+report.window.previousStart+' to '+report.window.previousEnd+'.'));
@@ -9254,99 +9282,174 @@ function renderReport(report){
     secs.append(b);
   });
   box.append(secs);
+  const moneyFmt=(n)=>'$'+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:Number(n)%1?2:0});
+  const numFmt=(n)=>Number(n||0).toLocaleString(undefined,{maximumFractionDigits:1});
+  const fmt=(unit,n)=>unit==='money'?moneyFmt(n):unit==='rate'?(Math.round(n*1000)/10)+'%':numFmt(n);
+  const spark=(values)=>{
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox','0 0 88 32'); svg.setAttribute('class','rep-spark');
+    const nums=(values||[]).map(Number).filter(v=>Number.isFinite(v));
+    if(nums.length<2){ return svg; }
+    const max=Math.max.apply(null, nums.concat([0.001]));
+    const min=Math.min.apply(null, nums.concat([0]));
+    const span=Math.max(max-min, 0.001);
+    const d=nums.map((v,i)=>{
+      const x=(i/(nums.length-1))*84+2;
+      const y=28-((v-min)/span)*24;
+      return (i?'L':'M')+x.toFixed(1)+','+y.toFixed(1);
+    }).join(' ');
+    const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d', d); path.setAttribute('fill','none'); path.setAttribute('stroke','#111'); path.setAttribute('stroke-width','1.6');
+    svg.append(path); return svg;
+  };
   const tiles=(list)=>{
     const g=el('div','rep-tiles');
     (list||[]).forEach(t=>{
       const c=el('div','rep-tile');
-      c.append(el('div','appsub',t.label));
-      c.append(el('b',null,t.value));
-      c.append(el('span',null,t.compare||''));
+      const head=el('div','rep-whead');
+      head.append(el('div','appsub',t.label));
+      if(t.sample) head.append(el('span','rep-sample','Sample data'));
+      c.append(head);
+      const row=el('div'); row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px';
+      row.append(el('b',null,t.value));
+      if(t.spark&&t.spark.length>1) row.append(spark(t.spark));
+      c.append(row);
+      const cmp=el('span', t.delta==='up'?'up':t.delta==='down'?'down':'', (t.delta==='up'?'\u25B2 ':(t.delta==='down'?'\u25BC ':''))+(t.compare||''));
+      c.append(cmp);
       g.append(c);
     });
     return g;
   };
-  const table=(rows)=>{
-    if(!rows||!rows.length) return el('p','appsub','No rows for this period.');
-    const t=el('table','rep-table');
-    t.innerHTML='<thead><tr><th>Name</th><th>Spend</th><th>Impressions</th><th>Clicks</th><th>CTR</th><th>CPC</th><th>Conversions</th><th>Conv. rate</th><th>Cost / conv.</th></tr></thead>';
-    const tb=el('tbody');
-    rows.forEach(r=>{
-      const tr=el('tr');
-      [r.extra?r.name+' ('+r.extra+')':r.name, r.spend, r.impressions, r.clicks, r.ctr, r.cpc, r.conversions, r.conversionRate, r.costPerConversion].forEach(cell=>{ tr.append(el('td',null,cell)); });
-      tb.append(tr);
-    });
-    t.append(tb); return t;
+  const REPORT_PALETTE=['#111112','#3F3F46','#8A8A92','#C8C8CE'];
+  if(window.Chart){
+    Chart.defaults.font.family='Archivo, ui-sans-serif, system-ui, sans-serif';
+    Chart.defaults.color='#3F3F46';
+    Chart.defaults.borderColor='#E6E6EA';
+  }
+  const shortDate=(iso)=>{
+    const parts=String(iso||'').split('-');
+    if(parts.length<3) return String(iso||'');
+    const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return months[(Number(parts[1])||1)-1]+' '+Number(parts[2]);
   };
-  const chart=(points)=>{
-    if(!points||!points.length) return el('p','appsub','No daily trend for this period.');
-    const max=Math.max.apply(null, points.map(p=>p.spend).concat([1]));
-    const wrap=el('div');
-    const bars=el('div','rep-chart');
-    points.forEach(p=>{ const i=el('i'); i.style.height=Math.max(4, Math.round((p.spend/max)*110))+'px'; i.title=p.date+' '+p.spend; bars.append(i); });
-    wrap.append(bars);
-    wrap.append(el('div','appsub',points[0].date+' to '+points[points.length-1].date+'. Bar height is spend.'));
-    return wrap;
+  const mountChart=(widget, canvas)=>{
+    if(!window.Chart){ return null; }
+    const labels=(widget.points||[]).map(p=>widget.kind==='line'?shortDate(p.label):p.label);
+    const values=(widget.points||[]).map(p=>p.value==null?null:Number(p.value));
+    const tip=(ctx)=>{
+      const raw=ctx.parsed&&(ctx.parsed.y!=null?ctx.parsed.y:ctx.parsed.x!=null?ctx.parsed.x:ctx.parsed);
+      const n=typeof raw==='number'?raw:(raw&&typeof raw.y==='number'?raw.y:0);
+      return (ctx.label?ctx.label+': ':'')+fmt(widget.unit, n);
+    };
+    const scales={
+      x:{grid:{color:'#EFEFF2'}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:widget.kind==='bar'?8:6}},
+      y:{beginAtZero:true, grid:{color:'#EFEFF2'}, ticks:{callback:(v)=>fmt(widget.unit, v)}}
+    };
+    let config;
+    if(widget.kind==='line'){
+      config={type:'line', data:{labels, datasets:[{data:values, borderColor:'#111112', backgroundColor:'rgba(17,17,18,.10)', fill:true, tension:.25, pointRadius:3, pointHoverRadius:5, borderWidth:2, spanGaps:true}]}, options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false}, plugins:{legend:{display:false}, tooltip:{callbacks:{label:tip}}}, scales}};
+    } else if(widget.kind==='bar'){
+      config={type:'bar', data:{labels, datasets:[{data:values, backgroundColor:'#111112', borderRadius:6, maxBarThickness:28}]}, options:{indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:tip}}}, scales:{x:{beginAtZero:true, grid:{color:'#EFEFF2'}, ticks:{callback:(v)=>fmt(widget.unit, v)}}, y:{grid:{display:false}}}}};
+    } else if(widget.kind==='donut'){
+      config={type:'doughnut', data:{labels, datasets:[{data:values, backgroundColor:REPORT_PALETTE, borderWidth:2, borderColor:'#fff'}]}, options:{responsive:true, maintainAspectRatio:false, cutout:'62%', plugins:{legend:{position:'right', labels:{boxWidth:12, padding:12}}, tooltip:{callbacks:{label:(ctx)=>ctx.label+': '+fmt('count', ctx.parsed)}}}}};
+    } else if(widget.kind==='funnel'){
+      const funnelType='bar';
+      const funnelScales={x:{beginAtZero:true, grid:{color:'#EFEFF2'}}, y:{grid:{display:false}}};
+      config={
+        type:funnelType,
+        data:{labels, datasets:[{data:values, backgroundColor:['#111112','#3F3F46','#6E6E76','#1B8552'], borderRadius:6}]},
+        options:{
+          indexAxis:'y',
+          responsive:true,
+          maintainAspectRatio:false,
+          plugins:{legend:{display:false}, tooltip:{callbacks:{label:tip}}},
+          scales:funnelScales
+        }
+      };
+    } else if(widget.kind==='gauge'){
+      const pace=Math.max(0, Math.min(1, Number(widget.pace)||0));
+      config={type:'doughnut', data:{labels:['Pace','Remaining'], datasets:[{data:[Math.round(pace*100), Math.round((1-pace)*100)], backgroundColor:['#111112','#E6E6EA'], borderWidth:0}]}, options:{rotation:270, circumference:180, cutout:'68%', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:(ctx)=>ctx.label+': '+ctx.parsed+'%'}}}}};
+    }
+    if(!config) return null;
+    const chart=new Chart(canvas, config);
+    window.__reportCharts.push(chart);
+    return chart;
+  };
+  const widgets=(list)=>{
+    const grid=el('div','rep-grid');
+    (list||[]).forEach(widget=>{
+      const span=widget.span||3;
+      const card=el('div','rep-widget span-'+span);
+      const head=el('div','rep-whead');
+      head.append(el('b',null,widget.title));
+      if(widget.sample) head.append(el('span','rep-sample','Sample data'));
+      card.append(head);
+      const box=el('div','rep-chartbox');
+      if(widget.kind==='bar') box.style.height=Math.max(220, ((widget.points||[]).length*36)+48)+'px';
+      const canvas=document.createElement('canvas');
+      box.append(canvas);
+      card.append(box);
+      if(widget.kind==='gauge'&&widget.caption) card.append(el('p','appsub',widget.caption));
+      if(widget.note) card.append(el('p','appsub',widget.note));
+      grid.append(card);
+      mountChart(widget, canvas);
+    });
+    return grid;
   };
   const block=(id, node)=>{ node.classList.add('rep-block'); if(id!==REPORT_SEC) node.style.display='none'; return node; };
   const overview=el('div');
   overview.append(tiles(report.overview.tiles));
+  overview.append(widgets(report.charts&&report.charts.overview));
   const proj=el('div','mcard'); proj.style.marginTop='12px';
-  proj.append(el('div','sect-label','BOOKED JOBS VS THE SAVED PLAN'));
+  proj.append(el('div','sect-label','SAVED PROJECTION'));
   proj.append(el('p','mdesc',report.overview.projection));
   proj.append(el('p','mdesc',report.overview.revenue));
   overview.append(proj);
   box.append(block('overview', overview));
-  const ads=(id, ch)=>{
+  const channel=(id, ch, charts)=>{
     const s=el('div');
     const card=el('div','mcard');
     card.append(el('h3',null,ch.title));
     card.append(el('p','mdesc',ch.note));
+    if(ch.footnote) card.append(el('p','appsub',ch.footnote));
     s.append(card);
-    if(ch.connected){
-      s.append(tiles(ch.tiles));
-      const trendCard=el('div','mcard'); trendCard.style.marginTop='12px';
-      trendCard.append(el('div','sect-label','SPEND OVER TIME'));
-      trendCard.append(chart(ch.trend));
-      s.append(trendCard);
-      const tables=[['Campaigns', ch.campaigns],[ch.groupLabel, ch.groups]];
-      if(id==='google') tables.push(['Keywords', ch.keywords],['Search terms', ch.terms]);
-      tables.forEach(([label, rows])=>{
-        const c=el('div','mcard'); c.style.marginTop='12px';
-        c.append(el('div','sect-label', String(label).toUpperCase()));
-        c.append(table(rows));
-        s.append(c);
+    let tileList=ch.tiles||[];
+    if(!tileList.length){
+      tileList=(charts||[]).filter(w=>w.kind==='line').slice(0,4).map(w=>{
+        const values=(w.points||[]).map(p=>Number(p.value)||0);
+        const sum=values.reduce((a,b)=>a+b,0);
+        const avg=values.length?sum/values.length:0;
+        const rateOrEach=w.unit==='rate'||/cost per/i.test(w.title);
+        const value=w.headline?w.headline:(rateOrEach?(w.unit==='rate'?((Math.round(avg*1000)/10)+'%'):moneyFmt(avg)):(w.unit==='money'?moneyFmt(sum):numFmt(sum)));
+        return {label:w.title, value, compare:'Sample data. Not your account.', sample:!!w.sample, delta:'none', spark:values};
       });
-      if(ch.footnote) s.append(el('p','appsub',ch.footnote));
     }
+    s.append(tiles(tileList));
+    s.append(widgets(charts));
     return block(id, s);
   };
-  box.append(ads('google', report.google));
-  box.append(ads('meta', report.meta));
+  box.append(channel('google', report.google, report.charts&&report.charts.google));
+  box.append(channel('meta', report.meta, report.charts&&report.charts.meta));
   const leads=el('div');
   const lc=el('div','mcard');
   lc.append(el('h3',null,'Leads and calls'));
   lc.append(el('p','mdesc',report.leads.note));
+  lc.append(el('p','appsub',report.leads.speedNote||''));
+  lc.append(el('p','appsub',report.leads.callNote||''));
   leads.append(lc);
-  if(report.leads.tiles.length) leads.append(tiles(report.leads.tiles));
-  const types=el('div','mcard'); types.style.marginTop='12px';
-  types.append(el('div','sect-label','BY TYPE'));
-  if(report.leads.byType.length){
-    const ul=el('ul'); report.leads.byType.forEach(row=>ul.append(el('li',null,row.label+': '+row.count))); types.append(ul);
-  } else types.append(el('p','appsub','No events in this period.'));
-  types.append(el('p','appsub',report.leads.sourceNote));
-  if(report.leads.bySource.length){
-    const ul=el('ul'); report.leads.bySource.forEach(row=>ul.append(el('li',null,row.label+': '+row.count))); types.append(ul);
-  }
-  types.append(el('p','mdesc',report.leads.speedNote));
-  types.append(el('p','appsub',report.leads.callNote));
-  leads.append(types);
+  leads.append(tiles(report.leads.tiles));
+  leads.append(widgets(report.charts&&report.charts.leads));
   box.append(block('leads', leads));
-  const sum=el('div','mcard');
-  sum.append(el('div','sect-label','WHAT HAPPENED'));
-  sum.append(el('p','mdesc',report.summary.happened));
-  sum.append(el('div','sect-label','WHAT MILES IS DOING NEXT'));
-  sum.append(el('p','mdesc',report.summary.next));
-  sum.append(el('p','appsub',report.shareNote));
+  const sum=el('div');
+  const copy=el('div','mcard');
+  copy.append(el('div','sect-label','WHAT HAPPENED'));
+  copy.append(el('p','mdesc',report.summary.happened));
+  copy.append(el('div','sect-label','WHAT MILES IS DOING NEXT'));
+  copy.append(el('p','mdesc',report.summary.next));
+  copy.append(el('p','appsub',report.shareNote));
+  sum.append(copy);
+  const picked=(report.charts&&report.charts.overview||[]).filter(w=>w.kind==='funnel'||w.kind==='gauge');
+  sum.append(widgets(picked));
   box.append(block('summary', sum));
 }
 

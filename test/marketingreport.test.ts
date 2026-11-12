@@ -157,8 +157,14 @@ describe('marketing report', () => {
       }),
     }));
     expect(JSON.stringify(hidden)).not.toMatch(/1240|Emergency Plumbing|999/);
-    expect(hidden.google.note).toMatch(/preview/i);
-    expect(hidden.overview.tiles.find((tile) => tile.label === 'Spend')!.value).toBe('Not connected');
+    expect(hidden.google.note).toMatch(/sample data/i);
+    expect(hidden.google.note).not.toMatch(/not shown|hidden/i);
+    const hiddenSpend = hidden.overview.tiles.find((tile) => tile.label === 'Spend')!;
+    expect(hiddenSpend.sample).toBe(true);
+    expect(hiddenSpend.value).toBe('$600');
+    expect(hidden.sampleBanner).toMatch(/Sample data/);
+    expect(hidden.charts.google.every((widget) => widget.sample)).toBe(true);
+    expect(hidden.charts.google.every((widget) => widget.note.startsWith('Sample data'))).toBe(true);
   });
 
   it('does not turn Google conversions into leads when the ledger is empty', () => {
@@ -170,9 +176,16 @@ describe('marketing report', () => {
         rows: [{ level: 'campaign', campaign: 'HOUSE PAINTING', impressions: 10, clicks: 2, conversions: 4, spend: 10 }],
       }),
     }));
-    expect(report.overview.tiles.find((tile) => tile.label === 'Leads')!.value).toBe('No lead tracking yet');
-    expect(report.overview.tiles.find((tile) => tile.label === 'Cost per lead')!.value).toBe('n/a');
+    const leadTile = report.overview.tiles.find((tile) => tile.label === 'Leads')!;
+    expect(leadTile.sample).toBe(true);
+    expect(leadTile.compare).toMatch(/Sample data/);
+    const cplTile = report.overview.tiles.find((tile) => tile.label === 'Cost per lead')!;
+    expect(cplTile.sample).toBe(true);
+    expect(report.google.tiles.find((tile) => tile.label === 'Spend')!.sample).toBe(false);
     expect(report.google.tiles.find((tile) => tile.label === 'Conversions')!.value).toBe('4');
+    expect(report.charts.overview.find((widget) => widget.title === 'Impressions to booked jobs')!.sample).toBe(true);
+    expect(report.charts.google.find((widget) => widget.title === 'Spend by campaign')!.sample).toBe(false);
+    expect(report.charts.google.find((widget) => widget.title === 'Spend by campaign')!.points[0]!.label).toBe('HOUSE PAINTING');
     expect(report.google.tiles.find((tile) => tile.label === 'Spend')!.compare).toBe('No earlier period to compare.');
   });
 });
@@ -192,11 +205,14 @@ describe('reports route', () => {
     expect(body.report.business).toBe('Painters In Philly');
     expect(body.report.sample).toBe(true);
     expect(JSON.stringify(body)).not.toMatch(/1240|Emergency Plumbing/);
-    expect(body.report.google.note).toMatch(/preview/i);
+    expect(body.report.google.note).toMatch(/sample data/i);
+    expect(body.report.google.note).not.toMatch(/not shown|hidden/i);
     expect(body.report.shareNote).toMatch(/Print or save as PDF/);
     const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
     expect(html).toContain('data-page="reports"');
     expect(html).toContain('rep-tiles');
+    expect(html).toContain('chart.umd.min.js');
+    expect(html).toContain('Sample data');
     expect(html).toContain('Print or save as PDF');
     await app.close();
   });
