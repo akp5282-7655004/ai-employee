@@ -219,6 +219,13 @@ export class MockConnector implements Connector {
     return { ok: true, live: false, applied: acted.length, steps: acted.map((c) => ({ campaign: c.campaign, ok: true })), note: 'Demo connector — no real budget change. On Render with Google Ads connected, this pushes the approved budget moves live.' };
   }
 
+  async readMarketingAds(): Promise<{ google: { connected: boolean; note: string; rows: [] }; meta: { connected: boolean; note: string; rows: [] } }> {
+    return {
+      google: { connected: false, note: 'Preview mode. Google Ads numbers are hidden because this is not your live ad account.', rows: [] },
+      meta: { connected: false, note: 'Preview mode. Facebook and Instagram numbers are hidden because this is not your live ad account.', rows: [] },
+    };
+  }
+
   async getAdSpend(externalUserId: string, range = 'LAST_30_DAYS') {
     const apps = new Set((this.acc(externalUserId)).map((a) => a.app));
     // Scale demo figures to the selected window so the range selector visibly works.

@@ -82,7 +82,8 @@ import { buildGhlPlaybook } from './agents/ghlplaybook.js';
 import { emptyReviewState, reviewAskText, parseRating, routeRating, promoterText, detractorText, recoveryTask, type ReviewRequestState } from './agents/reviewrequest.js';
 import { emptyAutomationsState, noShowText, onboardingText, type AutomationsState } from './agents/automations.js';
 import { buildGrowthPlan } from './agents/growth.js';
-import { buildPlaybook } from './agents/playbook.js';
+import { buildPlaybook, playbookTicket } from './agents/playbook.js';
+import { buildMarketingReport, reportRangeId, reportWindow } from './reports/marketing.js';
 import { activePlaybooks } from './agents/activeplaybooks.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { answerChat } from './chat/ask.js';
@@ -4045,6 +4046,59 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       campaignResource: result.campaignResource,
       steps: result.steps ?? [],
     });
+  });
+
+  app.get<{ Querystring: { range?: string } }>('/api/reports/marketing', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const profile = (data.profile ?? {}) as Record<string, string>;
+    const range = reportRangeId(req.query?.range);
+    const current = reportWindow(range);
+    const blank = { connected: false, note: 'This connector cannot read ad performance. Nothing here is a sample.', rows: [] as import('./connectors/gadsread.js').AdsPerformanceRow[] };
+    const read = async (window: { googleRange: string; start: string; end: string; metaPreset: string }) => {
+      if (!connector.readMarketingAds) return { google: blank, meta: blank };
+      try {
+        return await connector.readMarketingAds(u.id, { dateRange: window.googleRange, startDate: window.start, endDate: window.end, metaPreset: window.metaPreset });
+      } catch {
+        return { google: blank, meta: { ...blank, note: 'Miles could not read Facebook. Nothing here is a sample.' } };
+      }
+    };
+    const [nowAds, prevAds] = await Promise.all([
+      read(current),
+      read({ googleRange: 'CUSTOM_DATE', start: current.previousStart, end: current.previousEnd, metaPreset: 'time_range' }),
+    ]);
+    const savedTicket = Number(profile.averageJobValue);
+    const bookTicket = playbookTicket(profile.industry);
+    const ticket = Number.isFinite(savedTicket) && savedTicket > 0 ? savedTicket : bookTicket;
+    const replies = ((data.speedToLead as { log?: import('./agents/speed_to_lead.js').ResponderLog[] } | undefined)?.log) || [];
+    const report = buildMarketingReport({
+      range,
+      business: profile.businessName || '',
+      trade: profile.industry || '',
+      sample: connector.name === 'mock',
+      expectation: readExpectation(data),
+      ticket,
+      ticketSource: Number.isFinite(savedTicket) && savedTicket > 0 ? 'your saved average job value' : (bookTicket != null ? `the playbook job value for ${profile.industry || 'this trade'}` : 'no saved job value'),
+      events: Array.isArray(data.crmEvents) ? data.crmEvents as import('./metrics/crmledger.js').CrmEvent[] : [],
+      replies,
+      speedOn: !!((data.speedToLead as { enabled?: boolean } | undefined)?.enabled),
+      google: {
+        connected: nowAds.google.connected,
+        note: nowAds.google.note,
+        rows: nowAds.google.rows,
+        previousRows: prevAds.google.rows,
+        previousKnown: prevAds.google.connected && prevAds.google.note.startsWith('Read from'),
+      },
+      meta: {
+        connected: nowAds.meta.connected,
+        note: nowAds.meta.note,
+        rows: nowAds.meta.rows,
+        previousRows: prevAds.meta.rows,
+        previousKnown: prevAds.meta.connected && prevAds.meta.note.startsWith('Read from'),
+      },
+    });
+    return { ok: true, report };
   });
 
   const loopContext = async (userId: string, observed?: ObservedAd[], totalDaily?: number) => {
