@@ -654,7 +654,7 @@
   .md-num{font-size:22px;font-weight:800;letter-spacing:-.03em;color:#111;text-transform:none;}
   .md-bar{height:8px;border-radius:999px;background:#ececef;margin-top:8px;overflow:hidden;}
   .md-bar i{display:block;height:100%;background:#1f8a4c;border-radius:999px;}
-  .md-explain{margin:14px 0 0;color:#3f3f46;font-size:14px;line-height:1.45;max-width:62ch;}
+  .md-explain{margin:14px 0 0;color:var(--graphite);font-size:14px;line-height:1.45;max-width:62ch;}
   .md-action{background:#111112;color:#fff;border-radius:18px;padding:20px 20px 16px;display:flex;flex-direction:column;min-height:100%;}
   .md-action .kicker{font-size:11px;font-weight:800;letter-spacing:.1em;color:#8dcea8;}
   .md-action h3{margin:8px 0 8px;font-size:22px;letter-spacing:-.03em;line-height:1.15;color:#fff;}
@@ -782,6 +782,32 @@
   .md-tile{background:#fff;border:1px solid #ececef;border-radius:16px;padding:14px 16px;}
   @media (max-width:1100px){
     .md-split,.md-tiles,.md-plays,.md-chans,.md-trio,.md-low,.md-activity,.md-trends{grid-template-columns:1fr 1fr;}
+  }
+  @media (max-width:768px){
+    .main,.md-card,.md-play,.rep-widget,.lib-card,.yb-card{min-width:0;}
+    .main{padding:16px 16px 96px;overflow-x:hidden;}
+    .md-split,.md-tiles,.md-plays,.md-chans,.md-trio,.md-low,.md-activity,.md-trends,.md-else,
+    .rep-grid,.rep-tiles,.lib-grid,.stats,.cards,.meters,.intgrid,.agrid2,.statgrid,
+    .ln-grid,.ln-goals,.ln-buds,.ln-chans,.ln-profile,.ln-ads,.ln-fields,.ln-metrics,
+    .yb-hero,.yb-cols,.yb-bottom,.yb-ads,.yb-fields,.appgrid,.pf-grid,.an-grid,.bigfour{
+      grid-template-columns:1fr;
+    }
+    .rep-widget,.rep-widget.span-2,.rep-widget.span-3,.rep-widget.span-4,.rep-widget.span-6{grid-column:auto;}
+    .md-greet,.md-h,.ln-title,.pagehead h2,.lib-title,.yb-title h1{
+      font-size:clamp(22px,6vw,28px);
+      line-height:1.2;
+      overflow-wrap:normal;
+      word-break:normal;
+    }
+    .md-top{flex-direction:column;align-items:stretch;}
+    .md-controls,.ln-head-row .md-controls{width:100%;justify-content:flex-start;}
+    .md-row{flex-direction:column;align-items:flex-start;gap:4px;text-transform:none;}
+    .md-row > span:first-child{white-space:nowrap;letter-spacing:.04em;text-transform:uppercase;}
+    .md-action{min-height:0;}
+    .md-action p{flex:none;}
+    .md-action button{position:static;margin-top:14px;}
+    .md-link{float:none !important;margin-top:0 !important;}
+    .composer,.chatview,.emp{max-width:100%;min-width:0;}
   }
   :root[data-theme="dark"] body.on-dash .main{background:#111112;}
   :root[data-theme="dark"] body.on-dash .md-greet,
@@ -3540,7 +3566,13 @@ function renderMilesHome(box, d, place, opts){
   box.append(brief);
   const inbox=d.inbox||[];
   if(inbox.length){ const ib=el('div','mcard'); ib.style.marginTop='12px'; ib.append(el('div','sect-label','WAITING ON YOU'));
-    inbox.filter(i=>i.status==='queued').forEach(i=>{ const row=el('div'); row.style.cssText='padding:8px 0;border-top:1px solid var(--line)'; row.append(el('b',null,i.title), el('div','appsub', i.reason)); const yes=el('button','go','Approve'); yes.style.marginTop='6px'; yes.onclick=async()=>{ await fetch('/api/miles/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:i.id, confirm:true})}); openOverview(); }; row.append(yes); ib.append(row); });
+    inbox.filter(i=>i.status==='queued').forEach(i=>{
+      const note=/budget shifter/i.test(i.title||'') && /no campaign spend|no budget move|no budget changes|until your campaigns are spending/i.test(i.reason||'');
+      const reason=note?'No budget changes to suggest until your campaigns are spending.':i.reason;
+      const row=el('div'); row.style.cssText='padding:8px 0;border-top:1px solid var(--line)'; row.append(el('b',null,i.title), el('div','appsub', reason));
+      if(!note){ const yes=el('button','go','Approve'); yes.style.marginTop='6px'; yes.onclick=async()=>{ await fetch('/api/miles/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:i.id, confirm:true})}); openOverview(); }; row.append(yes); }
+      ib.append(row);
+    });
     box.append(ib);
   }
   (d.channels||[]).forEach(c=>{ if(c.id==='google') return; const n=el('div','appsub', c.label+': coming later. '+c.note); box.append(n); });
@@ -3858,7 +3890,8 @@ function renderOverview(d, miles, op){
       card.append(row('Leads', track.leadPace.actual, track.leadPace.goal, false, track.leadPace.bar));
     }
     const expectRead=op&&op.expectation;
-    if(expectRead){
+    const exampleTrack=track && /example/i.test(track.headline||'');
+    if(expectRead && expectRead.state && expectRead.state!=='empty' && !(exampleTrack && expectRead.state==='sample')){
       card.append(el('p','md-explain', expectRead.headline));
       if(expectRead.detail) card.append(el('p','md-explain', expectRead.detail));
       (expectRead.lines||[]).forEach(line=>card.append(row(line.label, line.value, null, false, null)));
@@ -3874,15 +3907,17 @@ function renderOverview(d, miles, op){
   if(track&&track.action){
     action.append(el('h3',null, track.action.title));
     action.append(el('p',null, track.action.body||''));
-    const go=el('button',null,'Approve');
-    go.onclick=async()=>{
-      const dec=(op.decisions||[]).find(x=>x.id===track.action.decisionId);
-      if(!dec) return;
-      go.disabled=true; go.textContent='Applying...';
-      try{ await actDecision(dec,'approve'); }catch(e){}
-      await refreshMilesSurface();
-    };
-    action.append(go);
+    if(track.action.canApprove!==false){
+      const go=el('button',null,'Approve');
+      go.onclick=async()=>{
+        const dec=(op.decisions||[]).find(x=>x.id===track.action.decisionId);
+        if(!dec) return;
+        go.disabled=true; go.textContent='Applying...';
+        try{ await actDecision(dec,'approve'); }catch(e){}
+        await refreshMilesSurface();
+      };
+      action.append(go);
+    }
   } else {
     action.append(el('h3',null,'No move is waiting'));
     action.append(el('p',null,'Miles will put a real decision here when one is waiting. This build does not invent a budget move.'));
@@ -3942,12 +3977,13 @@ function renderOverview(d, miles, op){
   box.append(cc);
 
   const decs=(op&&op.decisions)||[];
-  box.append(el('div','md-label','4 · What do I need to do?'+(decs.length?' · '+decs.length+' decision'+(decs.length===1?'':'s')+' waiting':'')));
+  const waiting=decs.filter(dec=>dec.canApprove!==false);
+  box.append(el('div','md-label','4 · What do I need to do?'+(waiting.length?' · '+waiting.length+' decision'+(waiting.length===1?'':'s')+' waiting':'')));
   const dq=el('div','md-card');
-  if(!decs.length){
+  if(!waiting.length){
     dq.append(el('p','md-explain','Nothing needs you today. Miles keeps watching and will surface a real decision here.'));
   } else {
-    decs.forEach((dec,i)=>{
+    waiting.forEach((dec,i)=>{
       const row=el('div','md-dec');
       row.append(el('div','md-qn', String(i+1)));
       const mid=el('div'); mid.style.flex='1';
@@ -3966,10 +4002,10 @@ function renderOverview(d, miles, op){
       dq.append(row);
     });
     const foot=el('div','md-foot');
-    foot.append(el('span','md-legend', decs.length? decs.length+' waiting.':'Nothing else needs you today.'));
-    if(decs.length>1){
-      const all=el('button','md-all','Approve all '+decs.length);
-      all.onclick=async()=>{ all.disabled=true; all.textContent='Applying...'; for(const dec of decs){ try{ await actDecision(dec,'approve'); }catch(e){} } await refreshMilesSurface(); };
+    foot.append(el('span','md-legend', waiting.length? waiting.length+' waiting.':'Nothing else needs you today.'));
+    if(waiting.length>1){
+      const all=el('button','md-all','Approve all '+waiting.length);
+      all.onclick=async()=>{ all.disabled=true; all.textContent='Applying...'; for(const dec of waiting){ try{ await actDecision(dec,'approve'); }catch(e){} } await refreshMilesSurface(); };
       foot.append(all);
     }
     dq.append(foot);

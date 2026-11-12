@@ -105,10 +105,13 @@ describe('operator honesty', () => {
         { key: 'calc.blended_leads', value: 10, prior_value: 0, source: 'live' },
       ],
     }));
-    expect(view.onTrack.bookedGoal).toBe('30 lead goal');
+    expect(view.onTrack.bookedGoal).toBeNull();
+    expect(view.onTrack.headline).toBe('4 booked jobs');
+    expect(view.onTrack.headline).not.toMatch(/lead goal/);
     expect(view.onTrack.costGoal).toBe('under $80 goal');
     expect(view.onTrack.bookedSample).toBe(false);
-    expect(view.onTrack.explain).toMatch(/lead goal, not a booked-job target/);
+    expect(view.onTrack.explain).toMatch(/1 lead a day/);
+    expect(view.onTrack.explain).not.toMatch(/booked-job target/);
     expect(view.setupLine).toMatch(/Painting/);
     expect(view.setupLine).toMatch(/\$20\/day/);
     expect(view.money.tone).toBe('positive');
@@ -152,6 +155,36 @@ describe('operator honesty', () => {
     expect(view.breakdown.sample).toBe(true);
     expect(view.breakdown.rows[0]!.jobs).toBe('n/a');
     expect(view.breakdown.note).toMatch(/SAMPLE/);
+  });
+
+  it('treats sample booked jobs as an example and does not mix them with a lead goal', () => {
+    const view = buildOperatorView(base({ leadsPerDay: 1, targetCpa: 50, dailyBudget: 20 }));
+    expect(view.onTrack.headline).toBe('These numbers are an example.');
+    expect(view.onTrack.bookedGoal).toBeNull();
+    expect(view.onTrack.bookedValue).toBe('22');
+    expect(view.onTrack.explain).toBe('Set a budget and connect your CRM to see your own booked jobs.');
+    expect(view.onTrack.headline).not.toMatch(/Goal saved|not live yet/);
+    expect(view.onTrack.explain).not.toMatch(/No budget projection|No monthly job goal/);
+    const sentences = view.onTrack.explain.split('.').map((part) => part.trim()).filter(Boolean);
+    expect(sentences.length).toBeLessThanOrEqual(2);
+    expect(copy(view)).not.toMatch(/\u2014|searchlight/i);
+  });
+
+  it('turns a no-spend budget shift into one line and does not ask for approval', () => {
+    const view = buildOperatorView(base({
+      inbox: [{
+        id: 'shift-1',
+        title: 'Budget Shifter',
+        reason: 'This move is larger than the max percent change per day. It needs your approval. No campaign spend is on file, so there is no budget move to propose.',
+      }],
+    }));
+    expect(view.onTrack.action).toMatchObject({
+      title: 'Budget Shifter',
+      body: 'No budget changes to suggest until your campaigns are spending.',
+      canApprove: false,
+    });
+    expect(view.decisions[0]!.canApprove).toBe(false);
+    expect(view.onTrack.action?.body).not.toMatch(/approval|max percent/i);
   });
 
   it('does not invent a budget shift when nothing is waiting', () => {

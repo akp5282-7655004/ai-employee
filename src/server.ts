@@ -6457,7 +6457,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
                 canPush: key === 'loser-pauser' && !!milesTick.campaignResource && connector.name !== 'mock',
               },
             });
-            if (decision.effect === 'apply' && key === 'loser-pauser' && milesTick.campaignResource && connector.setGoogleCampaignStatus) {
+            if (key === 'budget-shifter' && run.approvable === false) {
+              const queued = milesTick.inbox.find((item) => item.skill === 'budget-shifter' && item.status === 'queued');
+              if (queued) queued.reason = run.summary;
+              else milesTick.inbox.unshift({ id: newToken().slice(0, 10), kind: 'skill', title: run.name, reason: run.summary, status: 'queued', skill: key });
+            } else if (decision.effect === 'apply' && key === 'loser-pauser' && milesTick.campaignResource && connector.setGoogleCampaignStatus) {
               const gate = runSopGate('campaign_pause', { mode: milesTick.bundle.setup.mode, spec: milesTick.bundle.spec });
               const turned = gate.disposition === 'block' ? { ok: false, note: gate.blocks.join(' ') } : await connector.setGoogleCampaignStatus(uid, { campaignResource: milesTick.campaignResource, status: 'PAUSED' });
               if (turned.ok) milesTick.activation = 'paused';
