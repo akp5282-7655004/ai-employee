@@ -101,13 +101,13 @@ export function buildRecommendations(input: RecInput, today: Date = new Date()):
       const cpa = pf.spend / pf.conv;
       if (target && cpa > target * 1.15) {
         push({ key: `cpa-high:${pf.platform}`, category: 'ads', severity: 'high',
-          title: `${name} cost per lead is ${money(cpa)} — ${pct(cpa, target)}% over target`,
+          title: `${name} cost per lead is ${money(cpa)}, ${pct(cpa, target)}% over target`,
           why: `${name} is at ${money(cpa)} per lead vs your ${money(target)} target (${pf.conv} leads on ${money(pf.spend)}).`,
           action: `Shift ~20% of ${name} budget to your best channel and pause its weakest ad set to pull the cost back toward ${money(target)}.`,
           apply: { kind: 'queue_change', label: `Rebalance ${name} budget (CPA ${money(cpa)} > target)` } });
       } else if (target && cpa < target * 0.8) {
         push({ key: `scale:${pf.platform}`, category: 'ads', severity: 'medium',
-          title: `${name} is beating target — scale it up`,
+          title: `${name} is beating target. Scale it up`,
           why: `${name} is winning leads at ${money(cpa)} vs your ${money(target)} target, so there's room to spend more at this efficiency.`,
           action: `Increase ${name} daily budget ~20% to capture more leads while the cost is below target.`,
           apply: { kind: 'queue_change', label: `Increase ${name} budget +20% (beating target)` } });
@@ -119,7 +119,7 @@ export function buildRecommendations(input: RecInput, today: Date = new Date()):
   const uncontacted = input.leads.filter((l) => !l.contacted).length;
   if (uncontacted > 0 && !input.speedToLeadOn) {
     push({ key: 'stl-off', category: 'speed', severity: 'high',
-      title: `${uncontacted} new lead${uncontacted > 1 ? 's' : ''} not answered — turn on Speed-to-Lead`,
+      title: `${uncontacted} new lead${uncontacted > 1 ? 's' : ''} not answered. Turn on Speed-to-Lead`,
       why: `${uncontacted} lead${uncontacted > 1 ? 's have' : ' has'} come in without an instant reply. 78% of homeowners hire whoever answers first.`,
       action: `Turn on Speed-to-Lead so every new lead gets an instant text + email within a minute.`,
       apply: { kind: 'enable_speed_to_lead', label: 'Enable Speed-to-Lead responder' } });
@@ -138,8 +138,8 @@ export function buildRecommendations(input: RecInput, today: Date = new Date()):
     push({ key: 'hot-email', category: 'email', severity: 'high',
       title: `Unread email looks like a new job: "${hot.subject}"`,
       why: `${hot.from} sent an unread message that reads like a ready-to-book customer: "${hot.snippet}"`,
-      action: `Reply now with availability and a quote — this looks like money on the table.`,
-      apply: { kind: 'queue_change', label: `Reply to ${hot.from} — "${hot.subject}"` } });
+      action: `Reply now with availability and a quote. This looks like money on the table.`,
+      apply: { kind: 'queue_change', label: `Reply to ${hot.from}: "${hot.subject}"` } });
   }
 
   // ── Reputation: a low review that needs a response ──
@@ -155,7 +155,7 @@ export function buildRecommendations(input: RecInput, today: Date = new Date()):
   // ── Content: nothing scheduled ──
   if (input.scheduledPosts === 0) {
     push({ key: 'no-posts', category: 'content', severity: 'low',
-      title: `No posts scheduled — stay top of mind`,
+      title: `No posts scheduled. Stay top of mind`,
       why: `You have no posts queued. Consistent posting keeps you visible to past and future customers.`,
       action: `Schedule 3 on-brand posts for this week (a job photo, a review, and your current offer).`,
       apply: { kind: 'queue_change', label: 'Schedule 3 posts for this week' } });

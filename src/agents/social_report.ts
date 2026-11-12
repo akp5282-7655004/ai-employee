@@ -56,10 +56,10 @@ export function buildSocialReport(history: DailySnapshot[], nowISO: string): Soc
     `• ${clk.toLocaleString()} clicks (${ctr.toFixed(1)}% CTR)`,
     `• ${lk.toLocaleString()} likes`,
     first.followers != null && last.followers != null ? `• ${follGain >= 0 ? '+' : ''}${follGain.toLocaleString()} followers` : '',
-    `• Best day: ${best.date} — ${best.impressions.toLocaleString()} impressions`,
+    `• Best day: ${best.date}, ${best.impressions.toLocaleString()} impressions`,
     '',
     'Daily dataset:',
     ...rows.map((r) => `${r.date}: ${r.impressions} impr · ${r.clicks} clk · ${r.likes} likes${r.followers != null ? ` · ${r.followers} followers` : ''}`),
   ].filter(Boolean);
-  return { title: `30-day social report — ${rows.length} days`, body: lines.join('\n'), rows };
+  return { title: `30-day social report, ${rows.length} days`, body: lines.join('\n'), rows };
 }
