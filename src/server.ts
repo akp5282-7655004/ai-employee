@@ -392,6 +392,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     if (running) return running;
     const p = (async () => {
       try {
+        await hydrateGoogle(userId);
         const snap = await buildSnapshot(connector, userId);
         const data = await authStore.getUserData(userId);
         data.snapshot = snap;
@@ -2674,7 +2675,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       reviewOn: !!((d.reviewRequest as { enabled?: boolean } | undefined)?.enabled),
       speedOn: stlOn,
       metrics: metricRows.map((m) => ({ key: m.key, value: m.value, prior_value: m.prior_value, source: m.source })),
-      campaigns: (snap?.campaigns ?? []).map((c) => ({ platform: c.platform, name: c.campaign, spend: c.spend || 0, leads: c.conversions || 0, status: c.status })),
+      campaigns: (snap?.campaigns ?? []).map((c) => ({ platform: c.platform, name: c.campaign, spend: c.spend || 0, leads: c.conversions || 0, impressions: c.impressions || 0, clicks: c.clicks || 0, status: c.status })),
       recommendations: openRecs,
       inbox: miles.inbox.filter((row) => row.status === 'queued').map((row) => ({ id: row.id, title: row.title, reason: row.reason })),
       expectation,
@@ -2719,7 +2720,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const campaigns = spend
       .map((c) => {
         const s = Math.round(c.spend || 0); const clicks = c.clicks || 0; const conv = c.conversions || 0; const revenue = Math.round(revFor(c.utm || '', c.campaign));
-        return { platform: c.platform, name: c.campaign, spend: s, clicks, leads: conv, revenue, roas: s ? r2(revenue / s) : null, cpc: clicks ? r2(s / clicks) : null, costPerLead: conv ? r2(s / conv) : null };
+        return { platform: c.platform, name: c.campaign, status: c.status ?? null, spend: s, impressions: Math.round(c.impressions || 0), clicks, leads: conv, revenue, roas: s ? r2(revenue / s) : null, cpc: clicks ? r2(s / clicks) : null, costPerLead: conv ? r2(s / conv) : null };
       })
       .sort((a, b) => b.spend - a.spend);
     const totSpend = campaigns.reduce((a, c) => a + c.spend, 0);

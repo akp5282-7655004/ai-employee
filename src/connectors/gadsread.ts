@@ -188,3 +188,161 @@ export const PIPEDREAM_RUN = {
   os: [] as unknown[],
   ret: PIPEDREAM_LIST_CAMPAIGNS,
 };
+
+/**
+ * One campaign's metrics inside a date window. Daily rows are summed by the
+ * caller. costMicros is millionths of a dollar. A missing micros field can
+ * still carry a dollar `cost`.
+ */
+export interface CampaignMetric {
+  id: string;
+  name: string;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  spend: number;
+}
+
+function metricNumber(value: unknown): number {
+  if (typeof value === 'string') {
+    const n = Number(value.replace(/,/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  }
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function campaignIdOf(value: unknown): string {
+  const text = String(value ?? '');
+  const fromResource = text.match(/campaigns\/(\d+)/);
+  if (fromResource?.[1]) return fromResource[1];
+  const digits = text.replace(/\D/g, '');
+  return /^\d+$/.test(digits) ? digits : '';
+}
+
+/** True when a report row actually carries a metric, not just a campaign name. */
+export function metricRowHasNumbers(row: unknown): boolean {
+  if (!row || typeof row !== 'object') return false;
+  const rec = row as Record<string, unknown>;
+  const metrics = rec.metrics && typeof rec.metrics === 'object' ? rec.metrics as Record<string, unknown> : rec;
+  return ['impressions', 'clicks', 'conversions', 'costMicros', 'cost_micros', 'cost', 'spend'].some((key) => {
+    const value = metrics[key] ?? rec[key];
+    return value != null && value !== '' && Number.isFinite(Number(typeof value === 'string' ? value.replace(/,/g, '') : value));
+  });
+}
+
+export function parseCampaignMetric(row: unknown): CampaignMetric | null {
+  if (!row || typeof row !== 'object') return null;
+  const rec = row as Record<string, unknown>;
+  const campaign = rec.campaign && typeof rec.campaign === 'object' ? rec.campaign as Record<string, unknown> : {};
+  const metrics = rec.metrics && typeof rec.metrics === 'object' ? rec.metrics as Record<string, unknown> : rec;
+  const id = campaignIdOf(campaign.id ?? campaign.resourceName ?? rec.id ?? rec.resourceName);
+  const name = String(campaign.name ?? rec.campaignName ?? rec.name ?? '').trim();
+  if (!id && !name) return null;
+  const micros = metrics.costMicros ?? metrics.cost_micros ?? rec.costMicros ?? rec.cost_micros;
+  const spend = micros != null && String(micros).trim() !== ''
+    ? metricNumber(micros) / 1_000_000
+    : metricNumber(metrics.cost ?? rec.cost ?? rec.spend);
+  return {
+    id,
+    name,
+    impressions: metricNumber(metrics.impressions),
+    clicks: metricNumber(metrics.clicks),
+    conversions: metricNumber(metrics.conversions),
+    spend,
+  };
+}
+
+export interface ListedCampaignSpend {
+  platform?: string;
+  campaign: string;
+  utm?: string;
+  spend: number;
+  clicks?: number;
+  conversions?: number;
+  impressions?: number;
+  status?: 'ENABLED' | 'PAUSED' | 'UNKNOWN';
+  id?: string;
+}
+
+/**
+ * Keep every listed campaign, including paused and zero-impression rows.
+ * Overlay summed metrics from the date-window report. Match on campaign id,
+ * then on name. Metrics-only rows are appended so spend is not dropped when
+ * the status list failed.
+ */
+export function mergeCampaignMetrics(listed: ListedCampaignSpend[], metricRows: unknown[]): ListedCampaignSpend[] {
+  const buckets = new Map<string, CampaignMetric>();
+  const add = (key: string, row: CampaignMetric) => {
+    const prev = buckets.get(key);
+    if (!prev) {
+      buckets.set(key, { ...row });
+      return;
+    }
+    prev.impressions += row.impressions;
+    prev.clicks += row.clicks;
+    prev.conversions += row.conversions;
+    prev.spend += row.spend;
+    if (!prev.id && row.id) prev.id = row.id;
+    if (!prev.name && row.name) prev.name = row.name;
+  };
+  for (const raw of metricRows) {
+    const row = parseCampaignMetric(raw);
+    if (!row) continue;
+    add(row.id || row.name.toLowerCase(), row);
+  }
+  const used = new Set<string>();
+  const take = (item: ListedCampaignSpend): CampaignMetric | undefined => {
+    const byId = item.id ? buckets.get(item.id) : undefined;
+    const byName = buckets.get(item.campaign.toLowerCase());
+    const hit = byId ?? byName;
+    if (!hit) return undefined;
+    if (hit.id) used.add(hit.id);
+    if (hit.name) used.add(hit.name.toLowerCase());
+    return hit;
+  };
+  const merged = listed.map((item) => {
+    const hit = take(item);
+    if (!hit) {
+      return { ...item, impressions: item.impressions ?? 0, clicks: item.clicks ?? 0, conversions: item.conversions ?? 0 };
+    }
+    return {
+      ...item,
+      spend: Math.round(hit.spend * 100) / 100,
+      clicks: hit.clicks,
+      conversions: hit.conversions,
+      impressions: hit.impressions,
+    };
+  });
+  for (const row of buckets.values()) {
+    if ((row.id && used.has(row.id)) || (row.name && used.has(row.name.toLowerCase()))) continue;
+    merged.push({
+      platform: 'google_ads',
+      campaign: row.name || `Campaign ${row.id}`,
+      utm: '',
+      spend: Math.round(row.spend * 100) / 100,
+      clicks: row.clicks,
+      conversions: row.conversions,
+      impressions: row.impressions,
+      id: row.id || undefined,
+    });
+  }
+  return merged;
+}
+
+/** Last 30 days of one live campaign, split by day the way a segmented report returns it. */
+export const PIPEDREAM_METRICS_WINDOW = {
+  query: 'SELECT campaign.id, campaign.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM campaign WHERE segments.date DURING LAST_30_DAYS',
+  results: [
+    {
+      campaign: { id: '222', name: 'HOUSE PAINTING', resourceName: 'customers/9013698905/campaigns/222' },
+      metrics: { impressions: '80', clicks: '12', costMicros: '12000000', conversions: 1 },
+      segments: { date: '2026-11-01' },
+    },
+    {
+      campaign: { id: '222', name: 'HOUSE PAINTING', resourceName: 'customers/9013698905/campaigns/222' },
+      metrics: { impressions: '120', clicks: '8', costMicros: '8000000', conversions: 1 },
+      segments: { date: '2026-11-02' },
+    },
+  ],
+};

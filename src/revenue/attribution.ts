@@ -14,7 +14,11 @@ export interface CampaignSpend {
   utm: string; // utm_campaign this spend is tagged with
   spend: number;
   clicks?: number;
+  /** Google Ads impressions in the same date window as spend. */
+  impressions?: number;
   conversions?: number;
+  /** Google campaign id, when the status list returned one. */
+  id?: string;
   /** Google campaign status when the row came from a status read. */
   status?: 'ENABLED' | 'PAUSED' | 'UNKNOWN';
 }

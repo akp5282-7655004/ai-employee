@@ -1,7 +1,7 @@
 import type { Config } from '../config.js';
 import { META_SHARED_ACCOUNT_NOTE as _META_NOTE } from '../agents/googlelaunch.js';
 import { collectReadIds, googleResourceMissing, listCampaignRows, parseGoogleStatuses, retryReadback } from '../agents/enablecheck.js';
-import { actionPayload, customerPair, plainGoogleError, statusReportProps } from './gadsread.js';
+import { actionPayload, customerPair, mergeCampaignMetrics, metricRowHasNumbers, plainGoogleError, statusReportProps } from './gadsread.js';
 import { areaTerms, chooseGeoHits, geoReportProps, locationCriterion, locationReadbackOk, parseGeoTargets, parseLocationCriteria, resolveAreas, type GeoTarget } from '../agents/geotarget.js';
 import { plainStepErrors } from '../agents/googlelaunch.js';
 import { classifyGadsAccounts, extractCustomerNodes, type GadsAccess } from './gadsAccess.js';
@@ -80,6 +80,15 @@ export class PipedreamConnector implements Connector {
   private static readonly PROJECT_TTL_MS = 45_000;
   /** One hung Pipedream list must not pin every later read. */
   private static readonly LIST_TIMEOUT_MS = 8_000;
+
+  /** Saved client plus its manager login, when discovery only saw the manager. */
+  private rememberedTarget(externalUserId: string): { login: string; client?: string } | null {
+    const client = (this.gadsPreferred.get(externalUserId) || '').replace(/\D/g, '');
+    if (!/^\d{10}$/.test(client)) return null;
+    const login = (this.gadsLogin.get(externalUserId) || '').replace(/\D/g, '');
+    if (/^\d{10}$/.test(login) && login !== client) return { login, client };
+    return { login: client };
+  }
 
   /** Order targets so the owner's preferred (last-launched-into) account is tried first. */
   private preferTargets(externalUserId: string, targets: { login: string; client?: string }[]): { login: string; client?: string }[] {
@@ -760,15 +769,21 @@ export class PipedreamConnector implements Connector {
       targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
       if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return out;
       targets = (targets ?? []).filter((t) => /^\d{10}$/.test(t.client || t.login));
+      if (!targets.length) {
+        const remembered = this.rememberedTarget(externalUserId);
+        if (remembered) targets = [remembered];
+      }
       const access = this.gadsAccess.get(externalUserId);
-      if (!targets.length || access?.kind === 'none' || access?.kind === 'manager_only' || access?.kind === 'error' || access?.kind === 'choose') return out;
+      if (!targets.length) return out;
+      if ((access?.kind === 'none' || access?.kind === 'error') && !this.gadsPreferred.get(externalUserId)) return out;
       this.gadsCache.set(externalUserId, { key, appName, ids: targets.map((t) => t.client ?? t.login).filter((id) => /^\d{10}$/.test(id)), targets, ts: Date.now() });
     }
     const preferred = this.preferTargets(externalUserId, targets).slice(0, 8);
     const listed = await this.listGoogleCampaigns(externalUserId, account.id, preferred);
-    const metrics = new Map<string, { name: string; spend: number; clicks: number; conversions: number }>();
-    // Metrics are optional. A date-window report omits campaigns with no impressions.
-    // The list above is the source of campaign rows. Metrics fill in spend when present.
+    // A date-window report omits campaigns with no impressions. The list above
+    // is the source of rows, including paused and zero-impression campaigns.
+    // Metrics are summed onto that list for LAST_30_DAYS (or the requested range).
+    let metricRows: unknown[] = [];
     if (key) {
       const shapes = cachedShape ? [cachedShape, ...GADS_SHAPES.filter((s) => s.tag !== cachedShape.tag)] : GADS_SHAPES;
       let matched = false;
@@ -791,33 +806,26 @@ export class PipedreamConnector implements Connector {
             continue;
           }
           const rows = asRows(raw);
-          if (!rows.length) continue;
+          if (!rows.length || !rows.some((row) => metricRowHasNumbers(row))) continue;
           matched = true;
-          for (const r of rows) {
-            const name = String(r?.campaign?.name ?? r.campaignName ?? r.name ?? 'Google campaign');
-            const spend = num(r?.metrics?.costMicros ?? r?.metrics?.cost_micros) / 1e6 || num(r.cost ?? r.spend);
-            const clicks = num(r?.metrics?.clicks ?? r.clicks);
-            const conv = num(r?.metrics?.conversions ?? r.conversions);
-            const keyName = name.toLowerCase();
-            const prev = metrics.get(keyName) ?? { name, spend: 0, clicks: 0, conversions: 0 };
-            metrics.set(keyName, { name: prev.name, spend: prev.spend + spend, clicks: prev.clicks + clicks, conversions: prev.conversions + conv });
-          }
+          metricRows = rows;
           const prev = this.gadsCache.get(externalUserId);
           if (prev) this.gadsCache.set(externalUserId, { ...prev, shape });
           break;
         }
       }
     }
-    if (listed.length) {
-      return listed.map((row) => {
-        const hit = metrics.get((row.campaign || '').toLowerCase());
-        return { ...row, spend: Math.round(hit?.spend || 0), clicks: hit?.clicks || 0, conversions: Math.round(hit?.conversions || 0) };
-      });
-    }
-    for (const hit of metrics.values()) {
-      out.push({ platform: 'google_ads', campaign: hit.name, utm: '', spend: Math.round(hit.spend), clicks: hit.clicks, conversions: Math.round(hit.conversions) });
-    }
-    return out;
+    return mergeCampaignMetrics(listed, metricRows).map((row) => ({
+      platform: row.platform || 'google_ads',
+      campaign: row.campaign,
+      utm: row.utm || '',
+      spend: row.spend,
+      clicks: row.clicks,
+      conversions: row.conversions,
+      impressions: row.impressions,
+      status: row.status,
+      id: row.id,
+    }));
   }
 
   /** Every non-removed campaign on the client account, including paused and zero-spend. */
@@ -850,7 +858,9 @@ export class PipedreamConnector implements Connector {
             spend: 0,
             clicks: 0,
             conversions: 0,
+            impressions: 0,
             status: row.status,
+            id: row.id,
           });
         }
         if (out.length) break;
@@ -1951,10 +1961,10 @@ type GadsShape = { tag: string; fields: string[]; metrics: string[] };
 /** Formats Pipedream's create-campaign-report might expect, most-likely first.
  *  googleAdsSpend tries these until one returns rows, then caches the winner. */
 const GADS_SHAPES: GadsShape[] = [
-  { tag: 'qualified', fields: ['campaign.name'], metrics: ['metrics.cost_micros', 'metrics.clicks', 'metrics.conversions'] },
-  { tag: 'short', fields: ['campaign.name'], metrics: ['cost_micros', 'clicks', 'conversions'] },
-  { tag: 'bare', fields: ['name'], metrics: ['cost', 'clicks', 'conversions'] },
-  { tag: 'cost', fields: ['campaign.name'], metrics: ['metrics.cost', 'metrics.clicks', 'metrics.conversions'] },
+  { tag: 'qualified', fields: ['campaign.id', 'campaign.name'], metrics: ['metrics.impressions', 'metrics.clicks', 'metrics.cost_micros', 'metrics.conversions'] },
+  { tag: 'short', fields: ['campaign.name'], metrics: ['impressions', 'cost_micros', 'clicks', 'conversions'] },
+  { tag: 'bare', fields: ['name'], metrics: ['impressions', 'cost', 'clicks', 'conversions'] },
+  { tag: 'cost', fields: ['campaign.name'], metrics: ['metrics.impressions', 'metrics.cost', 'metrics.clicks', 'metrics.conversions'] },
 ];
 
 /**

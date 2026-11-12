@@ -3952,13 +3952,13 @@ function renderOverview(d, miles, op){
   } else {
     const t=el('table','md-table');
     const th=el('tr');
-    ['Campaign','Spend','Leads','Jobs','Cost / lead','Status'].forEach((name,i)=>{ th.append(el('th', i?'num':'', name)); });
+    ['Campaign','Spend','Impressions','Clicks','Conversions','Jobs','Cost / lead','Status'].forEach((name,i)=>{ th.append(el('th', i?'num':'', name)); });
     const head=el('thead'); head.append(th); t.append(head);
     const body=el('tbody');
     br.rows.forEach(r=>{
       const tr=el('tr');
       tr.append(el('td',null, r.name));
-      [r.spend, r.leads, r.jobs, r.cost].forEach(v=>tr.append(el('td','num', v)));
+      [r.spend, r.impressions||'0', r.clicks||'0', r.leads, r.jobs, r.cost].forEach(v=>tr.append(el('td','num', v)));
       const st=el('td','num');
       if(r.status){
         const cls=r.status==='Winning'?'win':r.status==='Losing'?'lose':'ok';
