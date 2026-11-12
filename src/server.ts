@@ -113,6 +113,7 @@ import {
   fallbackAgentDesign,
   customAgentRun,
   fallbackCustomAgent,
+  plainOwner,
   DATA_SOURCES,
   type CustomAgentSpec,
   type AgentStep,
@@ -594,7 +595,7 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   /** A plain branded page for the two things that should never be raw JSON. */
   const statusPage = (code: number, heading: string, body: string) => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Miles — ${heading}</title><style>
+<title>Miles, ${heading}</title><style>
 :root{color-scheme:light dark}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
   background:#F4F4F5;color:#111112;font:400 15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px}
@@ -2567,7 +2568,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       reviews: { connected: gmbLinked || reviews.length > 0, hasData: reviews.length > 0, count: reviews.length, avg: reviews.length ? Math.round((reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length) * 10) / 10 : null },
       social: social ? { connected: true, hasData: true, ...social } : (socialLinked ? { connected: true, hasData: false, impressions: 0, clicks: 0, likes: 0, followers: 0 } : null),
       upcomingPosts: posts.filter((x) => x.status === 'scheduled').sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt)).slice(0, 5).map((x) => ({ caption: x.caption, platforms: x.platforms, scheduledAt: x.scheduledAt, kind: x.kind })),
-      recentRuns: runs.slice(0, 6).map((r) => ({ title: r.title, ts: r.ts, task: r.task })),
+      recentRuns: runs.slice(0, 6).map((r) => ({ title: plainOwner(r.title), ts: r.ts, task: r.task })),
     };
   });
 
@@ -2899,7 +2900,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const status = result.live && result.ok ? 'live' : autonomy >= 100 && result.ok ? 'live' : 'pending';
     deploy.queue.unshift({
       id: newToken().slice(0, 10),
-      label: `Growth Autopilot — ${changes.length} budget move${changes.length === 1 ? '' : 's'} (${changes.filter((c) => c.action === 'scale').length} scale, ${changes.filter((c) => c.action === 'cut' || c.action === 'pause').length} cut/pause)`,
+      label: `Growth Autopilot, ${changes.length} budget move${changes.length === 1 ? '' : 's'} (${changes.filter((c) => c.action === 'scale').length} scale, ${changes.filter((c) => c.action === 'cut' || c.action === 'pause').length} cut/pause)`,
       type: 'budget',
       status,
       ts: new Date().toISOString(),
@@ -3615,7 +3616,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       }
       const next = [...active, wanted];
       data.activeFrameworks = next;
-      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'deployments', title: `Deployed framework — ${wanted}` });
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'deployments', title: `Deployed framework, ${wanted}` });
       await authStore.setUserData(u.id, data);
       return { ok: true, frameworks: next };
     }
@@ -3642,7 +3643,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (added.length) {
       appendApproval(data, {
         id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'deployments',
-        title: `Deployed ${added.length} skill${added.length === 1 ? '' : 's'} — ${added.slice(0, 5).join(', ')}${added.length > 5 ? '…' : ''}`,
+        title: `Deployed ${added.length} skill${added.length === 1 ? '' : 's'}, ${added.slice(0, 5).join(', ')}${added.length > 5 ? '…' : ''}`,
         detail: 'Runs on its own cadence in proposal mode; nothing is applied without approval.',
       });
     }
@@ -3664,7 +3665,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (kind !== 'skill') return reply.code(400).send({ error: 'kind must be "skill" or "framework"' });
     const next = deployedOf(data).filter((d) => d.key !== id);
     data.deployedSkills = next;
-    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'dismissal', actor: u.email, source: 'deployments', title: `Undeployed skill — ${id}` });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'dismissal', actor: u.email, source: 'deployments', title: `Undeployed skill, ${id}` });
     await authStore.setUserData(u.id, data);
     return { ok: true, skills: next };
   });
@@ -3787,7 +3788,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     // which none of the proposal targets have yet — status reflects reality.
     run.status = action === 'approve' ? 'approved' : 'dismissed';
     data.skill_runs = runs;
-    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: action === 'approve' ? 'approval' : 'dismissal', actor: u.email, source: run.skill, title: `${action === 'approve' ? 'Approved' : 'Dismissed'} — ${run.name}: ${run.summary.slice(0, 120)}` });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: action === 'approve' ? 'approval' : 'dismissal', actor: u.email, source: run.skill, title: `${action === 'approve' ? 'Approved' : 'Dismissed'}, ${run.name}: ${run.summary.slice(0, 120)}` });
     await authStore.setUserData(u.id, data);
     return { ok: true, run };
   });
@@ -3858,14 +3859,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         ? `${result.note} It is PAUSED. Miles does not enable campaigns and does not spend.`
         : searchLaunchNote({ live, ok, partial: judged.partial, missing: judged.missing, customerLabel: chosen!.label, name: spec.name }));
     const data = await authStore.getUserData(u.id);
-    if (live && ok) chargeCredits(data, 'campaign_launch', `Google Ads — ${spec.name} (PAUSED)`);
+    if (live && ok) chargeCredits(data, 'campaign_launch', `Google Ads, ${spec.name} (PAUSED)`);
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'campaign-launcher', title: `Approved paused Google Ads create — "${spec.name}" ($${spec.dailyBudget}/day)` });
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'campaign-launcher', title: `${ok ? 'Created PAUSED' : demoRun ? 'Demo preview only' : 'Create FAILED'} — "${spec.name}"`, detail: note });
     const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
     deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
     deploy.queue.unshift({
       id: newToken().slice(0, 10),
-      label: `Google Ads campaign — ${spec.name} (PAUSED${demoRun ? ', demo — not created' : ''})`,
+      label: `Google Ads campaign, ${spec.name} (PAUSED${demoRun ? ', demo, not created' : ''})`,
       type: 'ads',
       status: ok ? 'pending' : 'reverted',
       ts: new Date().toISOString(),
@@ -5158,7 +5159,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const forBusiness = (req.body?.mode ?? 'business') !== 'general';
     const data = await authStore.getUserData(u.id);
     const p = (data.profile ?? {}) as Record<string, string>;
-    const who = `${p.businessName || 'a local business'} — ${p.industry || 'local-service'}${p.serviceAreas ? `, ${p.serviceAreas}` : ''}${p.services ? `. Services: ${p.services}` : ''}`;
+    const who = `${p.businessName || 'a local business'}, ${p.industry || 'local-service'}${p.serviceAreas ? `, ${p.serviceAreas}` : ''}${p.services ? `. Services: ${p.services}` : ''}`;
     // Business mode carries the brand kit so the optimized prompt already reflects it.
     const kit = brandKitFor(data);
     const brandBlock =
@@ -5202,7 +5203,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }
     if (source === 'leads') {
       const l = await safeConn(connector.getLeads ? () => connector.getLeads!(userId) : undefined, []);
-      return { text: l.map((x) => `${x.name || 'Lead'} — ${x.service || 'inquiry'} (via ${x.source || 'unknown'})`).join('\n'), summary: `${l.length} leads` };
+      return { text: l.map((x) => `${x.name || 'Lead'}, ${x.service || 'inquiry'} (via ${x.source || 'unknown'})`).join('\n'), summary: `${l.length} leads` };
     }
     if (source === 'social') {
       const m = await safeConn(connector.getSocialMetrics ? () => connector.getSocialMetrics!(userId) : undefined, null);
@@ -5242,7 +5243,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           const { text, summary } = await readSourceText(st.tool, userId);
           ctx += `\n\n[Data from ${st.tool}]\n${text || '(nothing to read — source not connected)'}`;
           const need = DATA_SOURCES.find((d) => d.id === st.tool)?.connect;
-          lines.push(`📥 Step ${n} · Read ${st.tool} — ${text ? summary : `needs ${need || 'a connection'}`}`);
+          lines.push(`📥 Step ${n} · Read ${st.tool}, ${text ? summary : `needs ${need || 'a connection'}`}`);
         }
       } else if (st.kind === 'generate') {
         const task = st.tool === 'custom' ? (custom || st.instruction) : st.instruction;
@@ -5282,19 +5283,19 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       if (!spec) return { title: 'Custom agent', body: 'This agent is missing its configuration — re-create it in the Agent Studio.' };
       // Wireframe-built agents run their ordered steps.
       if (spec.steps && spec.steps.length) {
-        return runAgentSteps(spec.steps, userId, p.businessName || '', `${spec.name || 'Custom agent'} — ${dl}`);
+        return runAgentSteps(spec.steps, userId, p.businessName || '', `${spec.name || 'Custom agent'}, ${dl}`);
       }
       const { text: dataText } = spec.dataSource === 'none' ? { text: '' } : await readSourceText(spec.dataSource, userId);
       if (spec.dataSource !== 'none' && !dataText) {
         const src = DATA_SOURCES.find((x) => x.id === spec.dataSource);
         return {
-          title: `${spec.name} — ${dl}`,
+          title: `${spec.name}, ${dl}`,
           body: `${spec.name} is ready: ${spec.description}. It just needs ${src?.connect || 'its data source'} connected in Integrations — there’s nothing to read yet. Once connected, it runs automatically and drops its report here.`,
         };
       }
       const { system, user } = customAgentRun(spec, p.businessName, dataText);
       const body = (await generateText({ system, user, maxTokens: 900 })) ?? fallbackCustomAgent(spec);
-      return { title: `${spec.name} — ${dl}`, body };
+      return { title: `${spec.name}, ${dl}`, body };
     }
     if (task === 'cpa_report') {
       const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(userId) : undefined, []);
@@ -5314,11 +5315,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const scheduledPosts = ((data.scheduledPosts as ScheduledPost[]) ?? []).filter((x) => x.status === 'scheduled').length;
       const stl = (data.speedToLead as { enabled?: boolean } | undefined)?.enabled ?? false;
       const recs = buildRecommendations({ spend, deals, leads, reviews, emails, social, scheduledPosts, targetCpa: Number(p.targetCpa) || null, speedToLeadOn: stl }, new Date());
-      if (!recs.length) return { title: `Recommendations — ${dl}`, body: `You’re all optimized today — nothing needs your attention. Nice work.` };
+      if (!recs.length) return { title: `Recommendations, ${dl}`, body: `You are all set today. Nothing needs your attention. Nice work.` };
       const urgent = recs.filter((r) => r.severity === 'high').length;
       const lines = recs.map((r, i) => `${i + 1}. ${r.title}\n   Why: ${r.why}\n   Do: ${r.action}`).join('\n\n');
-      const body = `You have ${recs.length} recommendation${recs.length > 1 ? 's' : ''}${urgent ? ` — ${urgent} need action now` : ''}. Open Miles and approve the ones you want:\n\n${lines}`;
-      return { title: `${recs.length} recommendation${recs.length > 1 ? 's' : ''} — ${dl}`, body };
+      const body = `You have ${recs.length} recommendation${recs.length > 1 ? 's' : ''}${urgent ? `, ${urgent} need action now` : ''}. Open Miles and approve the ones you want:\n\n${lines}`;
+      return { title: `${recs.length} recommendation${recs.length > 1 ? 's' : ''}, ${dl}`, body };
     }
     if (task === 'email_tasklist') {
       const emails = await safeConn(connector.getRecentEmails ? () => connector.getRecentEmails!(userId, 25) : undefined, []);
@@ -5330,7 +5331,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         };
       const { system, user } = buildTaskListPrompt(emails, p.businessName);
       const body = (await generateText({ system, user, maxTokens: 800 })) ?? fallbackTaskList(emails);
-      return { title: `Morning task list — ${dateLabel}`, body };
+      return { title: `Morning task list, ${dateLabel}`, body };
     }
     if (task === 'daily_wrapup') {
       const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -5345,7 +5346,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       };
       const { system, user } = buildWrapupPrompt(activity, p.businessName);
       const body = (await generateText({ system, user, maxTokens: 700 })) ?? fallbackWrapup(activity, dateLabel);
-      return { title: `Daily wrap-up — ${dateLabel}`, body };
+      return { title: `Daily wrap-up, ${dateLabel}`, body };
     }
     // ── content agents (social / reviews / leads / competitors) ──
     const dLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -5360,41 +5361,41 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const metrics = await safeConn(connector.getSocialMetrics ? () => connector.getSocialMetrics!(userId) : undefined, null);
       const { system, user } = socialAgent(ctx);
       const post = (await generateText({ system, user, maxTokens: 500 })) ?? agentFallback('social_content', ctx);
-      return { title: `Today's social post — ${dLabel}`, body: `${post}\n\n${metricsLine(metrics)}` };
+      return { title: `Today's social post, ${dLabel}`, body: `${post}\n\n${metricsLine(metrics)}` };
     }
     if (task === 'review_responder') {
       const reviews = await safeConn(connector.getReviews ? () => connector.getReviews!(userId) : undefined, []);
       const cctx: AgentCtx = { ...ctx, reviews };
       const { system, user } = reviewAgent(cctx);
       const body = (await generateText({ system, user, maxTokens: 700 })) ?? agentFallback('review_responder', cctx);
-      return { title: reviews.length ? `Review replies (${reviews.length}) — ${dLabel}` : `Review reply templates — ${dLabel}`, body };
+      return { title: reviews.length ? `Review replies (${reviews.length}), ${dLabel}` : `Review reply templates, ${dLabel}`, body };
     }
     if (task === 'lead_followup') {
       const leads = await safeConn(connector.getLeads ? () => connector.getLeads!(userId) : undefined, []);
       const cctx: AgentCtx = { ...ctx, leads };
       const { system, user } = leadAgent(cctx);
       const body = (await generateText({ system, user, maxTokens: 700 })) ?? agentFallback('lead_followup', cctx);
-      return { title: leads.length ? `Lead follow-ups (${leads.length}) — ${dLabel}` : `Lead follow-up sequence — ${dLabel}`, body };
+      return { title: leads.length ? `Lead follow-ups (${leads.length}), ${dLabel}` : `Lead follow-up sequence, ${dLabel}`, body };
     }
     if (task === 'competitor_watch') {
       const { system, user } = competitorAgent(ctx);
       const body = (await generateText({ system, user, maxTokens: 700 })) ?? agentFallback('competitor_watch', ctx);
-      return { title: `Competitor watch — ${dLabel}`, body };
+      return { title: `Competitor watch, ${dLabel}`, body };
     }
     if (task === 'seo_agent') {
       const { system, user } = seoAgent(ctx);
       const body = (await generateText({ system, user, maxTokens: 700 })) ?? agentFallback('seo_agent', ctx);
-      return { title: `Local SEO play — ${dLabel}`, body };
+      return { title: `Local SEO play, ${dLabel}`, body };
     }
     if (task === 'content_writer') {
       const { system, user } = contentAgent(ctx);
       const body = (await generateText({ system, user, maxTokens: 900 })) ?? agentFallback('content_writer', ctx);
-      return { title: `SEO blog draft — ${dLabel}`, body };
+      return { title: `SEO blog draft, ${dLabel}`, body };
     }
     if (task === 'geo_agent') {
       const { system, user } = geoAgent(ctx);
       const body = (await generateText({ system, user, maxTokens: 800 })) ?? agentFallback('geo_agent', ctx);
-      return { title: `AI-search (GEO) kit — ${dLabel}`, body };
+      return { title: `AI-search (GEO) kit, ${dLabel}`, body };
     }
     if (task === 'social_poster') {
       // The full workflow in one run: generate image → write caption → publish to connected socials.
@@ -5422,7 +5423,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         statusLine = (ok.length ? `✅ Published to ${ok.join(', ')}. ` : '') + (bad.length ? `⚠︎ Couldn’t post to ${bad.join(', ')}.` : '');
       }
       const body = `${caption}\n\n${imageUrl ? `🖼 On-brand image generated: ${imageUrl}` : ''}\n${statusLine}`.trim();
-      return { title: `Social media post — ${dLabel}`, body };
+      return { title: `Social media post, ${dLabel}`, body };
     }
     if (task === 'social_report') {
       const metrics = await safeConn(connector.getSocialMetrics ? () => connector.getSocialMetrics!(userId) : undefined, null);
@@ -5455,7 +5456,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   }
 
   function appendRun(data: Record<string, unknown>, agent: ScheduledAgent, result: { title: string; body: string }): AgentRun {
-    const run: AgentRun = { id: newToken().slice(0, 10), agentId: agent.id, task: agent.task, ts: new Date().toISOString(), ...result };
+    const run: AgentRun = { id: newToken().slice(0, 10), agentId: agent.id, task: agent.task, ts: new Date().toISOString(), title: plainOwner(result.title), body: plainOwner(result.body) };
     data.agentRuns = [run, ...(((data.agentRuns as AgentRun[]) ?? []))].slice(0, 50);
     return run;
   }
@@ -5553,7 +5554,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       }
       const held = channels.length === 0;
       state = recordContact(state, lead, nowISO, channels, held, responseSeconds(lead, nowISO));
-      blocks.push(`• ${lead.name || 'New lead'} — ${lead.service || 'inquiry'} (via ${lead.source || 'website'}): ${held ? 'drafted, ready to send' : `sent ${channels.join(' + ')}`}\n${reply}`);
+      blocks.push(`• ${lead.name || 'New lead'}, ${lead.service || 'inquiry'} (via ${lead.source || 'website'}): ${held ? 'drafted, ready to send' : `sent ${channels.join(' + ')}`}\n${reply}`);
     }
     data.speedToLead = state;
     const title = `Speed-to-Lead: answered ${fresh.length} new lead${fresh.length === 1 ? '' : 's'}`;
@@ -6068,7 +6069,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    return { agents: (data.schedules as ScheduledAgent[]) ?? [], runs: (data.agentRuns as AgentRun[]) ?? [], tasks: TASK_SPECS };
+    return { agents: (data.schedules as ScheduledAgent[]) ?? [], runs: ((data.agentRuns as AgentRun[]) ?? []).map((run) => ({ ...run, title: plainOwner(run.title), body: plainOwner(run.body) })), tasks: TASK_SPECS };
   });
   app.put<{ Body: { agents?: ScheduledAgent[] } }>('/api/schedules', async (req, reply) => {
     const u = await requireUser(req, reply);

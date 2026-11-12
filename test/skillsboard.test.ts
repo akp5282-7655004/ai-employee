@@ -30,6 +30,11 @@ describe('skills and playbooks board', () => {
     expect(planning).toMatch(/\$40 to \$90/);
     expect(planning).toMatch(/does not use it/);
     expect(painting.lines.find((line) => line.label === 'Season')!.text).toMatch(/spring/);
+    expect(painting.summary).toMatch(/paused Google Search/);
+    expect(painting.facts.join(' ')).toMatch(/\$104 to \$149/);
+    expect(painting.facts.join(' ')).toMatch(/Season:/);
+    expect(painting.badge).toBe('Available');
+    expect(board.cards.filter((card) => card.group === 'playbook' || card.group === 'pack').every((card) => card.badge === 'Active' || card.badge === 'Available')).toBe(true);
     expect(painting.lines.find((line) => line.label === 'Campaign structure')!.text).toMatch(/prospecting group/);
     const roofing = playbooks.find((card) => card.id === 'playbook-roofing')!;
     expect(roofing.lines.find((line) => line.label === 'Campaign structure')!.text).toMatch(/pitched and shingle/);
@@ -69,6 +74,8 @@ describe('skills and playbooks board', () => {
       noShowOn: true,
     });
     expect(on.cards.find((card) => card.id === 'speed-to-lead')!.status).toBe('On');
+    expect(on.cards.find((card) => card.id === 'speed-to-lead')!.badge).toBe('Active');
+    expect(on.cards.find((card) => card.id === 'speed-to-lead')!.facts.join(' ')).toMatch(/text back|GoHighLevel|lead/i);
     expect(on.cards.find((card) => card.id === 'reviews')!.active).toBe(true);
     expect(on.cards.find((card) => card.id === 'google-search')!.status).toBe('Running');
     expect(on.cards.find((card) => card.id === 'social')!.status).toBe('2 scheduled');
@@ -93,6 +100,9 @@ describe('skills board route and nav', () => {
     expect(marketing).toContain('data-page="library"');
     expect(marketing).toContain('Skills &amp; Playbooks');
     expect(ui).toContain('id="page-library"');
+    expect(ui).toContain('lib-grid');
+    expect(ui).toContain('repeat(3,minmax(0,1fr))');
+    expect(ui).toContain('repeat(2,minmax(0,1fr))');
     expect(ui).toContain("setPage('library')");
     const connector = {
       name: 'mock',

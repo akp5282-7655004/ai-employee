@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isDue, buildCpaReport, buildMorningBrief, buildTaskListPrompt, fallbackTaskList, buildWrapupPrompt, fallbackWrapup, TASK_SPECS, socialAgent, reviewAgent, leadAgent, metricsLine, agentFallback, buildAgentDesignPrompt, parseAgentSpec, fallbackAgentDesign, customAgentRun, DATA_SOURCES, type ScheduledAgent } from '../src/agents/scheduled.js';
+import { isDue, buildCpaReport, buildMorningBrief, buildTaskListPrompt, fallbackTaskList, buildWrapupPrompt, fallbackWrapup, plainOwner, TASK_SPECS, socialAgent, reviewAgent, leadAgent, metricsLine, agentFallback, buildAgentDesignPrompt, parseAgentSpec, fallbackAgentDesign, customAgentRun, DATA_SOURCES, type ScheduledAgent } from '../src/agents/scheduled.js';
 
 const agent = (o: Partial<ScheduledAgent> = {}): ScheduledAgent => ({
   id: 'a1', name: 'Brief', task: 'morning_brief', time: '08:30', days: [1, 2, 3, 4, 5], enabled: true, tzOffset: 0, createdAt: '', ...o,
@@ -183,8 +183,17 @@ describe('buildMorningBrief', () => {
       weatherOpportunity: 'Push AC emergency ads', pendingApprovals: 2, activeTriggers: 1,
     });
     expect(b.title).toContain('Morning brief');
+    expect(b.title).not.toContain('\u2014');
+    expect(b.body).not.toContain('\u2014');
     expect(b.body).toContain('Rivera Plumbing');
     expect(b.body).toContain('104°F');
     expect(b.body).toContain('Approve 2 changes');
+  });
+});
+
+describe('activity titles', () => {
+  it('removes the em dash from a generated activity line', () => {
+    expect(plainOwner('Ad Creator — Monday, November 9')).toBe('Ad Creator, Monday, November 9');
+    expect(plainOwner('Ad Creator — Monday, November 9')).not.toContain('\u2014');
   });
 });

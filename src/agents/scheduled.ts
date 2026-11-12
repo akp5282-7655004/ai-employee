@@ -522,15 +522,20 @@ export function buildWrapupPrompt(a: WrapActivity, business?: string): { system:
   return { system, user };
 }
 
+/** Owner-facing text. Em dashes and en dashes never reach the screen. */
+export function plainOwner(s: string): string {
+  return s.replace(/[ \t]*\u2014[ \t]*/g, ', ').replace(/\u2013/g, '-');
+}
+
 export function fallbackWrapup(a: WrapActivity, dateLabel: string): string {
   const done = [...a.accomplished, ...a.agentRuns];
-  if (!done.length && !a.pending.length) return `Quiet day — nothing shipped or pending in Miles on ${dateLabel}. A good time to plan tomorrow’s outreach.`;
+  if (!done.length && !a.pending.length) return plainOwner(`Quiet day, nothing shipped or pending in Miles on ${dateLabel}. A good time to plan tomorrow's outreach.`);
   const lines: string[] = [];
   lines.push('✅ Accomplished today:');
   if (done.length) done.forEach((d) => lines.push(`   • ${d}`));
   else lines.push('   • (nothing shipped today)');
   lines.push('', '⏳ Still pending:');
-  if (a.pending.length) a.pending.forEach((d) => lines.push(`   • ${d} — needs your approval`));
+  if (a.pending.length) a.pending.forEach((d) => lines.push(`   • ${d}, needs your approval`));
   else lines.push('   • Nothing waiting on you 🎉');
   lines.push('', `🎯 Tomorrow: clear any pending approvals and follow up on new leads.`);
   return lines.join('\n');
@@ -538,7 +543,7 @@ export function fallbackWrapup(a: WrapActivity, dateLabel: string): string {
 
 export function buildMorningBrief(ctx: BriefContext): { title: string; body: string } {
   const biz = ctx.business || 'your business';
-  const lines: string[] = [`Good morning — here's ${biz} for ${ctx.dateLabel}.`, ''];
+  const lines: string[] = [`Good morning. Here is ${biz} for ${ctx.dateLabel}.`, ''];
   if (ctx.weatherLine) {
     lines.push(`🌤  Weather: ${ctx.weatherLine}`);
     if (ctx.weatherOpportunity) lines.push(`     Opportunity: ${ctx.weatherOpportunity}`);
@@ -548,13 +553,13 @@ export function buildMorningBrief(ctx: BriefContext): { title: string; body: str
   const todos: string[] = [];
   if (ctx.pendingApprovals > 0)
     todos.push(`Approve ${ctx.pendingApprovals} change${ctx.pendingApprovals === 1 ? '' : 's'} waiting in Deploy.`);
-  if (ctx.activeTriggers > 0) todos.push(`${ctx.activeTriggers} weather trigger${ctx.activeTriggers === 1 ? '' : 's'} armed — no action needed.`);
+  if (ctx.activeTriggers > 0) todos.push(`${ctx.activeTriggers} weather trigger${ctx.activeTriggers === 1 ? '' : 's'} armed. No action needed.`);
   todos.push('Reply to any new leads from overnight.');
   todos.push('Check yesterday’s ad spend vs. booked jobs.');
   todos.forEach((t, i) => lines.push(`   ${i + 1}. ${t}`));
   lines.push('');
   lines.push(`🎯 Focus: ${ctx.focus || 'Turn yesterday’s leads into booked jobs before chasing new ones.'}`);
-  return { title: `Morning brief — ${ctx.dateLabel}`, body: lines.join('\n') };
+  return { title: plainOwner(`Morning brief, ${ctx.dateLabel}`), body: plainOwner(lines.join('\n')) };
 }
 
 export interface CpaRow {

@@ -21,8 +21,16 @@ export interface BoardCard {
   active: boolean;
   status: string;
   yours: boolean;
+  /** One line for the card face. */
+  summary: string;
+  /** Short facts on the card. Playbooks: cost per lead and season. Skills: what it does. */
+  facts: string[];
+  /** Active when this account has it on. Otherwise available. */
+  badge: 'Active' | 'Available';
   lines: { label: string; text: string }[];
 }
+
+type DraftCard = Omit<BoardCard, 'summary' | 'facts' | 'badge'>;
 
 export interface SkillsBoard {
   title: string;
@@ -110,7 +118,7 @@ export function buildSkillsBoard(input: SkillsBoardInput = {}): SkillsBoard {
   const yours = tradeKey(input.trade || '');
   const installed = new Set(input.installed ?? []);
   const deployed = new Set(input.deployed ?? []);
-  const cards: BoardCard[] = [];
+  const cards: DraftCard[] = [];
 
   for (const trade of playbookTrades()) {
     cards.push({
@@ -161,7 +169,7 @@ export function buildSkillsBoard(input: SkillsBoardInput = {}): SkillsBoard {
   const search = searchStatus(input);
   const posts = input.scheduledPosts ?? 0;
   const weatherOn = input.weatherRulesOn ?? 0;
-  const product: BoardCard[] = [
+  const product: DraftCard[] = [
     {
       id: 'google-search',
       title: 'Google Search ads',
@@ -305,20 +313,52 @@ export function buildSkillsBoard(input: SkillsBoardInput = {}): SkillsBoard {
 
   return {
     title: 'Skills and playbooks',
-    intro: 'These are the playbooks and skills stored in Miles. A card is on only when this account has it running, saved, installed, or scheduled. Nothing here is a sample result.',
-    cards: cards.map((card) => ({
-      ...card,
-      title: plain(card.title),
-      status: plain(card.status),
-      lines: card.lines.map((line) => ({ label: plain(line.label), text: plain(line.text) })),
-    })),
+    intro: 'These are the playbooks and skills stored in Miles. Active means this account has it on. Available means Miles can run it, and it is not on yet. Nothing here is a sample result.',
+    cards: cards.map((card) => {
+      const lines = card.lines.map((line) => ({ label: plain(line.label), text: plain(line.text) }));
+      const faced: BoardCard = { ...card, title: plain(card.title), status: plain(card.status), lines, summary: '', facts: [], badge: card.active ? 'Active' : 'Available' };
+      faced.summary = summaryFor(faced);
+      faced.facts = factsFor(faced);
+      return faced;
+    }),
   };
+}
+
+function oneLine(text: string): string {
+  const clean = plain(text);
+  const cut = clean.split('. ')[0] || clean;
+  const line = !cut || /[.!?]$/.test(cut) ? cut : `${cut}.`;
+  return line.length > 140 ? `${line.slice(0, 137).trim()}...` : line;
+}
+
+function summaryFor(card: DraftCard): string {
+  if (card.group === 'playbook') return 'Builds a paused Google Search campaign from your saved business details.';
+  const what = card.lines.find((line) => /what|playbook/i.test(line.label))?.text || card.lines[0]?.text || card.title;
+  return oneLine(what);
+}
+
+function factsFor(card: DraftCard): string[] {
+  if (card.group === 'playbook') {
+    const cpl = card.lines.find((line) => line.label === 'Cost per lead Miles uses')?.text || '';
+    const season = card.lines.find((line) => line.label === 'Season')?.text || '';
+    const range = cpl.match(/\$[\d,]+(?: to \$[\d,]+)?/);
+    return [
+      range ? `Cost per lead ${range[0]}` : 'Cost per lead is not listed',
+      season ? `Season: ${season}` : '',
+    ].filter(Boolean);
+  }
+  const what = card.lines.find((line) => line.label === 'What it does')?.text
+    || card.lines.find((line) => line.label === 'Playbook')?.text
+    || card.lines[0]?.text
+    || '';
+  const extra = card.lines.find((line) => line.label === 'Limit' || line.label === 'Plays' || line.label === 'Budget bands')?.text || '';
+  return [oneLine(what), extra ? oneLine(extra) : ''].filter(Boolean).slice(0, 2);
 }
 
 export function boardCopy(board: SkillsBoard): string[] {
   const out = [board.title, board.intro];
   for (const card of board.cards) {
-    out.push(card.title, card.status);
+    out.push(card.title, card.status, card.summary, card.badge, ...card.facts);
     for (const line of card.lines) out.push(line.label, line.text);
   }
   return out;
