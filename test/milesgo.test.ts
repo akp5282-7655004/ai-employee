@@ -65,16 +65,16 @@ async function ready(app: ReturnType<typeof buildServer>, email: string) {
   await app.inject({ method: 'POST', url: '/api/miles/crawl', headers, payload: { businessName: 'Painters In Philly', location: 'Philadelphia, PA', website: 'https://paintersinphilly.com', html } });
   const planned = await app.inject({ method: 'POST', url: '/api/miles/questions', headers, payload: { goal: 'get me leads', dailyBudget: 20, leadsPerDay: 1, mode: 'automate' } });
   await app.inject({ method: 'POST', url: '/api/miles/tracking', headers, payload: { leadConversion: true, method: 'call_or_form' } });
-  return { headers, name: planned.json().bundle.spec.name as string };
+  return { headers, name: planned.json().bundle.spec.name as string, spec: planned.json().bundle.spec };
 }
 
 describe('one Start does not create two campaigns', () => {
   it('joins a second /api/miles/go while the first is still creating', async () => {
     const { app, calls, release, started } = appFor({ delayLaunch: true });
-    const { headers } = await ready(app, 'double@example.com');
-    const first = app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
+    const { headers, spec } = await ready(app, 'double@example.com');
+    const first = app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true, plan: spec } });
     await started;
-    const second = app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
+    const second = app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true, plan: spec } });
     await new Promise((resolve) => setTimeout(resolve, 50));
     release();
     const [a, b] = await Promise.all([first, second]);
@@ -86,8 +86,8 @@ describe('one Start does not create two campaigns', () => {
 
   it('enables the paused campaign on file instead of creating another', async () => {
     const { app, calls } = appFor();
-    const { headers } = await ready(app, 'reuse@example.com');
-    const first = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
+    const { headers, spec } = await ready(app, 'reuse@example.com');
+    const first = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true, plan: spec } });
     expect(first.json().created).toBe(true);
     expect(first.json().enabled).toBe(true);
     const second = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
@@ -135,8 +135,8 @@ describe('one Start does not create two campaigns', () => {
       },
     } as unknown as Connector;
     const app = buildServer({ authStore: new MemoryStore(), connector });
-    const { headers } = await ready(app, 'partial@example.com');
-    const started = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
+    const { headers, spec } = await ready(app, 'partial@example.com');
+    const started = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true, plan: spec } });
     expect(started.json().created).toBe(true);
     expect(started.json().enabled).toBe(false);
     expect(started.json().note).toMatch(/capitalization/);
@@ -148,8 +148,8 @@ describe('one Start does not create two campaigns', () => {
 
   it('clears a stale campaign when Google says it is gone', async () => {
     const { app, calls } = appFor({ missingOnPause: true });
-    const { headers } = await ready(app, 'missing@example.com');
-    await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
+    const { headers, spec } = await ready(app, 'missing@example.com');
+    await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true, plan: spec } });
     const reverted = await app.inject({ method: 'POST', url: '/api/miles/revert', headers, payload: { confirm: true } });
     expect(reverted.statusCode).toBe(200);
     expect(reverted.json().cleared).toBe(true);
@@ -176,6 +176,9 @@ describe('Run and Start show the result', () => {
     expect(page).toContain("btn.type='button'");
     const play = page.slice(page.indexOf('function runPlaybook'), page.indexOf('async function actDecision'));
     expect(play).toContain('startMilesGo');
+    expect(page).toContain('Approve and launch');
+    expect(page).toContain('openCampaignPlan');
+    expect(page).toContain("md-ghost','Cancel'");
     expect(play).not.toContain("r.enabled?'Enabled inside your caps.'");
     const plan = page.slice(page.indexOf("sect-label','GOOGLE PLAN'"), page.indexOf("sect-label','GOOGLE PLAN'") + 1800);
     expect(plan).toContain('startMilesGo');

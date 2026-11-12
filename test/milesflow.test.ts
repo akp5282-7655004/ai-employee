@@ -55,7 +55,7 @@ describe('Google path at $20 a day', () => {
     expect(planned.json().bundle.spec.status).toBe('PAUSED');
     expect(planned.json().bundle.channels.find((ch: { id: string }) => ch.id === 'meta').status).toBe('coming_later');
     await app.inject({ method: 'POST', url: '/api/miles/tracking', headers, payload: { leadConversion: true, ga4Linked: true, method: 'thank_you' } });
-    const started = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
+    const started = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true, plan: planned.json().bundle.spec } });
     expect(started.statusCode).toBe(200);
     expect(started.json().created).toBe(true);
     expect(started.json().enabled).toBe(true);
@@ -78,11 +78,10 @@ describe('Google path at $20 a day', () => {
     await app.inject({ method: 'POST', url: '/api/miles/crawl', headers, payload: { businessName: 'Painters In Philly', location: 'Philadelphia, PA', website: 'https://paintersinphilly.com', html } });
     await app.inject({ method: 'POST', url: '/api/miles/questions', headers, payload: { goal: 'get me leads', dailyBudget: 20, leadsPerDay: 1, mode: 'hybrid' } });
     const started = await app.inject({ method: 'POST', url: '/api/miles/go', headers, payload: { confirm: true } });
+    expect(started.statusCode).toBe(400);
+    expect(started.json().needsPlan).toBe(true);
     expect(started.json().created).toBe(false);
     expect(calls).not.toContain('launch');
-    const home = await app.inject({ method: 'GET', url: '/api/miles/home', headers });
-    const queued = home.json().inbox.find((i: { kind: string }) => i.kind === 'create');
-    expect(queued.status).toBe('queued');
   });
 
   it('manual does not create', async () => {

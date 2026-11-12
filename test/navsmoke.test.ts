@@ -131,5 +131,34 @@ describe('every nav tab loads', () => {
     }
     expect(calls).not.toContain('launch');
     expect(calls).not.toContain('status');
+
+    const before = seen.errors.length;
+    await page.getByRole('button', { name: 'Run', exact: true }).first().click();
+    await page.locator('#campaign-plan').waitFor();
+    for (let i = 0; i < 12; i++) {
+      const text = await page.locator('#campaign-plan').innerText();
+      if (text.includes('Approve and launch')) break;
+      const input = page.locator('#campaign-plan input[type="text"]');
+      if (await input.count()) {
+        if (/website/i.test(text)) await input.fill('https://painters.example');
+        else if (/phone/i.test(text)) await input.fill('2155550199');
+        else if (!(await input.inputValue()).trim()) await input.fill('Philadelphia');
+      }
+      const before = text;
+      await page.getByRole('button', { name: 'Use this answer' }).click();
+      await page.waitForFunction((prev) => {
+        const el = document.getElementById('campaign-plan');
+        return !!el && el.innerText !== prev;
+      }, before);
+    }
+    const planText = await page.locator('#campaign-plan').innerText();
+    expect(planText).toMatch(/Approve and launch/);
+    expect(planText).toMatch(/Cancel/);
+    expect(planText).toMatch(/Locations/);
+    expect(planText).not.toContain('\u2014');
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.locator('#campaign-plan').waitFor({ state: 'detached' });
+    expect(seen.errors.slice(before), seen.errors.join('\n')).toEqual([]);
+    expect(calls).not.toContain('launch');
   }, 90000);
 });

@@ -6,6 +6,7 @@ const CUSTOMER = '1234567890';
 
 function client(opts?: { missing?: boolean; lag?: boolean }) {
   const queries: string[] = [];
+  const sent: Record<string, unknown>[] = [];
   let reports = 0;
   const components = [
     { key: 'google_ads-list-account-id-options', configurableProps: [{ type: 'app', name: 'googleAds' }] },
@@ -17,6 +18,7 @@ function client(opts?: { missing?: boolean; lag?: boolean }) {
   ];
   return {
     queries,
+    sent,
     pd: {
       accounts: {
         list: async () => ({ data: [{ id: 'apn_1', app: { nameSlug: 'google_ads' }, healthy: true, name: 'Google' }] }),
@@ -34,6 +36,7 @@ function client(opts?: { missing?: boolean; lag?: boolean }) {
           }
           if (req.id === 'google_ads-create-report') {
             reports += 1;
+            sent.push((req.configuredProps || {}) as Record<string, unknown>);
             if (req.configuredProps?.query) queries.push(req.configuredProps.query);
             const lag = opts?.lag && reports < 3;
             return {
@@ -64,8 +67,8 @@ describe('Google enable read-back', () => {
       adGroupResources: ['customers/1/adGroups/3'],
       adResources: ['customers/1/ads/8'],
     });
-    expect(fake.queries.some((query) => query.includes('ad_group.status'))).toBe(true);
-    expect(fake.queries.some((query) => query.includes('ad_group_ad.status'))).toBe(true);
+    expect(fake.sent.some((props) => props.resource === 'ad_group' && Array.isArray(props.segments) && (props.segments as unknown[]).length === 0 && !('dateRange' in props) && !('metrics' in props))).toBe(true);
+    expect(fake.sent.some((props) => props.resource === 'ad_group_ad')).toBe(true);
     expect(turned.readback?.adGroups).toEqual(['ENABLED']);
     expect(turned.readback?.ads).toEqual(['ENABLED']);
     expect(turned.ok).toBe(true);
@@ -82,7 +85,7 @@ describe('Google enable read-back', () => {
       adGroupResources: ['customers/1/adGroups/3'],
       adResources: ['customers/1/adGroupAds/3~8'],
     });
-    expect(fake.queries.length).toBeGreaterThan(2);
+    expect(fake.sent.length).toBeGreaterThan(2);
     expect(turned.readback?.adGroups).toEqual(['ENABLED']);
     expect(turned.ok).toBe(true);
   });

@@ -32,7 +32,8 @@ import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, a
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, normalizeSiteUrl, repairCampaignUrls, type CampaignSpec } from './agents/campaign.js';
 import { googleResourceMissing, judgeEnableReadback } from './agents/enablecheck.js';
-import { enforceRulebook, housekeepingProposals } from './agents/rulebook.js';
+import { housekeepingProposals } from './agents/rulebook.js';
+import { acceptApprovedPlan, applyPlanAnswer, buildSearchPlan, type PlanProfile } from './agents/campaignplan.js';
 import { formatSopLog, runSopGate } from './agents/sopgate.js';
 import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, META_SHARED_ACCOUNT_NOTE, plainStepErrors, resourcesFromSteps, searchLaunchNote } from './agents/googlelaunch.js';
 import { buildLoopPlan, decideLead, ghlUpsertProps, GHL_UPSERT_ACTION, judgeActivation, normalizeLead, type ObservedAd } from './agents/plumberloop.js';
@@ -1263,6 +1264,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     audits: { id: string; title: string; source: string; summary: string; score?: number; grade?: string }[];
     found: { pagesRead: number; businessName: string; phone: string; services: string; website: string; fetchNote: string; auditSummary: string; crawledAt?: string } | null;
     pendingMode?: 'automate' | 'hybrid' | 'manual';
+    /** The plan the owner approved. Automate reuses it after the first approval. */
+    approvedPlan?: CampaignSpec;
+    planApproved?: boolean;
   };
   const milesOf = (data: Record<string, unknown>): MilesFile => {
     const raw = (data.miles as Partial<MilesFile>) ?? {};
@@ -1281,6 +1285,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       audits: Array.isArray(raw.audits) ? raw.audits : [],
       found: raw.found ?? null,
       pendingMode: raw.pendingMode,
+      approvedPlan: raw.approvedPlan,
+      planApproved: raw.planApproved === true,
     };
   };
   const rememberMiles = (data: Record<string, unknown>, miles: MilesFile, text: string, go = false) => {
@@ -1487,6 +1493,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     adsMissing?: unknown;
     reused?: boolean;
     cleared?: boolean;
+    needsPlan?: boolean;
   };
   const milesGoFlight = new Map<string, Promise<GoResult>>();
   const adoptNamedCampaign = async (uid: string, name: string): Promise<string | undefined> => {
@@ -1500,7 +1507,29 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       return undefined;
     }
   };
-  const runMilesGoBody = async (uid: string, email: string, explicitCreate: boolean): Promise<GoResult> => {
+  const planProfileOf = (data: Record<string, unknown>, miles: MilesFile): PlanProfile => {
+    const profile = (data.profile ?? {}) as Record<string, string>;
+    const setup = miles.bundle?.setup;
+    const saved = miles.bundle?.profile ?? {};
+    const budget = setup?.caps?.dailyBudget;
+    return {
+      businessName: profile.businessName || setup?.businessName || saved.businessName,
+      trade: profile.industry || saved.industry,
+      services: profile.services || saved.services,
+      serviceAreas: profile.serviceAreas || setup?.location,
+      phone: profile.phone || saved.phone,
+      website: setup?.website || profile.website || saved.website,
+      hours: profile.hours || miles.bundle?.hours || saved.hours,
+      goal: profile.goal || setup?.goal,
+      dailyBudget: budget && budget > 0 ? budget : undefined,
+      leadsPerDay: setup?.leadsPerDay,
+      jobsToAvoid: profile.jobsToAvoid,
+      keywordFocus: profile.keywordFocus,
+      gbpUrl: setup?.gbpUrl || profile.gbpUrl,
+      links: miles.crawl?.links,
+    };
+  };
+  const runMilesGoBody = async (uid: string, email: string, explicitCreate: boolean, submitted?: CampaignSpec): Promise<GoResult> => {
     const data = await authStore.getUserData(uid);
     const miles = milesOf(data);
     if (!miles.bundle) return { error: 'Save the three questions first.', code: 400 as const };
@@ -1510,6 +1539,20 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const adopted = await adoptNamedCampaign(uid, miles.bundle.spec?.name || '');
       if (adopted) miles.campaignResource = adopted;
     }
+    const savedSiteEarly = normalizeSiteUrl(miles.bundle.setup.website || miles.bundle.profile.website || miles.found?.website || (data.profile as { website?: string } | undefined)?.website);
+    const standing = mode === 'automate' && miles.planApproved && miles.approvedPlan ? acceptApprovedPlan(miles.approvedPlan) : undefined;
+    const chosen = submitted?.name ? acceptApprovedPlan(submitted) : standing;
+    if (!miles.campaignResource && mode !== 'manual' && !miles.bundle.setup.caps.paused && savedSiteEarly && !chosen) {
+      return { error: 'Review the campaign plan and approve it before Miles launches. Nothing was created.', code: 400 as const, needsPlan: true, created: false };
+    }
+    if (chosen && !miles.campaignResource) {
+      miles.approvedPlan = chosen;
+      miles.planApproved = true;
+      miles.bundle.spec = chosen;
+      if (submitted?.name) {
+        appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: email, source: 'campaign-plan', title: `Approved Google Search plan "${chosen.name}" at $${chosen.dailyBudget}/day` });
+      }
+    }
     const decisions = planGo({
       mode,
       areaModes: miles.bundle.setup.areaModes,
@@ -1517,7 +1560,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       spentToday: 0,
       spentMonth: 0,
       dailySpend: daily,
-      explicitCreate,
+      explicitCreate: explicitCreate || !!submitted?.name,
       campaignOnFile: !!miles.campaignResource,
     });
     if (miles.campaignResource) {
@@ -1560,7 +1603,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       miles.activation = verdict.enabled ? 'enabled' : 'paused';
       const note = verdict.enabled
         ? `Google reports the campaign, ad groups, and ads are enabled inside the $${daily}/day cap.`
-        : `Left paused. ${verdict.reason}`;
+        : `Left paused. ${turned.note || verdict.reason}`;
       rememberMiles(data, miles, note, true);
       appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: email, source: 'miles', title: verdict.enabled ? 'Standing approval enabled Google Search inside caps' : 'Google Search left paused' });
       await authStore.setUserData(uid, data);
@@ -1572,19 +1615,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         return { error: 'Crawl your website first. Miles needs the saved website before it can set the landing page. Open the crawl step, enter the site, and run Crawl again. Nothing was created.', code: 400 as const, created: false };
       }
       miles.bundle.setup.website = savedSite;
-      const profile = (data.profile ?? {}) as { phone?: string; industry?: string };
-      const ruled = enforceRulebook(repairCampaignUrls(miles.bundle.spec, { website: savedSite, links: miles.crawl?.links ?? [] }), {
-        trade: profile.industry || miles.bundle.profile.industry,
-        city: miles.bundle.setup.location,
-        phone: profile.phone || miles.bundle.profile.phone,
-        gbpUrl: miles.bundle.setup.gbpUrl,
-      });
-      miles.bundle.spec = forcePausedSearchSpec(ruled.spec);
-      data.miles = miles;
-      if (ruled.blocks.length) {
-        await authStore.setUserData(uid, data);
-        return { error: ruled.blocks.join(' '), code: 400 as const, created: false };
+      if (!miles.bundle.spec.finalUrl) {
+        miles.bundle.spec = repairCampaignUrls(miles.bundle.spec, { website: savedSite, links: miles.crawl?.links ?? [] });
       }
+      miles.bundle.spec = forcePausedSearchSpec(miles.bundle.spec);
+      data.miles = miles;
     }
     if (decisions.create.effect === 'queue') {
       miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'create', title: 'Create paused Google Search', reason: decisions.create.reason, status: 'queued' });
@@ -1668,7 +1703,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       enabled = verdict.enabled;
       enableNote = verdict.reason;
       miles.activation = enabled ? 'enabled' : 'paused';
-      const note = enabled ? `Google reports the campaign, ad groups, and ads are enabled inside the $${daily}/day cap.` : `Created paused. ${verdict.reason}`;
+      const note = enabled ? `Google reports the campaign, ad groups, and ads are enabled inside the $${daily}/day cap.` : `Created paused. ${turned.note || verdict.reason}`;
       enableNote = note;
       rememberMiles(data, miles, note, true);
     } else {
@@ -1680,14 +1715,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     await authStore.setUserData(uid, data);
     return { ok: true, created: true, enabled, note: enableNote, decisions, campaignResource: miles.campaignResource };
   };
-  const runMilesGo = (uid: string, email: string, explicitCreate: boolean): Promise<GoResult> => {
+  const runMilesGo = (uid: string, email: string, explicitCreate: boolean, submitted?: CampaignSpec): Promise<GoResult> => {
     const existing = milesGoFlight.get(uid);
     if (existing) return existing;
     let resolve!: (value: GoResult) => void;
     let reject!: (reason: unknown) => void;
     const job = new Promise<GoResult>((res, rej) => { resolve = res; reject = rej; });
     milesGoFlight.set(uid, job);
-    void runMilesGoBody(uid, email, explicitCreate).then(resolve, reject).finally(() => {
+    void runMilesGoBody(uid, email, explicitCreate, submitted).then(resolve, reject).finally(() => {
       if (milesGoFlight.get(uid) === job) milesGoFlight.delete(uid);
     });
     return job;
@@ -1722,11 +1757,65 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return { ok: true, published: true, note: 'Marked ready in Miles. No WordPress publish was sent.', log: formatSopLog(gate) };
   });
 
-  app.post<{ Body: { confirm?: boolean } }>('/api/miles/go', async (req, reply) => {
+  const searchPlanFor = (data: Record<string, unknown>, miles: MilesFile) => {
+    const mode = miles.bundle?.setup.mode || miles.pendingMode;
+    const preapproved = mode === 'automate' && miles.planApproved === true && !!miles.approvedPlan;
+    return buildSearchPlan(planProfileOf(data, miles), { preapproved });
+  };
+  app.get('/api/miles/plan', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const miles = milesOf(data);
+    if (!miles.bundle) return reply.code(400).send({ error: 'Save the three questions first. Nothing was created.' });
+    const plan = searchPlanFor(data, miles);
+    return { ok: true, ...plan, planApproved: miles.planApproved === true };
+  });
+  app.post<{ Body: { id?: string; value?: string } }>('/api/miles/plan/answer', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const id = req.body?.id;
+    const allowed = ['website', 'phone', 'areas', 'services', 'budget', 'goal', 'hours', 'avoid', 'keywords'];
+    if (!id || !allowed.includes(id)) return reply.code(400).send({ error: 'That is not a plan question. Nothing was saved.' });
+    const data = await authStore.getUserData(u.id);
+    const miles = milesOf(data);
+    if (!miles.bundle) return reply.code(400).send({ error: 'Save the three questions first. Nothing was saved.' });
+    const next = applyPlanAnswer(planProfileOf(data, miles), id as 'website', String(req.body?.value ?? ''));
+    const profile = { ...((data.profile as Record<string, string>) ?? {}) };
+    if (next.services) profile.services = next.services;
+    if (next.serviceAreas) profile.serviceAreas = next.serviceAreas;
+    if (next.phone) profile.phone = next.phone;
+    if (next.website) profile.website = next.website;
+    if (next.hours) profile.hours = next.hours;
+    if (next.goal) profile.goal = next.goal;
+    if (next.jobsToAvoid) profile.jobsToAvoid = next.jobsToAvoid;
+    if (next.keywordFocus) profile.keywordFocus = next.keywordFocus;
+    if (next.trade) profile.industry = next.trade;
+    data.profile = profile;
+    if (next.serviceAreas) miles.bundle.setup.location = next.serviceAreas.split(',')[0]?.trim() || miles.bundle.setup.location;
+    if (next.website) miles.bundle.setup.website = normalizeSiteUrl(next.website) || miles.bundle.setup.website;
+    if (next.goal) miles.bundle.setup.goal = next.goal;
+    if (next.hours) miles.bundle.hours = next.hours;
+    if (next.phone) miles.bundle.profile.phone = next.phone;
+    if (next.services) miles.bundle.profile.services = next.services;
+    if (next.dailyBudget && next.dailyBudget > 0) {
+      miles.bundle.setup.caps.dailyBudget = next.dailyBudget;
+      const google = miles.bundle.channels.find((c) => c.id === 'google');
+      if (google) google.daily = next.dailyBudget;
+    }
+    miles.bundle.profile = { ...miles.bundle.profile, ...profile };
+    miles.bundle.spec = buildSearchPlan(planProfileOf(data, miles)).spec;
+    data.miles = miles;
+    await authStore.setUserData(u.id, data);
+    const plan = searchPlanFor(data, miles);
+    return { ok: true, ...plan };
+  });
+
+  app.post<{ Body: { confirm?: boolean; plan?: CampaignSpec } }>('/api/miles/go', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
     if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Confirm the caps before Miles starts. Nothing was created.' });
-    const result = await runMilesGo(u.id, u.email, false);
+    const result = await runMilesGo(u.id, u.email, false, req.body?.plan);
     if ('code' in result && result.code) return reply.code(result.code).send(result);
     return result;
   });
@@ -1829,6 +1918,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       audits: miles.bundle?.audits?.length ? miles.bundle.audits : miles.audits,
       activation: miles.activation,
       goNote: miles.goNote || '',
+      planApproved: miles.planApproved === true && (miles.bundle?.setup.mode || miles.pendingMode) === 'automate',
       inbox: miles.inbox.slice(0, 20),
       events: miles.events.slice(0, 12),
       caps: miles.bundle?.setup.caps ?? null,
@@ -2314,7 +2404,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       reviewOn: !!((d.reviewRequest as { enabled?: boolean } | undefined)?.enabled),
       speedOn: stlOn,
       metrics: metricRows.map((m) => ({ key: m.key, value: m.value, prior_value: m.prior_value, source: m.source })),
-      campaigns: (snap?.campaigns ?? []).map((c) => ({ platform: c.platform, name: c.campaign, spend: c.spend || 0, leads: c.conversions || 0 })),
+      campaigns: (snap?.campaigns ?? []).map((c) => ({ platform: c.platform, name: c.campaign, spend: c.spend || 0, leads: c.conversions || 0, status: c.status })),
       recommendations: openRecs,
       inbox: miles.inbox.filter((row) => row.status === 'queued').map((row) => ({ id: row.id, title: row.title, reason: row.reason })),
     });

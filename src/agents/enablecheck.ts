@@ -13,6 +13,9 @@ export interface EnableReadback {
 }
 
 export function judgeEnableReadback(read: EnableReadback): { enabled: boolean; reason: string } {
+  if (read.campaign === 'UNKNOWN') {
+    return { enabled: false, reason: `Miles could not read the campaign status from Google. It was not marked enabled. ${read.note}`.trim() };
+  }
   if (read.campaign !== 'ENABLED') {
     return { enabled: false, reason: `Google reports the campaign as ${read.campaign}. It was not marked enabled. ${read.note}`.trim() };
   }
@@ -182,14 +185,19 @@ export function listCampaignRows(payload: unknown): ListedCampaign[] {
     const campaign = row.campaign && typeof row.campaign === 'object' ? row.campaign as Record<string, unknown> : undefined;
     const rawId = String(row.resourceName ?? row.id ?? campaign?.resourceName ?? campaign?.id ?? '');
     const bare = rawId.split('/').pop() || '';
-    const status = asStatus(row.status ?? campaign?.status);
+    const rawStatus = String(row.status ?? campaign?.status ?? '');
+    const removed = /^removed$/i.test(rawStatus) || rawStatus === '4';
+    const status = asStatus(rawStatus);
     const nameRaw = row.name ?? campaign?.name;
     const name = typeof nameRaw === 'string' && nameRaw.trim() ? nameRaw.trim() : undefined;
-    const underCampaigns = keyHint === 'campaigns';
-    const looksLikeCampaign = /campaigns\/\d+$/.test(rawId) || (underCampaigns && !!bare && (status !== 'UNKNOWN' || !!name));
-    if (looksLikeCampaign && bare && !found.has(bare)) found.set(bare, { id: bare, name, status });
+    const underCampaigns = keyHint === 'campaigns' || keyHint === 'results' || keyHint === 'ret';
+    const nestedCampaign = !!campaign && !!bare && status !== 'UNKNOWN';
+    const looksLikeCampaign = /campaigns\/\d+$/.test(rawId) || nestedCampaign || (underCampaigns && !!bare && (status !== 'UNKNOWN' || !!name));
+    if (!removed && looksLikeCampaign && bare && !found.has(bare) && !row.adGroup && !row.ad_group && !row.adGroupAd && !row.ad_group_ad) {
+      found.set(bare, { id: bare, name, status });
+    }
     for (const [key, value] of Object.entries(row)) walk(value, key);
   };
   walk(payload);
-  return [...found.values()].slice(0, 20);
+  return [...found.values()].slice(0, 200);
 }

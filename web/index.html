@@ -896,6 +896,13 @@
     box-shadow:0 1px 2px rgba(16,16,20,.04);
   }
   .mcard{padding:20px 22px;margin-bottom:16px;}
+  .plan-screen{position:fixed;inset:0;z-index:40;background:rgba(17,17,18,.35);display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:28px 16px 48px;}
+  .plan-sheet{width:min(820px,100%);display:flex;flex-direction:column;gap:12px;}
+  .plan-sheet h2{margin:0;font-size:28px;font-weight:800;letter-spacing:-.03em;}
+  .plan-sheet textarea,.plan-sheet input[type="text"],.plan-sheet input[type="number"]{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font:inherit;background:var(--card);color:var(--ink);}
+  .plan-kws{display:flex;flex-direction:column;gap:6px;margin-top:8px;}
+  .plan-kws label{display:flex;gap:8px;align-items:center;font-size:14px;}
+  .plan-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
   .acard{padding:16px 18px;}
   .mcard h3,.acard h3{margin:0 0 6px;font-size:18px;font-weight:800;letter-spacing:-.02em;}
   .mdesc,.appsub{line-height:1.45;}
@@ -3050,7 +3057,132 @@ async function milesPost(btn, statusEl, working, url, payload){
     return null;
   }
 }
-async function startMilesGo(btn, note){
+function closeCampaignPlan(){
+  const old=document.getElementById('campaign-plan');
+  if(old) old.remove();
+}
+function renderPlanQuestion(sheet, plan, btn, note){
+  const q=plan.questions[0];
+  const card=el('div','mcard');
+  card.append(el('h2',null,'One question'));
+  card.append(el('p','appsub', q.prompt));
+  card.append(el('p','appsub', q.reason));
+  const input=el('input'); input.type='text'; input.value=q.suggested||'';
+  card.append(input);
+  const row=el('div','plan-actions');
+  const use=el('button','go','Use this answer');
+  const cancel=el('button','md-ghost','Cancel');
+  cancel.onclick=()=>closeCampaignPlan();
+  use.onclick=async()=>{
+    const r=await milesPost(use, note, 'Saving...', '/api/miles/plan/answer', {id:q.id, value:input.value});
+    if(!r) return;
+    renderCampaignPlan(sheet, r, btn, note);
+  };
+  row.append(use, cancel);
+  card.append(row);
+  sheet.append(card);
+}
+function renderPlanSummary(sheet, plan, btn, note){
+  const spec=JSON.parse(JSON.stringify(plan.spec||{}));
+  const card=el('div','mcard');
+  card.append(el('h2',null,'Campaign plan'));
+  card.append(el('p','appsub','Review this plan. Approve and launch sends this exact plan. Cancel leaves Google unchanged.'));
+  if(plan.preapproved) card.append(el('p','appsub','Automate already has your approval from the first launch. You can launch this saved plan again.'));
+  (plan.sections||[]).forEach((section)=>{
+    const block=el('div'); block.style.marginTop='14px';
+    block.append(el('b',null, section.title));
+    block.append(el('p','appsub', section.reason));
+    if(section.id==='locations'){
+      const input=el('input'); input.type='text'; input.value=(spec.locations||[]).join(', ');
+      input.oninput=()=>{ spec.locations=input.value.split(',').map(s=>s.trim()).filter(Boolean); };
+      block.append(input);
+    } else if(section.id==='keywords'){
+      (spec.adGroups||[]).forEach((group)=>{
+        block.append(el('div','appsub', group.name));
+        const list=el('div','plan-kws');
+        (group.keywords||[]).forEach((kw, i)=>{
+          const lab=el('label');
+          const box=el('input'); box.type='checkbox'; box.checked=true;
+          box.onchange=()=>{ kw._off=!box.checked; };
+          lab.append(box, document.createTextNode(kw.text+' ('+kw.match+')'));
+          kw._i=i;
+          list.append(lab);
+        });
+        const add=el('input'); add.type='text'; add.placeholder='Add a keyword';
+        add.onchange=()=>{
+          const text=add.value.trim().toLowerCase();
+          if(!text) return;
+          group.keywords.push({text, match:'phrase'});
+          add.value='';
+          renderCampaignPlan(sheet, Object.assign({}, plan, {spec}), btn, note);
+        };
+        block.append(list, add);
+      });
+    } else if(section.id==='negatives'){
+      const area=el('textarea'); area.rows=4; area.value=(spec.negatives||[]).join(', ');
+      area.oninput=()=>{ spec.negatives=area.value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean); };
+      block.append(area);
+    } else if(section.id==='ads'){
+      (spec.adGroups||[]).forEach((group)=>{
+        block.append(el('div','appsub', group.name+' headlines'));
+        const heads=el('textarea'); heads.rows=4; heads.value=(group.rsa&&group.rsa.headlines||[]).join('\n');
+        heads.oninput=()=>{ group.rsa.headlines=heads.value.split('\n').map(s=>s.trim()).filter(Boolean); };
+        block.append(heads);
+        block.append(el('div','appsub', group.name+' descriptions'));
+        const desc=el('textarea'); desc.rows=3; desc.value=(group.rsa&&group.rsa.descriptions||[]).join('\n');
+        desc.oninput=()=>{ group.rsa.descriptions=desc.value.split('\n').map(s=>s.trim()).filter(Boolean); };
+        block.append(desc);
+      });
+    } else if(section.id==='budget'){
+      const input=el('input'); input.type='number'; input.min='1'; input.value=spec.dailyBudget||20;
+      input.oninput=()=>{ const n=Number(input.value); if(n>0) spec.dailyBudget=n; };
+      block.append(input);
+      block.append(el('p','appsub', section.body));
+    } else {
+      block.append(el('p','appsub', section.body));
+    }
+    card.append(block);
+  });
+  const row=el('div','plan-actions');
+  const go=el('button','go','Approve and launch');
+  const cancel=el('button','md-ghost','Cancel');
+  cancel.type='button'; go.type='button';
+  cancel.onclick=()=>closeCampaignPlan();
+  const status=el('div','appsub','');
+  go.onclick=async()=>{
+    (spec.adGroups||[]).forEach((group)=>{ group.keywords=(group.keywords||[]).filter(kw=>!kw._off).map(kw=>({text:kw.text, match:kw.match==='exact'?'exact':'phrase'})); });
+    const r=await startMilesGoNow(go, status, spec);
+    if(note && status.textContent) note.textContent=status.textContent;
+    if(r && !r.skipped) closeCampaignPlan();
+  };
+  row.append(go, cancel);
+  card.append(row, status);
+  sheet.append(card);
+}
+function renderCampaignPlan(sheet, plan, btn, note){
+  sheet.innerHTML='';
+  if(plan && plan.questions && plan.questions.length) renderPlanQuestion(sheet, plan, btn, note);
+  else renderPlanSummary(sheet, plan||{}, btn, note);
+}
+function openCampaignPlan(btn, note, plan){
+  closeCampaignPlan();
+  const screen=el('div','plan-screen'); screen.id='campaign-plan';
+  const sheet=el('div','plan-sheet');
+  screen.append(sheet);
+  document.body.append(screen);
+  if(!plan || plan.error){
+    const card=el('div','mcard');
+    card.append(el('h2',null,'Campaign plan'));
+    card.append(el('p','appsub', (plan&&plan.error)||'Save your website and the three questions first. Nothing was created.'));
+    const cancel=el('button','md-ghost','Cancel');
+    cancel.onclick=()=>closeCampaignPlan();
+    card.append(cancel);
+    sheet.append(card);
+    return;
+  }
+  renderCampaignPlan(sheet, plan, btn, note);
+}
+async function startMilesGoNow(btn, note, plan){
   if(milesGoBusy){
     const busy='Miles is already starting this. Nothing else was created.';
     if(note) note.textContent=busy;
@@ -3059,13 +3191,27 @@ async function startMilesGo(btn, note){
   milesGoBusy=true;
   document.querySelectorAll('[data-miles-go]').forEach((b)=>{ b.disabled=true; b.textContent='Starting...'; });
   try{
-    const r=await milesPost(btn, note, 'Starting...', '/api/miles/go', {confirm:true});
+    const payload={confirm:true};
+    if(plan) payload.plan=plan;
+    const r=await milesPost(btn, note, 'Starting...', '/api/miles/go', payload);
     milesGoNote=r ? goResultText(r) : ((note&&note.textContent)||'That did not work. Nothing else was started.');
     if(note) note.textContent=milesGoNote;
     return r;
   }finally{
     milesGoBusy=false;
   }
+}
+async function startMilesGo(btn, note){
+  if(milesGoBusy){
+    const busy='Miles is already starting this. Nothing else was created.';
+    if(note) note.textContent=busy;
+    return {skipped:true, note:busy};
+  }
+  let plan=null;
+  try{ plan=await(await fetch('/api/miles/plan')).json(); }catch(e){ plan=null; }
+  if(plan && plan.preapproved) return startMilesGoNow(btn, note, null);
+  openCampaignPlan(btn, note, plan);
+  return null;
 }
 function trackingMethodLabel(method){
   if(method==='call_or_form') return 'calls or form fills';
@@ -4398,34 +4544,17 @@ async function lnRewrite(btn){
   }catch(e){ toast('Could not write new ads.'); btn.disabled=false; btn.textContent=old; }
 }
 async function lnBuild(btn){
-  const L=LN.launch||{};
-  const mode=(LN.miles&&LN.miles.mode)||L.mode||null;
   const daily=LN.daily;
-  const cap=L.savedCap;
+  const cap=(LN.launch||{}).savedCap;
   const result=$('#ln-result');
   const say=(t)=>{ if(result) result.innerHTML=''; if(result) result.append(el('p','md-explain', t)); };
   if(!daily){ say('Pick a daily budget. Nothing was created.'); return; }
   if(cap && daily>cap+0.001){ say('That is above your $'+Math.round(cap)+'/day cap. Raise the cap in setup, or pick a lower budget. Nothing was created.'); return; }
-  if(mode==='manual'||!mode){ say('Ask me first is on. Miles will not create this campaign. Nothing was created.'); return; }
   btn.disabled=true;
-  if(mode==='hybrid'){
-    const leads=(LN.miles&&LN.miles.bundle&&LN.miles.bundle.setup&&LN.miles.bundle.setup.leadsPerDay)||1;
-    const saved=await milesPost(btn, result, 'Queuing...', '/api/miles/questions', {goal:LN.offer? (LN.service+' '+LN.offer): (LN.service||'more calls'), dailyBudget:daily, leadsPerDay:leads, mode:'hybrid'});
-    if(!saved){ btn.disabled=false; return; }
-    const queued=await milesPost(btn, result, 'Queuing...', '/api/miles/go', {confirm:true});
-    if(queued) say(queued.created?'Created paused. Nothing was enabled.':'Hybrid is on. This is waiting for your approval. Nothing was created or spent.');
-    btn.disabled=false;
-    return;
-  }
-  try{
-    const draft=await(await fetch('/api/campaign/draft',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({goal:LN.service||'more calls', dailyBudget:daily, finalUrl:L.landingPage||undefined, locations:L.area&&L.area!=='Not saved'?[L.area.split(' + ')[0]]:undefined})})).json();
-    if(!draft||!draft.spec){ say('Could not build the plan. Nothing was created.'); btn.disabled=false; return; }
-    draft.spec.status='PAUSED';
-    const res=await fetch('/api/campaign/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec:draft.spec, confirm:true})});
-    const body=await res.json().catch(()=>({}));
-    if(!res.ok||body.ok===false){ say((body.error||body.note||'Nothing was created.')+' It was not enabled.'); btn.disabled=false; return; }
-    say(body.demo||body.live===false?'Nothing was created in Google. The plan stays paused.':'Created paused. This button did not enable it or spend.');
-  }catch(e){ say('Could not create the campaign. Nothing was enabled.'); }
+  const status=el('p','md-explain','');
+  if(result){ result.innerHTML=''; result.append(status); }
+  try{ await fetch('/api/miles/plan/answer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:'budget', value:String(daily)})}); }catch(e){}
+  await startMilesGo(btn, status);
   btn.disabled=false;
 }
 async function autofillCampaign(btn,opts){

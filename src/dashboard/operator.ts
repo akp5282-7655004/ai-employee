@@ -32,6 +32,8 @@ export interface OperatorCampaign {
   name: string;
   spend: number;
   leads: number;
+  /** Google Ads status when the row was listed, including paused and zero spend. */
+  status?: 'ENABLED' | 'PAUSED' | 'UNKNOWN';
 }
 
 export interface OperatorInput {
@@ -173,6 +175,12 @@ function deltaOf(m: OperatorMetric | undefined): string | null {
 function impactOf(text: string): string | null {
   const m = text.match(/\$[\d,]+(?:\.\d+)?/);
   return m ? m[0] : null;
+}
+
+function googleStatus(status: OperatorCampaign['status']): string | null {
+  if (status === 'ENABLED') return 'Enabled';
+  if (status === 'PAUSED') return 'Paused';
+  return null;
 }
 
 function statusFor(spend: number, leads: number, target: number | null): string | null {
@@ -441,7 +449,7 @@ function channelsOf(input: OperatorInput): OperatorChannel[] {
       cost: null,
       jobs: null,
       foot: 'No rows',
-      verdict: 'Google Ads is ready and returned no campaign rows in this window.',
+      verdict: 'Google Ads is ready. This account has no campaigns.',
     };
   } else {
     const sample = input.sampleConnector;
@@ -457,7 +465,9 @@ function channelsOf(input: OperatorInput): OperatorChannel[] {
         : `${money(spend)} spent. ${Math.round(leads)} leads. Booked jobs are not split by channel.`,
       verdict: sample
         ? 'Example rows from the preview connector. Not a live grade.'
-        : 'Live Google Ads leads in this window. There is no letter grade until booked jobs are known for this channel.',
+        : spend === 0 && leads === 0
+          ? 'These campaigns are on the account. Spend and leads are 0.'
+          : 'Live Google Ads leads in this window. There is no letter grade until booked jobs are known for this channel.',
     };
   }
   return [
@@ -505,7 +515,7 @@ function breakdownOf(input: OperatorInput): OperatorView['breakdown'] {
       ? 'No campaign rows. Connect Google Ads to see spend, leads, and status.'
       : !input.google.ready
         ? plain(input.google.note || 'Google is signed in. The ad customer id is not resolved, so there are no campaign rows.')
-        : 'No campaign rows in this window.';
+        : 'No campaigns on this account.';
     return {
       sample: false,
       empty,
@@ -525,7 +535,7 @@ function breakdownOf(input: OperatorInput): OperatorView['breakdown'] {
       leads: String(Math.round(r.leads || 0)),
       jobs: 'n/a',
       cost: r.leads > 0 ? money(r.spend / r.leads) : 'n/a',
-      status: statusFor(r.spend || 0, r.leads || 0, target),
+      status: googleStatus(r.status) || statusFor(r.spend || 0, r.leads || 0, target),
     })),
   };
 }
