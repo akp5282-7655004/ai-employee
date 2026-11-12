@@ -1,5 +1,6 @@
 import type { Config } from '../config.js';
 import { META_SHARED_ACCOUNT_NOTE as _META_NOTE } from '../agents/googlelaunch.js';
+import { discoverMetaAccount, launchPausedMeta, META_GRAPH_BASE, META_NOT_CONNECTED, META_PAGE_ONLY, readMetaCampaign, type MetaGraph } from '../agents/metalaunch.js';
 import { collectReadIds, googleResourceMissing, listCampaignRows, parseGoogleStatuses, retryReadback } from '../agents/enablecheck.js';
 import { actionPayload, customerPair, mergeCampaignMetrics, metricRowHasNumbers, plainGoogleError, statusReportProps } from './gadsread.js';
 import { areaTerms, chooseGeoHits, geoReportProps, locationCriterion, locationReadbackOk, parseGeoTargets, parseLocationCriteria, resolveAreas, type GeoTarget } from '../agents/geotarget.js';
@@ -1553,10 +1554,93 @@ export class PipedreamConnector implements Connector {
     }
   }
 
-  async launchMetaCampaign(_externalUserId: string, spec: import('../agents/metacampaign.js').MetaCampaignSpec): Promise<import('./types.js').CampaignLaunchResult> {
-    const ready = this.metaLaunchReady();
-    return { ok: false, live: false, steps: [{ step: 'Meta ad account', ok: false, error: ready.note }], note: ready.note };
+  private async facebookAccount(externalUserId: string): Promise<{ id: string; app: string } | { error: string }> {
+    let accounts: import('./types.js').ConnectedAccount[] = [];
+    try {
+      accounts = await this.listAccounts(externalUserId);
+    } catch (err) {
+      return { error: (err as Error).message || 'Miles could not read connected accounts.' };
+    }
+    const slugs = ['facebook_graph_api', 'facebook_pages', 'facebook'];
+    const hit = slugs.map((slug) => accounts.find((account) => account.app === slug && account.healthy)).find(Boolean);
+    if (!hit) return { error: META_NOT_CONNECTED };
+    return { id: hit.id, app: hit.app };
+  }
 
+  private async metaGraph(externalUserId: string): Promise<{ graph: MetaGraph; app: string } | { error: string; app?: string }> {
+    const account = await this.facebookAccount(externalUserId);
+    if ('error' in account) return account;
+    let pd: any;
+    try { pd = await this.backend(); } catch (err) { return { error: (err as Error).message || 'Pipedream is not configured.', app: account.app }; }
+    if (typeof pd?.proxy?.get !== 'function' || typeof pd?.proxy?.post !== 'function') {
+      return { error: 'This connection cannot call Facebook for you. Nothing was created.', app: account.app };
+    }
+    const call = async (method: 'get' | 'post', path: string, extra: Record<string, unknown>) => {
+      const url = `${META_GRAPH_BASE}/${path.replace(/^\//, '')}`;
+      const res = await pd.proxy[method]({ url, externalUserId, accountId: account.id, ...extra });
+      if (res && typeof res === 'object' && 'body' in res && (res as { body?: unknown }).body !== undefined) return (res as { body: unknown }).body;
+      return res;
+    };
+    return {
+      app: account.app,
+      graph: {
+        get: (path, query) => call('get', path, query ? { params: query } : {}),
+        post: (path, body) => call('post', path, { body }),
+      },
+    };
+  }
+
+  async metaStatus(externalUserId: string, campaignId?: string): Promise<{ ready: boolean; account?: string; page?: string; note: string; readback?: { id: string; name?: string; status: string } }> {
+    const wired = await this.metaGraph(externalUserId);
+    if (!('graph' in wired)) {
+      return { ready: false, note: wired.app === 'facebook_pages' ? META_PAGE_ONLY : (wired.error || META_NOT_CONNECTED) };
+    }
+    const found = await discoverMetaAccount(wired.graph);
+    if (!found.account) {
+      const permission = /permission|ads_management|#200|oauth/i.test(found.error || '');
+      if (wired.app === 'facebook_pages' && !permission) return { ready: false, note: META_PAGE_ONLY };
+      if (permission) return { ready: false, note: `${META_PAGE_ONLY} Meta said: ${found.error}` };
+      return { ready: false, note: found.error || META_NOT_CONNECTED };
+    }
+    let readback: { id: string; name?: string; status: string } | undefined;
+    if (campaignId && /^\d+$/.test(campaignId)) {
+      const read = await readMetaCampaign(wired.graph, campaignId);
+      if (read?.status) readback = { id: read.id, name: read.name, status: read.status };
+    }
+    const accountName = found.account.adAccountName || found.account.adAccountId;
+    const pageName = found.account.pageName || found.account.pageId;
+    return {
+      ready: true,
+      account: accountName,
+      page: pageName,
+      note: `Connected to ${accountName} and ${pageName}. Campaigns are created paused. Nothing spends until you turn one on in Meta.`,
+      readback,
+    };
+  }
+
+  async launchMetaCampaign(externalUserId: string, spec: import('../agents/metacampaign.js').MetaCampaignSpec): Promise<import('./types.js').CampaignLaunchResult> {
+    if (spec.status !== 'PAUSED') {
+      return { ok: false, live: false, steps: [{ step: 'Paused create', ok: false, error: 'Miles will only create this paused.' }], note: 'Nothing was created.' };
+    }
+    const wired = await this.metaGraph(externalUserId);
+    if (!('graph' in wired)) {
+      const note = wired.error || META_NOT_CONNECTED;
+      return { ok: false, live: false, steps: [{ step: 'Facebook account', ok: false, error: note }], note };
+    }
+    try {
+      const result = await launchPausedMeta(wired.graph, spec);
+      return {
+        ok: result.ok,
+        live: result.live,
+        campaignResource: result.campaignId,
+        link: result.link,
+        steps: result.steps,
+        note: result.note,
+      };
+    } catch (err) {
+      const note = (err as Error).message || 'Miles could not create the Facebook campaign.';
+      return { ok: false, live: false, steps: [{ step: 'Facebook campaign', ok: false, error: note }], note };
+    }
   }
 
     private async metaAccountDetails(): Promise<{ adAccount?: { id: string; name?: string; status?: string; currency?: string }; page?: { id: string; name?: string; logo?: string; link?: string } }> {

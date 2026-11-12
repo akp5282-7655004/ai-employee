@@ -13,7 +13,7 @@ export const LSA_BLOCKED =
   'Google Leads means Google Local Services Ads: a verified business profile billed per lead, not a Search campaign. Miles cannot create or activate LSA from google_ads-create-or-update-campaign, and it will not relabel a Search campaign as LSA. Google Ads lead-form assets are also not created here.';
 
 export const META_BLOCKED =
-  'Facebook and Instagram ads are not created. Pipedream’s public catalog has no Meta Ads campaign action: facebook_graph_api has zero actions, and facebook_pages only creates Page posts. Miles will not call the Graph API itself and will not use META_ADS_ACCESS_TOKEN.';
+  'Facebook and Instagram are a separate paused campaign on the Facebook tab. Pipedream has no prebuilt Meta campaign action, so that tab uses the owner Facebook account through Connect proxy. This Google plan does not create it or spend on it.';
 
 export const SPEND_UNAVAILABLE =
   'Exact competitor ad spend is not public. Miles will not invent a dollar figure.';

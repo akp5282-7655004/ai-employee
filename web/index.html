@@ -1825,7 +1825,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',library:'Skills and Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',playdetail:'Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',approvals:'Approvals & Autonomy',billing:'Plan & Credits',fblaunch:'Facebook, coming later',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',library:'Skills and Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',playdetail:'Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',approvals:'Approvals & Autonomy',billing:'Plan & Credits',fblaunch:'Facebook',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
 // A destination can own several pages, Launch owns the plan, both channel
 // launchers and the ad-copy writer. The nav lists the destination; its pages
 // become a tab strip, so a four-step job stops looking like four unrelated
@@ -5597,87 +5597,105 @@ function ghlRecipeRow(r){
   head.onclick=()=>{ const open=body.style.display!=='none'; body.style.display=open?'none':'block'; chev.style.transform=open?'':'rotate(90deg)'; };
   return row;
 }
-// ── Launch on Facebook: business + offer → build → review → paused draft in Meta ──
+// Facebook campaign plan. Created paused, only after approval.
 function fbConnBanner(status){
   const c=el('div','mcard');
-  if(status&&status.ready){ c.style.borderLeft='3px solid var(--good,var(--good))'; c.append(el('div','verdict tight','✅ Connected to your Meta ad account ('+esc(status.account||'')+'). Campaigns build as a PAUSED draft you review before spending.')); }
-  else { c.style.borderLeft='3px solid var(--warn)';
-    const d=el('div'); d.innerHTML='<b>Meta ads are not connected yet.</b><br><span class="appsub" style="margin-top:6px;display:block">You can still build and review the campaign. Launch stays off until Meta is connected.</span>';
+  if(status&&status.ready){
+    c.style.borderLeft='3px solid var(--good,var(--good))';
+    c.append(el('div','verdict tight','Connected to '+(status.account||'your Facebook ad account')+(status.page?(' and '+status.page):'')+'. Miles creates this paused. Nothing spends until you turn it on in Meta.'));
+  } else {
+    c.style.borderLeft='3px solid var(--warn)';
+    const d=el('div');
+    d.append(el('b',null,'Facebook is not ready to create a campaign.'));
+    const note=el('div','appsub',(status&&status.note)||'Connect a Facebook ad account and a Page under Integrations. Nothing was created.');
+    note.style.marginTop='6px';
+    d.append(note);
     c.append(d);
   }
   return c;
 }
 async function openFbLaunch(){
-  const box=$('#fblaunch-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading…</p>';
-  let status={ready:false,note:''};
-  if(REMOTE){ try{ status=await(await fetch('/api/meta/status')).json(); }catch(e){} }
-  box.innerHTML='';
-  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">Facebook</h3><p class="mdesc" style="margin:6px 0 0">Coming later. This version runs Google Ads only. Miles will not create a Meta campaign.</p>';
-  box.append(h);
-  return;
-  box.append(fbConnBanner(status));
-  const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','TELL MILES THE BASICS'));
-  const mk=(label,ph,val,type)=>{ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.placeholder=ph||''; if(val!=null)i.value=val; if(type)i.type=type; i.style.width='100%'; w.append(i); return i; };
-  const offer=mk('Your offer','e.g. $500 off a new roof');
-  const website=mk('Your website (the ad’s destination)','e.g. phillyroofingco.com');
-  const budget=mk('Daily budget (USD, optional, Miles picks a smart default)','','','number');
-  const finW=el('div'); finW.style.cssText='display:flex;align-items:center;gap:8px;margin:12px 0'; const fin=el('input'); fin.type='checkbox'; finW.append(fin, el('label','appsub','We offer financing (put the monthly-payment reframe in the ad)'));
-  f.append(offer.parentNode? offer.parentNode:offer); f.append(website.parentNode?website.parentNode:website); f.append(budget.parentNode?budget.parentNode:budget); f.append(finW);
-  const btn=el('button','go','Build my Facebook campaign →');
-  btn.onclick=async()=>{ btn.disabled=true; btn.textContent='Building…'; try{ const r=await(await fetch('/api/meta/build',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({offer:offer.value,website:website.value,dailyBudget:Number(budget.value)||undefined,financing:fin.checked})})).json(); renderFbReview(r.spec,r.issues||[],r.status||status); }catch(e){ toast('Could not build, try again.'); btn.disabled=false; btn.textContent='Build my Facebook campaign →'; } };
-  f.append(btn); box.append(f);
+  const box=$('#fblaunch-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading the Facebook plan.</p>';
+  let built=null;
+  if(REMOTE){
+    try{ built=await(await fetch('/api/meta/build',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).json(); }
+    catch(e){ built=null; }
+  }
+  renderFbReview(built);
 }
-function renderFbReview(spec,issues,status){
-  const box=$('#fblaunch-body'); if(!box||!spec) return; box.innerHTML='';
-  const back=el('button',null,'← Edit'); back.style.cssText='background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-bottom:8px'; back.onclick=openFbLaunch; box.append(back);
-  const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">Review before it goes to Meta</h3><p class="mdesc" style="margin:6px 0 0">Everything below is created <b>PAUSED</b> as a draft in your Ads Manager. Check it, then push, nothing spends until you flip it live in Meta.</p>'; box.append(h);
+function renderFbReview(built){
+  const box=$('#fblaunch-body'); if(!box) return; box.innerHTML='';
+  const spec=built&&built.spec;
+  const status=(built&&built.status)||{ready:false,note:'Connect a Facebook ad account and a Page. Nothing was created.'};
+  const issues=(built&&built.issues)||[];
+  const h=el('div','mcard');
+  h.innerHTML='<h3 style="margin:0">Facebook campaign</h3><p class="mdesc" style="margin:6px 0 0">A paused leads campaign for Facebook and Instagram. Miles creates it only after you approve it, and only inside your daily cap. Nothing spends until you turn it on in Meta.</p>';
+  box.append(h);
   box.append(fbConnBanner(status));
-  // Settings summary
-  const geo=(spec.geo&&spec.geo.zips&&spec.geo.zips.length)?(spec.geo.zips.join(', ')):'United States (add service-area ZIPs for local targeting)';
-  const s=el('div','mcard'); s.style.marginTop='14px'; s.append(el('div','sect-label','CAMPAIGN SETTINGS'));
+  if(!spec){
+    box.append(el('p','appsub','Miles could not build a plan from your profile yet. Save your business name, city, and website, then open this tab again.'));
+    return;
+  }
+  const plan=built.plan||{};
+  const s=el('div','mcard'); s.style.marginTop='14px'; s.append(el('div','sect-label','SUGGESTED PLAN'));
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:8px';
   const cell=(k,v)=>{ const c=el('div'); c.style.cssText='border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:10px'; c.append(el('div','appsub',k)); const b=el('div',null,v); b.style.fontWeight='600'; c.append(b); return c; };
   grid.append(
-    cell('Objective','Traffic → your website'),
-    cell('Daily budget','$'+Number(spec.dailyBudget).toLocaleString()+'/day'),
-    cell('Placements','Facebook + Instagram'),
-    cell('Audience','Age '+spec.ageMin+'–'+spec.ageMax),
-    cell('Location',geo),
-    cell('Status','PAUSED (draft)')
+    cell('Objective','Leads'),
+    cell('Daily budget','$'+Number(spec.dailyBudget||0).toLocaleString()+' a day'),
+    cell('Placements', plan.placements||'Facebook and Instagram feeds'),
+    cell('Audience', plan.audience||('Age '+spec.ageMin+' to '+spec.ageMax)),
+    cell('Location', plan.geo||'Your service area'),
+    cell('Status','Paused')
   );
-  s.append(grid); box.append(s);
-  // Ad preview, a Facebook-style card
-  const ap=el('div','mcard'); ap.style.marginTop='14px'; ap.append(el('div','sect-label','THE AD'));
+  s.append(grid);
+  if(built.budgetNote) s.append(el('p','appsub',built.budgetNote));
+  box.append(s);
+  const ap=el('div','mcard'); ap.style.marginTop='14px'; ap.append(el('div','sect-label','AD COPY'));
   const card=el('div'); card.style.cssText='border:1px solid var(--line,#e5e7eb);border-radius:12px;overflow:hidden;max-width:400px;margin-top:8px';
-  const ph=el('div'); ph.style.cssText='display:flex;align-items:center;gap:8px;padding:10px 12px';
-  const av=el('div',null,(esc((spec.name||'A')[0]||'A')).toUpperCase()); av.style.cssText='width:32px;height:32px;border-radius:50%;background:#1877f2;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700'; ph.append(av); const pn=el('div'); pn.append(el('div',null,'Your Page')); const sp=el('div','appsub','Sponsored'); pn.append(sp); ph.append(pn); card.append(ph);
-  const msg=el('div',null,spec.ad.primaryText); msg.style.cssText='padding:0 12px 10px;white-space:pre-line;font-size:14px'; card.append(msg);
-  const img=el('div'); img.style.cssText='height:150px;background:linear-gradient(135deg,#0e7490,#155e75);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px'; img.textContent=spec.ad.headline; card.append(img);
-  const foot=el('div'); foot.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;background:var(--panel2,var(--panel-2))'; const ft=el('div'); ft.append(el('div','appsub',(spec.website||'your website').replace(/^https?:\/\//,''))); const fh=el('div',null,spec.ad.headline); fh.style.fontWeight='600'; ft.append(fh); const fd=el('div','appsub',spec.ad.description); ft.append(fd); foot.append(ft); const cta=el('button','ghost',(spec.ad.cta||'LEARN_MORE').replace(/_/g,' ')); cta.style.pointerEvents='none'; foot.append(cta); card.append(foot);
-  ap.append(card); box.append(ap);
-  // Issues
-  if(issues&&issues.length){ const iw=el('div','mcard'); iw.style.marginTop='14px'; iw.style.borderLeft='3px solid var(--warn)'; iw.append(el('div','sect-label','BEFORE YOU LAUNCH')); const ul=el('ul'); ul.style.cssText='margin:8px 0 0;padding-left:18px'; issues.forEach(i=>ul.append(el('li','appsub',i))); iw.append(ul); box.append(iw); }
-  // Launch bar
-  const bar=el('div','mcard'); bar.style.marginTop='14px'; bar.style.display='flex'; bar.style.gap='10px'; bar.style.flexWrap='wrap';
-  const go=el('button','go', status&&status.ready?'🚀 Push to Meta as a paused draft':'🔒 Connect Meta to push');
-  if(!status||!status.ready){ go.disabled=true; go.style.opacity='0.55'; go.title='Meta ads are not connected yet.'; }
-  go.onclick=()=>doFbLaunch(spec);
+  if(spec.imageUrl){ const img=el('img'); img.src=spec.imageUrl; img.alt='Ad image from Creative Studio'; img.style.cssText='width:100%;height:160px;object-fit:cover;display:block'; card.append(img); }
+  else { const img=el('div','appsub','No public image yet. Save an https image in Creative Studio.'); img.style.cssText='padding:16px'; card.append(img); }
+  const msg=el('div',null,(spec.ad&&spec.ad.primaryText)||''); msg.style.cssText='padding:12px;white-space:pre-line;font-size:14px'; card.append(msg);
+  const foot=el('div'); foot.style.cssText='padding:0 12px 12px';
+  const headLine=el('div',null,(spec.ad&&spec.ad.headline)||''); headLine.style.fontWeight='600'; foot.append(headLine);
+  foot.append(el('div','appsub',(spec.ad&&spec.ad.description)||''));
+  card.append(foot); ap.append(card); box.append(ap);
+  if(issues.length){ const iw=el('div','mcard'); iw.style.marginTop='14px'; iw.style.borderLeft='3px solid var(--warn)'; iw.append(el('div','sect-label','BEFORE YOU APPROVE')); const ul=el('ul'); ul.style.cssText='margin:8px 0 0;padding-left:18px'; issues.forEach(i=>ul.append(el('li','appsub',i))); iw.append(ul); box.append(iw); }
+  const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','CHANGE THE PLAN'));
+  const mk=(label,val,type)=>{ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.value=val||''; if(type)i.type=type; i.style.width='100%'; w.append(i); return i; };
+  const offer=mk('Offer', (spec.ad&&spec.ad.headline)||'');
+  const website=mk('Website', spec.website||'');
+  const budget=mk('Facebook daily budget', spec.dailyBudget?String(spec.dailyBudget):'', 'number');
+  f.append(offer.parentNode, website.parentNode, budget.parentNode);
+  const rebuild=el('button','ghost','Update the plan');
+  rebuild.onclick=async()=>{ rebuild.disabled=true; try{ const r=await(await fetch('/api/meta/build',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({offer:offer.value,website:website.value,dailyBudget:Number(budget.value)||undefined})})).json(); renderFbReview(r); }catch(e){ toast('Could not update the plan.'); rebuild.disabled=false; } };
+  f.append(rebuild); box.append(f);
+  const bar=el('div','mcard'); bar.style.marginTop='14px';
+  const ready=!!(status.ready&&!issues.length);
+  const go=el('button','go', ready?'Approve paused campaign':'Connect Facebook before approval');
+  if(!ready) go.disabled=true;
+  go.onclick=()=>doFbLaunch(spec, go);
   bar.append(go);
+  bar.append(el('p','appsub','Approval creates the campaign paused. It does not turn spend on.'));
   box.append(bar);
 }
-async function doFbLaunch(spec){
-  const box=$('#fblaunch-body'); if(!box) return;
-  const bar=box.lastChild; const go=bar&&bar.querySelector('button'); if(go){ go.disabled=true; go.textContent='Pushing to Meta…'; }
+async function doFbLaunch(spec, go){
+  if(go){ go.disabled=true; go.textContent='Creating the paused campaign'; }
   let r={ok:false,steps:[],note:'No response.'};
-  try{ r=await(await fetch('/api/meta/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec,confirm:true})})).json(); }catch(e){ r={ok:false,steps:[],note:'Request failed, check your connection.'}; }
+  try{ r=await(await fetch('/api/meta/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec,confirm:true})})).json(); }
+  catch(e){ r={ok:false,steps:[],note:'The request failed. Nothing was created.'}; }
+  const box=$('#fblaunch-body'); if(!box) return;
   const res=el('div','mcard'); res.style.marginTop='14px'; res.style.borderLeft='3px solid '+(r.ok?'var(--good,var(--good))':'var(--bad)');
-  res.append(el('div','sect-label', r.ok?'BUILT AS A PAUSED DRAFT':'SOME STEPS FAILED'));
+  res.append(el('div','sect-label', r.ok?'CREATED PAUSED':'NOT CREATED'));
   if(r.note) res.append(el('p','appsub',r.note));
-  const ul=el('div'); ul.style.cssText='display:flex;flex-direction:column;gap:5px;margin-top:8px'; (r.steps||[]).forEach(st=>{ const row=el('div','appsub',(st.ok?'✓ ':'✗ ')+st.step+(st.error?(', '+st.error):'')); if(!st.ok) row.style.color='var(--bad)'; ul.append(row); }); res.append(ul);
-  if(r.link){ const a=el('a','go','Open it in Meta Ads Manager ↗'); a.href=r.link; a.target='_blank'; a.rel='noopener'; a.style.cssText='display:inline-block;margin-top:12px;text-decoration:none'; res.append(a); }
-  if(go){ if(r.ok){ go.textContent='✓ Pushed to Meta'; go.style.opacity='0.6'; } else { go.disabled=false; go.textContent='🚀 Try again'; } }
+  if(r.readback&&r.readback.status) res.append(el('p','appsub','Meta reported '+r.readback.status+'.'));
+  const ul=el('div'); ul.style.cssText='display:flex;flex-direction:column;gap:5px;margin-top:8px';
+  (r.steps||[]).forEach(st=>{ const row=el('div','appsub',(st.ok?'Done: ':'Not done: ')+st.step+(st.error?('. '+st.error):'')); if(!st.ok) row.style.color='var(--bad)'; ul.append(row); });
+  res.append(ul);
+  if(r.link){ const a=el('a',null,'Open it in Meta Ads Manager'); a.href=r.link; a.target='_blank'; a.rel='noopener'; a.style.cssText='display:inline-block;margin-top:12px'; res.append(a); }
   box.append(res);
-  if(r.ok) toast('Paused draft created in Meta. Review and flip it live.');
+  if(go){ go.textContent=r.ok?'Created paused':'Try again'; if(!r.ok) go.disabled=false; }
+  if(r.ok) toast('Paused Facebook campaign created. Nothing is spending.');
 }
 function openPlaybook(){
   const box=$('#playbook-body'); if(!box) return; box.innerHTML='';

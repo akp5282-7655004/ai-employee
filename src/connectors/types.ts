@@ -228,6 +228,8 @@ export interface Connector {
    *  creative → ad — as a PAUSED draft in the owner's Ads Manager. Money-safe:
    *  nothing spends until the owner flips it live. Returns each step. */
   launchMetaCampaign?(externalUserId: string, spec: import('../agents/metacampaign.js').MetaCampaignSpec): Promise<CampaignLaunchResult>;
+  /** Whether this owner's Facebook ad account and Page can take a paused campaign. */
+  metaStatus?(externalUserId: string, campaignId?: string): Promise<{ ready: boolean; account?: string; page?: string; note: string; readback?: { id: string; name?: string; status: string } }>;
   /** Whether a Meta ad account is connected and ready to receive a campaign. */
   metaLaunchReady?(): { ready: boolean; account?: string; note: string };
   /** Resolve the concrete identity of every connected platform (names, account

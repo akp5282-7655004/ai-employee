@@ -95,7 +95,10 @@ describe('every nav tab loads', () => {
     expect(seen.failed, seen.failed.join('\n')).toEqual([]);
 
     await page.evaluate(() => { (globalThis as unknown as { setPage: (id: string) => void }).setPage('fblaunch'); });
-    await page.locator('#page-fblaunch').getByText('Coming later').waitFor();
+    const facebook = page.locator('#fblaunch-body');
+    await facebook.getByRole('heading', { name: 'Facebook campaign' }).waitFor();
+    await facebook.getByText('Leads', { exact: true }).waitFor();
+    await facebook.getByText('Paused', { exact: true }).waitFor();
     await page.evaluate(() => { (globalThis as unknown as { setPage: (id: string) => void }).setPage('integrations'); });
     const intro = await page.locator('#page-int').innerText();
     expect(intro).not.toMatch(/runs across all/i);

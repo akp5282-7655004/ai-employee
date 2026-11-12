@@ -21,24 +21,32 @@ export interface MetaGeo {
 }
 export interface MetaCampaignSpec {
   name: string;
-  objective: string; // OUTCOME_TRAFFIC (reliable, no pixel/form dependency)
-  optimizationGoal: string; // LANDING_PAGE_VIEWS
-  billingEvent: string; // IMPRESSIONS
+  objective: 'OUTCOME_LEADS';
+  optimizationGoal: 'LEAD_GENERATION';
+  billingEvent: 'IMPRESSIONS';
+  placements: ('facebook' | 'instagram')[];
   dailyBudget: number; // dollars/day
   website: string;
+  /** Public https image from Creative Studio. A data URL is not sent to Meta. */
+  imageUrl?: string;
   geo: MetaGeo;
   ageMin: number;
   ageMax: number;
   ad: MetaAdCopy;
-  status: 'PAUSED'; // always paused from Miles — owner flips it live in Ads Manager
+  status: 'PAUSED';
 }
 
 export interface MetaCampaignInput {
   offer?: string;
   website?: string;
+  /** When set, including 0, this is the daily amount. 0 means the saved split left nothing for Facebook. */
   dailyBudget?: number;
   ticket?: number;
   financing?: boolean;
+  imageUrl?: string;
+  headline?: string;
+  primaryText?: string;
+  description?: string;
 }
 export interface MetaCampaignCtx {
   business?: string;
@@ -80,6 +88,10 @@ function cleanUrl(website?: string): string {
   return /^https?:\/\//i.test(w) ? w : 'https://' + w;
 }
 
+function ownerText(s: string): string {
+  return s.replace(/[ \t]*\u2014[ \t]*/g, ', ').replace(/\u2013/g, '-').replace(/\u2019/g, "'").replace(/\s{2,}/g, ' ').trim();
+}
+
 export function buildMetaCampaignSpec(input: MetaCampaignInput, ctx: MetaCampaignCtx): MetaCampaignSpec {
   // Lean on the playbook for the economics + engineered offer.
   const pb = buildPlaybook(
@@ -88,32 +100,34 @@ export function buildMetaCampaignSpec(input: MetaCampaignInput, ctx: MetaCampaig
   );
   const trade = pb.trade;
   const { zips, cities } = parseGeo(ctx.serviceAreas);
-  const dailyBudget = input.dailyBudget && input.dailyBudget > 0 ? Math.round(input.dailyBudget) : pb.economics.testBudgetDaily;
+  const city = (ctx.city || '').trim();
+  if (city && !cities.some((c) => c.toLowerCase() === city.toLowerCase())) cities.unshift(city);
+  const dailyBudget = input.dailyBudget != null ? Math.max(0, Math.round(input.dailyBudget)) : pb.economics.testBudgetDaily;
   const website = cleanUrl(input.website);
 
-  const offerLine = pb.offer.engineered;
-  const primaryText = [
+  const offerLine = ownerText(pb.offer.engineered);
+  const primaryText = ownerText(input.primaryText || [
     offerLine + '.',
     pb.offer.reasonWhy,
     pb.offer.stack.join(' '),
     input.financing ? pb.offer.financing : '',
-    'Licensed & insured, real local crew. Tap below for a fast, no-pressure quote.',
-  ]
-    .filter(Boolean)
-    .join('\n\n')
-    .slice(0, 600);
+    'Licensed and insured, real local crew. Tap below for a fast, no-pressure quote.',
+  ].filter(Boolean).join('\n\n')).slice(0, 600);
 
-  const headline = offerLine.split('—')[0]!.trim().slice(0, 40) || `${ctx.business || trade} — Special Offer`;
-  const description = (pb.offer.riskReversal[0] || 'Licensed & insured · free estimate').slice(0, 60);
+  const headline = ownerText(input.headline || offerLine.split(',')[0] || '').slice(0, 40) || `${ctx.business || trade} in ${ctx.city || 'your area'}`;
+  const description = ownerText(input.description || pb.offer.riskReversal[0] || 'Licensed and insured. Free estimate').slice(0, 60);
+  const imageUrl = /^https:\/\//i.test(input.imageUrl || '') ? input.imageUrl : undefined;
 
   return {
-    name: `${ctx.business || trade} — ${offerLine}`.slice(0, 100),
-    objective: 'OUTCOME_TRAFFIC',
-    optimizationGoal: 'LANDING_PAGE_VIEWS',
+    name: `${ctx.business || trade}: ${headline}`.slice(0, 100),
+    objective: 'OUTCOME_LEADS',
+    optimizationGoal: 'LEAD_GENERATION',
     billingEvent: 'IMPRESSIONS',
+    placements: ['facebook', 'instagram'],
     dailyBudget,
     website,
-    geo: { countries: ['US'], zips, cities },
+    imageUrl,
+    geo: { countries: ['US'], zips, cities: cities.slice(0, 10) },
     ageMin: 30,
     ageMax: 65,
     ad: {
@@ -129,10 +143,14 @@ export function buildMetaCampaignSpec(input: MetaCampaignInput, ctx: MetaCampaig
 /** Human-readable validation issues — surfaced before the owner approves a launch. */
 export function validateMetaCampaignSpec(spec: MetaCampaignSpec): string[] {
   const issues: string[] = [];
-  if (!spec.website) issues.push('No website URL — the ad needs a destination link. Add your website.');
+  if (!spec.website) issues.push('No website URL. The ad needs a destination link. Add your website.');
   if (spec.dailyBudget < 1) issues.push('Daily budget must be at least $1.');
-  if (!spec.geo.zips.length && !spec.geo.cities.length)
-    issues.push('No local ZIPs or cities found — I’ll target the US broadly. Add your service-area ZIPs for local targeting.');
-  if (!spec.ad.primaryText.trim()) issues.push('Ad has no primary text.');
+  const zips = spec.geo?.zips?.length ?? 0;
+  const cities = spec.geo?.cities?.length ?? 0;
+  if (!zips && !cities)
+    issues.push('No local ZIPs or cities found. Add your service-area ZIPs for local targeting.');
+  if (!spec.ad?.primaryText?.trim()) issues.push('Ad has no primary text.');
+  if (!spec.imageUrl) issues.push('Add a public image in Creative Studio. Meta needs an https image link before the ad can be created.');
+  if (spec.status !== 'PAUSED') issues.push('Miles only creates paused campaigns. It will not turn spend on.');
   return issues;
 }

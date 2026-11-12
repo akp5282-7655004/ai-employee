@@ -71,9 +71,9 @@ export const PIPEDREAM_APPS: PipedreamAppRecord[] = [
     auth: 'No campaign app verified.',
     campaign: {
       available: false,
-      note: 'No prebuilt create-campaign action was found. facebook_graph_api is an OAuth app with zero actions; its proxy could reach Graph, and Miles does not use that proxy. META_* env tokens are not a per-tenant Pipedream account.',
+      note: 'No prebuilt create-campaign action was found. Miles calls the Marketing API through Pipedream Connect proxy on the owner Facebook account (facebook_graph_api, then facebook_pages). A shared META_* token is not used. facebook_pages published scopes do not include ads_management, so a Page connection alone cannot create ads until the app grants that permission.',
     },
-    repoWiring: 'Launch is refused. Older Graph code in PipedreamConnector.launchMetaCampaign returns before any POST. Reads that pass the slug "facebook" are not a verified catalog slug (pipedream.com/apps/facebook.md was 404).',
+    repoWiring: 'POST /api/meta/launch uses client.proxy to create a paused campaign, ad set, lead form, creative, and ad. It does not use a prebuilt campaign action.',
     ownerProject: 'unknown',
   },
   {
