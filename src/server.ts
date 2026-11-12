@@ -31,10 +31,10 @@ import { buildMetaAssets, buildSearchAssets, checkMetaPack, checkSearchPack } fr
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, validateCampaignSpec, campaignSummary, normalizeSiteUrl, repairCampaignUrls, type CampaignSpec } from './agents/campaign.js';
-import { judgeEnableReadback } from './agents/enablecheck.js';
+import { googleResourceMissing, judgeEnableReadback } from './agents/enablecheck.js';
 import { enforceRulebook, housekeepingProposals } from './agents/rulebook.js';
 import { formatSopLog, runSopGate } from './agents/sopgate.js';
-import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, META_SHARED_ACCOUNT_NOTE, searchLaunchNote } from './agents/googlelaunch.js';
+import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, META_SHARED_ACCOUNT_NOTE, plainStepErrors, resourcesFromSteps, searchLaunchNote } from './agents/googlelaunch.js';
 import { buildLoopPlan, decideLead, ghlUpsertProps, GHL_UPSERT_ACTION, judgeActivation, normalizeLead, type ObservedAd } from './agents/plumberloop.js';
 import { judgeTikTokCreate, planFollowUp, proposeOptimizations, rollupJobs, stageOpportunity, TIKTOK_CREATE_ACTION, type JobMark } from './agents/contractorloop.js';
 import { PIPEDREAM_APPS, pipedreamConfigPresence, CATALOG_READ_ON } from './connectors/pipedreamCatalog.js';
@@ -1252,6 +1252,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     bundle: ReturnType<typeof buildBundle> | null;
     crawl: ReturnType<typeof crawlFacts> | null;
     campaignResource?: string;
+    adGroupResources?: string[];
+    adResources?: string[];
+    /** Latest Start, enable, or revert sentence. Shown on the Run button and the plan card. */
+    goNote?: string;
     activation: 'none' | 'paused' | 'enabled';
     inbox: MilesInbox[];
     skillClock: Record<string, string>;
@@ -1267,6 +1271,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       bundle: raw.bundle ?? null,
       crawl: raw.crawl ?? null,
       campaignResource: raw.campaignResource,
+      adGroupResources: Array.isArray(raw.adGroupResources) ? raw.adGroupResources : undefined,
+      adResources: Array.isArray(raw.adResources) ? raw.adResources : undefined,
+      goNote: raw.goNote,
       activation: raw.activation ?? 'none',
       inbox: Array.isArray(raw.inbox) ? raw.inbox : [],
       skillClock: raw.skillClock ?? {},
@@ -1276,10 +1283,25 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       pendingMode: raw.pendingMode,
     };
   };
-  const rememberMiles = (data: Record<string, unknown>, miles: MilesFile, text: string) => {
+  const rememberMiles = (data: Record<string, unknown>, miles: MilesFile, text: string, go = false) => {
     miles.events = [{ ts: new Date().toISOString(), text }, ...miles.events].slice(0, 40);
+    if (go) miles.goNote = text;
     data.miles = miles;
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'miles', title: text.slice(0, 180) });
+  };
+  const clearCampaignFile = (miles: MilesFile) => {
+    miles.campaignResource = undefined;
+    miles.adGroupResources = undefined;
+    miles.adResources = undefined;
+    miles.activation = 'none';
+  };
+  const rememberCampaign = (miles: MilesFile, resource: string, steps: { step: string; ok: boolean; resource?: string }[]) => {
+    miles.campaignResource = resource;
+    const found = resourcesFromSteps(steps);
+    if (found.adGroupResources.length) miles.adGroupResources = found.adGroupResources;
+    if (found.adResources.length) miles.adResources = found.adResources;
+    miles.activation = 'paused';
+    miles.phase = 'running';
   };
 
   app.post<{ Body: { businessName?: string; location?: string; email?: string; website?: string; gbpUrl?: string; competitors?: string[]; html?: string } }>('/api/miles/crawl', async (req, reply) => {
@@ -1440,28 +1462,110 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (paused && miles.campaignResource && connector.setGoogleCampaignStatus && connector.name !== 'mock') {
       const gate = runSopGate('campaign_pause', { mode: miles.bundle?.setup.mode, spec: miles.bundle?.spec });
       appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'sop-gate', title: 'campaign_pause', detail: formatSopLog(gate) });
-      await connector.setGoogleCampaignStatus(u.id, { campaignResource: miles.campaignResource, status: 'PAUSED' });
-      miles.activation = 'paused';
+      const turned = await connector.setGoogleCampaignStatus(u.id, { campaignResource: miles.campaignResource, status: 'PAUSED' });
+      if (turned.missing || googleResourceMissing(turned.note)) {
+        clearCampaignFile(miles);
+        rememberMiles(data, miles, turned.note || 'That campaign is no longer in the Google Ads account. Miles cleared the saved campaign. Nothing was changed.', true);
+      } else miles.activation = 'paused';
     }
     rememberMiles(data, miles, paused ? 'Kill switch on. Miles is paused.' : 'Kill switch off. Miles can run inside your caps again.');
     await authStore.setUserData(u.id, data);
     return { ok: true, paused };
   });
 
-  const runMilesGo = async (uid: string, email: string, explicitCreate: boolean) => {
+  type GoResult = {
+    ok?: boolean;
+    error?: string;
+    code?: number;
+    created?: boolean;
+    enabled?: boolean;
+    demo?: boolean;
+    note?: string;
+    decisions?: unknown;
+    campaignResource?: string;
+    steps?: unknown;
+    adsMissing?: unknown;
+    reused?: boolean;
+    cleared?: boolean;
+  };
+  const milesGoFlight = new Map<string, Promise<GoResult>>();
+  const adoptNamedCampaign = async (uid: string, name: string): Promise<string | undefined> => {
+    if (!name || connector.name === 'mock' || !connector.readGoogleCampaignStatus) return undefined;
+    try {
+      const read = await connector.readGoogleCampaignStatus(uid);
+      if (!read.called || !read.live) return undefined;
+      const hit = read.campaigns.find((row) => (row.name || '').trim().toLowerCase() === name.trim().toLowerCase());
+      return hit ? `customers/0/campaigns/${hit.id}` : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const runMilesGoBody = async (uid: string, email: string, explicitCreate: boolean): Promise<GoResult> => {
     const data = await authStore.getUserData(uid);
     const miles = milesOf(data);
     if (!miles.bundle) return { error: 'Save the three questions first.', code: 400 as const };
     const daily = miles.bundle.channels.find((c) => c.id === 'google')?.daily || miles.bundle.setup.caps.dailyBudget;
+    const mode = miles.bundle.setup.mode;
+    if (!miles.campaignResource && mode !== 'manual' && !miles.bundle.setup.caps.paused) {
+      const adopted = await adoptNamedCampaign(uid, miles.bundle.spec?.name || '');
+      if (adopted) miles.campaignResource = adopted;
+    }
     const decisions = planGo({
-      mode: miles.bundle.setup.mode,
+      mode,
       areaModes: miles.bundle.setup.areaModes,
       caps: miles.bundle.setup.caps,
       spentToday: 0,
       spentMonth: 0,
       dailySpend: daily,
       explicitCreate,
+      campaignOnFile: !!miles.campaignResource,
     });
+    if (miles.campaignResource) {
+      const resource = miles.campaignResource;
+      const spec = miles.bundle.spec;
+      if (decisions.enable.effect === 'queue') {
+        if (!miles.inbox.some((item) => item.kind === 'enable' && item.status === 'queued')) {
+          miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'enable', title: 'Enable the Google campaign', reason: decisions.enable.reason, status: 'queued' });
+        }
+        const note = `The paused campaign is already in Google. ${decisions.enable.reason} Nothing new was created.`;
+        rememberMiles(data, miles, note, true);
+        await authStore.setUserData(uid, data);
+        return { ok: true, created: false, enabled: false, reused: true, note, decisions, campaignResource: resource };
+      }
+      if (decisions.enable.effect !== 'apply' || !connector.setGoogleCampaignStatus || connector.name === 'mock') {
+        const note = connector.name === 'mock'
+          ? 'Preview connector. The Google plan is saved. Nothing was created in Google Ads.'
+          : `${decisions.enable.reason} The paused campaign is already in Google. Nothing new was created.`;
+        rememberMiles(data, miles, note, true);
+        await authStore.setUserData(uid, data);
+        return { ok: true, created: false, enabled: false, reused: true, demo: connector.name === 'mock', note, decisions, campaignResource: resource };
+      }
+      const enableGate = runSopGate('campaign_enable', { mode, spec, tracking: data.trackingProof as { leadConversion?: boolean; ga4Linked?: boolean } | undefined });
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: enableGate.disposition === 'block' ? 'dismissal' : 'action', actor: 'miles', source: 'sop-gate', title: 'campaign_enable', detail: formatSopLog(enableGate) });
+      if (enableGate.disposition === 'block') {
+        const note = `Left paused. ${enableGate.blocks.join(' ')} Nothing new was created.`;
+        rememberMiles(data, miles, note, true);
+        await authStore.setUserData(uid, data);
+        return { ok: true, created: false, enabled: false, reused: true, note, decisions, campaignResource: resource };
+      }
+      const turned = await connector.setGoogleCampaignStatus(uid, { campaignResource: resource, status: 'ENABLED', adGroupResources: miles.adGroupResources, adResources: miles.adResources });
+      if (turned.missing || googleResourceMissing(turned.note)) {
+        clearCampaignFile(miles);
+        const note = turned.note || 'That campaign is no longer in the Google Ads account. Miles cleared the saved campaign. Nothing was changed.';
+        rememberMiles(data, miles, note, true);
+        await authStore.setUserData(uid, data);
+        return { ok: true, created: false, enabled: false, cleared: true, note, decisions };
+      }
+      const verdict = judgeEnableReadback(turned.readback ?? { campaign: 'UNKNOWN', adGroups: [], ads: [], note: turned.note || 'No status was read back from Google.' });
+      miles.activation = verdict.enabled ? 'enabled' : 'paused';
+      const note = verdict.enabled
+        ? `Google reports the campaign, ad groups, and ads are enabled inside the $${daily}/day cap.`
+        : `Left paused. ${verdict.reason}`;
+      rememberMiles(data, miles, note, true);
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: email, source: 'miles', title: verdict.enabled ? 'Standing approval enabled Google Search inside caps' : 'Google Search left paused' });
+      await authStore.setUserData(uid, data);
+      return { ok: true, created: false, enabled: verdict.enabled, reused: true, note, decisions, campaignResource: resource };
+    }
     const savedSite = normalizeSiteUrl(miles.bundle.setup.website || miles.bundle.profile.website || miles.found?.website || (data.profile as { website?: string } | undefined)?.website);
     if (decisions.create.effect !== 'skip') {
       if (!savedSite) {
@@ -1485,14 +1589,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (decisions.create.effect === 'queue') {
       miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'create', title: 'Create paused Google Search', reason: decisions.create.reason, status: 'queued' });
       miles.phase = 'ready';
-      rememberMiles(data, miles, decisions.create.reason);
+      rememberMiles(data, miles, decisions.create.reason, true);
       await authStore.setUserData(uid, data);
-      return { ok: true, decisions, created: false };
+      return { ok: true, decisions, created: false, note: decisions.create.reason };
     }
     if (decisions.create.effect !== 'apply') {
-      rememberMiles(data, miles, decisions.create.reason);
+      rememberMiles(data, miles, decisions.create.reason, true);
       await authStore.setUserData(uid, data);
-      return { ok: true, decisions, created: false };
+      return { ok: true, decisions, created: false, note: decisions.create.reason };
     }
     const spec = miles.bundle.spec;
     const problems = validateCampaignSpec(spec);
@@ -1526,44 +1630,67 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const demo = connector.name === 'mock';
     const live = !demo && !!result.live;
     if (demo && !result.campaignResource) {
-      rememberMiles(data, miles, 'Preview connector. The Google plan is saved. Nothing was created in Google Ads.');
+      rememberMiles(data, miles, 'Preview connector. The Google plan is saved. Nothing was created in Google Ads.', true);
       await authStore.setUserData(uid, data);
-      return { ok: true, decisions, created: false, demo: true };
+      return { ok: true, decisions, created: false, demo: true, note: 'Preview connector. The Google plan is saved. Nothing was created in Google Ads.' };
     }
+    const detail = plainStepErrors(result.steps ?? []);
+    const failNote = result.note && detail && !result.note.includes(detail)
+      ? `${result.note} ${detail}`
+      : (result.note || detail || 'Google did not create the campaign. It was not enabled.');
+    if ((live || demo) && result.campaignResource) rememberCampaign(miles, result.campaignResource, result.steps ?? []);
     if (!((live || demo) && judged.ok && result.campaignResource)) {
-      rememberMiles(data, miles, result.note || 'Google did not create the campaign. It was not enabled.');
+      rememberMiles(data, miles, failNote, true);
       await authStore.setUserData(uid, data);
-      return { ok: false, created: false, decisions, note: result.note, steps: result.steps, adsMissing: judged.adsMissing };
+      return { ok: false, created: !!((live || demo) && result.campaignResource), enabled: false, decisions, note: failNote, steps: result.steps, adsMissing: judged.adsMissing, campaignResource: result.campaignResource };
     }
-    miles.campaignResource = result.campaignResource;
-    miles.activation = 'paused';
-    miles.phase = 'running';
     let enabled = false;
     let enableNote = '';
     if (decisions.enable.effect === 'apply' && connector.setGoogleCampaignStatus) {
-      const adGroupResources = (result.steps ?? []).filter((step) => /create ad group/i.test(step.step) && step.resource).map((step) => step.resource!);
-      const adResources = (result.steps ?? []).filter((step) => /responsive search ad/i.test(step.step) && step.resource).map((step) => step.resource!);
       const enableGate = runSopGate('campaign_enable', { mode: miles.bundle.setup.mode, spec, tracking: data.trackingProof as { leadConversion?: boolean; ga4Linked?: boolean } | undefined });
       appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: enableGate.disposition === 'block' ? 'dismissal' : 'action', actor: 'miles', source: 'sop-gate', title: 'campaign_enable', detail: formatSopLog(enableGate) });
       if (enableGate.disposition === 'block') {
         enableNote = enableGate.blocks.join(' ');
-        rememberMiles(data, miles, `Created paused. ${enableNote}`);
+        const note = `Created paused. ${enableNote}`;
+        rememberMiles(data, miles, note, true);
         await authStore.setUserData(uid, data);
-        return { ok: true, created: true, enabled: false, note: enableNote, decisions, campaignResource: result.campaignResource };
+        return { ok: true, created: true, enabled: false, note, decisions, campaignResource: result.campaignResource };
       }
-      const turned = await connector.setGoogleCampaignStatus(uid, { campaignResource: result.campaignResource, status: 'ENABLED', adGroupResources, adResources });
+      const turned = await connector.setGoogleCampaignStatus(uid, { campaignResource: result.campaignResource, status: 'ENABLED', adGroupResources: miles.adGroupResources, adResources: miles.adResources });
+      if (turned.missing || googleResourceMissing(turned.note)) {
+        clearCampaignFile(miles);
+        const note = turned.note || 'That campaign is no longer in the Google Ads account. Miles cleared the saved campaign. Nothing was changed.';
+        rememberMiles(data, miles, note, true);
+        await authStore.setUserData(uid, data);
+        return { ok: true, created: false, enabled: false, cleared: true, note, decisions };
+      }
       const verdict = judgeEnableReadback(turned.readback ?? { campaign: 'UNKNOWN', adGroups: [], ads: [], note: turned.note || 'No status was read back from Google.' });
       enabled = verdict.enabled;
       enableNote = verdict.reason;
       miles.activation = enabled ? 'enabled' : 'paused';
-      rememberMiles(data, miles, enabled ? `Google reports the campaign, ad groups, and ads are enabled inside the $${daily}/day cap.` : `Created paused. ${verdict.reason}`);
+      const note = enabled ? `Google reports the campaign, ad groups, and ads are enabled inside the $${daily}/day cap.` : `Created paused. ${verdict.reason}`;
+      enableNote = note;
+      rememberMiles(data, miles, note, true);
     } else {
       miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'enable', title: 'Enable the Google campaign', reason: decisions.enable.reason, status: 'queued' });
-      rememberMiles(data, miles, `Created paused. ${decisions.enable.reason}`);
+      enableNote = `Created paused. ${decisions.enable.reason}`;
+      rememberMiles(data, miles, enableNote, true);
     }
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: email, source: 'miles', title: enabled ? 'Standing approval enabled Google Search inside caps' : 'Google Search created paused' });
     await authStore.setUserData(uid, data);
-    return { ok: true, created: true, enabled, note: enableNote, decisions, campaignResource: result.campaignResource };
+    return { ok: true, created: true, enabled, note: enableNote, decisions, campaignResource: miles.campaignResource };
+  };
+  const runMilesGo = (uid: string, email: string, explicitCreate: boolean): Promise<GoResult> => {
+    const existing = milesGoFlight.get(uid);
+    if (existing) return existing;
+    let resolve!: (value: GoResult) => void;
+    let reject!: (reason: unknown) => void;
+    const job = new Promise<GoResult>((res, rej) => { resolve = res; reject = rej; });
+    milesGoFlight.set(uid, job);
+    void runMilesGoBody(uid, email, explicitCreate).then(resolve, reject).finally(() => {
+      if (milesGoFlight.get(uid) === job) milesGoFlight.delete(uid);
+    });
+    return job;
   };
 
   app.post<{ Body: { leadConversion?: boolean; ga4Linked?: boolean; method?: string } }>('/api/miles/tracking', async (req, reply) => {
@@ -1619,11 +1746,20 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const gate = runSopGate('campaign_enable', { mode: miles.bundle?.setup.mode, spec: miles.bundle?.spec, tracking: data.trackingProof as { leadConversion?: boolean; ga4Linked?: boolean } | undefined });
       appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: 'miles', source: 'sop-gate', title: 'campaign_enable', detail: formatSopLog(gate) });
       if (gate.disposition === 'block') return { ok: false, enabled: false, note: gate.blocks.join(' ') };
-      const turned = await connector.setGoogleCampaignStatus(u.id, { campaignResource: miles.campaignResource, status: 'ENABLED' });
-      miles.activation = turned.ok ? 'enabled' : miles.activation;
-      rememberMiles(data, miles, turned.ok ? 'You approved enable. The campaign is on, inside the cap you set.' : turned.note);
+      const turned = await connector.setGoogleCampaignStatus(u.id, { campaignResource: miles.campaignResource, status: 'ENABLED', adGroupResources: miles.adGroupResources, adResources: miles.adResources });
+      if (turned.missing || googleResourceMissing(turned.note)) {
+        clearCampaignFile(miles);
+        const note = turned.note || 'That campaign is no longer in the Google Ads account. Miles cleared the saved campaign. Nothing was changed.';
+        rememberMiles(data, miles, note, true);
+        await authStore.setUserData(u.id, data);
+        return { ok: true, enabled: false, cleared: true, note };
+      }
+      const verdict = judgeEnableReadback(turned.readback ?? { campaign: 'UNKNOWN', adGroups: [], ads: [], note: turned.note || 'No status was read back from Google.' });
+      miles.activation = verdict.enabled ? 'enabled' : 'paused';
+      const note = verdict.enabled ? 'You approved enable. Google reports the campaign, its ad groups, and its ads as enabled.' : verdict.reason;
+      rememberMiles(data, miles, note, true);
       await authStore.setUserData(u.id, data);
-      return { ok: turned.ok, enabled: turned.ok, note: turned.note };
+      return { ok: verdict.enabled, enabled: verdict.enabled, note };
     }
     if (item.kind === 'create') return runMilesGo(u.id, u.email, true);
     return { ok: true, item };
@@ -1645,10 +1781,18 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const gate = runSopGate('campaign_pause', { mode: miles.bundle?.setup.mode, spec: miles.bundle?.spec });
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'sop-gate', title: 'campaign_pause', detail: formatSopLog(gate) });
     const turned = await connector.setGoogleCampaignStatus(u.id, { campaignResource: miles.campaignResource, status: 'PAUSED' });
+    if (turned.missing || googleResourceMissing(turned.note)) {
+      clearCampaignFile(miles);
+      const note = turned.note || 'That campaign is no longer in the Google Ads account. Miles cleared the saved campaign. Nothing was changed.';
+      rememberMiles(data, miles, note, true);
+      await authStore.setUserData(u.id, data);
+      return { ok: true, cleared: true, note, activation: 'none' };
+    }
     miles.activation = turned.ok ? 'paused' : miles.activation;
-    rememberMiles(data, miles, turned.ok ? 'Reverted to paused. Spend stops when Google accepts the pause.' : turned.note);
+    const note = turned.ok ? 'Reverted to paused. Spend stops when Google accepts the pause.' : turned.note;
+    rememberMiles(data, miles, note, true);
     await authStore.setUserData(u.id, data);
-    return { ok: turned.ok, note: turned.note, activation: miles.activation };
+    return { ok: turned.ok, note, activation: miles.activation };
   });
 
   app.get('/api/miles/home', async (req, reply) => {
@@ -1684,6 +1828,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       bundle: miles.bundle,
       audits: miles.bundle?.audits?.length ? miles.bundle.audits : miles.audits,
       activation: miles.activation,
+      goNote: miles.goNote || '',
       inbox: miles.inbox.slice(0, 20),
       events: miles.events.slice(0, 12),
       caps: miles.bundle?.setup.caps ?? null,

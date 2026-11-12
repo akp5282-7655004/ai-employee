@@ -48,6 +48,27 @@ const TRADE_NEGATIVES: Record<string, string[]> = {
 
 const JUNK = /\b(free custom quote|slide title|lorem|placeholder|untitled)\b/i;
 
+/** All-caps words Google's capitalization policy allows in an ad. */
+const AD_ACRONYMS = new Set(['HVAC', 'AC', 'LLC', 'INC', 'LLP', 'PLLC', 'USA', 'SEO', 'GBP', 'TV', 'EV', 'DIY', 'PA', 'NJ', 'NY', 'DC']);
+
+/**
+ * Google rejects excessive capitalization. All-caps words become title case.
+ * Known acronyms (HVAC) and short tokens (LLC) stay in caps. The line is kept.
+ */
+export function fixAdCapitalization(input: string): string {
+  return input.replace(/[A-Za-z0-9&']+/g, (word) => {
+    const letters = word.replace(/[^A-Za-z]/g, '');
+    if (!letters) return word;
+    const upper = letters.toUpperCase();
+    if (AD_ACRONYMS.has(upper)) return word.replace(letters, upper);
+    if (letters.length >= 2 && letters === upper) {
+      return word.replace(letters, upper.charAt(0) + upper.slice(1).toLowerCase());
+    }
+    if (letters === letters.toLowerCase()) return word.replace(letters, upper.charAt(0) + letters.slice(1));
+    return word;
+  });
+}
+
 export interface RulebookContext {
   trade?: string;
   city?: string;
@@ -62,10 +83,7 @@ export interface RulebookResult {
 }
 
 function title(input: string): string {
-  return input.replace(/\w\S*/g, (word) => {
-    if (/^[A-Z0-9]{2,4}$/.test(word)) return word;
-    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-  });
+  return fixAdCapitalization(input).replace(/\s+/g, ' ').trim();
 }
 
 function fit(line: string, max: number): string {

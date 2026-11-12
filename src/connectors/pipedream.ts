@@ -1,6 +1,7 @@
 import type { Config } from '../config.js';
 import { META_SHARED_ACCOUNT_NOTE as _META_NOTE } from '../agents/googlelaunch.js';
-import { listCampaignRows, parseGoogleStatuses } from '../agents/enablecheck.js';
+import { collectReadIds, googleResourceMissing, listCampaignRows, parseGoogleStatuses, retryReadback } from '../agents/enablecheck.js';
+import { plainStepErrors } from '../agents/googlelaunch.js';
 import { classifyGadsAccounts, extractCustomerNodes, type GadsAccess } from './gadsAccess.js';
 import { explainPipedreamError, type PipedreamFailure } from './pipedreamErrors.js';
 import { withTimeout } from './readcache.js';
@@ -1000,14 +1001,53 @@ export class PipedreamConnector implements Connector {
     const structureOk = campaignCreated && adGroupCreated && rsaCreated;
     const ok = structureOk && (verifyAttempted ? verified : true);
     const link = campaign.resource && customerId ? `https://ads.google.com/aw/campaigns?ocid=&campaignId=${(campaign.resource.match(/campaigns\/(\d+)/) || [])[1] ?? ''}` : undefined;
+    const errors = plainStepErrors(steps);
     const note = !campaignCreated
-      ? 'The campaign was NOT created in Google Ads — see the per-step errors. Nothing was charged.'
+      ? `The campaign was not created in Google Ads. ${errors || 'No step error was returned.'} Nothing was charged.`
       : verifyAttempted && !verified
-        ? 'Miles could not find this campaign in your Google Ads account afterward — treat it as NOT launched. See the per-step errors.'
+        ? `Miles could not find this campaign in your Google Ads account afterward. ${errors || 'Treat it as not launched.'} Nothing was charged.`
         : !structureOk
-          ? 'A campaign shell was created but the ad groups/ads did not — it would not serve. See the per-step errors.'
+          ? `A paused campaign was created, but it is not complete. ${errors || 'The ad groups or ads did not finish.'} Nothing was charged for a step Google rejected.`
           : `Paused Search campaign created in Google Ads account ${customerId ? `${customerId.slice(0, 3)}-${customerId.slice(3, 6)}-${customerId.slice(6)}` : ''}${verifyAttempted ? '' : ' (structure confirmed; independent verification unavailable)'}. It is PAUSED. Miles does not enable it and does not spend. Turn it on only in Google Ads after you review it.`;
     return { ok, live: true, campaignResource: campaign.resource, link, steps, note };
+  }
+
+  /**
+   * Campaign status comes from the campaign list. Ad group and ad status do not.
+   * Those are read with a GAQL report (ad_group.status and ad_group_ad.status).
+   */
+  private async readEnablePayload(externalUserId: string, accountId: string, acct: Record<string, unknown>, campaignId: string, rows: any[]): Promise<{ payload: unknown; queriedGroups: boolean }> {
+    const pd = await this.backend();
+    const chunks: unknown[] = [];
+    let queriedGroups = false;
+    const listComp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-list-campaigns');
+    if (listComp) {
+      const lkey = listComp.key ?? listComp.id ?? listComp.componentKey;
+      const lprops = await this.componentProps(listComp, lkey);
+      const lapp = lprops.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+      const res = await pd.actions.run({ externalUserId, id: lkey, configuredProps: { [lapp]: { authProvisionId: accountId }, ...acct } });
+      chunks.push(res?.ret ?? res?.exports ?? res ?? {});
+    }
+    const report = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-report');
+    if (report) {
+      const key = report.key ?? report.id ?? report.componentKey;
+      const props = await this.componentProps(report, key);
+      const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+      const queries = [
+        `SELECT campaign.id, campaign.status, ad_group.id, ad_group.status FROM ad_group WHERE campaign.id = ${campaignId}`,
+        `SELECT campaign.id, campaign.status, ad_group.id, ad_group.status, ad_group_ad.ad.id, ad_group_ad.status FROM ad_group_ad WHERE campaign.id = ${campaignId}`,
+      ];
+      for (const query of queries) {
+        const res = await pd.actions.run({
+          externalUserId,
+          id: key,
+          configuredProps: { [appName]: { authProvisionId: accountId }, ...acct, query },
+        });
+        chunks.push(res?.ret ?? res?.exports ?? res ?? {});
+        queriedGroups = true;
+      }
+    }
+    return { payload: chunks, queriedGroups };
   }
 
   /**
@@ -1015,7 +1055,7 @@ export class PipedreamConnector implements Connector {
    * Google Ads CampaignStatus values used here are ENABLED and PAUSED.
    * A production tool-call block returns before any actions.run.
    */
-  async setGoogleCampaignStatus(externalUserId: string, args: { campaignResource: string; status: 'ENABLED' | 'PAUSED'; adGroupResources?: string[]; adResources?: string[] }): Promise<{ ok: boolean; live: boolean; called: boolean; note: string; readback?: import('../agents/enablecheck.js').EnableReadback }> {
+  async setGoogleCampaignStatus(externalUserId: string, args: { campaignResource: string; status: 'ENABLED' | 'PAUSED'; adGroupResources?: string[]; adResources?: string[] }): Promise<{ ok: boolean; live: boolean; called: boolean; missing?: boolean; note: string; readback?: import('../agents/enablecheck.js').EnableReadback }> {
     if (args.status !== 'ENABLED' && args.status !== 'PAUSED') {
       return { ok: false, live: false, called: false, note: 'Only ENABLED or PAUSED are allowed.' };
     }
@@ -1037,6 +1077,7 @@ export class PipedreamConnector implements Connector {
     const acct: Record<string, unknown> = {};
     if (target?.login) acct.accountId = target.login;
     if (target?.client) acct.customerClientId = target.client;
+    const cleared = 'That campaign is no longer in the Google Ads account. Miles cleared the saved campaign. Nothing was changed.';
     const result = await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign', account.id, {}, {
       ...acct,
       operationType: 'update',
@@ -1044,48 +1085,82 @@ export class PipedreamConnector implements Connector {
       updateMask: 'status',
       status: args.status,
     });
+    if (googleResourceMissing(result.error)) {
+      return { ok: false, live: true, called: true, missing: true, note: cleared };
+    }
+    const writeErrors: string[] = [];
+    if (!result.ok && result.error) writeErrors.push(result.error);
     for (const resource of args.adGroupResources ?? []) {
       const adGroupId = resource.split('/').pop();
       if (!adGroupId) continue;
-      await this.writeComponent(externalUserId, 'google_ads-create-or-update-ad-group', account.id, {}, {
+      const updated = await this.writeComponent(externalUserId, 'google_ads-create-or-update-ad-group', account.id, {}, {
         ...acct,
         operationType: 'update',
         adGroupId,
         updateMask: 'status',
         status: args.status,
       });
+      if (googleResourceMissing(updated.error)) writeErrors.push(`Ad group ${adGroupId} is not in the account.`);
+      else if (!updated.ok && updated.error) writeErrors.push(updated.error);
     }
+    const adKey = ['google_ads-update-ad-group-ad', 'google_ads-create-or-update-ad-group-ad'].find((key) => rows.some((c) => (c.key ?? c.id ?? c.componentKey) === key));
+    if (adKey) {
+      for (const resource of args.adResources ?? []) {
+        const adId = resource.split('/').pop();
+        if (!adId) continue;
+        const updated = await this.writeComponent(externalUserId, adKey, account.id, {}, {
+          ...acct,
+          operationType: 'update',
+          adId,
+          updateMask: 'status',
+          status: args.status,
+        });
+        if (!updated.ok && updated.error && !googleResourceMissing(updated.error)) writeErrors.push(updated.error);
+      }
+    }
+    const passedGroups = (args.adGroupResources ?? []).map((resource) => resource.split('/').pop() || '').filter(Boolean);
+    const passedAds = (args.adResources ?? []).map((resource) => resource.split('/').pop() || '').filter(Boolean);
+    const readOnce = async (): Promise<import('../agents/enablecheck.js').EnableReadback> => {
+      const { payload, queriedGroups } = await this.readEnablePayload(externalUserId, account.id, acct, campaignId, rows);
+      const discovered = collectReadIds(payload);
+      const readback = parseGoogleStatuses(payload, {
+        campaignId,
+        adGroupIds: passedGroups.length ? passedGroups : discovered.adGroupIds,
+        adIds: passedAds.length ? passedAds : discovered.adIds,
+      });
+      if (!queriedGroups) readback.note = 'The campaign list does not include ad group status. Miles could not read ad groups back from Google.';
+      return readback;
+    };
     let readback: import('../agents/enablecheck.js').EnableReadback = {
       campaign: 'UNKNOWN',
-      adGroups: (args.adGroupResources ?? []).map(() => 'UNKNOWN' as const),
-      ads: (args.adResources ?? []).map(() => 'UNKNOWN' as const),
+      adGroups: passedGroups.map(() => 'UNKNOWN' as const),
+      ads: passedAds.map(() => 'UNKNOWN' as const),
       note: 'Miles could not read the status back from Google.',
     };
     try {
-      const rows = await this.listComponents('google_ads');
-      const listComp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-list-campaigns');
-      if (listComp) {
-        const pd = await this.backend();
-        const lkey = listComp.key ?? listComp.id ?? listComp.componentKey;
-        const lprops = await this.componentProps(listComp, lkey);
-        const lapp = lprops.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
-        const res = await pd.actions.run({ externalUserId, id: lkey, configuredProps: { [lapp]: { authProvisionId: account.id }, ...acct } });
-        const { parseGoogleStatuses } = await import('../agents/enablecheck.js');
-        readback = parseGoogleStatuses(res?.ret ?? res?.exports ?? res ?? {}, {
-          campaignId,
-          adGroupIds: (args.adGroupResources ?? []).map((resource) => resource.split('/').pop() || '').filter(Boolean),
-          adIds: (args.adResources ?? []).map((resource) => resource.split('/').pop() || '').filter(Boolean),
-        });
-      }
+      readback = args.status === 'ENABLED'
+        ? await retryReadback(readOnce, 'ENABLED', { tries: 3, waitMs: 300 })
+        : await readOnce();
     } catch {
       /* readback stays unknown */
     }
-    const confirmed = readback.campaign === args.status;
+    const ready = args.status === 'ENABLED'
+      ? readback.campaign === 'ENABLED' && readback.adGroups.length > 0 && readback.adGroups.every((status) => status === 'ENABLED') && readback.ads.length > 0 && readback.ads.every((status) => status === 'ENABLED')
+      : readback.campaign === 'PAUSED';
+    const extra = writeErrors.filter(Boolean).join(' ');
+    const note = googleResourceMissing(extra)
+      ? cleared
+      : ready
+        ? (args.status === 'ENABLED'
+          ? 'Google reports the campaign, its ad groups, and its ads as enabled.'
+          : 'Google reports the campaign as PAUSED.')
+        : [extra, readback.note].filter(Boolean).join(' ');
     return {
-      ok: result.ok && (args.status === 'PAUSED' || confirmed),
+      ok: result.ok && (args.status === 'PAUSED' ? readback.campaign !== 'UNKNOWN' || result.ok : ready) && !googleResourceMissing(extra),
       live: true,
       called: true,
-      note: confirmed ? `Google reports the campaign as ${args.status}.` : (result.error || readback.note),
+      missing: googleResourceMissing(extra),
+      note,
       readback,
     };
   }

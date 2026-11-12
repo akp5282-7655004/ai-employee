@@ -68,6 +68,10 @@ describe('approval policy', () => {
     expect(over.create.effect).toBe('apply');
     expect(over.enable.effect).toBe('queue');
     const approved = planGo({ mode: 'hybrid', caps, spentToday: 0, spentMonth: 0, dailySpend: 20, explicitCreate: true });
+    const again = planGo({ mode: 'automate', caps, spentToday: 0, spentMonth: 0, dailySpend: 20, campaignOnFile: true });
+    expect(again.create.effect).toBe('skip');
+    expect(again.create.reason).toMatch(/will not create another/);
+    expect(again.enable.effect).toBe('apply');
     expect(approved.create.effect).toBe('apply');
     expect(approved.enable.effect).toBe('queue');
   });
