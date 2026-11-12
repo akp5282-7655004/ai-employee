@@ -3147,8 +3147,9 @@ function renderPlanSummary(sheet, plan, btn, note){
   const go=el('button','go','Approve and launch');
   const cancel=el('button','md-ghost','Cancel');
   cancel.type='button'; go.type='button';
+  if(plan.locationBlock){ go.disabled=true; go.title=plan.locationBlock; }
   cancel.onclick=()=>closeCampaignPlan();
-  const status=el('div','appsub','');
+  const status=el('div','appsub', plan.locationBlock || '');
   go.onclick=async()=>{
     (spec.adGroups||[]).forEach((group)=>{ group.keywords=(group.keywords||[]).filter(kw=>!kw._off).map(kw=>({text:kw.text, match:kw.match==='exact'?'exact':'phrase'})); });
     const r=await startMilesGoNow(go, status, spec);

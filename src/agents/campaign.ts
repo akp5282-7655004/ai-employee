@@ -64,6 +64,8 @@ export interface CampaignSpec {
   bidPlan?: { stage: 'MAXIMIZE_CLICKS' | 'MAXIMIZE_CONVERSIONS' | 'TARGET_CPA'; maxCpc: number; targetCpa?: number };
   callAsset?: { phone: string } | null;
   locationAsset?: { gbpUrl: string } | null;
+  /** Google geo target constants for the service area. Presence only. */
+  geoTargets?: { id: string; name: string; targetType: 'City' | 'County' | 'Postal Code'; resourceName: string }[];
 }
 
 /** Google's fixed structured-snippet headers. */

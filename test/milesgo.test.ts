@@ -15,6 +15,7 @@ function steps(okAd = true) {
     { step: 'Create ad group "Interior painting"', ok: true, resource: 'customers/1/adGroups/3' },
     { step: 'Add 3 keywords to "Interior painting"', ok: true },
     { step: 'Create responsive search ad in "Interior painting"', ok: okAd, resource: okAd ? 'customers/1/ads/8' : undefined, error: okAd ? undefined : 'Google rejected the ad for capitalization.' },
+    { step: 'Add location targeting', ok: true },
   ];
 }
 

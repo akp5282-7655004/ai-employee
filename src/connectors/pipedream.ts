@@ -2,6 +2,7 @@ import type { Config } from '../config.js';
 import { META_SHARED_ACCOUNT_NOTE as _META_NOTE } from '../agents/googlelaunch.js';
 import { collectReadIds, googleResourceMissing, listCampaignRows, parseGoogleStatuses, retryReadback } from '../agents/enablecheck.js';
 import { actionPayload, customerPair, plainGoogleError, statusReportProps } from './gadsread.js';
+import { areaTerms, chooseGeoHits, geoReportProps, locationCriterion, locationReadbackOk, parseGeoTargets, parseLocationCriteria, resolveAreas, type GeoTarget } from '../agents/geotarget.js';
 import { plainStepErrors } from '../agents/googlelaunch.js';
 import { classifyGadsAccounts, extractCustomerNodes, type GadsAccess } from './gadsAccess.js';
 import { explainPipedreamError, type PipedreamFailure } from './pipedreamErrors.js';
@@ -947,6 +948,20 @@ export class PipedreamConnector implements Connector {
     const fmtCid = (id?: string) => id && /^\d{10}$/.test(id) ? `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` : id ?? '';
     if (customerId) steps.push({ step: `Target account: ${fmtCid(customerId)}${target?.client && target.login !== target.client ? ` (client under manager ${fmtCid(target.login)})` : ''}`, ok: true });
 
+    const pair = customerPair({ login: target?.login, client: target?.client });
+    const indexed = spec.geoTargets?.length ? spec.geoTargets : resolveAreas(spec.locations).targets;
+    let geos: GeoTarget[] = indexed;
+    try {
+      const live = await this.lookupLiveGeo(externalUserId, account.id, pair, spec.locations || []);
+      if (live.length) geos = live;
+    } catch {
+      /* the published geo list still applies */
+    }
+    if (!geos.length) {
+      const block = resolveAreas(spec.locations).block;
+      return { ok: false, live: true, steps: [{ step: 'Add location targeting', ok: false, error: block }], note: block };
+    }
+
     // 1) Budget — micros ($1 = 1_000_000). Budget names must be UNIQUE across
     // the account (Google rejects a re-launch with DUPLICATE_NAME), so stamp
     // each launch's budget with the launch time.
@@ -993,6 +1008,27 @@ export class PipedreamConnector implements Connector {
     // resource paths themselves, so extract the id from each resource name.
     const campaignNumId = (campaign.resource?.match(/campaigns\/(\d+)/) || [])[1];
     if (campaign.resource && campaignNumId) {
+      let located = 0;
+      let locateErr: string | undefined;
+      for (const geo of geos) {
+        const placed = await this.writeComponent(externalUserId, 'google_ads-create-or-remove-campaign-criteria', account.id, {}, {
+          ...acct,
+          operationType: 'create',
+          campaignId: campaignNumId,
+          negative: false,
+          additionalFields: { location: locationCriterion(geo) },
+        });
+        if (placed.ok) located++;
+        else locateErr = locateErr ?? placed.error;
+      }
+      const read = await this.readLocationCriteria(externalUserId, account.id, pair, campaignNumId, rows);
+      const check = locationReadbackOk(geos, read.found, read.presence);
+      const locationOk = located === geos.length && check.ok;
+      steps.push({
+        step: 'Add location targeting',
+        ok: locationOk,
+        error: locationOk ? undefined : (locateErr || check.reason || 'Location targeting did not read back from Google.'),
+      });
       for (const g of spec.adGroups) {
         const ag = await this.writeComponent(externalUserId, 'google_ads-create-or-update-ad-group', account.id, {}, {
           ...acct,
@@ -1108,7 +1144,8 @@ export class PipedreamConnector implements Connector {
       steps.push({ step: 'Verify campaign in Google Ads', ok: verifyAttempted ? verified : true, error: verifyAttempted && !verified ? 'Not found in your account — treat as NOT launched.' : verifyAttempted ? undefined : 'Could not independently verify (verification unavailable).' });
     }
 
-    const structureOk = campaignCreated && adGroupCreated && rsaCreated;
+    const locationOk = steps.some((step) => /location targeting/i.test(step.step) && step.ok);
+    const structureOk = campaignCreated && adGroupCreated && rsaCreated && locationOk;
     const ok = structureOk && (verifyAttempted ? verified : true);
     const link = campaign.resource && customerId ? `https://ads.google.com/aw/campaigns?ocid=&campaignId=${(campaign.resource.match(/campaigns\/(\d+)/) || [])[1] ?? ''}` : undefined;
     const errors = plainStepErrors(steps);
@@ -1120,6 +1157,80 @@ export class PipedreamConnector implements Connector {
           ? `A paused campaign was created, but it is not complete. ${errors || 'The ad groups or ads did not finish.'} Nothing was charged for a step Google rejected.`
           : `Paused Search campaign created in Google Ads account ${customerId ? `${customerId.slice(0, 3)}-${customerId.slice(3, 6)}-${customerId.slice(6)}` : ''}${verifyAttempted ? '' : ' (structure confirmed; independent verification unavailable)'}. It is PAUSED. Miles does not enable it and does not spend. Turn it on only in Google Ads after you review it. ${planGaps(spec)}`.trim();
     return { ok, live: true, campaignResource: campaign.resource, link, steps, note };
+  }
+
+  /**
+   * Ask Google for geo_target_constant rows. create-report rejects that
+   * resource today, so a thrown call returns [] and the published list is used.
+   */
+  private async lookupLiveGeo(externalUserId: string, authId: string, pair: { accountId: string; customerClientId?: string }, areas: string[]): Promise<GeoTarget[]> {
+    const terms = areaTerms(areas);
+    if (!terms.length) return [];
+    const pd = await this.backend();
+    const rows = await this.listComponents('google_ads');
+    const report = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-report');
+    if (!report) return [];
+    const key = report.key ?? report.id ?? report.componentKey;
+    const props = await this.componentProps(report, key);
+    const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+    const queryProp = props.find((p: any) => p?.name === 'query' && /gaql|select/i.test(`${p.label ?? ''} ${p.description ?? ''}`));
+    const hits: GeoTarget[] = [];
+    for (const term of terms) {
+      try {
+        const configured = geoReportProps({ appName, authId, accountId: pair.accountId, customerClientId: pair.customerClientId, term });
+        if (!queryProp) delete configured.query;
+        const res = await pd.actions.run({ externalUserId, id: key, configuredProps: configured });
+        const picked = chooseGeoHits(term, parseGeoTargets(actionPayload(res)));
+        if (picked && picked !== 'ambiguous') hits.push(picked);
+      } catch {
+        return [];
+      }
+    }
+    return hits;
+  }
+
+  /** Read location criteria and the campaign presence setting back from Google. */
+  private async readLocationCriteria(externalUserId: string, authId: string, pair: { accountId: string; customerClientId?: string }, campaignId: string, rows: any[]): Promise<{ found: { id: string; negative: boolean }[]; presence?: string }> {
+    const pd = await this.backend();
+    const acct: Record<string, unknown> = { accountId: pair.accountId };
+    if (pair.customerClientId) acct.customerClientId = pair.customerClientId;
+    let found: { id: string; negative: boolean }[] = [];
+    let presence: string | undefined;
+    const list = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-list-campaign-criteria');
+    if (list) {
+      try {
+        const key = list.key ?? list.id ?? list.componentKey;
+        const props = await this.componentProps(list, key);
+        const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+        const res = await pd.actions.run({ externalUserId, id: key, configuredProps: { [appName]: { authProvisionId: authId }, ...acct } });
+        found = parseLocationCriteria(actionPayload(res)).filter((row) => row.id);
+      } catch {
+        found = [];
+      }
+    }
+    const report = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-create-report');
+    if (report) {
+      try {
+        const key = report.key ?? report.id ?? report.componentKey;
+        const props = await this.componentProps(report, key);
+        const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+        const res = await pd.actions.run({
+          externalUserId,
+          id: key,
+          configuredProps: {
+            ...statusReportProps({ appName, authId, pair, resource: 'campaign', ids: [campaignId] }),
+            fields: ['geo_target_type_setting.positive_geo_target_type'],
+          },
+        });
+        const payload = actionPayload(res);
+        const text = JSON.stringify(payload ?? {});
+        const match = text.match(/positiveGeoTargetType"\s*:\s*"([A-Z_]+)"/i) || text.match(/PRESENCE|PRESENCE_OR_INTEREST|SEARCH_INTEREST/);
+        presence = match?.[1] || match?.[0];
+      } catch {
+        presence = undefined;
+      }
+    }
+    return { found, presence };
   }
 
   /**
@@ -1744,10 +1855,13 @@ export class PipedreamConnector implements Connector {
 }
 
 function planGaps(spec: import('../agents/campaign.js').CampaignSpec): string {
-  const areas = (spec.locations || []).filter(Boolean).join(', ');
+  // Checked 2026-11-12 against Pipedream's google_ads actions. There is no
+  // generic mutate or API-request action, and no call, sitelink, or callout
+  // action. Those stay on the plan only.
+  const places = (spec.geoTargets || []).map((target) => target.name).join(', ');
   const parts = [
-    areas ? `Location targeting is Presence only for ${areas}. No Google place id was on the plan, so the city was not added as a location criterion.` : '',
-    spec.callAsset?.phone ? `The call number is on the plan. This connection has no call asset action, so the call button was not created.` : '',
+    places ? `Location targeting is Presence only for ${places}.` : '',
+    spec.callAsset?.phone ? 'The call number is on the plan. This connection has no call asset action, so the call button was not created.' : '',
     (spec.sitelinks?.length || spec.callouts?.length) ? 'Sitelinks and callouts are on the plan. This connection has no asset action, so they were not created in Google.' : '',
   ].filter(Boolean);
   return parts.join(' ');

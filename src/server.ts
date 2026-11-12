@@ -34,6 +34,7 @@ import { buildCampaignSpec, validateCampaignSpec, campaignSummary, normalizeSite
 import { googleResourceMissing, judgeEnableReadback } from './agents/enablecheck.js';
 import { housekeepingProposals } from './agents/rulebook.js';
 import { acceptApprovedPlan, applyPlanAnswer, buildSearchPlan, type PlanProfile } from './agents/campaignplan.js';
+import { resolveAreas } from './agents/geotarget.js';
 import { formatSopLog, runSopGate } from './agents/sopgate.js';
 import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, META_SHARED_ACCOUNT_NOTE, plainStepErrors, resourcesFromSteps, searchLaunchNote } from './agents/googlelaunch.js';
 import { buildLoopPlan, decideLead, ghlUpsertProps, GHL_UPSERT_ACTION, judgeActivation, normalizeLead, type ObservedAd } from './agents/plumberloop.js';
@@ -1546,6 +1547,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       return { error: 'Review the campaign plan and approve it before Miles launches. Nothing was created.', code: 400 as const, needsPlan: true, created: false };
     }
     if (chosen && !miles.campaignResource) {
+      const profile = (data.profile ?? {}) as Record<string, string>;
+      const area = [chosen.locations?.join('; '), miles.bundle.setup.location, profile.serviceAreas].filter(Boolean).join('; ');
+      const geo = resolveAreas(area);
+      if (!geo.targets.length) {
+        return { error: geo.block, code: 400 as const, created: false };
+      }
+      chosen.geoTargets = geo.targets;
       miles.approvedPlan = chosen;
       miles.planApproved = true;
       miles.bundle.spec = chosen;

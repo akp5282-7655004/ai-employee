@@ -285,7 +285,7 @@ export function runSopGate(action: SopAction, subject: SopSubject): SopGate {
     if (badLink) add('sop149-assets', '149', 'block', `Sitelink "${badLink.text}" breaks the 25/35 character limits or has no https URL.`);
     else if ((next.spec.sitelinks?.length ?? 0) < 4) add('sop149-assets', '149', 'warn', 'Fewer than 4 useful sitelinks. SOP 149 aims for four when the site has the pages.');
     else add('sop149-assets', '149', 'pass', 'Assets fit the character limits.');
-    if (action === 'campaign_create') add('sop147-not-sent', '147', 'warn', 'The service area is Presence only on the plan. Miles does not have a Google place id, so the city itself is not added as a location. The radius stays a default on the plan.');
+    if (action === 'campaign_create') add('sop147-not-sent', '147', 'pass', 'Location targeting uses a Google geo target constant for the service area, Presence only.');
     if (subject.tracking?.ga4Linked) add('sop134-ga4', '134', 'pass', 'Google Ads is marked linked to GA4.');
     else if (action === 'campaign_create' || action === 'campaign_enable') add('sop134-ga4', '134', 'warn', 'GA4 is not marked linked. Reports will not line up until SOP 134 is done.');
     const emptyUtm = /[?&]utm_[a-z]+=(&|$)/i.test(next.spec.finalUrl);

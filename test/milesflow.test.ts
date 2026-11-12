@@ -21,6 +21,7 @@ function appFor(targets: { id: string; label: string }[]) {
           { step: 'Create ad group "Interior painting"', ok: true, resource: 'customers/1/adGroups/3' },
           { step: 'Add 3 keywords to "Interior painting"', ok: true },
           { step: 'Create responsive search ad in "Interior painting"', ok: true, resource: 'customers/1/ads/8' },
+          { step: 'Add location targeting', ok: true },
         ],
       };
     },

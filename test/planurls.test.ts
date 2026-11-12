@@ -48,6 +48,7 @@ function appFor() {
           { step: 'Create ad group "Interior Painting"', ok: true, resource: 'customers/DEMO/adGroups/3' },
           { step: 'Add 3 keywords to "Interior Painting"', ok: true },
           { step: 'Create responsive search ad in "Interior Painting"', ok: true, resource: 'customers/DEMO/ads/8' },
+          { step: 'Add location targeting', ok: true },
         ],
       };
     },
@@ -148,6 +149,7 @@ describe('plan URLs come from the crawl', () => {
             { step: 'Create ad group "Interior Painting"', ok: true, resource: 'customers/DEMO/adGroups/3' },
             { step: 'Add 3 keywords to "Interior Painting"', ok: true },
             { step: 'Create responsive search ad in "Interior Painting"', ok: true, resource: 'customers/DEMO/ads/8' },
+            { step: 'Add location targeting', ok: true },
           ],
         };
       },

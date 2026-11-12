@@ -83,6 +83,7 @@ describe('approve then launch', () => {
             { step: 'Create ad group "Interior painting"', ok: true, resource: 'customers/9013698905/adGroups/3' },
             { step: 'Add 4 keywords to "Interior painting"', ok: true },
             { step: 'Create responsive search ad in "Interior painting"', ok: true, resource: 'customers/9013698905/ads/8' },
+            { step: 'Add location targeting', ok: true },
           ],
         };
       },

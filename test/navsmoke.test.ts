@@ -147,7 +147,8 @@ describe('every nav tab loads', () => {
       const before = text;
       await page.getByRole('button', { name: 'Use this answer' }).click();
       await page.waitForFunction((prev) => {
-        const el = document.getElementById('campaign-plan');
+        const root = (globalThis as unknown as { document: { getElementById(id: string): { innerText: string } | null } }).document;
+        const el = root.getElementById('campaign-plan');
         return !!el && el.innerText !== prev;
       }, before);
     }

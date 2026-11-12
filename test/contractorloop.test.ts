@@ -154,6 +154,7 @@ describe('activation, revert, and honest dashboard', () => {
           { step: 'Add 3 keywords to "g"', ok: true },
           { step: 'Create responsive search ad in "g"', ok: true },
           { step: 'Verify campaign in Google Ads', ok: true },
+          { step: 'Add location targeting', ok: true },
         ] };
       },
       async setGoogleCampaignStatus(id: string, args: { status: string }) {

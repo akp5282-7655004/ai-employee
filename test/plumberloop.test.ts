@@ -126,6 +126,7 @@ describe('journey routes', () => {
             { step: 'Add 4 keywords to "Drain"', ok: true },
             { step: 'Create responsive search ad in "Drain"', ok: true },
             { step: 'Verify campaign in Google Ads', ok: true },
+            { step: 'Add location targeting', ok: true },
           ],
         };
       },

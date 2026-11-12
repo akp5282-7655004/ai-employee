@@ -19,6 +19,7 @@ import {
   type CampaignSpec,
   type PageLinkRef,
 } from './campaign.js';
+import { resolveAreas } from './geotarget.js';
 import { enforceRulebook, fixAdCapitalization, hoursRange, RULEBOOK_DEFAULTS, STANDARD_NEGATIVES } from './rulebook.js';
 
 export const AUTOMATE_PLAN_RULE =
@@ -63,6 +64,8 @@ export interface SearchPlan {
   sections: PlanSection[];
   /** True only in Automate after the first approved launch. */
   preapproved: boolean;
+  /** Set when the service area did not match a Google location. Approve and launch stays off. */
+  locationBlock: string;
 }
 
 const BOOK: Record<string, string[]> = {
@@ -307,7 +310,19 @@ export function buildSearchPlan(profile: PlanProfile, opts?: { preapproved?: boo
   }
   spec.status = 'PAUSED';
   spec.biddingStrategy = spec.bidPlan?.stage === 'MAXIMIZE_CONVERSIONS' ? 'MAXIMIZE_CONVERSIONS' : 'MAXIMIZE_CLICKS';
-  return { questions, spec, sections: sectionsOf(spec), preapproved: !!opts?.preapproved };
+  const geo = resolveAreas(profile.serviceAreas || spec.locations.join('; '));
+  spec.geoTargets = geo.targets;
+  const sections = sectionsOf(spec);
+  const places = sections.find((section) => section.id === 'locations');
+  if (places) {
+    places.body = geo.targets.length
+      ? `Presence only. ${geo.targets.map((target) => `${target.name}${target.state ? `, ${target.state}` : ''} (${target.targetType} ${target.id})`).join('; ')}.`
+      : geo.block;
+    places.reason = geo.targets.length
+      ? 'People physically in these Google locations. Interest outside them is off.'
+      : geo.block;
+  }
+  return { questions, spec, sections, preapproved: !!opts?.preapproved, locationBlock: geo.block };
 }
 
 /** Keep the owner's approved spec. Force paused, drop broad match, fix capitalization. */
