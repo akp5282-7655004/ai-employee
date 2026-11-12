@@ -135,6 +135,8 @@ export function extractCustomerNodes(v: unknown, into: CustomerNode[] = [], dept
 }
 
 function idOf(s: string): string | undefined {
+  const nested = s.match(/customerClients\/(\d{10})/);
+  if (nested?.[1]) return nested[1];
   const resource = s.match(/customers\/(\d{10})/);
   if (resource?.[1]) return resource[1];
   const digits = s.replace(/[^\d]/g, '');

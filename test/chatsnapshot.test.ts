@@ -229,7 +229,8 @@ describe('chat turn', () => {
     expect(check).toMatch(/SAMPLE/);
     expect(check).toMatch(/not resolved/i);
     expect(check).toMatch(/paused/i);
-    expect(role).toMatch(/hybrid/);
+    expect(role).toMatch(/Hybrid/);
+    expect(role).not.toMatch(/\bautomate\b|\bhybrid\b/);
     expect(role).toMatch(/\$40\/day/);
     expect(integrations).toMatch(/GoHighLevel is not connected/);
     expect(integrations).toMatch(/coming later/i);

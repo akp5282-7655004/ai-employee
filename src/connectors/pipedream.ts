@@ -66,6 +66,8 @@ export class PipedreamConnector implements Connector {
   /** The ad account the owner last launched into — reads prefer it too, so an
    *  MCC with many clients reports the business the owner actually works in. */
   private gadsPreferred = new Map<string, string>();
+  /** Manager login saved with the preferred client. Does not call Google. */
+  private gadsLogin = new Map<string, string>();
   private static GHL_SLUGS = ['gohighlevel', 'highlevel_oauth', 'highlevel', 'leadconnector'];
   /** Successful account lists. A page load calls this many times; Pipedream does not. */
   private accountCache = new Map<string, { ts: number; value: ConnectedAccount[] }>();
@@ -515,18 +517,46 @@ export class PipedreamConnector implements Connector {
     }
     const clientsByLogin: Record<string, ReturnType<typeof extractCustomerNodes>> = {};
     for (const login of [...loginIds].slice(0, 5)) {
-      const clients = await runList('google_ads-list-customer-clients', { accountId: login, customerClientId: login });
+      // accountId is the manager (login-customer-id). Do not also send that
+      // manager as customerClientId. That prop is the client ad account, and
+      // setting it to the manager hides the client list.
+      const clients = await runList('google_ads-list-customer-clients', { accountId: login });
       clientsByLogin[login] = clients.nodes.length ? clients.nodes : [...clients.ids].map((id) => ({ id }));
       if (clients.error) error = error || clients.error;
     }
     const logins = loginNodes.length ? loginNodes : [...loginIds].map((id) => ({ id }));
-    const access = classifyGadsAccounts({
+    const fmtId = (id: string) => (/^\d{10}$/.test(id) ? `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` : id);
+    let access = classifyGadsAccounts({
       logins,
       clientsByLogin,
       missingAction: missingAction || undefined,
       error: error || undefined,
       selectedId: this.gadsPreferred.get(externalUserId),
     });
+    const savedClient = (this.gadsPreferred.get(externalUserId) || '').replace(/[^\d]/g, '');
+    const savedLogin = (this.gadsLogin.get(externalUserId) || '').replace(/[^\d]/g, '');
+    if ((access.kind === 'manager_only' || access.kind === 'none') && /^\d{10}$/.test(savedClient)) {
+      const login = /^\d{10}$/.test(savedLogin) ? savedLogin : (access.loginCustomerId || savedClient);
+      const name = this.gadsNames.get(savedClient);
+      const label = name ? `${name} (${fmtId(savedClient)})` : fmtId(savedClient);
+      access = {
+        kind: 'ready',
+        reason: 'A saved Google Ads customer id is selected.',
+        loginCustomerId: login,
+        customers: [{ id: savedClient, login, name, label }],
+        selectedId: savedClient,
+      };
+    } else if (access.kind === 'manager_only' && access.loginCustomerId) {
+      const harvested = await this.clientsFromCampaignList(externalUserId, authId, rows, access.loginCustomerId);
+      if (harvested.length === 1) {
+        const client = harvested[0]!;
+        access = classifyGadsAccounts({
+          logins: [{ id: access.loginCustomerId, manager: true }],
+          clientsByLogin: { [access.loginCustomerId]: [client] },
+          selectedId: savedClient || client.id,
+        });
+      }
+    }
     this.gadsAccess.set(externalUserId, access);
     if (access.kind === 'ready' && access.selectedId) {
       const chosen = access.customers.find((c) => c.id === access.selectedId)!;
@@ -540,9 +570,41 @@ export class PipedreamConnector implements Connector {
     return this.gadsAccess.get(externalUserId) ?? null;
   }
 
-  rememberGoogleCustomer(externalUserId: string, customerId: string): void {
-    this.gadsPreferred.set(externalUserId, customerId.replace(/[^\d]/g, ''));
+  rememberGoogleCustomer(externalUserId: string, customerId: string, loginCustomerId?: string): void {
+    const client = customerId.replace(/[^\d]/g, '');
+    this.gadsPreferred.set(externalUserId, client);
+    const login = (loginCustomerId || '').replace(/[^\d]/g, '');
+    if (/^\d{10}$/.test(login)) this.gadsLogin.set(externalUserId, login);
     this.gadsCache.delete(externalUserId);
+  }
+
+  /**
+   * When the client list only returns the manager, a campaign list on that
+   * login can still name the client in customers/{id}/. One client is enough
+   * to resolve. An empty or failed list does not invent an id.
+   */
+  private async clientsFromCampaignList(externalUserId: string, authId: string, rows: any[], login: string): Promise<{ id: string; manager?: boolean; name?: string }[]> {
+    const comp = rows.find((c) => (c.key ?? c.id ?? c.componentKey) === 'google_ads-list-campaigns');
+    if (!comp) return [];
+    try {
+      const pd = await this.backend();
+      const key = comp.key ?? comp.id ?? comp.componentKey;
+      const props = await this.componentProps(comp, key);
+      const appName = props.find((p: any) => p?.type === 'app')?.name ?? 'googleAds';
+      const res = await pd.actions.run({
+        externalUserId,
+        id: key,
+        configuredProps: { [appName]: { authProvisionId: authId }, accountId: login },
+      });
+      const ids = new Set<string>();
+      const text = JSON.stringify(res?.ret ?? res?.exports ?? res ?? {});
+      for (const match of text.matchAll(/customers\/(\d{10})\//g)) {
+        if (match[1] && match[1] !== login) ids.add(match[1]);
+      }
+      return [...ids].map((id) => ({ id, manager: false, name: this.gadsNames.get(id) }));
+    } catch {
+      return [];
+    }
   }
 
   /**

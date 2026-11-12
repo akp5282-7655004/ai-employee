@@ -7,6 +7,8 @@ export interface ChatReaders {
   integrations: () => Promise<unknown>;
   leads: () => Promise<unknown>;
   changeLog: () => Promise<unknown>;
+  /** Live Google Ads spend for the signed-in account. Optional so older callers still typecheck. */
+  liveSpend?: () => Promise<import('./prompt.js').LiveSpendRead | null>;
 }
 
 export interface ChatToolSpec {
@@ -56,7 +58,11 @@ export async function runChatTool(name: string, readers: ChatReaders): Promise<s
     });
   }
   try {
-    const value = await readers[key]();
+    const read = readers[key];
+    if (!read) {
+      return JSON.stringify({ ok: false, error: 'That read is not available.' });
+    }
+    const value = await read();
     const text = JSON.stringify(value);
     return text.length > 6000 ? `${text.slice(0, 6000)}…` : text;
   } catch {

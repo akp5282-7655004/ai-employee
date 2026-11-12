@@ -220,7 +220,7 @@ export interface Connector {
   /** Last customer-id resolution for this external user, after a list or describe. */
   googleAdsAccess?(externalUserId: string): { kind: string; reason: string; customers: { id: string; login: string; label: string }[]; selectedId?: string; loginCustomerId?: string } | null;
   /** Remember which customer id this tenant picked. Does not call Google. */
-  rememberGoogleCustomer?(externalUserId: string, customerId: string): void;
+  rememberGoogleCustomer?(externalUserId: string, customerId: string, loginCustomerId?: string): void;
   /** 30-day search terms with spend/conversions (Gold Miner). Empty when the
    *  connection doesn't expose a search-terms report. */
   getSearchTerms?(externalUserId: string): Promise<{ term: string; cost: number; clicks: number; conversions: number }[]>;

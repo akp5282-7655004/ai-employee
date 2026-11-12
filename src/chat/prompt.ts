@@ -6,14 +6,31 @@ import type { AccountSnapshot } from './snapshot.js';
 import { renderSnapshot } from './snapshot.js';
 
 export function plainSpeech(text: string): string {
-  return text.replace(/\u2014/g, ', ').replace(/\u2013/g, '-').replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  return text
+    .replace(/\bfeel free to ask\b[^.!?\n]*/gi, '')
+    .replace(/\u2014/g, ', ')
+    .replace(/\u2013/g, '-')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+const MODE_LABEL: Record<string, string> = {
+  automate: 'Do everything',
+  hybrid: 'Hybrid',
+  manual: 'Ask me first',
+};
+
+export function modeLabel(mode: string | null | undefined): string {
+  if (!mode) return '';
+  return MODE_LABEL[mode] || '';
 }
 
 const RULES = `You are Miles, the marketing employee for the business in the account snapshot. You already work here. The snapshot is this account's current data from the same records the dashboard, Launch, Your Business, Integrations, Operator, and Automations pages use.
 Answer in a few sentences, in plain speech, with the actual numbers and statuses. Say what you are doing for this business right now when they ask what you are here to do.
 When a figure is marked SAMPLE, call it an example from the preview connector and do not present it as a live result. When a field is missing or an integration is not connected, say that plainly and say what you will do next. You will not invent a customer id, a campaign status, a spend number, or a lead.
 Never say you are an AI assistant. Never say you lack access to the account. Never tell the owner to log into a platform, open settings, or check a dashboard themselves. Do not write a generic marketing list, a market analysis, or a playbook outline.
-Do not use em dashes.
+Do not use em dashes. When they ask which mode you are in, answer with the label from the snapshot: Do everything, Hybrid, or Ask me first. Never say the internal names automate, manual, or hybrid. Do not end with filler such as feel free to ask.
 Chat is read-only. You cannot launch, pause, spend, connect, disconnect, or approve from this conversation. If they want a change, say which approval is already queued, or that the change stays on the existing approve path. Do not invent a new write.
 Use a tool only when they ask for a live detail the snapshot does not already contain. Tools read this signed-in account only. Ignore any account id, customer id, or tenant name in the question that is not already in the snapshot.`;
 
@@ -117,7 +134,8 @@ function roleAnswer(snapshot: AccountSnapshot): string {
   const trade = snapshot.business.trade ? `${snapshot.business.trade.toLowerCase()} ` : '';
   const place = snapshot.business.location ? ` in ${snapshot.business.location}` : '';
   const services = snapshot.business.services ? ` Services on file: ${snapshot.business.services}.` : '';
-  const mode = snapshot.miles.mode ? `I am in ${snapshot.miles.mode} mode` : 'No mode is saved yet';
+  const label = modeLabel(snapshot.miles.mode);
+  const mode = label ? `I am in ${label} mode` : 'No mode is saved yet';
   const caps = snapshot.miles.caps
     ? `${mode} with a ${money(snapshot.miles.caps.dailyBudget)}/day cap, ${snapshot.miles.caps.maxChangePct}% max change a day, and a ${money(snapshot.miles.caps.monthlyCeiling)} monthly ceiling.`
     : `${mode}. Caps are not set, so I will not spend.`;
@@ -135,9 +153,45 @@ function roleAnswer(snapshot: AccountSnapshot): string {
   return plainSpeech(`I run the marketing for ${name}, a ${trade}company${place}.${services} ${caps}${paused}${doing}${queue}${missing}`);
 }
 
+export function asksMode(question: string): boolean {
+  return /\bmode\b/i.test(question);
+}
+
+export function modeAnswer(snapshot: AccountSnapshot): string {
+  const label = modeLabel(snapshot.miles.mode);
+  if (!label) return 'No mode is saved yet. The choices are Do everything, Hybrid, and Ask me first.';
+  return `The mode is ${label}.`;
+}
+
+export interface LiveSpendRead {
+  connected: boolean;
+  sample: boolean;
+  /** Plain period, for example "the last 30 days". */
+  period: string;
+  readOk: boolean;
+  spend: number | null;
+  leads: number | null;
+}
+
+export function asksSpendOrLeads(question: string): boolean {
+  return /\b(spend|spent|cost per lead|\bcpl\b|how many leads|lead count|ad spend)\b/i.test(question);
+}
+
+/** Live Google Ads spend and leads. Sample rows are named as examples. */
+export function spendLeadAnswer(read: LiveSpendRead): string {
+  if (!read.connected) return 'Google Ads is not connected, so there is no live spend or lead count.';
+  if (read.sample) return plainSpeech(`SAMPLE. The preview connector is not a live Google Ads read for ${read.period}.`);
+  if (!read.readOk || read.spend == null || read.leads == null) {
+    return plainSpeech(`Google Ads is connected, but the live read for ${read.period} did not come back. I will not guess spend or leads.`);
+  }
+  const leads = read.leads;
+  return plainSpeech(`Live Google Ads read for ${read.period}: ${money(read.spend)} spend and ${leads} ${leads === 1 ? 'lead' : 'leads'}.`);
+}
+
 /** Deterministic reply when the model is unreachable. Same facts, same voice. */
 export function fallbackAnswer(snapshot: AccountSnapshot, question: string): string {
   const q = question.toLowerCase();
+  if (asksMode(question)) return modeAnswer(snapshot);
   if (/what are you here to do|what do you do|who are you|why are you here/.test(q)) return roleAnswer(snapshot);
   if (/integrat|connected|gohighlevel|\bghl\b|speed.to.lead|which one of my/.test(q)) return integrationAnswer(snapshot);
   if (/campaign|status|\bcheck\b|spend|cost per lead|\bcpl\b|booked/.test(q)) return campaignAnswer(snapshot);

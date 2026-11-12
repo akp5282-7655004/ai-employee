@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyGadsAccounts } from '../src/connectors/gadsAccess.js';
+import { classifyGadsAccounts, extractCustomerNodes } from '../src/connectors/gadsAccess.js';
 import { PipedreamConnector } from '../src/connectors/pipedream.js';
 import type { Config } from '../src/config.js';
 import { buildServer } from '../src/server.js';
@@ -44,6 +44,67 @@ describe('Google customer id resolution', () => {
     });
     expect(picked.kind).toBe('ready');
     expect(picked.selectedId).toBe('3333333333');
+  });
+
+  it('reads the client id out of a manager customerClients resource', () => {
+    const nodes = extractCustomerNodes({
+      resourceName: 'customers/3519644891/customerClients/9013698905',
+      clientCustomer: 'customers/9013698905',
+      descriptiveName: 'Painters In Philly',
+      manager: false,
+    });
+    expect(nodes.some((node) => node.id === '9013698905')).toBe(true);
+  });
+
+  it('resolves the client under a manager without sending the manager as the client id', async () => {
+    const sent: { id?: string; configuredProps?: Record<string, unknown> }[] = [];
+    const client = {
+      accounts: { list: async () => ({ data: [{ id: 'apn_1', app: { nameSlug: 'google_ads' }, healthy: true, name: 'Google' }] }) },
+      actions: {
+        list: async () => ({ data: [
+          { key: 'google_ads-list-account-id-options', configurableProps: [{ type: 'app', name: 'googleAds' }] },
+          { key: 'google_ads-list-customer-clients', configurableProps: [{ type: 'app', name: 'googleAds' }, { name: 'accountId' }, { name: 'customerClientId' }] },
+          { key: 'google_ads-list-campaigns', configurableProps: [{ type: 'app', name: 'googleAds' }, { name: 'accountId' }, { name: 'customerClientId' }] },
+        ] }),
+        run: async (req: { id?: string; configuredProps?: Record<string, unknown> }) => {
+          sent.push({ id: req.id, configuredProps: req.configuredProps });
+          if (req.id === 'google_ads-list-account-id-options') return { ret: [{ value: '3519644891', manager: true }] };
+          if (req.id === 'google_ads-list-customer-clients') return { ret: [{ id: '9013698905', descriptiveName: 'Painters In Philly', manager: false }] };
+          return { ret: [] };
+        },
+      },
+    };
+    const connector = new PipedreamConnector({ connector: 'pipedream', pipedream: { environment: 'production', projectId: 'p', clientId: 'c', clientSecret: 's' } } as Config);
+    (connector as unknown as { client: unknown }).client = client;
+    const targets = await connector.listAdTargets('painters');
+    const listed = sent.find((call) => call.id === 'google_ads-list-customer-clients');
+    expect(listed?.configuredProps?.accountId).toBe('3519644891');
+    expect(listed?.configuredProps?.customerClientId).toBeUndefined();
+    expect(targets.map((row) => row.id)).toEqual(['9013698905']);
+    expect(targets[0]?.login).toBe('3519644891');
+  });
+
+  it('keeps a saved client when the live list only returns the manager', async () => {
+    const client = {
+      accounts: { list: async () => ({ data: [{ id: 'apn_1', app: { nameSlug: 'google_ads' }, healthy: true }] }) },
+      actions: {
+        list: async () => ({ data: [
+          { key: 'google_ads-list-account-id-options', configurableProps: [{ type: 'app', name: 'googleAds' }] },
+          { key: 'google_ads-list-customer-clients', configurableProps: [{ type: 'app', name: 'googleAds' }, { name: 'accountId' }] },
+        ] }),
+        run: async (req: { id?: string }) => {
+          if (req.id === 'google_ads-list-account-id-options') return { ret: [{ value: '3519644891', manager: true }] };
+          return { ret: [{ id: '3519644891', manager: true }] };
+        },
+      },
+    };
+    const connector = new PipedreamConnector({ connector: 'pipedream', pipedream: { environment: 'production', projectId: 'p', clientId: 'c', clientSecret: 's' } } as Config);
+    (connector as unknown as { client: unknown }).client = client;
+    connector.rememberGoogleCustomer('painters', '9013698905', '3519644891');
+    const targets = await connector.listAdTargets('painters');
+    expect(targets.map((row) => row.id)).toEqual(['9013698905']);
+    expect(connector.googleAdsAccess('painters')?.selectedId).toBe('9013698905');
+    expect(connector.googleAdsAccess('painters')?.loginCustomerId).toBe('3519644891');
   });
 
   it('does not show a blank customer id when the tool result is empty', async () => {

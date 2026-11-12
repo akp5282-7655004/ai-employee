@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Miles — Sign in</title>
+<title>Miles, Sign in</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='1.5' y='1.5' width='97' height='97' rx='26' fill='%23111112'/><g fill='none' stroke='%23fff' stroke-width='8'><path d='M31.6 31.6A26 26 0 0 0 68.4 68.4' stroke-opacity='.22'/><path d='M31.6 31.6A26 26 0 0 1 68.4 68.4'/></g><circle cx='42' cy='50' r='4' fill='%23fff'/><circle cx='58' cy='50' r='4' fill='%23fff'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -100,11 +100,11 @@
   const params=new URLSearchParams(location.search);
   const resetToken=params.get('reset'), resetUid=params.get('uid');
   const inviteToken=params.get('invite');
-  // Arriving here because a session ran out, rather than by choice — say so, or
+  // Arriving here because a session ran out, rather than by choice, say so, or
   // being bounced to a login screen mid-task reads as the app breaking.
   if(params.get('expired')){
     const n=document.createElement('div');
-    n.textContent='Your session expired — please sign in again.';
+    n.textContent='Your session expired, please sign in again.';
     n.style.cssText='text-align:center;font-size:12.5px;font-weight:600;color:#86651C;background:#FBF6E7;border:1px solid #E8DCB8;border-radius:9px;padding:9px;margin-bottom:14px';
     $('form').before(n);
   }
@@ -177,7 +177,7 @@
     try{
       if(!window.PasswordCredential || !navigator.credentials) return;
       await navigator.credentials.store(new PasswordCredential({ id: email, password, name: name || email }));
-    }catch(e){ /* declined or unsupported — never block the sign-in */ }
+    }catch(e){ /* declined or unsupported, never block the sign-in */ }
   }
 
   // Say so, before anyone signs up, if this server cannot keep the account.
@@ -192,10 +192,10 @@
       }
     }catch(e){ /* the warning is a courtesy, never a blocker */ }
   })();
-  // Invite link — default to Sign up and show a friendly banner.
+  // Invite link, default to Sign up and show a friendly banner.
   if(inviteToken && !(resetToken && resetUid)){
     setMode('signup');
-    $('subtitle').textContent='You’ve been invited — create your account below.';
+    $('subtitle').textContent='You’ve been invited, create your account below.';
     const b=document.createElement('div'); b.textContent='You have an invite to join Miles.'; b.style.cssText='text-align:center;font-size:12.5px;font-weight:600;color:var(--brand);background:var(--panel-2);border-radius:9px;padding:8px;margin-bottom:14px'; $('form').before(b);
   }
   // Reset-password mode (from an emailed / admin link).
@@ -214,7 +214,7 @@
     $('err').textContent=''; $('forgot').disabled=true;
     try{ const r=await fetch('/auth/forgot',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email})}); const d=await r.json().catch(()=>({}));
       $('msg').textContent = d.emailConfigured ? 'If that email is registered, a reset link is on its way.' : 'Ask your admin for a reset link (email delivery isn’t set up yet).';
-    }catch(e){ $('err').textContent='Network error — try again.'; }
+    }catch(e){ $('err').textContent='Network error, try again.'; }
     $('forgot').disabled=false;
   };
   $('form').addEventListener('submit', async e=>{
@@ -233,7 +233,7 @@
       if(!r.ok){ $('err').textContent=d.error||'Something went wrong.'; btn.disabled=false; return; }
       await saveCredential(body.email, body.password, body.name);
       window.location='/';
-    }catch(err){ $('err').textContent='Network error — try again.'; btn.disabled=false; }
+    }catch(err){ $('err').textContent='Network error, try again.'; btn.disabled=false; }
   });
 </script>
 </body>

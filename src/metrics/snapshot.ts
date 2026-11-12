@@ -15,6 +15,7 @@
  * immediately while a refresh runs behind it.
  */
 import type { Connector } from '../connectors/types.js';
+import { withTimeout } from '../connectors/readcache.js';
 import type { CampaignSpend, Deal } from '../revenue/attribution.js';
 
 export interface PlatformSnapshot {
@@ -58,7 +59,7 @@ export function snapshotAgeMs(s: PlatformSnapshot | undefined): number {
  *  that fails contributes nothing rather than failing the whole refresh. */
 export async function buildSnapshot(connector: Connector, userId: string): Promise<PlatformSnapshot> {
   const safe = async <T>(fn: (() => Promise<T>) | undefined, empty: T): Promise<T> => {
-    try { return fn ? await fn() : empty; } catch { return empty; }
+    try { return fn ? await withTimeout(fn(), 8_000) : empty; } catch { return empty; }
   };
   const [spendRows, deals, searchTerms, leads, reviews, social] = await Promise.all([
     safe(connector.getAdSpend ? () => connector.getAdSpend!(userId) : undefined, [] as CampaignSpend[]),

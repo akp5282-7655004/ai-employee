@@ -2,11 +2,12 @@
  * Goal check for an owner who is not a marketer.
  *
  * Expected leads are budget divided by a published Google Ads cost per lead.
- * Every dollar figure below is copied from src/packs/benchmarks.ts (the
- * Searchlight Google Ads rows and the dollar amounts already written in
- * those notes). Nothing here is averaged, stretched, or taken from the
- * home-services playbook bands. Those bands are not a measured Google Ads
- * cost per lead.
+ * A published Google Ads row in src/packs/benchmarks.ts wins when one exists.
+ * Those dollars are copied from that file, not averaged. When the file has
+ * no row, the only other figure Miles may use is the playbook band in
+ * src/agents/playbook.ts (for painting, $40 to $90). That band is labeled
+ * as a playbook planning range, not as a published Google Ads study.
+ * The midpoint is only the middle of those two ends. No other number is added.
  *
  * The benchmark file has no city rows and no Google Ads CPC or click
  * conversion rate for these trades. A city always uses the trade's national
@@ -16,6 +17,7 @@
  * A month is 30 days. A week is 7 days.
  */
 import { BENCHMARK_HUB, BENCHMARK_META } from '../packs/benchmarks.js';
+import { playbookCplBand } from './playbook.js';
 import { tradeKey } from './feasibility.js';
 
 export const MONTH_DAYS = 30;
@@ -52,6 +54,8 @@ export interface CplBand {
   typical: number;
   high: number;
   single: boolean;
+  /** published = benchmark file. playbook = the planning band, not a Google Ads study. */
+  source: 'published' | 'playbook';
 }
 
 export interface GoalCaps {
@@ -160,6 +164,26 @@ export function nationalSearchCpl(trade: string): CplBand | null {
     typical: spec.typical,
     high: spec.high,
     single: spec.low === spec.high,
+    source: 'published',
+  };
+}
+
+/** Published Google Ads row when the benchmark file has one, otherwise the playbook band. */
+export function cplBandForGoal(trade: string): CplBand | null {
+  const published = nationalSearchCpl(trade);
+  if (published) return published;
+  const band = playbookCplBand(trade);
+  if (!band) return null;
+  const typical = Math.round((band.low + band.high) / 2);
+  const label = band.key.charAt(0).toUpperCase() + band.key.slice(1);
+  return {
+    key: band.key,
+    label,
+    low: band.low,
+    typical,
+    high: band.high,
+    single: band.low === band.high,
+    source: 'playbook',
   };
 }
 
@@ -171,10 +195,17 @@ function cityLine(tradeLabel: string, city: string, single: boolean): string {
 }
 
 function assumptionFor(band: CplBand | null, tradeLabel: string, cityNote: string): string {
-  const source = `Source: ${BENCHMARK_META.source}.`;
   if (!band) {
-    return plain(`${cityNote} The published study has no Google Ads cost per lead for ${tradeLabel}. Miles will not guess one. ${source}`);
+    return plain(`${cityNote} The published study has no Google Ads cost per lead for ${tradeLabel}, and the playbook has no band either. Miles will not guess one. Source: ${BENCHMARK_META.source}.`);
   }
+  if (band.source === 'playbook') {
+    const middle = band.single
+      ? ''
+      : ` The middle figure, ${money(band.typical)}, is the midpoint of ${money(band.low)} and ${money(band.high)}, not a separate published cost.`;
+    const figures = band.single ? money(band.typical) : `${money(band.low)} to ${money(band.high)}`;
+    return plain(`Cost per lead used here: ${figures}. That is the home services playbook band for ${tradeLabel}, not a published Google Ads study.${middle} ${cityNote} Source: home services playbook.`);
+  }
+  const source = `Source: ${BENCHMARK_META.source}.`;
   const figures = band.single
     ? `${money(band.typical)}`
     : `${money(band.low)}, ${money(band.typical)}, and ${money(band.high)}`;
@@ -203,18 +234,22 @@ export function goalCheck(input: GoalInput): GoalCheck {
   const daily = roundDaily(dailyExact);
   const trade = (input.trade || '').trim();
   const city = (input.city || '').trim();
-  const band = trade ? nationalSearchCpl(trade) : null;
+  const band = trade ? cplBandForGoal(trade) : null;
   const tradeLabel = band?.label || trade || 'this trade';
   const place = city.trim();
   const cityNote = !band
     ? (place
-      ? `No published cost per lead for ${tradeLabel} in ${place}, and no national Google Ads figure for ${tradeLabel} either.`
-      : `No city is saved, and the published study has no Google Ads cost per lead for ${tradeLabel}.`)
-    : cityLine(tradeLabel, city, band.single);
+      ? `No published cost per lead for ${tradeLabel} in ${place}, and the playbook has no band for ${tradeLabel} either.`
+      : `No city is saved, and there is no Google Ads figure or playbook band for ${tradeLabel}.`)
+    : band.source === 'playbook'
+      ? (place
+        ? `No published Google Ads cost per lead for ${tradeLabel} in ${place}. This uses the home services playbook band, not a city figure.`
+        : `No city is saved. This uses the home services playbook band for ${tradeLabel}, not a city figure.`)
+      : cityLine(tradeLabel, city, band.single);
   const caps = input.caps ?? { daily: null, monthly: null };
   const savedDaily = caps.daily != null && caps.daily > 0 ? caps.daily : null;
   const savedMonthly = caps.monthly != null && caps.monthly > 0 ? caps.monthly : null;
-  const sourceLabel = BENCHMARK_META.source;
+  const sourceLabel = band?.source === 'playbook' ? 'Home services playbook' : BENCHMARK_META.source;
 
   const base = {
     trade: tradeLabel,
@@ -243,7 +278,7 @@ export function goalCheck(input: GoalInput): GoalCheck {
     const kept = savedDaily == null || daily <= savedDaily + 0.001 ? daily : roundDaily(savedDaily);
     return {
       ...base,
-      verdict: plain(`Miles does not have a published Google Ads cost per lead for ${tradeLabel}, so it will not guess how many leads ${money(daily)}/day brings.`),
+      verdict: plain(`Miles does not have a cost per lead for ${tradeLabel}, so it will not guess how many leads ${money(daily)}/day brings.`),
       likely: 'unknown',
       leads: null,
       assumption: assumptionFor(null, tradeLabel, cityNote),
