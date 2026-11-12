@@ -48,6 +48,21 @@ export function judgeSearchLaunch(steps: CampaignLaunchStep[]): { ok: boolean; p
   return { ok, partial: created && !ok, missing, adsMissing };
 }
 
+/** Plain sentences for the steps Google rejected. Empty when every step succeeded. */
+export function plainStepErrors(steps: { step: string; ok: boolean; error?: string }[]): string {
+  const bad = steps.filter((step) => !step.ok);
+  if (!bad.length) return '';
+  return bad.map((step) => `${step.step}: ${step.error || 'Google did not confirm this step.'}`).join(' ');
+}
+
+/** Resource names Miles can enable again on a later Start. */
+export function resourcesFromSteps(steps: { step: string; ok: boolean; resource?: string }[]): { adGroupResources: string[]; adResources: string[] } {
+  return {
+    adGroupResources: steps.filter((step) => /create ad group/i.test(step.step) && step.resource).map((step) => step.resource!),
+    adResources: steps.filter((step) => /responsive search ad/i.test(step.step) && step.resource).map((step) => step.resource!),
+  };
+}
+
 export function searchLaunchNote(args: {
   live: boolean;
   ok: boolean;

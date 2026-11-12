@@ -23,6 +23,8 @@ export function planGo(args: {
   explicitCreate?: boolean;
   /** A yes on the queued enable. */
   explicitEnable?: boolean;
+  /** A Miles campaign is already saved. Start must not create a second one. */
+  campaignOnFile?: boolean;
 }): { create: PolicyDecision; enable: PolicyDecision } {
   const base = {
     mode: args.mode,
@@ -31,6 +33,16 @@ export function planGo(args: {
     spentToday: args.spentToday,
     spentMonth: args.spentMonth,
   };
+  if (args.campaignOnFile) {
+    const enable = resolveDecision(decidePolicy({
+      ...base,
+      action: { area: 'ppc', kind: 'enable', spend: args.dailySpend, canPush: true },
+    }), !!args.explicitEnable);
+    return {
+      create: { effect: 'skip', mode: enable.mode, reason: 'A paused campaign is already in Google. Miles will not create another.' },
+      enable,
+    };
+  }
   const create = resolveDecision(decidePolicy({
     ...base,
     action: { area: 'ppc', kind: 'create', spend: 0, canPush: true },

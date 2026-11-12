@@ -101,7 +101,7 @@ export function normalizeAdCase(input: string): string {
     .filter(Boolean)
     .map((word) => {
       const letters = word.replace(/[^A-Za-z]/g, '');
-      if (letters.length <= 3 && ACRONYMS.has(letters.toUpperCase())) {
+      if (ACRONYMS.has(letters.toUpperCase())) {
         return word.replace(letters, letters.toUpperCase());
       }
       if (letters.length >= 3 && letters === letters.toUpperCase()) {

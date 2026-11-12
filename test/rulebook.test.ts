@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildCampaignSpec, deriveServiceLines } from '../src/agents/campaign.js';
-import { judgeEnableReadback, listCampaignRows, parseGoogleStatuses } from '../src/agents/enablecheck.js';
-import { enforceRulebook, housekeepingProposals, nextBidStage, RULEBOOK_DEFAULTS } from '../src/agents/rulebook.js';
+import { judgeEnableReadback, listCampaignRows, parseGoogleStatuses, readbackReady, retryReadback } from '../src/agents/enablecheck.js';
+import { enforceRulebook, fixAdCapitalization, housekeepingProposals, nextBidStage, RULEBOOK_DEFAULTS } from '../src/agents/rulebook.js';
 
 describe('campaign rulebook', () => {
   it('does not build the old junk ad group or quote keywords', () => {
@@ -40,6 +40,20 @@ describe('campaign rulebook', () => {
     expect(ruled.blocks.join(' ')).not.toMatch(/Sitelink needs/);
   });
 
+  it('rewrites all-caps ad lines and keeps the ad', () => {
+    const built = buildCampaignSpec({ dailyBudget: 20, finalUrl: 'https://paintersinphilly.com' }, { trade: 'Painting', city: 'Philadelphia', services: 'Interior painting' });
+    built.adGroups[0]!.rsa.headlines[0] = 'FREE ESTIMATE TODAY';
+    built.adGroups[0]!.rsa.headlines[1] = 'HVAC TUNE UP LLC';
+    const ruled = enforceRulebook(built, { trade: 'painting', city: 'Philadelphia' });
+    const headlines = ruled.spec.adGroups[0]!.rsa.headlines;
+    expect(headlines).toContain('Free Estimate Today');
+    expect(headlines).toContain('HVAC Tune Up LLC');
+    expect(headlines.join(' ')).not.toMatch(/\bFREE\b|\bESTIMATE\b|\bTODAY\b/);
+    expect(headlines).toHaveLength(15);
+    expect(fixAdCapitalization('FREE CUSTOM QUOTE')).toBe('Free Custom Quote');
+    expect(fixAdCapitalization('hvac repair llc')).toBe('HVAC Repair LLC');
+  });
+
   it('labels bid stages as defaults', () => {
     expect(nextBidStage({ conversions: 0 }).stage).toBe('MAXIMIZE_CLICKS');
     expect(nextBidStage({ conversions: RULEBOOK_DEFAULTS.conversionsBeforeMaximizeConversions }).reason).toMatch(/not a benchmark/);
@@ -75,6 +89,50 @@ describe('enable read-back', () => {
     expect(read.campaign).toBe('ENABLED');
     expect(read.adGroups).toEqual(['PAUSED']);
     expect(read.ads).toEqual(['UNKNOWN']);
+  });
+
+  it('does not treat a campaign list as ad group status', () => {
+    const read = parseGoogleStatuses({
+      results: [{ campaign: { id: '9', resourceName: 'customers/1/campaigns/9', status: 'ENABLED' } }],
+    }, { campaignId: '9', adGroupIds: ['3'], adIds: ['8'] });
+    expect(read.campaign).toBe('ENABLED');
+    expect(read.adGroups).toEqual(['UNKNOWN']);
+    expect(read.ads).toEqual(['UNKNOWN']);
+    expect(judgeEnableReadback(read).reason).toMatch(/could not read every ad group/);
+  });
+
+  it('reads ad group and ad status from their own fields', () => {
+    const read = parseGoogleStatuses({
+      results: [{
+        campaign: { id: '9', status: 2 },
+        adGroup: { id: '3', resourceName: 'customers/1/adGroups/3', status: 'ENABLED' },
+        adGroupAd: { resourceName: 'customers/1/adGroupAds/3~8', status: 'ENABLED', ad: { id: '8' } },
+      }],
+    }, { campaignId: '9', adGroupIds: ['3'], adIds: ['8'] });
+    expect(read.campaign).toBe('ENABLED');
+    expect(read.adGroups).toEqual(['ENABLED']);
+    expect(read.ads).toEqual(['ENABLED']);
+    const smeared = parseGoogleStatuses({
+      campaign: { id: '9', status: 'ENABLED' },
+      adGroupAd: { resourceName: 'customers/1/adGroupAds/3~8', ad: { id: '8' } },
+    }, { campaignId: '9', adGroupIds: ['3'], adIds: ['8'] });
+    expect(smeared.campaign).toBe('ENABLED');
+    expect(smeared.ads).toEqual(['UNKNOWN']);
+  });
+
+  it('retries read-back only while Google has not caught up', async () => {
+    const seen: string[] = [];
+    let n = 0;
+    const read = await retryReadback(async () => {
+      n += 1;
+      seen.push(String(n));
+      return n < 3
+        ? { campaign: 'ENABLED' as const, adGroups: ['UNKNOWN' as const], ads: ['ENABLED' as const], note: 'lag' }
+        : { campaign: 'ENABLED' as const, adGroups: ['ENABLED' as const], ads: ['ENABLED' as const], note: 'Read from the account list.' };
+    }, 'ENABLED', { tries: 3, waitMs: 5, sleep: async () => undefined });
+    expect(n).toBe(3);
+    expect(readbackReady(read, 'ENABLED')).toBe(true);
+    expect(seen).toEqual(['1', '2', '3']);
   });
 
   it('lists campaigns and skips ad groups', () => {

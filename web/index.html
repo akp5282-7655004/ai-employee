@@ -3019,6 +3019,19 @@ function launchModeNote(mode, caps){
   if(mode==='hybrid') return 'Hybrid is on. Miles builds the Google plan and waits for your approval.';
   return 'Pick a mode. Nothing is created until you start the Google plan.';
 }
+let milesGoBusy=false;
+let milesGoNote='';
+function goResultText(r){
+  if(!r) return '';
+  if(r.note) return r.note;
+  if(r.enabled) return 'Google reports the campaign, its ad groups, and its ads as enabled.';
+  if(r.demo) return 'Preview only. Nothing was created in Google.';
+  if(r.created) return 'Created paused.';
+  return 'Waiting on you. Nothing was spent.';
+}
+function milesGoLabel(miles){
+  return milesGoNote || (miles&&miles.goNote) || '';
+}
 async function milesPost(btn, statusEl, working, url, payload){
   if(btn){ btn.disabled=true; btn.dataset.prev=btn.textContent; btn.textContent=working; }
   if(statusEl) statusEl.textContent=working;
@@ -3030,11 +3043,28 @@ async function milesPost(btn, statusEl, working, url, payload){
     if(!res.ok||r.error) throw new Error(r.error||('Request failed ('+res.status+').'));
     return r;
   }catch(err){
-    if(btn){ btn.disabled=false; btn.textContent=btn.dataset.prev||btn.textContent; }
+    if(btn && btn.dataset.milesGo!=='1'){ btn.disabled=false; btn.textContent=btn.dataset.prev||btn.textContent; }
     const msg=(err&&err.message)?err.message:'That did not work. Try again.';
     if(statusEl) statusEl.textContent=msg;
     toast(msg);
     return null;
+  }
+}
+async function startMilesGo(btn, note){
+  if(milesGoBusy){
+    const busy='Miles is already starting this. Nothing else was created.';
+    if(note) note.textContent=busy;
+    return {skipped:true, note:busy};
+  }
+  milesGoBusy=true;
+  document.querySelectorAll('[data-miles-go]').forEach((b)=>{ b.disabled=true; b.textContent='Starting...'; });
+  try{
+    const r=await milesPost(btn, note, 'Starting...', '/api/miles/go', {confirm:true});
+    milesGoNote=r ? goResultText(r) : ((note&&note.textContent)||'That did not work. Nothing else was started.');
+    if(note) note.textContent=milesGoNote;
+    return r;
+  }finally{
+    milesGoBusy=false;
   }
 }
 function trackingMethodLabel(method){
@@ -3171,10 +3201,13 @@ function renderMilesHome(box, d, place, opts){
     plan.append(el('p','appsub',(spec.name||'Search')+' · $'+(spec.dailyBudget||0)+'/day · status '+(d.activation||'not created')));
     (spec.adGroups||[]).forEach(g=>{ const row=el('div','appsub', g.name+': '+(g.keywords||[]).map(k=>k.text).join(', ')); plan.append(row); });
     const row=el('div','md-plan-actions');
-    const planNote=el('div','appsub','');
+    const planNote=el('div','appsub md-go-note', milesGoLabel(d));
+    planNote.dataset.role='miles-go-note';
     const start=el('button','go', d.mode==='automate'?'Start inside my caps':d.mode==='manual'?'Manual mode does not create':'Queue for my approval');
     start.type='button';
-    start.onclick=async()=>{ const r=await milesPost(start, planNote, 'Starting...', '/api/miles/go', {confirm:true}); if(!r) return; planNote.textContent=r.note||(r.enabled?'Google reports the campaign, ad groups, and ads as enabled.':(r.demo?'Preview only. Nothing was created in Google.':(r.created?'Created paused.':'Waiting on you.'))); await refreshMilesSurface(); };
+    start.dataset.milesGo='1';
+    if(milesGoBusy){ start.disabled=true; start.textContent='Starting...'; }
+    start.onclick=async()=>{ const r=await startMilesGo(start, planNote); if(r&&r.skipped) return; await refreshMilesSurface(); milesGoNote=''; };
     const kill=el('button','md-ghost', d.caps&&d.caps.paused?'Resume':'Pause all');
     kill.type='button';
     kill.onclick=async()=>{ const r=await milesPost(kill, planNote, 'Pausing...', '/api/miles/kill', {paused:!(d.caps&&d.caps.paused)}); if(r) await refreshMilesSurface(); };
@@ -3407,17 +3440,22 @@ async function openOverview(){
 function mdSample(){ const s=el('span','md-sample','SAMPLE'); return s; }
 function runPlaybook(card, miles){
   const btn=el('button','md-run','Run');
+  btn.type='button';
   if(!card.runnable){ btn.disabled=true; btn.textContent=card.runKind==='google_plan'?'Save setup first':'Not available'; return btn; }
   if(card.runKind==='google_plan'){
+    btn.dataset.milesGo='1';
+    if(milesGoBusy){ btn.disabled=true; btn.textContent='Starting...'; }
+    const wrap=el('div');
+    const note=el('div','appsub md-go-note', milesGoLabel(miles));
+    note.dataset.role='miles-go-note';
     btn.onclick=async()=>{
-      const note=el('div','appsub','');
-      btn.insertAdjacentElement('afterend', note);
-      const r=await milesPost(btn, note, 'Starting...', '/api/miles/go', {confirm:true});
-      if(!r) return;
-      note.textContent=r.enabled?'Enabled inside your caps.':(r.demo?'Preview only. Nothing was created in Google.':(r.created?'Created paused.':'Waiting on you. Nothing was spent.'));
+      const r=await startMilesGo(btn, note);
+      if(r&&r.skipped) return;
       await refreshMilesSurface();
+      milesGoNote='';
     };
-    return btn;
+    wrap.append(btn, note);
+    return wrap;
   }
   const mode=(miles&&miles.mode)||'hybrid';
   if(mode==='manual'){ btn.disabled=true; btn.title='Manual mode. You turn this on yourself.'; btn.textContent='You turn this on'; return btn; }
