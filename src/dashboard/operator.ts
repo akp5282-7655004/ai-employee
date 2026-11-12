@@ -125,6 +125,8 @@ export interface OperatorView {
     costGoal: string | null;
     costSample: boolean;
     costBar: number | null;
+    /** Set when spend is real and booked jobs are not, so no ratio is shown. */
+    costNote: string | null;
     explain: string;
     action: { title: string; body: string; decisionId: string; canApprove: boolean } | null;
     /** Goal versus actual leads. Shown only once a campaign is running. */
@@ -294,8 +296,10 @@ function onTrack(input: OperatorInput, decisions: OperatorDecision[]): OperatorV
   const cost = metricOf(input.metrics, 'calc.cost_per_booked');
   const bookedSample = !booked || booked.source !== 'live';
   const costSample = !cost || cost.source !== 'live';
+  const spendLive = !input.sampleConnector && input.campaigns.some((row) => (row.spend || 0) > 0);
+  const costUntracked = spendLive && bookedSample;
   const bookedValue = booked ? String(Math.round(booked.value)) : 'n/a';
-  const costValue = cost ? money(cost.value) : 'n/a';
+  const costValue = costUntracked ? 'Not tracked yet' : (cost ? money(cost.value) : 'n/a');
   const pace = leadPaceOf(input);
   const liveJobs = !!(booked && !bookedSample);
 
@@ -321,9 +325,10 @@ function onTrack(input: OperatorInput, decisions: OperatorDecision[]): OperatorV
     bookedBar: null,
     costLabel: 'Cost per booked job',
     costValue,
-    costGoal: target ? `under ${money(target)} goal` : null,
-    costSample,
-    costBar: cost && target ? Math.max(0, Math.min(100, (Math.min(cost.value, target) / target) * 100)) : null,
+    costGoal: costUntracked ? null : (target ? `under ${money(target)} goal` : null),
+    costSample: costUntracked ? false : costSample,
+    costBar: costUntracked || !cost || !target ? null : Math.max(0, Math.min(100, (Math.min(cost.value, target) / target) * 100)),
+    costNote: costUntracked ? 'Cost per booked job appears once booked jobs come in from your CRM.' : null,
     explain: plain(explain),
     action: first
       ? { title: first.title, body: first.detail, decisionId: first.id, canApprove: first.canApprove }
@@ -356,7 +361,8 @@ function moneyBlock(input: OperatorInput): OperatorView['money'] {
   const leads = metricOf(input.metrics, 'calc.blended_leads');
   const booked = metricOf(input.metrics, 'crm.booked_jobs');
   const livePair = !!(rev && spend && rev.source === 'live' && spend.source === 'live' && spend.value > 0);
-  const per = livePair && rev && spend ? rev.value / spend.value : (rev && spend && spend.value > 0 ? rev.value / spend.value : null);
+  const samplePair = !!(rev && spend && rev.source !== 'live' && spend.source !== 'live' && spend.value > 0);
+  const per = livePair && rev && spend ? rev.value / spend.value : (samplePair && rev && spend ? rev.value / spend.value : null);
   const perText = per == null ? null : (per >= 100 ? money(per) : `$${per.toFixed(2).replace(/\.00$/, '')}`);
   let tone: OperatorView['money']['tone'] = 'unknown';
   let headline = 'Not enough live revenue and spend to say if you are making money.';

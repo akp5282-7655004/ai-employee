@@ -398,6 +398,7 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
   if (hasLedger) tiles.push(kpi('Leads', count(leadsNow), compare(leadsNow, leadsPrev), leadsNow, leadsPrev, [], false));
   else tiles.push(kpi('Leads', count(plan.totalLeads), 'Sample data. Tracked leads replace this when your CRM sends events.', null, null, plan.days.map((day) => day.leads), true));
   if (adsConnected && hasLedger && leadsNow > 0) tiles.push(kpi('Cost per lead', money(adSpend / leadsNow), 'Spend divided by tracked leads. Ad conversions are not used.', null, null, [], false));
+  else if (adsConnected) tiles.push(kpi('Cost per lead', 'Not tracked yet', 'Cost per lead appears once leads come in from your CRM or call tracking.', null, null, [], false));
   else tiles.push(kpi('Cost per lead', money(plan.cpl), 'Sample data. This is not your cost per lead.', null, null, [], true));
   const factor = window.days / 30;
   let projection = 'No budget projection is saved yet. Save one on the campaign plan before this can compare booked jobs with the plan.';

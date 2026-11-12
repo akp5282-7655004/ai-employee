@@ -645,6 +645,7 @@
   .md-ghost{background:#fff;border:1px solid #e4e4e8;border-radius:999px;padding:7px 12px;font-size:12.5px;font-weight:700;cursor:pointer;color:#111;font-family:inherit;}
   .md-link{background:none;border:0;padding:7px 4px;font-size:12.5px;font-weight:700;cursor:pointer;color:#111;font-family:inherit;text-decoration:underline;}
   .md-sample{display:inline-flex;align-items:center;font-size:10px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:999px;background:#f3efe2;color:#86651c;vertical-align:middle;}
+  .md-live{display:inline-flex;align-items:center;font-size:10px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:999px;background:#e7f6ee;color:#1b8552;vertical-align:middle;}
   .md-legend{color:#8a8a92;font-size:12.5px;}
   .md-label{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a8a92;margin:18px 0 10px;}
   .md-card{background:#fff;border:1px solid #ececef;border-radius:18px;padding:22px 24px;box-shadow:0 1px 2px rgba(16,16,20,.04);}
@@ -731,6 +732,7 @@
   .rep-whead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;}
   .rep-whead b{font-size:14px;letter-spacing:-.01em;}
   .rep-sample{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;background:#fff4d6;color:#8a5a00;border-radius:999px;padding:3px 8px;white-space:nowrap;}
+  .rep-live{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;background:#e7f6ee;color:#1b8552;border-radius:999px;padding:3px 8px;white-space:nowrap;}
   .rep-chartbox{position:relative;width:100%;height:240px;min-height:240px;}
   .rep-chartbox canvas{display:block;width:100% !important;height:100% !important;}
   .rep-spark{width:88px;height:32px;display:block;}
@@ -3779,7 +3781,10 @@ async function openOverview(){
   renderOverview(d, miles, op);
   openCmdCenter();
 }
-function mdSample(){ const s=el('span','md-sample','SAMPLE'); return s; }
+function mdSample(){ return el('span','md-sample','SAMPLE'); }
+function mdLive(){ return el('span','md-live','\u2713 Live'); }
+function mdBadge(sample){ return sample?mdSample():mdLive(); }
+function repBadge(sample){ return el('span', sample?'rep-sample':'rep-live', sample?'Sample data':'\u2713 Live'); }
 function runPlaybook(card, miles){
   const btn=el('button','md-run','Run');
   btn.type='button';
@@ -3879,7 +3884,7 @@ function renderOverview(d, miles, op){
     const right=el('span');
     right.append(el('span','md-num', value||'n/a'));
     if(goal) right.append(document.createTextNode(' / '+goal));
-    if(sample){ right.append(document.createTextNode(' ')); right.append(mdSample()); }
+    right.append(document.createTextNode(' ')); right.append(mdBadge(sample));
     head.append(lab, right); wrap.append(head);
     if(bar!=null){ const b=el('div','md-bar'); const i=el('i'); i.style.width=Math.round(bar)+'%'; b.append(i); wrap.append(b); }
     return wrap;
@@ -3898,6 +3903,7 @@ function renderOverview(d, miles, op){
     }
     card.append(row(track.bookedLabel, track.bookedValue, track.bookedGoal, track.bookedSample, track.bookedBar));
     card.append(row(track.costLabel, track.costValue, track.costGoal, track.costSample, track.costBar));
+    if(track.costNote) card.append(el('p','md-explain', track.costNote));
     card.append(el('p','md-explain', track.explain||''));
   } else {
     card.append(el('p','md-explain','The goal card loads with your saved setup. Nothing here is a live result until a source connects.'));
@@ -3937,7 +3943,7 @@ function renderOverview(d, miles, op){
   const tiles=el('div','md-tiles');
   (money&&money.tiles||[]).forEach(t=>{
     const c=el('div','md-tilebox');
-    const k=el('div','k'); k.append(document.createTextNode(t.label+' ')); if(t.sample) k.append(mdSample());
+    const k=el('div','k'); k.append(document.createTextNode(t.label+' ')); k.append(mdBadge(!!t.sample));
     c.append(k);
     c.append(el('div','v', t.value));
     if(t.delta) c.append(el('div','d', t.delta));
@@ -4041,6 +4047,7 @@ function renderOverview(d, miles, op){
     if(ch.grade){ const grade=el('span','md-grade', ch.grade); c.append(grade); }
     c.append(el('h3',null, ch.name));
     if(ch.state==='sample') c.append(mdSample());
+    else if(ch.state==='live') c.append(mdLive());
     const nums=el('div','md-row');
     nums.append(el('span',null,'Cost / lead'), el('span','md-num', ch.cost||'n/a'));
     c.append(nums);
@@ -4055,6 +4062,7 @@ function renderOverview(d, miles, op){
   box.append(el('div','md-label','7 · Breakdown'));
   const bc=el('div','md-card');
   if(br&&br.sample){ const lab=el('div'); lab.style.marginBottom='8px'; lab.append(mdSample(), document.createTextNode(' Example campaign rows. Not a live ad account.')); bc.append(lab); }
+  else if(br&&br.rows&&br.rows.length){ const lab=el('div'); lab.style.marginBottom='8px'; lab.append(mdLive(), document.createTextNode(' These campaign rows are from your account.')); bc.append(lab); }
   if(!br||br.empty){
     bc.append(el('p','md-explain', (br&&br.empty)||'No campaign rows. Connect Google Ads to see spend, leads, and status.'));
   } else {
@@ -9360,7 +9368,7 @@ function renderReport(report){
       const c=el('div','rep-tile');
       const head=el('div','rep-whead');
       head.append(el('div','appsub',t.label));
-      if(t.sample) head.append(el('span','rep-sample','Sample data'));
+      head.append(repBadge(!!t.sample));
       c.append(head);
       const row=el('div'); row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px';
       row.append(el('b',null,t.value));
@@ -9434,7 +9442,7 @@ function renderReport(report){
       const card=el('div','rep-widget span-'+span);
       const head=el('div','rep-whead');
       head.append(el('b',null,widget.title));
-      if(widget.sample) head.append(el('span','rep-sample','Sample data'));
+      head.append(repBadge(!!widget.sample));
       card.append(head);
       const box=el('div','rep-chartbox');
       if(widget.kind==='bar') box.style.height=Math.max(220, ((widget.points||[]).length*36)+48)+'px';
@@ -9473,7 +9481,7 @@ function renderReport(report){
         const avg=values.length?sum/values.length:0;
         const rateOrEach=w.unit==='rate'||/cost per/i.test(w.title);
         const value=w.headline?w.headline:(rateOrEach?(w.unit==='rate'?((Math.round(avg*1000)/10)+'%'):moneyFmt(avg)):(w.unit==='money'?moneyFmt(sum):numFmt(sum)));
-        return {label:w.title, value, compare:'Sample data. Not your account.', sample:!!w.sample, delta:'none', spark:values};
+        return {label:w.title, value, compare:w.sample?'Sample data. Not your account.':(w.note||''), sample:!!w.sample, delta:'none', spark:values};
       });
     }
     s.append(tiles(tileList));
