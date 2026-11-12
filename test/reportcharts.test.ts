@@ -35,11 +35,40 @@ describe('sample chart series', () => {
     const first = samplePlan({ trade: 'Painting', dailyBudget: 20, start: '2026-10-14', end: '2026-11-12' });
     const second = samplePlan({ trade: 'Painting', dailyBudget: 20, start: '2026-10-14', end: '2026-11-12' });
     expect(second).toEqual(first);
-    expect(first.cpl).toBe(cplBandForGoal('Painting')!.typical);
     expect(first.daily).toBe(20);
     expect(first.days).toHaveLength(30);
     expect(first.totalSpend).toBe(600);
-    expect(first.days.some((day, index) => index > 0 && day.spend !== first.days[0]!.spend)).toBe(true);
+    expect(first.totalLeads).toBe(Math.max(1, Math.round(600 / cplBandForGoal('Painting')!.typical)));
+    expect(first.cpl).toBe(first.totalSpend / first.totalLeads);
+    expect(first.googleSpend + first.metaSpend).toBe(first.totalSpend);
+    expect(first.googleClicks + first.metaClicks).toBe(first.totalClicks);
+    expect(first.days.reduce((sum, day) => sum + day.spend, 0)).toBe(600);
+    expect(first.google.reduce((sum, day) => sum + day.spend, 0)).toBe(first.googleSpend);
+    expect(first.meta.reduce((sum, day) => sum + day.spend, 0)).toBe(first.metaSpend);
+    expect(first.days.every((day) => Number.isInteger(day.spend) && Number.isInteger(day.clicks) && Number.isInteger(day.leads) && Number.isInteger(day.impressions))).toBe(true);
+    const weekend = first.days.filter((day) => [0, 6].includes(new Date(`${day.date}T00:00:00.000Z`).getUTCDay()));
+    const weekday = first.days.filter((day) => ![0, 6].includes(new Date(`${day.date}T00:00:00.000Z`).getUTCDay()));
+    const avg = (rows: typeof first.days) => rows.reduce((sum, day) => sum + day.spend, 0) / rows.length;
+    expect(avg(weekend)).toBeLessThan(avg(weekday));
+    expect(first.days.some((day, index) => index > 0 && day.spend !== first.days[index - 1]!.spend)).toBe(true);
+  });
+
+  it('keeps sample overview, Google, and Facebook spend on the same total', () => {
+    const report = buildMarketingReport(input());
+    const sum = (title: string, list: { title: string; points: { value: number | null }[] }[]) =>
+      list.find((widget) => widget.title === title)!.points.reduce((total, point) => total + (point.value || 0), 0);
+    const overview = sum('Spend', report.charts.overview);
+    const google = sum('Spend', report.charts.google);
+    const meta = sum('Spend', report.charts.meta);
+    expect(google + meta).toBe(overview);
+    expect(overview).toBe(600);
+    expect(Number.isInteger(google)).toBe(true);
+    const plan = samplePlan({ trade: 'Painting', dailyBudget: 20, start: '2026-10-14', end: '2026-11-12' });
+    expect(sum('Clicks', report.charts.google)).toBe(plan.googleClicks);
+    expect(report.charts.google.find((widget) => widget.title === 'CTR')!.headline).toBe(`${Math.round((plan.googleClicks / plan.googleImpressions) * 1000) / 10}%`);
+    expect(report.charts.google.find((widget) => widget.title === 'Cost per lead')!.headline).toBe(
+      (plan.googleSpend / plan.googleLeads).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: Number.isInteger(plan.googleSpend / plan.googleLeads) ? 0 : 2 }),
+    );
   });
 });
 

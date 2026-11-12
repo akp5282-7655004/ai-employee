@@ -11,6 +11,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap" media="print" onload="this.media='all';this.onload=null">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-funnel@4.2.0/build/index.umd.min.js"></script>
 </head>
 <body>
 <style>
@@ -720,16 +722,28 @@
   .rep-tile .up{color:#1b8552;}
   .rep-tile .down{color:#b42318;}
   .rep-banner{background:#fff4d6;border:1px solid #f0d48a;color:#6b4a00;border-radius:14px;padding:10px 14px;margin:0 0 14px;font-size:13.5px;line-height:1.4;}
-  .rep-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:12px;}
-  .rep-widget{background:#fff;border:1px solid #ececef;border-radius:18px;padding:14px 16px;box-shadow:0 1px 2px rgba(16,16,20,.04);min-width:0;}
-  .rep-widget.wide{grid-column:1 / -1;}
-  .rep-whead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;}
+  .rep-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;align-items:stretch;}
+  .rep-widget{grid-column:span 3;background:#fff;border:1px solid #ececef;border-radius:18px;padding:14px 14px 10px;box-shadow:0 1px 2px rgba(16,16,20,.04);min-width:0;display:flex;flex-direction:column;}
+  .rep-widget.span-2{grid-column:span 2;}
+  .rep-widget.span-3{grid-column:span 3;}
+  .rep-widget.span-4{grid-column:span 4;}
+  .rep-widget.span-6{grid-column:span 6;}
+  .rep-whead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;}
   .rep-whead b{font-size:14px;letter-spacing:-.01em;}
   .rep-sample{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;background:#fff4d6;color:#8a5a00;border-radius:999px;padding:3px 8px;white-space:nowrap;}
-  .rep-svg{width:100%;height:168px;display:block;}
+  .rep-chartbox{position:relative;width:100%;height:240px;min-height:240px;}
+  .rep-chartbox canvas{display:block;width:100% !important;height:100% !important;}
   .rep-spark{width:88px;height:32px;display:block;}
-  .rep-widget .appsub{margin:8px 0 0;}
-  @media(max-width:800px){.rep-grid{grid-template-columns:1fr;}}
+  .rep-widget .appsub{margin:6px 0 0;}
+  @media(max-width:900px){
+    .rep-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .rep-widget,.rep-widget.span-2,.rep-widget.span-3,.rep-widget.span-4,.rep-widget.span-6{grid-column:span 1;}
+  }
+  @media(max-width:640px){
+    .rep-grid{grid-template-columns:1fr;}
+    .rep-tiles{grid-template-columns:1fr 1fr;}
+    .rep-chartbox{height:220px;min-height:220px;}
+  }
   .rep-secs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px;}
   .rep-secs button{border:1px solid #ececef;background:#fff;border-radius:999px;padding:7px 12px;font:inherit;cursor:pointer;}
   .rep-secs button.on{background:#111;color:#fff;border-color:#111;}
@@ -9239,6 +9253,8 @@ async function openReports(){
   renderReport(body&&body.report);
 }
 function renderReport(report){
+  if(window.__reportCharts){ window.__reportCharts.forEach(c=>{ try{ c.destroy(); }catch(e){} }); }
+  window.__reportCharts=[];
   const box=$('#reports-body'); if(!box) return; box.innerHTML='';
   if(!report){ box.append(el('p','appsub','Miles could not load this report.')); return; }
   const bar=el('div','rep-bar');
@@ -9286,98 +9302,6 @@ function renderReport(report){
     path.setAttribute('d', d); path.setAttribute('fill','none'); path.setAttribute('stroke','#111'); path.setAttribute('stroke-width','1.6');
     svg.append(path); return svg;
   };
-  const axis=(svg,w,h)=>{
-    const line=document.createElementNS('http://www.w3.org/2000/svg','path');
-    line.setAttribute('d','M28,8 L28,'+(h-22)+' L'+(w-8)+','+(h-22));
-    line.setAttribute('fill','none'); line.setAttribute('stroke','#d9d9de'); line.setAttribute('stroke-width','1');
-    svg.append(line);
-  };
-  const chartSvg=(widget)=>{
-    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-    svg.setAttribute('viewBox','0 0 360 168'); svg.setAttribute('class','rep-svg'); svg.setAttribute('role','img');
-    const pts=widget.points||[];
-    axis(svg,360,168);
-    if(widget.kind==='gauge'){
-      const pace=Math.max(0, Math.min(1, Number(widget.pace)||0));
-      const track=document.createElementNS('http://www.w3.org/2000/svg','path');
-      track.setAttribute('d','M90,120 A90,90 0 0 1 270,120'); track.setAttribute('fill','none'); track.setAttribute('stroke','#ececef'); track.setAttribute('stroke-width','16'); track.setAttribute('stroke-linecap','round');
-      const arc=document.createElementNS('http://www.w3.org/2000/svg','path');
-      arc.setAttribute('d','M90,120 A90,90 0 0 1 270,120');
-      arc.setAttribute('fill','none'); arc.setAttribute('stroke','#111'); arc.setAttribute('stroke-width','16'); arc.setAttribute('stroke-linecap','round');
-      const len=Math.PI*90;
-      arc.setAttribute('stroke-dasharray', (pace*len).toFixed(1)+' '+len.toFixed(1));
-      svg.append(track, arc);
-      const cap=document.createElementNS('http://www.w3.org/2000/svg','text');
-      cap.setAttribute('x','180'); cap.setAttribute('y','108'); cap.setAttribute('text-anchor','middle'); cap.setAttribute('font-size','13'); cap.setAttribute('fill','#111');
-      cap.textContent=widget.caption||'';
-      svg.append(cap);
-      return svg;
-    }
-    if(!pts.length) return svg;
-    const max=Math.max.apply(null, pts.map(p=>Number(p.value)||0).concat([0.001]));
-    if(widget.kind==='line'){
-      const coords=pts.map((p,i)=>{
-        const x=pts.length===1?180:32+(i/(pts.length-1))*312;
-        const y=146-((Number(p.value)||0)/max)*124;
-        return [x,y];
-      });
-      const lineD=coords.map((c,i)=>(i?'L':'M')+c[0].toFixed(1)+','+c[1].toFixed(1)).join(' ');
-      const area=document.createElementNS('http://www.w3.org/2000/svg','path');
-      area.setAttribute('d', lineD+' L'+coords[coords.length-1][0].toFixed(1)+',146 L'+coords[0][0].toFixed(1)+',146 Z');
-      area.setAttribute('fill','rgba(17,17,17,.08)');
-      const path=document.createElementNS('http://www.w3.org/2000/svg','path');
-      path.setAttribute('d', lineD); path.setAttribute('fill','none'); path.setAttribute('stroke','#111'); path.setAttribute('stroke-width','2');
-      svg.append(area, path);
-    } else if(widget.kind==='bar'){
-      pts.slice(0,8).forEach((p,i)=>{
-        const y=16+i*18;
-        const w=Math.max(2, ((Number(p.value)||0)/max)*210);
-        const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
-        rect.setAttribute('x','118'); rect.setAttribute('y',String(y)); rect.setAttribute('width',w.toFixed(1)); rect.setAttribute('height','12'); rect.setAttribute('rx','4'); rect.setAttribute('fill','#111');
-        const label=document.createElementNS('http://www.w3.org/2000/svg','text');
-        label.setAttribute('x','112'); label.setAttribute('y',String(y+10)); label.setAttribute('text-anchor','end'); label.setAttribute('font-size','11'); label.setAttribute('fill','#3f3f46');
-        label.textContent=String(p.label||'').slice(0,18);
-        svg.append(rect, label);
-      });
-    } else if(widget.kind==='donut'){
-      const total=pts.reduce((s,p)=>s+(Number(p.value)||0),0)||1;
-      const colors=['#111','#5c5c66','#9a9aa3','#c8c8ce'];
-      let angle=-Math.PI/2;
-      pts.forEach((p,i)=>{
-        const frac=(Number(p.value)||0)/total;
-        const next=angle+frac*Math.PI*2;
-        const large=frac>0.5?1:0;
-        const x1=120+Math.cos(angle)*52, y1=84+Math.sin(angle)*52;
-        const x2=120+Math.cos(next)*52, y2=84+Math.sin(next)*52;
-        const path=document.createElementNS('http://www.w3.org/2000/svg','path');
-        path.setAttribute('d','M120,84 L'+x1.toFixed(1)+','+y1.toFixed(1)+' A52,52 0 '+large+' 1 '+x2.toFixed(1)+','+y2.toFixed(1)+' Z');
-        path.setAttribute('fill', colors[i%colors.length]);
-        svg.append(path);
-        angle=next;
-      });
-      const hole=document.createElementNS('http://www.w3.org/2000/svg','circle');
-      hole.setAttribute('cx','120'); hole.setAttribute('cy','84'); hole.setAttribute('r','30'); hole.setAttribute('fill','#fff');
-      svg.append(hole);
-      pts.slice(0,4).forEach((p,i)=>{
-        const label=document.createElementNS('http://www.w3.org/2000/svg','text');
-        label.setAttribute('x','190'); label.setAttribute('y',String(64+i*18)); label.setAttribute('font-size','12'); label.setAttribute('fill','#3f3f46');
-        label.textContent=p.label+' '+fmt(widget.unit, p.value);
-        svg.append(label);
-      });
-    } else if(widget.kind==='funnel'){
-      pts.forEach((p,i)=>{
-        const w=300-i*48;
-        const y=18+i*34;
-        const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
-        rect.setAttribute('x', String((340-w)/2)); rect.setAttribute('y', String(y)); rect.setAttribute('width', w.toFixed(1)); rect.setAttribute('height','26'); rect.setAttribute('rx','8'); rect.setAttribute('fill', i===pts.length-1?'#1b8552':'#111');
-        const label=document.createElementNS('http://www.w3.org/2000/svg','text');
-        label.setAttribute('x','180'); label.setAttribute('y', String(y+17)); label.setAttribute('text-anchor','middle'); label.setAttribute('font-size','12'); label.setAttribute('fill','#fff');
-        label.textContent=p.label+'  '+fmt('count', p.value);
-        svg.append(rect, label);
-      });
-    }
-    return svg;
-  };
   const tiles=(list)=>{
     const g=el('div','rep-tiles');
     (list||[]).forEach(t=>{
@@ -9396,17 +9320,79 @@ function renderReport(report){
     });
     return g;
   };
+  const REPORT_PALETTE=['#111112','#3F3F46','#8A8A92','#C8C8CE'];
+  if(window.Chart){
+    Chart.defaults.font.family='Archivo, ui-sans-serif, system-ui, sans-serif';
+    Chart.defaults.color='#3F3F46';
+    Chart.defaults.borderColor='#E6E6EA';
+  }
+  const shortDate=(iso)=>{
+    const parts=String(iso||'').split('-');
+    if(parts.length<3) return String(iso||'');
+    const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return months[(Number(parts[1])||1)-1]+' '+Number(parts[2]);
+  };
+  const mountChart=(widget, canvas)=>{
+    if(!window.Chart){ return null; }
+    const labels=(widget.points||[]).map(p=>widget.kind==='line'?shortDate(p.label):p.label);
+    const values=(widget.points||[]).map(p=>p.value==null?null:Number(p.value));
+    const tip=(ctx)=>{
+      const raw=ctx.parsed&&(ctx.parsed.y!=null?ctx.parsed.y:ctx.parsed.x!=null?ctx.parsed.x:ctx.parsed);
+      const n=typeof raw==='number'?raw:(raw&&typeof raw.y==='number'?raw.y:0);
+      return (ctx.label?ctx.label+': ':'')+fmt(widget.unit, n);
+    };
+    const scales={
+      x:{grid:{color:'#EFEFF2'}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:widget.kind==='bar'?8:6}},
+      y:{beginAtZero:true, grid:{color:'#EFEFF2'}, ticks:{callback:(v)=>fmt(widget.unit, v)}}
+    };
+    let config;
+    if(widget.kind==='line'){
+      config={type:'line', data:{labels, datasets:[{data:values, borderColor:'#111112', backgroundColor:'rgba(17,17,18,.10)', fill:true, tension:.25, pointRadius:3, pointHoverRadius:5, borderWidth:2, spanGaps:true}]}, options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false}, plugins:{legend:{display:false}, tooltip:{callbacks:{label:tip}}}, scales}};
+    } else if(widget.kind==='bar'){
+      config={type:'bar', data:{labels, datasets:[{data:values, backgroundColor:'#111112', borderRadius:6, maxBarThickness:28}]}, options:{indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:tip}}}, scales:{x:{beginAtZero:true, grid:{color:'#EFEFF2'}, ticks:{callback:(v)=>fmt(widget.unit, v)}}, y:{grid:{display:false}}}}};
+    } else if(widget.kind==='donut'){
+      config={type:'doughnut', data:{labels, datasets:[{data:values, backgroundColor:REPORT_PALETTE, borderWidth:2, borderColor:'#fff'}]}, options:{responsive:true, maintainAspectRatio:false, cutout:'62%', plugins:{legend:{position:'right', labels:{boxWidth:12, padding:12}}, tooltip:{callbacks:{label:(ctx)=>ctx.label+': '+fmt('count', ctx.parsed)}}}}};
+    } else if(widget.kind==='funnel'){
+      const funnelType='bar';
+      const funnelScales={x:{beginAtZero:true, grid:{color:'#EFEFF2'}}, y:{grid:{display:false}}};
+      config={
+        type:funnelType,
+        data:{labels, datasets:[{data:values, backgroundColor:['#111112','#3F3F46','#6E6E76','#1B8552'], borderRadius:6}]},
+        options:{
+          indexAxis:'y',
+          responsive:true,
+          maintainAspectRatio:false,
+          plugins:{legend:{display:false}, tooltip:{callbacks:{label:tip}}},
+          scales:funnelScales
+        }
+      };
+    } else if(widget.kind==='gauge'){
+      const pace=Math.max(0, Math.min(1, Number(widget.pace)||0));
+      config={type:'doughnut', data:{labels:['Pace','Remaining'], datasets:[{data:[Math.round(pace*100), Math.round((1-pace)*100)], backgroundColor:['#111112','#E6E6EA'], borderWidth:0}]}, options:{rotation:270, circumference:180, cutout:'68%', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:(ctx)=>ctx.label+': '+ctx.parsed+'%'}}}}};
+    }
+    if(!config) return null;
+    const chart=new Chart(canvas, config);
+    window.__reportCharts.push(chart);
+    return chart;
+  };
   const widgets=(list)=>{
     const grid=el('div','rep-grid');
     (list||[]).forEach(widget=>{
-      const card=el('div','rep-widget'+(widget.kind==='line'||widget.kind==='funnel'?' wide':''));
+      const span=widget.span||3;
+      const card=el('div','rep-widget span-'+span);
       const head=el('div','rep-whead');
       head.append(el('b',null,widget.title));
       if(widget.sample) head.append(el('span','rep-sample','Sample data'));
       card.append(head);
-      card.append(chartSvg(widget));
+      const box=el('div','rep-chartbox');
+      if(widget.kind==='bar') box.style.height=Math.max(220, ((widget.points||[]).length*36)+48)+'px';
+      const canvas=document.createElement('canvas');
+      box.append(canvas);
+      card.append(box);
+      if(widget.kind==='gauge'&&widget.caption) card.append(el('p','appsub',widget.caption));
       if(widget.note) card.append(el('p','appsub',widget.note));
       grid.append(card);
+      mountChart(widget, canvas);
     });
     return grid;
   };
@@ -9434,7 +9420,7 @@ function renderReport(report){
         const sum=values.reduce((a,b)=>a+b,0);
         const avg=values.length?sum/values.length:0;
         const rateOrEach=w.unit==='rate'||/cost per/i.test(w.title);
-        const value=rateOrEach?(w.unit==='rate'?((Math.round(avg*1000)/10)+'%'):moneyFmt(avg)):(w.unit==='money'?moneyFmt(sum):numFmt(sum));
+        const value=w.headline?w.headline:(rateOrEach?(w.unit==='rate'?((Math.round(avg*1000)/10)+'%'):moneyFmt(avg)):(w.unit==='money'?moneyFmt(sum):numFmt(sum)));
         return {label:w.title, value, compare:'Sample data. Not your account.', sample:!!w.sample, delta:'none', spark:values};
       });
     }

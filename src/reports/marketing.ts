@@ -434,7 +434,7 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
     kpi('Won jobs', count(wonNow), compare(wonNow, wonPrev), wonNow, wonPrev, [], false),
   ] : [
     kpi('Leads', count(plan.totalLeads), 'Sample data. Tracked leads replace this when your CRM sends events.', null, null, [], true),
-    kpi('Missed calls', count(plan.totalLeads * 0.22), 'Sample data. Answered calls are not tracked.', null, null, [], true),
+    kpi('Missed calls', count(plan.missed), 'Sample data. Answered calls are not tracked.', null, null, [], true),
     kpi('Won jobs', jobsLabel(plan.totalJobs), 'Sample data. This is not your saved projection.', null, null, [], true),
   ];
   const happenedParts: string[] = [];
@@ -451,11 +451,11 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
   else if (input.speedOn) nextParts.push('Speed to lead is on. No timed reply was saved in this period.');
   nextParts.push('Scheduled email of this report is not set up. Print or save as PDF to share it.');
   const googleNote = input.sample
-    ? 'Preview mode. Demo spend is not shown. Charts stay sample data until a live account is connected.'
-    : input.google.connected ? input.google.note : 'Google Ads is not connected. Connect it under Integrations. The charts are sample data until a real read comes back.';
+    ? 'Google Ads is not connected, so the charts on this tab are sample data.'
+    : input.google.connected ? input.google.note : 'Google Ads is not connected. Connect it under Integrations. The charts on this tab are sample data until a real read comes back.';
   const metaNote = input.sample
-    ? 'Preview mode. Demo spend is not shown. Charts stay sample data until a live account is connected.'
-    : input.meta.connected ? input.meta.note : (input.meta.note || 'No Facebook ad account is connected. A Page by itself is not an ad account. The charts are sample data until a real read comes back.');
+    ? 'Facebook is not connected, so the charts on this tab are sample data.'
+    : input.meta.connected ? input.meta.note : (input.meta.note || 'No Facebook ad account is connected. A Page by itself is not an ad account. The charts on this tab are sample data until a real read comes back.');
   const charts = buildReportCharts({
     trade: input.trade,
     dailyBudget: input.dailyBudget ?? null,

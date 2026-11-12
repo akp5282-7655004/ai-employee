@@ -157,7 +157,8 @@ describe('marketing report', () => {
       }),
     }));
     expect(JSON.stringify(hidden)).not.toMatch(/1240|Emergency Plumbing|999/);
-    expect(hidden.google.note).toMatch(/preview/i);
+    expect(hidden.google.note).toMatch(/sample data/i);
+    expect(hidden.google.note).not.toMatch(/not shown|hidden/i);
     const hiddenSpend = hidden.overview.tiles.find((tile) => tile.label === 'Spend')!;
     expect(hiddenSpend.sample).toBe(true);
     expect(hiddenSpend.value).toBe('$600');
@@ -204,12 +205,13 @@ describe('reports route', () => {
     expect(body.report.business).toBe('Painters In Philly');
     expect(body.report.sample).toBe(true);
     expect(JSON.stringify(body)).not.toMatch(/1240|Emergency Plumbing/);
-    expect(body.report.google.note).toMatch(/preview/i);
+    expect(body.report.google.note).toMatch(/sample data/i);
+    expect(body.report.google.note).not.toMatch(/not shown|hidden/i);
     expect(body.report.shareNote).toMatch(/Print or save as PDF/);
     const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
     expect(html).toContain('data-page="reports"');
     expect(html).toContain('rep-tiles');
-    expect(html).toContain('rep-svg');
+    expect(html).toContain('chart.umd.min.js');
     expect(html).toContain('Sample data');
     expect(html).toContain('Print or save as PDF');
     await app.close();
