@@ -187,6 +187,19 @@ describe('operator honesty', () => {
     expect(view.onTrack.action?.body).not.toMatch(/approval|max percent/i);
   });
 
+  it('does not divide real spend by sample booked jobs', () => {
+    const view = buildOperatorView(base({
+      sampleConnector: false,
+      campaigns: [{ platform: 'google_ads', name: 'HOUSE PAINTING', spend: 21.01, leads: 0 }],
+    }));
+    expect(view.onTrack.bookedSample).toBe(true);
+    expect(view.onTrack.costValue).toBe('Not tracked yet');
+    expect(view.onTrack.costSample).toBe(false);
+    expect(view.onTrack.costBar).toBeNull();
+    expect(view.onTrack.costNote).toMatch(/once booked jobs come in from your CRM/);
+    expect(view.onTrack.costValue).not.toMatch(/\$83/);
+  });
+
   it('does not invent a budget shift when nothing is waiting', () => {
     const view = buildOperatorView(base());
     expect(view.decisions).toEqual([]);

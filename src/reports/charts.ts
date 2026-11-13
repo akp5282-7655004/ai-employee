@@ -356,10 +356,13 @@ export function buildReportCharts(args: {
   const leadsLine = args.hasLedger
     ? line('Leads', false, 'Tracked leads from your CRM ledger, including missed calls.', 'count', realLeads, 3)
     : line('Leads', true, 'No leads are saved yet.', 'count', plan.days.map((day) => ({ label: day.date, value: day.leads })), 3, String(plan.totalLeads));
+  const spendConnected = args.googleConnected || args.metaConnected;
   const cplReal = args.hasLedger && (googleDated || metaDated) ? cplPoints(mergePoints([realGoogleSpend, realMetaSpend]), realLeads) : [];
   const cplLine = cplReal.length
     ? line('Cost per lead', false, 'Connected spend that day divided by tracked leads that day.', 'money', cplReal, 3)
-    : line('Cost per lead', true, 'Running spend divided by running leads. The last point matches the tile.', 'money', runningCpl(plan.days), 3, moneyText(plan.cpl));
+    : spendConnected
+      ? untrackedCpl()
+      : line('Cost per lead', true, 'Running spend divided by running leads. The last point matches the tile.', 'money', runningCpl(plan.days), 3, moneyText(plan.cpl));
 
   const campaignBar = (googleCampaigns.length || metaCampaigns.length)
     ? bar('Spend by campaign', false, 'Campaigns from connected accounts only.', 'money', [...googleCampaigns, ...metaCampaigns].sort((a, b) => b.value - a.value).slice(0, 8))
@@ -424,7 +427,7 @@ export function buildReportCharts(args: {
     googleDated
       ? line('CTR', false, 'Clicks divided by impressions each day.', 'rate', ctrPoints(args.googleRows))
       : line('CTR', true, 'No daily Google click-through rate. The tile is total clicks divided by total impressions.', 'rate', googleSample.map((day) => ({ label: day.date, value: day.ctr })), 3, rateText(plan.googleClicks, plan.googleImpressions)),
-    googleCpl(args, plan, googleDated, realLeads, realGoogleSpend),
+    googleCpl(args, plan, args.googleConnected, googleDated, realLeads, realGoogleSpend),
     googleCampaigns.length
       ? bar('Spend by campaign', false, 'Google campaigns in this period.', 'money', googleCampaigns)
       : bar('Spend by campaign', true, 'No Google campaign rows. The bars add up to this tab\'s sample spend.', 'money', parts(plan.googleSpend, [`${word} search`, `${word} calls`], [0.62, 0.38]), 3),
@@ -463,24 +466,30 @@ export function buildReportCharts(args: {
     source,
   ];
   const all = [...overview, ...google, ...meta, ...leads];
-  const banner = all.some((widget) => widget.sample)
-    ? 'Some cards are sample data. Each one is marked Sample data. Sample numbers are not your account, and they are not used for your saved projection or the Am I on track check.'
+  const banner = all.length
+    ? 'Live is this account. Sample data is an example, not your account, and it is not used for your saved projection or the Am I on track check.'
     : null;
   return { banner, overview, google, meta, leads };
 }
 
-function googleCpl(args: { hasLedger: boolean }, plan: SamplePlan, dated: boolean, leads: { label: string; value: number }[], spend: { label: string; value: number }[]): ChartWidget {
+const UNTRACKED_CPL = 'Cost per lead appears once leads come in from your CRM or call tracking.';
+
+function untrackedCpl(): ChartWidget {
+  return { kind: 'line', title: 'Cost per lead', sample: false, note: UNTRACKED_CPL, unit: 'money', span: 3, headline: 'Not tracked yet', points: [] };
+}
+
+function googleCpl(args: { hasLedger: boolean }, plan: SamplePlan, connected: boolean, dated: boolean, leads: { label: string; value: number }[], spend: { label: string; value: number }[]): ChartWidget {
   const points = args.hasLedger && dated ? cplPoints(spend, leads) : [];
-  return points.length
-    ? line('Cost per lead', false, 'Google spend that day divided by tracked leads that day. Not Google conversions.', 'money', points)
-    : line('Cost per lead', true, 'Running Google spend divided by running Google leads. The last point matches the tile.', 'money', runningCpl(plan.google), 3, plan.googleLeads > 0 ? moneyText(plan.googleSpend / plan.googleLeads) : 'n/a');
+  if (points.length) return line('Cost per lead', false, 'Google spend that day divided by tracked leads that day. Not Google conversions.', 'money', points);
+  if (connected) return untrackedCpl();
+  return line('Cost per lead', true, 'Running Google spend divided by running Google leads. The last point matches the tile.', 'money', runningCpl(plan.google), 3, plan.googleLeads > 0 ? moneyText(plan.googleSpend / plan.googleLeads) : 'n/a');
 }
 
 function metaCpl(args: { hasLedger: boolean; metaConnected: boolean }, plan: SamplePlan, dated: boolean, leads: { label: string; value: number }[], spend: { label: string; value: number }[]): ChartWidget {
   const points = args.hasLedger && dated ? cplPoints(spend, leads) : [];
-  return points.length
-    ? line('Cost per lead', false, 'Facebook spend that day divided by tracked leads that day.', 'money', points)
-    : line('Cost per lead', true, 'Running Facebook spend divided by running Facebook leads. The last point matches the tile.', 'money', runningCpl(plan.meta), 3, plan.metaLeads > 0 ? moneyText(plan.metaSpend / plan.metaLeads) : 'n/a');
+  if (points.length) return line('Cost per lead', false, 'Facebook spend that day divided by tracked leads that day.', 'money', points);
+  if (args.metaConnected) return untrackedCpl();
+  return line('Cost per lead', true, 'Running Facebook spend divided by running Facebook leads. The last point matches the tile.', 'money', runningCpl(plan.meta), 3, plan.metaLeads > 0 ? moneyText(plan.metaSpend / plan.metaLeads) : 'n/a');
 }
 
 function runningCpl(days: { date: string; spend: number; leads: number }[]): { label: string; value: number | null }[] {
