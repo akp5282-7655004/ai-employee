@@ -123,7 +123,7 @@ export function accountRow(input: AdminAccountInput): AdminAccountRow {
   const found = (miles as { found?: { fetchNote?: string } }).found;
   const openRouter = typeof data.openRouterCostUsd === 'number' ? data.openRouterCostUsd : null;
   const revenue = typeof monthlyPaid === 'number' ? monthlyPaid : null;
-  const profit = revenue != null && openRouter != null ? Math.round((revenue - openRouter) * 100) / 100 : 'Not connected';
+  const profit = revenue != null && openRouter != null ? Math.round((revenue - openRouter) * 1e6) / 1e6 : 'Not connected';
   return {
     id: input.id,
     businessName: text(profile.businessName) || text(input.name) || 'Untitled',
@@ -195,7 +195,9 @@ export function buildAdminBusiness(rows: AdminAccountInput[], opts?: { now?: str
       freeToPaidRate: stripeReady ? (accounts.length ? Math.round((payingCount / accounts.length) * 1000) / 10 : 0) : 'Not connected',
       mrr: stripeReady ? accounts.reduce((sum, row) => sum + (typeof row.monthlyPaid === 'number' ? row.monthlyPaid : 0), 0) : 'Not connected',
       creditsConsumed,
-      openRouterCost: 'Not connected',
+      openRouterCost: rows.some((row) => typeof row.data.openRouterCostUsd === 'number')
+        ? Math.round(rows.reduce((sum, row) => sum + (typeof row.data.openRouterCostUsd === 'number' ? row.data.openRouterCostUsd : 0), 0) * 1e6) / 1e6
+        : 'Not connected',
       reachedThreeTools: reached,
       launched,
       nearCreditEnd: accounts.filter((row) => row.nearCreditEnd).length,

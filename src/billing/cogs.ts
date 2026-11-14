@@ -21,7 +21,7 @@
  */
 
 import { isMediaKind, mediaCost } from './media.js';
-import { UNLIMITED_ITEMS } from './credits.js';
+import { TEXT_ITEMS } from './credits.js';
 
 export interface ModelPrice {
   /** USD per 1M input tokens. */
@@ -256,7 +256,7 @@ export function unpricedWork(
     // money with nobody having chosen that — which is exactly how video came
     // to be free on every plan. Deliberate and accidental must not look alike
     // in this list, or the list stops being read.
-    .filter((kind) => !(UNLIMITED_ITEMS as readonly string[]).includes(kind))
+    .filter((kind) => !(TEXT_ITEMS as readonly string[]).includes(kind))
     .map((kind) => ({ kind, label: labels[kind] ?? kind, runs: runs[kind] ?? 0, media: COSTLY_UNPRICED.has(kind) }))
     .sort((a, b) => Number(b.media) - Number(a.media) || b.runs - a.runs);
 }

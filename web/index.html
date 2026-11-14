@@ -697,6 +697,13 @@
   .lib-intro{margin:8px 0 0;color:#6e6e76;font-size:15px;line-height:1.45;max-width:62ch;}
   .lib-sec{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#8a8a92;margin:26px 0 12px;}
   .lib-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;}
+  .org-wrap{margin:0 0 22px;}
+  .org-head{border-radius:16px;padding:16px;text-align:center;background:#111;color:#fff;}
+  .org-head b{display:block;font-size:18px;}
+  .org-line{width:1px;height:16px;background:#ccc;margin:0 auto;}
+  .org-depts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+  .org-dept{border:1px solid #ececef;border-radius:14px;padding:12px;background:#fff;}
+  .org-skill{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:4px 0;}
   .lib-card{aspect-ratio:1;box-sizing:border-box;background:#fff;border:1px solid #ececef;border-radius:18px;padding:16px;display:flex;flex-direction:column;text-align:left;cursor:pointer;font-family:inherit;color:#111;box-shadow:0 1px 2px rgba(16,16,20,.04);min-width:0;width:100%;}
   .lib-card:hover{border-color:#111;}
   .lib-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
@@ -712,7 +719,7 @@
   .lib-detail h2{margin:0 28px 6px 0;font-size:22px;letter-spacing:-.02em;}
   .lib-detail p{margin:0 0 10px;line-height:1.45;color:#3f3f46;}
   @media(max-width:900px){.lib-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
-  @media(max-width:640px){.lib-grid{grid-template-columns:1fr;}}
+  @media(max-width:640px){.lib-grid,.org-depts{grid-template-columns:1fr;}}
   .rep-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 16px;}
   .rep-bar button{border:1px solid #ececef;background:#fff;border-radius:999px;padding:7px 12px;font:inherit;cursor:pointer;}
   .rep-bar button.on{background:#111;color:#fff;border-color:#111;}
@@ -5387,7 +5394,7 @@ async function openBilling(){
     const parts=[];
     if(vPrice) parts.push(Math.floor(b.monthlyCredits/vPrice)+' videos');
     if(iPrice) parts.push(Math.floor(b.monthlyCredits/iPrice).toLocaleString()+' images');
-    return parts.length ? 'Unlimited work + '+parts.join(' or ') : 'Unlimited work';
+    return parts.length ? parts.join(' or ') : 'Credits cover text and media';
   };
   // Owners see the credit bundle and top-up increment for reconciliation;
   // customers do not. To a customer "$50/mo credits" beside "$149/mo" only
@@ -5421,7 +5428,7 @@ async function openBilling(){
     t.append(tr);
   });
   wrap.append(t); bc.append(wrap);
-  bc.append(el('p','appsub','Every band includes all skills, all connectors, unlimited users, and unlimited campaigns, skill runs, weekly readouts, AI copy, email automations and website audits, plus unmetered monitoring, always. Videos and images draw from your monthly allowance; when it runs out you can top up or move up a band.'));
+  bc.append(el('p','appsub','Every band includes all skills and connectors. Text, chat, campaign builds, audits, skills, and agent runs draw from your credit balance at OpenRouter cost. Videos and images draw from the same balance. Monitoring stays free. When the balance hits zero, automation pauses and you can still view your data.'));
   box.append(bc);
   await renderEconomics(box);
   // What draws credits
@@ -5435,11 +5442,11 @@ async function openBilling(){
     const right=el('b',null,(buys?buys.includedPerMonth.toLocaleString()+' included each month  ·  ':'')+'then $'+Number(v).toFixed(2)+' each');
     row.append(el('span',null,names[k]||k),right); wc.append(row);
   });
-  wc.append(el('p','appsub','Everything else is unlimited, campaigns, skill runs, weekly readouts, AI copy, email automations, website audits, and all monitoring. Credits only ever buy media.'));
+  wc.append(el('p','appsub','Text, chat, campaign builds, audits, skills, and agent runs use the same credits, priced from the OpenRouter token cost. Monitoring, including reports and the dashboard, stays free.'));
   box.append(wc);
   // Usage ledger
   const lc=el('div','mcard'); lc.style.marginTop='12px'; lc.append(el('div','sect-label','CREDIT USAGE'));
-  if(!(d.ledger||[]).length) lc.append(el('p','appsub','No credits used yet. Videos, images, and voiceovers will appear here with their cost.'));
+  if(!(d.ledger||[]).length) lc.append(el('p','appsub','No credits used yet. Media and text work will appear here with their cost.'));
   (d.ledger||[]).forEach(e=>{
     const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line,var(--panel-2));font-size:12.5px';
     const l=el('div'); l.append(el('b',null,(names[e.item]||e.item))); if(e.note) l.append(el('span','appsub',' · '+e.note)); l.append(el('div','appsub',new Date(e.ts).toLocaleString()));
@@ -9600,6 +9607,48 @@ async function openLibrary(){
   }
   page.append(el('h1','lib-title', board.title||'Skills and playbooks'));
   page.append(el('p','lib-intro', board.intro||''));
+  if(board.org&&board.org.head){
+    const org=el('div','org-wrap');
+    if(board.upgrade) org.append(el('p','mdesc', board.upgrade));
+    const head=el('div','org-head');
+    head.append(el('b',null, board.org.head.name||'Miles'));
+    head.append(el('span',null, (board.org.head.title||'Head of Growth')+' · '+(board.org.head.playbook||'Home services')+' playbook'));
+    org.append(head);
+    org.append(el('div','org-line'));
+    const depts=el('div','org-depts');
+    (board.org.departments||[]).forEach(dept=>{
+      const card=el('div','org-dept');
+      card.append(el('b',null, dept.name||''));
+      (dept.skills||[]).forEach(skill=>{
+        const row=el('div','org-skill');
+        row.append(el('span',null, skill.name||''));
+        row.append(el('span',null, (skill.fired||0)+' this week'));
+        card.append(row);
+      });
+      depts.append(card);
+    });
+    org.append(depts);
+    const fired=(board.org.rulesFired||[]);
+    if(fired.length){
+      org.append(el('p','mdesc', 'Rules that fired this week'));
+      fired.slice(0,8).forEach(row=>org.append(el('div','appsub', (row.title||row.skill||''))));
+    } else org.append(el('p','mdesc', 'No rules have fired this week.'));
+    const controls=el('div'); controls.style.marginTop='10px';
+    const kill=el('button','go', board.automationPaused?'Turn automation back on':'Pause all automation');
+    kill.type='button';
+    kill.onclick=async()=>{
+      try{ await fetch('/api/automation/kill',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({paused:!board.automationPaused})}); }catch(e){}
+      openLibrary();
+    };
+    const run=el('button','go','Run today\'s read'); run.type='button'; run.style.marginLeft='8px';
+    run.onclick=async()=>{
+      try{ const r=await(await fetch('/api/automation/read',{method:'POST'})).json(); toast(r.upgrade||(r.ran?'Daily read saved.':'Already read today.')); }catch(e){ toast('The daily read did not finish.'); }
+      openLibrary();
+    };
+    controls.append(kill, run);
+    org.append(controls);
+    page.append(org);
+  }
   const sections=[
     ['Playbooks', ['playbook','pack']],
     ['Skills', ['skill','schedule','toolkit']],

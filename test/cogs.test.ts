@@ -247,8 +247,8 @@ describe('honesty guards', () => {
       { text: 'Copy', video: 'Videos', audit: 'Audits' },
       WORK_COSTS,
     );
-    // text and audit are deliberately unlimited; video is now priced. A leak
-    // means "spends money and nobody chose that", so none of these qualify.
+    // text and audit are priced from tokens, video from the media table.
+    // A leak means "spends money and nobody chose that", so none of these qualify.
     expect(leaks.map((l) => l.kind)).toEqual([]);
   });
 

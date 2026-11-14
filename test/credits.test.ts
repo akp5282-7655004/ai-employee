@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   BANDS, bandForSpend, creditState, chargeCredits, WORK_COSTS, billingEnforced,
-  canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS, writeCredits, settleTopUp,
+  canAfford, setAutoTopUp, bandOf, TEXT_ITEMS, writeCredits, settleTopUp,
 } from '../src/billing/credits.js';
+import { textQuote } from '../src/billing/textprice.js';
 import { MEDIA_KINDS, mediaCost } from '../src/billing/media.js';
 import { TARGET_MARGIN } from '../src/billing/cogs.js';
 
@@ -57,12 +58,20 @@ describe('credit metering', () => {
     }
   });
 
-  it('text work is unlimited — it charges nothing, on purpose', () => {
-    const data: Record<string, unknown> = {};
-    for (const item of UNLIMITED_ITEMS) chargeCredits(data, item);
-    expect(creditState(data).spent).toBe(0);
-    // And no unlimited item may quietly reappear in the price table.
-    for (const item of UNLIMITED_ITEMS) expect(WORK_COSTS[item]).toBeUndefined();
+  it('text work draws credits at four times the OpenRouter cost', () => {
+    for (const item of TEXT_ITEMS) {
+      const data: Record<string, unknown> = {};
+      const quote = textQuote(item);
+      expect(quote, item).toBeTruthy();
+      chargeCredits(data, item);
+      expect(creditState(data).spent, item).toBeCloseTo(quote!.retailUsd, 6);
+      expect(data.openRouterCostUsd, item).toBeCloseTo(quote!.serveUsd, 6);
+      expect(quote!.retailUsd).toBeCloseTo(quote!.serveUsd * 4, 6);
+      expect(WORK_COSTS[item]).toBeUndefined();
+    }
+    const skill = textQuote('skill_run')!;
+    const runs = Math.floor(100 / skill.retailUsd);
+    expect(runs * skill.serveUsd).toBeLessThanOrEqual(25);
   });
 
   it('every priced item clears the target margin against its real cost', () => {
@@ -184,7 +193,8 @@ describe('affordability check (pure, no ledger write)', () => {
       const v = canAfford(broke, 'video');
       expect(v.ok).toBe(false);
       expect(v.reason).toMatch(/Growth/); // names the upgrade, not just the refusal
-      expect(canAfford(broke, 'skill_run').ok).toBe(true);
+      expect(canAfford(broke, 'skill_run').ok).toBe(false);
+      expect(canAfford(broke, 'skill_run').reason).toMatch(/still view your reports/);
       expect(canAfford(broke, 'monitoring').ok).toBe(true);
     } finally {
       delete process.env.BILLING_ENFORCE;
@@ -272,15 +282,13 @@ describe('an empty balance stops output but never monitoring', () => {
     try { fn(); } finally { delete process.env.BILLING_ENFORCE; }
   };
 
-  it('blocks media on an empty balance and leaves campaigns and skills running', () => {
+  it('blocks media and text on an empty balance and still allows monitoring', () => {
     withEnforcement(() => {
-      for (const item of Object.keys(WORK_COSTS)) {
+      for (const item of [...Object.keys(WORK_COSTS), ...TEXT_ITEMS]) {
         const r = chargeCredits(broke(), item, 'x');
         expect(r.blocked, `${item} should be blocked on an empty balance`).toBe(true);
         expect(r.reason).toMatch(/Add \$25\.00/);
-      }
-      for (const item of UNLIMITED_ITEMS) {
-        expect(chargeCredits(broke(), item, 'x').blocked, `${item} is not metered`).toBe(false);
+        expect(r.reason).toMatch(/still view your reports/);
       }
     });
   });
@@ -296,14 +304,14 @@ describe('an empty balance stops output but never monitoring', () => {
 
   it('leaves everything running while there is a balance', () => {
     withEnforcement(() => {
-      for (const item of [...Object.keys(WORK_COSTS), ...UNLIMITED_ITEMS, 'monitoring']) {
+      for (const item of [...Object.keys(WORK_COSTS), ...TEXT_ITEMS, 'monitoring']) {
         expect(chargeCredits(funded(), item, 'x').blocked, `${item} should run with credits`).toBe(false);
       }
     });
   });
 
   it('blocks nothing at all while enforcement is off', () => {
-    for (const item of [...Object.keys(WORK_COSTS), ...UNLIMITED_ITEMS, 'monitoring']) {
+    for (const item of [...Object.keys(WORK_COSTS), ...TEXT_ITEMS, 'monitoring']) {
       expect(chargeCredits(broke(), item, 'x').blocked, `${item} must run with the wall off`).toBe(false);
     }
   });
@@ -315,7 +323,8 @@ describe('an empty balance stops output but never monitoring', () => {
         billing: { band: 'starter' },
       };
       expect(canAfford(optedIn, 'video').ok).toBe(false); // a pending charge is not credits
-      expect(canAfford(optedIn, 'skill_run').ok).toBe(true);
+      expect(canAfford(optedIn, 'skill_run').ok).toBe(false);
+      expect(canAfford(optedIn, 'monitoring').ok).toBe(true);
     });
   });
 });
