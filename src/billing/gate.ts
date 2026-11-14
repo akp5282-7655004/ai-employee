@@ -12,10 +12,12 @@ export function adSpendAllowed(data: Record<string, unknown>): { ok: boolean; re
   const billing = billingState(data);
   const launch = billing.band === 'launch' && billing.status === 'active' && credits.launchOffer !== false;
   const paid = billing.status === 'active' && (billing.band === 'starter' || billing.band === 'growth' || billing.band === 'scale');
+  // A free account with credits left is not locked behind a card.
+  if (credits.remaining > 0) return { ok: true };
   if (!launch && !paid) {
     return {
       ok: false,
-      reason: 'No active plan. The launch offer is the first 100 accounts at $0 a month with $100 in media credits. After that, Starter is $149, Growth is $397, and Scale is $797. Creating ads stays off until there is a plan. Reads stay available.',
+      reason: 'Your free credits are used up. Starter is $149, Growth is $397, and Scale is $797. Creating ads stays off until there is a plan or credits remain. Reads stay available. No card is required to sign up.',
     };
   }
   return { ok: true };

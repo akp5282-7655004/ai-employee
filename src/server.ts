@@ -64,6 +64,8 @@ import {
 } from './billing/costsink.js';
 import { itemEconomics, PRICES_STAMPED, rollup, TARGET_MARGIN, THIN_MARGIN, unpricedWork } from './billing/cogs.js';
 import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS, canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS, writeCredits, LAUNCH_GRANT, settleTopUp } from './billing/credits.js';
+import { setupProgress } from './onboarding/tools.js';
+import { buildAdminBusiness } from './admin/business.js';
 import { adSpendAllowed } from './billing/gate.js';
 import { isMediaKind, MEDIA_LABEL, MEDIA_KINDS, mediaCost } from './billing/media.js';
 import {
@@ -447,16 +449,12 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   const authStore = withUserDataCache(deps.authStore ?? new MemoryStore());
 
   const seedAccountPlan = async (userId: string, extra: Record<string, unknown>) => {
-    const claimed = await authStore.claimLaunchSlot(userId);
+    await authStore.claimLaunchSlot(userId);
     const data = await authStore.getUserData(userId);
     Object.assign(data, extra);
-    if (claimed) {
-      writeCredits(data, { granted: LAUNCH_GRANT, launchOffer: true, spent: 0 });
-      data.billing = { status: 'active', band: 'launch', grantedInvoices: [], grantKeys: [] };
-    } else {
-      writeCredits(data, { granted: 0, launchOffer: false, spent: 0 });
-      data.billing = { status: 'none', grantedInvoices: [], grantKeys: [] };
-    }
+    // Every new account starts with $100. No card is required to sign up.
+    writeCredits(data, { granted: LAUNCH_GRANT, launchOffer: true, spent: 0 });
+    data.billing = { status: 'active', band: 'launch', grantedInvoices: [], grantKeys: [] };
     await authStore.setUserData(userId, data);
   };
 
@@ -655,8 +653,32 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   };
   const requireUser = async (req: FastifyRequest, reply: FastifyReply): Promise<User | null> => {
     const u = await getUser(req);
-    if (!u) reply.code(401).send({ error: 'not signed in' });
-    else setCostAccount(u.id);
+    if (!u) { reply.code(401).send({ error: 'not signed in' }); return null; }
+    const adminRoute = req.url.startsWith('/api/admin') || req.url.startsWith('/auth/');
+    const data = await authStore.getUserData(u.id);
+    if (data.accountPaused === true && !(await isAdmin(u))) {
+      reply.code(403).send({ error: 'This account is paused. Ask the Miles owner to turn it back on.' });
+      return null;
+    }
+    const imp = data.impersonation as { targetId?: string; readOnly?: boolean } | undefined;
+    if (!adminRoute && imp?.targetId && imp.targetId !== u.id && (await isAdmin(u))) {
+      const target = await authStore.getUserById(imp.targetId);
+      if (target) {
+        const readOnly = imp.readOnly !== false;
+        if (readOnly && req.method !== 'GET' && req.method !== 'HEAD') {
+          reply.code(403).send({ error: 'You are viewing this account read only. Stop impersonating before you change anything.' });
+          return null;
+        }
+        setCostAccount(target.id);
+        return target;
+      }
+    }
+    const last = typeof data.lastActiveAt === 'string' ? Date.parse(data.lastActiveAt) : 0;
+    if (!Number.isFinite(last) || Date.now() - last > 5 * 60_000) {
+      data.lastActiveAt = new Date().toISOString();
+      await authStore.setUserData(u.id, data);
+    }
+    setCostAccount(u.id);
     return u;
   };
 
@@ -861,7 +883,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
 
   // ── auth ──
   app.post('/auth/signup', async (req, reply) => {
-    const b = (req.body ?? {}) as { email?: string; password?: string; name?: string; invite?: string; tos?: boolean };
+    const b = (req.body ?? {}) as { email?: string; password?: string; name?: string; invite?: string; tos?: boolean; utmSource?: string; utm_source?: string; utmCampaign?: string; utm_campaign?: string; referrer?: string };
     if (!b.email || !b.password || b.password.length < 6)
       return reply.code(400).send({ error: 'Enter an email and a password of at least 6 characters.' });
     // ToS acceptance is required and version-stamped to the account — the
@@ -891,7 +913,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       createdAt: new Date().toISOString(),
     };
     await authStore.createUser(user);
-    await seedAccountPlan(user.id, { tosAccepted: { version: TOS_VERSION, at: new Date().toISOString(), email } });
+    await seedAccountPlan(user.id, {
+      tosAccepted: { version: TOS_VERSION, at: new Date().toISOString(), email },
+      signupSource: {
+        utmSource: String(b.utmSource || b.utm_source || '').slice(0, 80),
+        utmCampaign: String(b.utmCampaign || b.utm_campaign || '').slice(0, 80),
+        referrer: String(b.referrer || '').slice(0, 200),
+      },
+    });
     if (invite && inviteCheck.ok) await markInviteUsed(invite);
     await startSession(reply, user.id);
     return { ok: true, user: { id: user.id, email: user.email, name: user.name } };
@@ -1095,7 +1124,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await getUser(req);
     if (!u) return reply.code(401).send({ error: 'not signed in' });
     const data = await authStore.getUserData(u.id);
-    return { user: { id: u.id, email: u.email, name: u.name }, profile: data.profile ?? null, admin: await isAdmin(u) };
+    const imp = data.impersonation as { targetId?: string; readOnly?: boolean } | undefined;
+    let impersonating: { email: string; readOnly: boolean } | null = null;
+    if (imp?.targetId && (await isAdmin(u))) {
+      const target = await authStore.getUserById(imp.targetId);
+      if (target) impersonating = { email: target.email, readOnly: imp.readOnly !== false };
+    }
+    return { user: { id: u.id, email: u.email, name: u.name }, profile: data.profile ?? null, admin: await isAdmin(u), impersonating };
   });
 
   // ── owner admin: list/remove users, gate signups (owner-only) ──
@@ -1105,6 +1140,106 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!(await isAdmin(u))) return { isAdmin: false };
     const invites = (await getInvites()).map((i) => ({ token: i.token, email: i.email, note: i.note, maxUses: i.maxUses, uses: i.uses, exp: i.exp, createdAt: i.createdAt, status: inviteStatus(i), link: inviteLink(req, i) }));
     return { isAdmin: true, adminId: await adminUserId(), users: await authStore.listUsers(), settings: await getAdminSettings(), invites };
+  });
+
+  app.get('/api/setup/tools', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const profile = (data.profile ?? {}) as Record<string, string>;
+    let apps: string[] = [];
+    try { apps = (await accountsList(u.id)).map((account) => account.app); } catch { apps = []; }
+    return setupProgress({ apps, website: profile.website });
+  });
+
+  app.get('/api/admin/business', async (req, reply) => {
+    const actor = await getUser(req);
+    if (!actor) return reply.code(401).send({ error: 'not signed in' });
+    if (!(await isAdmin(actor))) return reply.code(403).send({ error: 'owner only' });
+    const users = await authStore.listUsers();
+    const rows = [];
+    for (const user of users) {
+      const data = await authStore.getUserData(user.id);
+      let apps: string[] | null = null;
+      try { apps = (await accountsList(user.id)).map((account) => account.app); } catch { apps = null; }
+      rows.push({ id: user.id, email: user.email, name: user.name, createdAt: user.createdAt, data, apps });
+    }
+    return buildAdminBusiness(rows, { stripeReady: stripeReady() });
+  });
+
+  const adminActor = async (req: FastifyRequest, reply: FastifyReply) => {
+    const actor = await getUser(req);
+    if (!actor) { reply.code(401).send({ error: 'not signed in' }); return null; }
+    if (!(await isAdmin(actor))) { reply.code(403).send({ error: 'owner only' }); return null; }
+    return actor;
+  };
+  const auditAdmin = async (actorId: string, entry: { action: string; targetId: string; note: string }) => {
+    const data = await authStore.getUserData(actorId);
+    const log = Array.isArray(data.adminAudit) ? data.adminAudit as { ts: string; action: string; targetId: string; note: string }[] : [];
+    log.unshift({ ts: new Date().toISOString(), ...entry });
+    data.adminAudit = log.slice(0, 200);
+    await authStore.setUserData(actorId, data);
+  };
+
+  app.post<{ Body: { id?: string; amount?: number } }>('/api/admin/credits', async (req, reply) => {
+    const actor = await adminActor(req, reply);
+    if (!actor) return;
+    const id = String(req.body?.id || '');
+    const amount = Number(req.body?.amount);
+    if (!id || !Number.isFinite(amount) || amount <= 0 || amount > 1000) return reply.code(400).send({ error: 'Choose an account and an amount from 1 to 1000.' });
+    const target = await authStore.getUserById(id);
+    if (!target) return reply.code(404).send({ error: 'No account with that id.' });
+    const data = await authStore.getUserData(id);
+    const before = creditState(data);
+    writeCredits(data, { granted: Math.round((before.granted + amount) * 100) / 100, launchOffer: true });
+    await authStore.setUserData(id, data);
+    await auditAdmin(actor.id, { action: 'add credits', targetId: id, note: `Added $${amount} in credits.` });
+    return { ok: true, remaining: creditState(data).remaining };
+  });
+
+  app.post<{ Body: { id?: string; days?: number } }>('/api/admin/trial', async (req, reply) => {
+    const actor = await adminActor(req, reply);
+    if (!actor) return;
+    const id = String(req.body?.id || '');
+    const days = Math.round(Number(req.body?.days) || 14);
+    if (!id || days < 1 || days > 90) return reply.code(400).send({ error: 'Choose an account and 1 to 90 days.' });
+    const data = await authStore.getUserData(id);
+    const base = Date.parse(String(data.trialUntil || '')) || Date.now();
+    data.trialUntil = new Date(base + days * 86_400_000).toISOString();
+    await authStore.setUserData(id, data);
+    await auditAdmin(actor.id, { action: 'extend trial', targetId: id, note: `Extended the trial note by ${days} days. Free credits do not expire on their own.` });
+    return { ok: true, trialUntil: data.trialUntil };
+  });
+
+  app.post<{ Body: { id?: string; paused?: boolean } }>('/api/admin/pause', async (req, reply) => {
+    const actor = await adminActor(req, reply);
+    if (!actor) return;
+    const id = String(req.body?.id || '');
+    if (!id || id === actor.id) return reply.code(400).send({ error: 'Choose another account to pause.' });
+    const data = await authStore.getUserData(id);
+    data.accountPaused = req.body?.paused !== false;
+    await authStore.setUserData(id, data);
+    await auditAdmin(actor.id, { action: data.accountPaused ? 'pause account' : 'resume account', targetId: id, note: data.accountPaused ? 'Paused the account.' : 'Turned the account back on.' });
+    return { ok: true, paused: data.accountPaused };
+  });
+
+  app.post<{ Body: { id?: string; stop?: boolean } }>('/api/admin/impersonate', async (req, reply) => {
+    const actor = await adminActor(req, reply);
+    if (!actor) return;
+    const data = await authStore.getUserData(actor.id);
+    if (req.body?.stop) {
+      data.impersonation = null;
+      await authStore.setUserData(actor.id, data);
+      await auditAdmin(actor.id, { action: 'stop impersonation', targetId: actor.id, note: 'Stopped viewing another account.' });
+      return { ok: true, impersonating: null };
+    }
+    const id = String(req.body?.id || '');
+    const target = id ? await authStore.getUserById(id) : null;
+    if (!target || target.id === actor.id) return reply.code(400).send({ error: 'Choose another account to view.' });
+    data.impersonation = { targetId: target.id, readOnly: true, startedAt: new Date().toISOString() };
+    await authStore.setUserData(actor.id, data);
+    await auditAdmin(actor.id, { action: 'impersonate', targetId: target.id, note: `Viewing ${target.email} read only.` });
+    return { ok: true, impersonating: { email: target.email, readOnly: true } };
   });
 
   // Owner-only. One campaign list for the signed-in tenant, with no tokens.

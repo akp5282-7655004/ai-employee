@@ -181,6 +181,7 @@ describe('marketing report', () => {
     expect(leadTile.compare).toMatch(/Sample data/);
     const cplTile = report.overview.tiles.find((tile) => tile.label === 'Cost per lead')!;
     expect(cplTile.sample).toBe(false);
+    expect(cplTile.badge).toBe('none');
     expect(cplTile.value).toBe('Not tracked yet');
     expect(cplTile.compare).toMatch(/CRM or call tracking/);
     expect(cplTile.value).not.toMatch(/\$/);
@@ -188,6 +189,8 @@ describe('marketing report', () => {
     const googleCpl = report.charts.google.find((widget) => widget.title === 'Cost per lead')!;
     expect(cplChart.sample).toBe(false);
     expect(cplChart.headline).toBe('Not tracked yet');
+    expect(cplChart.badge).toBe('none');
+    expect(googleCpl.badge).toBe('none');
     expect(googleCpl.sample).toBe(false);
     expect(googleCpl.headline).toBe('Not tracked yet');
     expect(report.sampleBanner).toMatch(/Live is this account/);
