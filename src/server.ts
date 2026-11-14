@@ -65,6 +65,10 @@ import {
 import { itemEconomics, PRICES_STAMPED, rollup, TARGET_MARGIN, THIN_MARGIN, unpricedWork } from './billing/cogs.js';
 import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS, canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS, writeCredits, LAUNCH_GRANT, settleTopUp } from './billing/credits.js';
 import { setupProgress } from './onboarding/tools.js';
+import { approveChange, CREDIT_PAUSE, dailyDue, planActions, revertChange, runDailyRead } from './automation/engine.js';
+import { buildOrgChart } from './automation/org.js';
+import type { DailyInput } from './automation/skills.js';
+import { DEFAULT_CAPS, type MilesMode } from './agents/policy.js';
 import { buildAdminBusiness } from './admin/business.js';
 import { adSpendAllowed } from './billing/gate.js';
 import { isMediaKind, MEDIA_LABEL, MEDIA_KINDS, mediaCost } from './billing/media.js';
@@ -2995,7 +2999,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const autos = (data.automations ?? {}) as { noShow?: { enabled?: boolean }; onboarding?: { enabled?: boolean } };
     const ghlNow = await ghlLink(u.id);
     const presence = data.localPresence && typeof data.localPresence === 'object' ? Object.keys(data.localPresence as object).length > 0 : false;
-    return publicSafe(buildSkillsBoard({
+    const autoFile = (data.automation ?? {}) as { log?: { skill: string; title: string; ts: string; effect?: string }[]; kill?: boolean };
+    const board = buildSkillsBoard({
       trade: p.industry,
       installed: Array.isArray(data.skills) ? data.skills as string[] : [],
       deployed: normalizeDeployed(data.deployedSkills).map((row) => row.key),
@@ -3010,7 +3015,148 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       weatherRulesOn: weather.filter((row) => row.enabled).length,
       noShowOn: !!autos.noShow?.enabled,
       onboardingOn: !!autos.onboarding?.enabled,
+    });
+    const creditsNow = creditState(data);
+    return publicSafe({
+      ...board,
+      org: buildOrgChart({ trade: p.industry, fired: autoFile.log ?? [] }),
+      upgrade: creditsNow.remaining <= 0 ? CREDIT_PAUSE : null,
+      automationPaused: !!(autoFile.kill || miles.bundle?.setup.caps.paused),
+    });
+  });
+
+  const automationState = (data: Record<string, unknown>) => {
+    const raw = (data.automation ?? {}) as {
+      lastRunAt?: string | null;
+      findings?: import('./automation/skills.js').Finding[];
+      log?: import('./automation/engine.js').ChangeEntry[];
+      kill?: boolean;
+    };
+    return {
+      lastRunAt: raw.lastRunAt ?? null,
+      findings: Array.isArray(raw.findings) ? raw.findings : [],
+      log: Array.isArray(raw.log) ? raw.log : [],
+      kill: raw.kill === true,
+    };
+  };
+
+  const automationInput = (data: Record<string, unknown>, apps: string[]): DailyInput => {
+    const profile = (data.profile ?? {}) as Record<string, string>;
+    const snap = readSnapshot(data);
+    const expectation = readExpectation(data);
+    const monthly = expectation?.inputs.monthlyBudget || Number(profile.monthlyBudget) || 0;
+    const campaigns = (snap?.campaigns ?? []).map((row) => ({
+      name: row.campaign || 'Campaign',
+      platform: row.platform || 'google_ads',
+      spend: row.spend || 0,
+      conversions: row.conversions || 0,
+      clicks: row.clicks || 0,
     }));
+    const google = apps.includes('google_ads') || campaigns.some((row) => row.platform === 'google_ads');
+    const meta = ['facebook_pages', 'facebook', 'instagram', 'facebook_graph_api'].some((app) => apps.includes(app));
+    const gbp = ['google_my_business', 'gmb'].some((app) => apps.includes(app));
+    const ghl = ['gohighlevel', 'highlevel_oauth', 'highlevel', 'leadconnector'].some((app) => apps.includes(app));
+    const metaSpend = campaigns.filter((row) => /facebook|meta|instagram/i.test(row.platform)).reduce((sum, row) => sum + row.spend, 0);
+    const leads = Array.isArray(data.crmEvents) ? (data.crmEvents as { type?: string }[]).filter((event) => event.type === 'lead' || event.type === 'missed_call').length : (snap?.leads?.length ?? 0);
+    const booked = Array.isArray(data.crmEvents) ? (data.crmEvents as { type?: string }[]).filter((event) => event.type === 'closed_won').length : 0;
+    const now = new Date();
+    return {
+      now: now.toISOString(),
+      trade: profile.industry || '',
+      monthlyBudget: monthly,
+      spentMonth: campaigns.reduce((sum, row) => sum + row.spend, 0),
+      dayOfMonth: now.getDate(),
+      leads,
+      bookedJobs: booked,
+      channels: { google, meta, gbp, ghl },
+      campaigns,
+      searchTerms: (snap?.searchTerms ?? []).map((row) => ({ term: row.term, spend: row.cost || 0, clicks: row.clicks || 0, conversions: row.conversions || 0 })),
+      conversionActions: campaigns.some((row) => row.conversions > 0) ? 1 : 0,
+      callTracking: false,
+      metaSpend: meta ? metaSpend : null,
+      gbpCalls: gbp ? (Array.isArray(snap?.reviews) ? snap!.reviews.length : 0) : null,
+      ghlLeads: ghl ? leads : null,
+    };
+  };
+
+  app.post('/api/automation/read', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const state = automationState(data);
+    const now = new Date();
+    if (!dailyDue(state.lastRunAt, now)) {
+      return { ran: false, findings: state.findings, log: state.log.slice(0, 40), upgrade: creditState(data).remaining <= 0 ? CREDIT_PAUSE : null };
+    }
+    let apps: string[] = [];
+    try { apps = (await accountsList(u.id)).map((account) => account.app); } catch { apps = []; }
+    const miles = milesOf(data);
+    const result = runDailyRead(automationInput(data, apps));
+    const credits = creditState(data);
+    const caps = miles.bundle?.setup.caps ?? DEFAULT_CAPS;
+    const mode: MilesMode = miles.bundle?.setup.mode || miles.pendingMode || 'hybrid';
+    const guard = {
+      mode,
+      paused: state.kill || caps.paused,
+      creditsLeft: credits.remaining,
+      dailyBudget: caps.dailyBudget,
+      monthlyCeiling: caps.monthlyCeiling,
+      maxChangePct: caps.maxChangePct,
+      spentToday: 0,
+      spentMonth: automationInput(data, apps).spentMonth,
+    };
+    let upgrade: string | null = null;
+    let entries = state.log;
+    if (credits.remaining <= 0) {
+      upgrade = CREDIT_PAUSE;
+      entries = [...planActions(result.findings, { ...guard, creditsLeft: 0 }, now.toISOString()), ...entries];
+    } else {
+      const charge = chargeCredits(data, 'skill_run', 'Daily account read', now);
+      if (charge.blocked) upgrade = charge.reason || CREDIT_PAUSE;
+      const after = creditState(data);
+      entries = [...planActions(result.findings, { ...guard, creditsLeft: charge.blocked ? 0 : after.remaining }, now.toISOString()), ...entries];
+    }
+    data.automation = { lastRunAt: now.toISOString(), findings: result.findings, log: entries.slice(0, 200), kill: state.kill };
+    await authStore.setUserData(u.id, data);
+    return publicSafe({ ran: true, findings: result.findings, log: entries.slice(0, 40), rules: result.rules, upgrade, paused: state.kill || caps.paused });
+  });
+
+  app.post<{ Body: { id?: string } }>('/api/automation/revert', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const state = automationState(data);
+    const result = revertChange(state.log, String(req.body?.id || ''));
+    if (!result.ok) return reply.code(400).send({ ok: false, error: result.reason });
+    data.automation = { ...state, log: result.log };
+    await authStore.setUserData(u.id, data);
+    return { ok: true, restored: result.restored, reason: result.reason };
+  });
+
+  app.post<{ Body: { id?: string } }>('/api/automation/approve', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const state = automationState(data);
+    const result = approveChange(state.log, String(req.body?.id || ''));
+    if (!result.ok) return reply.code(400).send({ ok: false, error: result.reason });
+    data.automation = { ...state, log: result.log };
+    await authStore.setUserData(u.id, data);
+    return { ok: true, reason: result.reason };
+  });
+
+  app.post<{ Body: { paused?: boolean } }>('/api/automation/kill', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const state = automationState(data);
+    const paused = req.body?.paused !== false;
+    const miles = milesOf(data);
+    if (miles.bundle) miles.bundle.setup.caps.paused = paused;
+    data.automation = { ...state, kill: paused };
+    rememberMiles(data, miles, paused ? 'Kill switch on. Miles is paused.' : 'Kill switch off. Miles can run inside your caps again.');
+    await authStore.setUserData(u.id, data);
+    return { ok: true, paused };
   });
 
   // GoHighLevel Automation Playbook — the 32-recipe workflow library, tailored to
@@ -3446,7 +3592,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       paymentsConnected,
       subscription: sub.status === 'none' ? null : sub,
       note: (credits.launchOffer && sub.band !== 'starter' && sub.band !== 'growth' && sub.band !== 'scale'
-        ? `Launch offer: $0 a month and $${LAUNCH_GRANT} in media credits for the first 100 accounts. $${credits.remaining.toFixed(2)} remaining. Images are $0.10, voiceover is $0.50, video is $1.50. Monitoring, campaigns, and skill runs do not use these credits. `
+        ? `Launch offer: $0 a month and $${LAUNCH_GRANT} in credits. $${credits.remaining.toFixed(2)} remaining. Images are $0.10, voiceover is $0.50, video is $1.50. Text, chat, campaign builds, audits, skills, and agent runs also draw from this balance at OpenRouter cost plus a 75% margin. Monitoring stays free. `
         : '') + (paymentsConnected
         ? 'Your card is held by Stripe. Miles never sees or stores it.'
         : 'Payments are not connected yet, so nothing is charged.'),
@@ -3704,7 +3850,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(u.id);
     // Bank anything this account has spent that has not been written yet.
     const drained = drainCosts(u.id);
-    if (Object.keys(drained).length) { applyCosts(data, drained); await authStore.setUserData(u.id, data); }
+    if (Object.keys(drained).length) {
+      applyCosts(data, drained);
+      const unclaimed = drained[UNCLAIMED];
+      if (unclaimed && unclaimed.costUsd > 0) chargeCredits(data, 'text', 'OpenRouter', new Date(), { serveUsd: unclaimed.costUsd, inputTokens: unclaimed.inputTokens, outputTokens: unclaimed.outputTokens });
+      await authStore.setUserData(u.id, data);
+    }
 
     const led = costLedger(data);
     const credits = creditState(data);
@@ -3912,7 +4063,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       return { error: String((e as Error).message), code: 404 };
     }
     const charge = chargeCredits(data, 'skill_run', run.name);
-    if (charge.blocked) return { error: 'Credits exhausted — work items are paused (monitoring continues). Top up or upgrade to keep working.', code: 402 };
+    if (charge.blocked) return { error: charge.reason || CREDIT_PAUSE, code: 402 };
     const entry: import('./skills/seven.js').SkillRun = { ...run, id: newToken().slice(0, 10), ts: new Date().toISOString() };
     const runs = (data.skill_runs as import('./skills/seven.js').SkillRun[]) ?? [];
     runs.unshift(entry);
@@ -6526,7 +6677,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     for (const uid of pendingAccounts()) {
       try {
         const data = await authStore.getUserData(uid);
-        applyCosts(data, drainCosts(uid));
+        const drained = drainCosts(uid);
+        applyCosts(data, drained);
+        const unclaimed = drained[UNCLAIMED];
+        if (unclaimed && unclaimed.costUsd > 0) chargeCredits(data, 'text', 'OpenRouter', new Date(), { serveUsd: unclaimed.costUsd, inputTokens: unclaimed.inputTokens, outputTokens: unclaimed.outputTokens });
         await authStore.setUserData(uid, data);
       } catch { /* costs stay pending and are banked on the next tick */ }
     }

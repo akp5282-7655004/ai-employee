@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BANDS, WORK_COSTS, FAIR_USE, UNLIMITED_ITEMS, chargeCredits, creditState, settleTopUp } from '../src/billing/credits.js';
+import { BANDS, WORK_COSTS, FAIR_USE, TEXT_ITEMS, chargeCredits, creditState, settleTopUp } from '../src/billing/credits.js';
+import { textQuote } from '../src/billing/textprice.js';
 import { planMargin, SERVE_ASSUMPTIONS, TARGET_MARGIN } from '../src/billing/cogs.js';
 import { MEDIA_KINDS, mediaCost } from '../src/billing/media.js';
 import { CREDIT_COST } from '../src/usage/meter.js';
@@ -90,9 +91,10 @@ describe('every action has a ceiling', () => {
     }
   });
 
-  it('caps every unlimited item', () => {
-    for (const item of UNLIMITED_ITEMS) {
-      expect(FAIR_USE[item], `${item} is unlimited with no ceiling`).toBeGreaterThan(0);
+  it('prices every text item and keeps an abuse ceiling', () => {
+    for (const item of TEXT_ITEMS) {
+      expect(FAIR_USE[item], `${item} has no abuse ceiling`).toBeGreaterThan(0);
+      expect(textQuote(item)?.retailUsd, item).toBeGreaterThan(0);
     }
   });
 
@@ -109,18 +111,20 @@ describe('fair-use enforcement', () => {
     try { fn(); } finally { delete process.env.BILLING_ENFORCE; }
   };
 
-  it('pauses an unlimited item at its ceiling instead of charging for it', () => {
+  it('charges each text run and pauses that item at the abuse ceiling', () => {
     withEnforcement(() => {
       const data: Record<string, unknown> = {};
       const cap = FAIR_USE.weekly_readout!;
+      const price = textQuote('weekly_readout')!.retailUsd;
       for (let i = 0; i < cap; i++) {
         expect(chargeCredits(data, 'weekly_readout').blocked).toBe(false);
       }
+      const spent = creditState(data).spent;
+      expect(spent).toBeCloseTo(cap * price, 6);
       const over = chargeCredits(data, 'weekly_readout');
       expect(over.blocked).toBe(true);
       expect(over.reason).toMatch(/fair.?use/i);
-      // Sold as unlimited, so hitting the ceiling must never take credits.
-      expect(creditState(data).spent).toBe(0);
+      expect(creditState(data).spent).toBeCloseTo(spent, 6);
     });
   });
 

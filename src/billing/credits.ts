@@ -15,6 +15,7 @@
  */
 
 import { claimCostItem } from './costsink.js';
+import { textQuote } from './textprice.js';
 
 export interface Band {
   key: 'launch' | 'starter' | 'growth' | 'scale';
@@ -50,18 +51,10 @@ export function bandForSpend(spend30: number): Band {
 /**
  * Retail credit cost per work item, in dollars.
  *
- * Only media appears here, and that is the whole pricing model:
- *
- *  - TEXT WORK IS UNLIMITED. A skill run costs about $0.0006 of inference and
- *    a campaign build about $0.0015. Rationing them made the product feel
- *    metered while saving nothing, so they are free and uncapped (see
- *    UNLIMITED_ITEMS). An item absent from this table is never charged.
- *
- *  - MEDIA IS METERED, because it is the only thing that costs real money. A
- *    video is roughly a thousand skill runs. Prices are set to clear
- *    TARGET_MARGIN against the vendor costs in MEDIA_COST.
- *
- * Monitoring is absent on purpose and must never appear here.
+ * Media has a fixed retail price. Text, chat, campaign builds, audits,
+ * skills, and agent runs are priced per run from OpenRouter tokens
+ * (see textprice.ts) at a 75% margin. Monitoring is absent on purpose
+ * and must never appear here.
  */
 export const WORK_COSTS: Record<string, number> = {
   video: 1.5, // ~$0.35 to serve — 77% margin
@@ -70,15 +63,13 @@ export const WORK_COSTS: Record<string, number> = {
 };
 
 /**
- * Work that is deliberately free and unlimited on every band.
- *
- * Listed rather than merely omitted, because "absent from WORK_COSTS" is how
- * video came to be unlimited and free on every plan without anyone deciding
- * that. If an item is here, someone chose it. If it is in neither list, that
- * is a bug, not a free tier.
+ * Text work billed from the credit balance. Kept as a named list so a new
+ * caller cannot become free by being omitted from WORK_COSTS.
+ * UNLIMITED_ITEMS stays empty: nothing in this list is free.
  */
-export const UNLIMITED_ITEMS = [
+export const TEXT_ITEMS = [
   'text',
+  'chat',
   'campaign_build',
   'campaign_launch',
   'ai_autofill',
@@ -90,9 +81,11 @@ export const UNLIMITED_ITEMS = [
   'agent_run',
 ] as const;
 
+export const UNLIMITED_ITEMS = [] as const;
+
 /**
  * Work that produces output, priced or not — everything in WORK_COSTS plus
- * everything in UNLIMITED_ITEMS.
+ * everything in TEXT_ITEMS.
  *
  * This is the line an empty balance stops at. Unpriced output is still output:
  * it costs tokens to generate, so it is free as part of a paid plan, not free
@@ -103,27 +96,21 @@ export const UNLIMITED_ITEMS = [
  * worse than pausing their work is quietly stopping watching their money.
  */
 export function isOutputWork(item: string): boolean {
-  return WORK_COSTS[item] !== undefined || (UNLIMITED_ITEMS as readonly string[]).includes(item);
+  return WORK_COSTS[item] !== undefined || (TEXT_ITEMS as readonly string[]).includes(item);
 }
 
 /**
  * Fair-use ceilings on the unlimited work, per calendar month.
  *
- * "Unlimited" is the promise and stays the promise: these are set roughly ten
- * times what a real account does, so no honest customer meets one. They exist
- * because unlimited-with-no-ceiling is the same class of bug as free video —
- * a loop, a bad retry, or a script turns a $0.0006 item into an unbounded
- * bill, and nothing in the system says stop.
- *
- * Hitting one pauses that item and asks the owner to get in touch. It does not
- * charge credits, because charging for something sold as unlimited is worse
- * than pausing it.
+ * Abuse ceilings on text work, per calendar month. Each run still draws
+ * credits. The ceiling stops a loop from burning the balance in one day.
  *
  * At every cap simultaneously this costs about $2.75 a month to serve, which
  * is the point: the ceiling converts an unbounded tail into a rounding error.
  */
 export const FAIR_USE: Record<string, number> = {
   text: 2000,
+  chat: 2000,
   email_send: 2000,
   skill_run: 500,
   ai_autofill: 500,
@@ -199,8 +186,8 @@ export function creditState(data: Record<string, unknown>, now = new Date()): Cr
   // best available answer for them and correct while they are under the cap.
   const spent =
     typeof raw.spent === 'number'
-      ? Math.round(raw.spent * 100) / 100
-      : Math.round(ledger.reduce((a, e) => a + (e.cost || 0), 0) * 100) / 100;
+      ? Math.round(raw.spent * 1e6) / 1e6
+      : Math.round(ledger.reduce((a, e) => a + (e.cost || 0), 0) * 1e6) / 1e6;
   // Monthly counters reset by rolling over, never by a scheduled job — a job
   // that fails to run would silently hand someone an unlimited month.
   const period = creditPeriod(now);
@@ -208,7 +195,7 @@ export function creditState(data: Record<string, unknown>, now = new Date()): Cr
   return {
     granted,
     spent,
-    remaining: Math.max(0, Math.round((granted - spent) * 100) / 100),
+    remaining: Math.max(0, Math.round((granted - spent) * 1e6) / 1e6),
     ledger,
     launchOffer: raw.launchOffer !== false,
     autoTopUp: raw.autoTopUp === true, // opt-in: anything but an explicit yes is no
@@ -335,20 +322,34 @@ export function settleTopUp(
  * whether the item should be BLOCKED (only when enforcement is on and the
  * balance was already empty).
  */
+export interface TokenUse {
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  /** Measured OpenRouter dollars for this call. Wins over a token estimate. */
+  serveUsd?: number;
+}
+
+function addOpenRouter(data: Record<string, unknown>, serveUsd: number): void {
+  if (!(serveUsd > 0)) return;
+  const prev = typeof data.openRouterCostUsd === 'number' ? data.openRouterCostUsd : 0;
+  data.openRouterCostUsd = Math.round((prev + serveUsd) * 1e6) / 1e6;
+}
+
 export function chargeCredits(
   data: Record<string, unknown>,
   item: string,
   note?: string,
   now = new Date(),
+  usage?: TokenUse,
 ): ChargeResult {
   const before = creditState(data, now);
   const band = bandOf(data);
-  const cost = WORK_COSTS[item];
+  const quote = (TEXT_ITEMS as readonly string[]).includes(item) ? textQuote(item, usage) : null;
+  const cost = WORK_COSTS[item] ?? (quote && quote.retailUsd > 0 ? quote.retailUsd : undefined);
   const fairUse = FAIR_USE[item];
 
-  // Three states, and every action must be in exactly one: priced (media),
-  // fair-use capped (the unlimited work), or never metered (monitoring). An
-  // action in none of them is a bug, not a free tier.
+  // Priced (media or text), fair-use capped, or never metered (monitoring).
   if (cost === undefined && fairUse === undefined) {
     return { state: before, blocked: false, toppedUp: 0 };
   }
@@ -358,28 +359,23 @@ export function chargeCredits(
     writeCredits(data, { ...patch, usedThisMonth: { ...before.usedThisMonth, [item]: used } }, now);
   };
 
-  // ── Unlimited work: free, but not infinite ──
+  if (fairUse !== undefined && billingEnforced() && used > fairUse) {
+    return {
+      state: before,
+      blocked: true,
+      toppedUp: 0,
+      reason:
+        `You've hit this month's fair-use limit for ${item.replace(/_/g, ' ')} ` +
+        `(${fairUse}). It resets next month. Get in touch if you need more.`,
+    };
+  }
+
   if (cost === undefined) {
-    // Campaigns, skill runs, and the rest of UNLIMITED_ITEMS stay free at a
-    // zero balance. Credits are only for media. Fair-use is an abuse ceiling.
-    if (billingEnforced() && used > fairUse!) {
-      return {
-        state: before,
-        blocked: true,
-        toppedUp: 0,
-        reason:
-          `You've hit this month's fair-use limit for ${item.replace(/_/g, ' ')} ` +
-          `(${fairUse}). It resets next month — get in touch if you need more.`,
-      };
-    }
     claimCostItem(item);
     persist({});
     return { state: creditState(data, now), blocked: false, toppedUp: 0 };
   }
 
-  // ── Priced work: media, drawn from credits ──
-  // Cost and revenue land on the same line: whatever this request has spent on
-  // inference is what serving this billable item cost.
   claimCostItem(item);
 
   let granted = before.granted;
@@ -411,7 +407,7 @@ export function chargeCredits(
     };
   }
 
-  const remaining = Math.round((granted - before.spent) * 100) / 100;
+  const remaining = Math.round((granted - before.spent) * 1e6) / 1e6;
 
   // Enforcement is what turns the meter into a wall. Off by default so the
   // accounting can run honestly against real customers before it bites.
@@ -432,12 +428,13 @@ export function chargeCredits(
           (upgrade ? `Upgrading to ${upgrade} costs less than topping up further.` : 'Get in touch to raise it.')
         : before.autoTopUp
           ? `Top-up limit reached. Add credit${upgrade ? ` or upgrade to ${upgrade}` : ''}.`
-          : `Out of credits. Add $${band.topUp.toFixed(2)}, turn on auto top-up${upgrade ? `, or upgrade to ${upgrade}` : ''}.`,
+          : `Out of credits. Automation is paused. You can still view your reports and data. Add $${band.topUp.toFixed(2)}, turn on auto top-up${upgrade ? `, or upgrade to ${upgrade}` : ''}.`,
     };
   }
 
+  if (quote?.serveUsd) addOpenRouter(data, quote.serveUsd);
   const ledger = [{ ts: now.toISOString(), item, cost, note }, ...before.ledger].slice(0, LEDGER_CAP);
-  const spent = Math.round((before.spent + cost) * 100) / 100;
+  const spent = Math.round((before.spent + cost) * 1e6) / 1e6;
   persist({ granted, spent, topUps, toppedUpThisMonth, ledger });
   return { state: creditState(data, now), blocked: false, toppedUp };
 }
@@ -453,7 +450,6 @@ export function chargeCredits(
  */
 export function canAfford(data: Record<string, unknown>, item: string): { ok: boolean; reason?: string } {
   if (!isOutputWork(item)) return { ok: true }; // monitoring — never gated
-  if ((UNLIMITED_ITEMS as readonly string[]).includes(item)) return { ok: true };
   if (!billingEnforced()) return { ok: true }; // meter runs, wall is off
   const state = creditState(data);
   if (state.remaining > 0) return { ok: true }; // a positive balance always passes
@@ -463,7 +459,7 @@ export function canAfford(data: Record<string, unknown>, item: string): { ok: bo
   return {
     ok: false,
     reason:
-      `Out of credits. Add $${band.topUp.toFixed(2)}, turn on auto top-up` +
+      `Out of credits. Automation is paused. You can still view your reports and data. Add $${band.topUp.toFixed(2)}, turn on auto top-up` +
       `${upgrade ? `, or upgrade to ${upgrade}` : ''}.`,
   };
 }
