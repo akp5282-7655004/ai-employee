@@ -73,10 +73,10 @@ import { buildAdminBusiness } from './admin/business.js';
 import { adSpendAllowed } from './billing/gate.js';
 import { isMediaKind, MEDIA_LABEL, MEDIA_KINDS, mediaCost } from './billing/media.js';
 import {
-  bandForPriceId, createCheckoutSession, createPortalSession, createTopUpPaymentIntent, priceIdForBand,
-  stampCustomer, stripeReady, userIdForCustomer, userIdForSubscription, verifyWebhook, type PaidBand,
+  applySubscriptionCoupon, bandForPriceId, cancelStripeSubscription, createCheckoutSession, createPortalSession, createTopUpPaymentIntent, priceIdForBand,
+  refundLatestCharge, setSubscriptionPrice, stampCustomer, stripeReady, userIdForCustomer, userIdForSubscription, verifyWebhook, type PaidBand,
 } from './billing/stripe.js';
-import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, updateBand } from './billing/subscription.js';
+import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, syncSubscription, updateBand } from './billing/subscription.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
 import { buildBundle, competitorAudit, crawlFacts, performanceAudit, readPublicPage, setupPlacement, websiteAudit } from './agents/journey.js';
 import { planGo } from './agents/milesrun.js';
@@ -777,6 +777,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   const inviteLink = (req: { headers: Record<string, unknown> }, i: Invite) => `${baseUrl(req)}/login?invite=${encodeURIComponent(i.token)}`;
 
   // ── pages (gated: no account → login) ──
+  app.get('/admin', async (req, reply) => {
+    const u = await getUser(req);
+    reply.header('cache-control', 'private, no-store');
+    reply.header('vary', 'cookie, accept-encoding');
+    return reply.type('text/html').send(u ? dashboardPage : loginPage);
+  });
   app.get('/', async (req, reply) => {
     const u = await getUser(req);
     // This one URL returns two different documents depending on the session, so
@@ -1141,7 +1147,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   app.get('/api/admin', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    if (!(await isAdmin(u))) return { isAdmin: false };
+    if (!(await isAdmin(u))) return reply.code(403).send({ error: 'owner only' });
     const invites = (await getInvites()).map((i) => ({ token: i.token, email: i.email, note: i.note, maxUses: i.maxUses, uses: i.uses, exp: i.exp, createdAt: i.createdAt, status: inviteStatus(i), link: inviteLink(req, i) }));
     return { isAdmin: true, adminId: await adminUserId(), users: await authStore.listUsers(), settings: await getAdminSettings(), invites };
   });
@@ -1185,7 +1191,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     await authStore.setUserData(actorId, data);
   };
 
-  app.post<{ Body: { id?: string; amount?: number } }>('/api/admin/credits', async (req, reply) => {
+  app.post<{ Body: { id?: string; amount?: number; remove?: boolean } }>('/api/admin/credits', async (req, reply) => {
     const actor = await adminActor(req, reply);
     if (!actor) return;
     const id = String(req.body?.id || '');
@@ -1195,9 +1201,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!target) return reply.code(404).send({ error: 'No account with that id.' });
     const data = await authStore.getUserData(id);
     const before = creditState(data);
-    writeCredits(data, { granted: Math.round((before.granted + amount) * 100) / 100, launchOffer: true });
+    const delta = req.body?.remove ? -amount : amount;
+    writeCredits(data, { granted: Math.max(0, Math.round((before.granted + delta) * 100) / 100), launchOffer: true });
     await authStore.setUserData(id, data);
-    await auditAdmin(actor.id, { action: 'add credits', targetId: id, note: `Added $${amount} in credits.` });
+    await auditAdmin(actor.id, { action: req.body?.remove ? 'remove credits' : 'add credits', targetId: id, note: `${req.body?.remove ? 'Removed' : 'Added'} $${amount} in credits.` });
     return { ok: true, remaining: creditState(data).remaining };
   });
 
@@ -1247,6 +1254,77 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   });
 
   // Owner-only. One campaign list for the signed-in tenant, with no tokens.
+  app.get('/api/admin/audit', async (req, reply) => {
+    const actor = await adminActor(req, reply);
+    if (!actor) return;
+    const data = await authStore.getUserData(actor.id);
+    const log = Array.isArray(data.adminAudit) ? data.adminAudit : [];
+    return { entries: log };
+  });
+
+  app.post<{ Body: { id?: string; action?: string; band?: string; confirm?: string; coupon?: string } }>('/api/admin/billing', async (req, reply) => {
+    const actor = await adminActor(req, reply);
+    if (!actor) return;
+    const id = String(req.body?.id || '');
+    const action = String(req.body?.action || '');
+    const target = id ? await authStore.getUserById(id) : null;
+    if (!target) return reply.code(404).send({ error: 'No account with that id.' });
+    const data = await authStore.getUserData(id);
+    const sub = billingState(data);
+    const band = req.body?.band;
+    const paidBand = band === 'starter' || band === 'growth' || band === 'scale' ? band : undefined;
+    if (action === 'cancel_now' && req.body?.confirm !== 'CANCEL NOW') {
+      return reply.code(400).send({ error: 'Type CANCEL NOW to cancel immediately.' });
+    }
+    if (action === 'refund' && req.body?.confirm !== 'REFUND') {
+      return reply.code(400).send({ error: 'Type REFUND to refund the last payment.' });
+    }
+    const needsStripe = action === 'upgrade' || action === 'downgrade' || action === 'cancel' || action === 'cancel_now' || action === 'refund' || action === 'coupon' || (action === 'free' && !!sub.stripeSubscriptionId);
+    if (needsStripe && !stripeReady()) return reply.code(503).send({ error: 'Stripe not connected' });
+    if ((action === 'upgrade' || action === 'downgrade') && (!paidBand || !priceIdForBand(paidBand))) {
+      return reply.code(503).send({ error: 'Stripe not connected' });
+    }
+    let note = action;
+    if (action === 'upgrade' || action === 'downgrade') {
+      if (!sub.stripeSubscriptionId) return reply.code(400).send({ error: 'This account has no Stripe subscription yet.' });
+      const res = await setSubscriptionPrice(sub.stripeSubscriptionId, priceIdForBand(paidBand!)!);
+      if ('error' in res) return reply.code(502).send({ error: res.error });
+      note = `${action} to ${paidBand}`;
+    } else if (action === 'cancel' || action === 'cancel_now') {
+      if (!sub.stripeSubscriptionId) return reply.code(400).send({ error: 'This account has no Stripe subscription yet.' });
+      const res = await cancelStripeSubscription(sub.stripeSubscriptionId, action === 'cancel');
+      if ('error' in res) return reply.code(502).send({ error: res.error });
+      note = action === 'cancel' ? 'Cancel at period end' : 'Cancel now';
+    } else if (action === 'free') {
+      if (sub.stripeSubscriptionId) {
+        const res = await cancelStripeSubscription(sub.stripeSubscriptionId, true);
+        if ('error' in res) return reply.code(502).send({ error: res.error });
+      }
+      const next = billingState(data);
+      next.band = 'launch';
+      if (!sub.stripeSubscriptionId) next.status = 'none';
+      data.billing = next;
+      await authStore.setUserData(id, data);
+      note = 'Move to free credits';
+    } else if (action === 'refund') {
+      if (!sub.stripeCustomerId) return reply.code(400).send({ error: 'This account has no Stripe customer yet.' });
+      const res = await refundLatestCharge(sub.stripeCustomerId);
+      if ('error' in res) return reply.code(502).send({ error: res.error });
+      note = `Refund $${res.amount.toFixed(2)}`;
+    } else if (action === 'coupon') {
+      const coupon = String(req.body?.coupon || '').trim();
+      if (!coupon) return reply.code(400).send({ error: 'Name the coupon.' });
+      if (!sub.stripeSubscriptionId) return reply.code(400).send({ error: 'This account has no Stripe subscription yet.' });
+      const res = await applySubscriptionCoupon(sub.stripeSubscriptionId, coupon);
+      if ('error' in res) return reply.code(502).send({ error: res.error });
+      note = `Coupon ${coupon}`;
+    } else {
+      return reply.code(400).send({ error: 'Unknown billing action.' });
+    }
+    await auditAdmin(actor.id, { action, targetId: id, note });
+    return { ok: true };
+  });
+
   app.get('/api/admin/google-ads', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
@@ -3755,8 +3833,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           }
           if (user && subId && bandKey && inv.id) {
             const periodEnd = new Date(((inv.lines?.data?.[0]?.period?.end) ?? Math.floor(Date.now() / 1000) + 2_592_000) * 1000).toISOString();
+            const amountUsd = typeof inv.amount_paid === 'number' ? inv.amount_paid / 100 : undefined;
+            const paidAt = typeof inv.status_transitions?.paid_at === 'number' ? new Date(inv.status_transitions.paid_at * 1000).toISOString() : new Date().toISOString();
             await authStore.mutateUserData(user.id, (data) => {
-              const r = applyRenewal(data, { invoiceId: inv.id!, customerId: customerId!, subscriptionId: subId, bandKey, periodEnd });
+              const r = applyRenewal(data, { invoiceId: inv.id!, customerId: customerId!, subscriptionId: subId, bandKey, periodEnd, amountUsd, paidAt });
               if (r.applied) appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: 'stripe', source: 'billing', title: `Subscription renewed. ${r.band}, plus $${r.granted} credits` });
             });
           }
@@ -3772,23 +3852,36 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           }
           break;
         }
-        case 'customer.subscription.deleted': {
-          const s = event.data.object as import('stripe').default.Subscription;
-          const customerId = typeof s.customer === 'string' ? s.customer : s.customer?.id ?? null;
-          const user = await findUser(customerId, s.id);
-          if (user) {
-            await authStore.mutateUserData(user.id, (data) => { markCanceled(data, s.id); });
-          }
-          break;
-        }
+        case 'customer.subscription.created':
         case 'customer.subscription.updated': {
           const s = event.data.object as import('stripe').default.Subscription;
           const customerId = typeof s.customer === 'string' ? s.customer : s.customer?.id ?? null;
           const priceId = s.items?.data?.[0]?.price?.id;
           const bandKey = bandForPriceId(priceId);
           const user = await findUser(customerId, s.id);
-          if (user && bandKey) {
-            await authStore.mutateUserData(user.id, (data) => { updateBand(data, s.id, bandKey); });
+          const periodUnix = (s as unknown as { current_period_end?: number }).current_period_end
+            ?? (s.items?.data?.[0] as unknown as { current_period_end?: number } | undefined)?.current_period_end;
+          if (user) {
+            await authStore.mutateUserData(user.id, (data) => {
+              syncSubscription(data, {
+                customerId: customerId || undefined,
+                subscriptionId: s.id,
+                status: s.status,
+                bandKey,
+                periodEnd: typeof periodUnix === 'number' ? new Date(periodUnix * 1000).toISOString() : undefined,
+                cancelAtPeriodEnd: s.cancel_at_period_end === true,
+              });
+              if (event.type === 'customer.subscription.updated' && bandKey) updateBand(data, s.id, bandKey);
+            });
+          }
+          break;
+        }
+        case 'customer.subscription.deleted': {
+          const s = event.data.object as import('stripe').default.Subscription;
+          const customerId = typeof s.customer === 'string' ? s.customer : s.customer?.id ?? null;
+          const user = await findUser(customerId, s.id);
+          if (user) {
+            await authStore.mutateUserData(user.id, (data) => { markCanceled(data, s.id); });
           }
           break;
         }

@@ -1069,6 +1069,7 @@
           <a data-page="integrations" data-pages="integrations" data-tabs="Integrations">Integrations</a>
           <a data-page="autohub" data-pages="autohub,schedules,weather,autopilot,approvals" data-tabs="Plays|Scheduled|Weather|Autonomy|Approvals">Automations</a>
           <a data-page="settings" data-pages="settings,billing,health,logs" data-tabs="Account|Plan &amp; Credits|System Health|Change Log">Settings</a>
+          <a id="nav-admin" data-page="owneradmin" data-pages="owneradmin" hidden>Admin</a>
         </div>
       </div>
     </nav>
@@ -1267,6 +1268,9 @@
       <div id="ap-body" style="max-width:860px"></div>
     </section>
 
+    <section class="page" id="page-owneradmin">
+      <div id="owneradmin-body" style="max-width:1100px"></div>
+    </section>
     <section class="page" id="page-billing">
       <div id="bill-body" style="max-width:860px"></div>
     </section>
@@ -1909,7 +1913,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',library:'Skills and Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',playdetail:'Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',approvals:'Approvals & Autonomy',billing:'Plan & Credits',fblaunch:'Facebook',reports:'Reports',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',library:'Skills and Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',playdetail:'Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',approvals:'Approvals & Autonomy',billing:'Plan & Credits',fblaunch:'Facebook',reports:'Reports',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',owneradmin:'Admin',market:'Marketplace',chat:'Chat with Miles'};
 // A destination can own several pages, Launch owns the plan, both channel
 // launchers and the ad-copy writer. The nav lists the destination; its pages
 // become a tab strip, so a four-step job stops looking like four unrelated
@@ -2017,6 +2021,7 @@ function setPage(id){
   $('#page-localpresence').classList.toggle('on',id==='localpresence');
   $('#page-approvals').classList.toggle('on',id==='approvals');
   $('#page-billing').classList.toggle('on',id==='billing');
+  $('#page-owneradmin').classList.toggle('on',id==='owneradmin');
   $('#page-ghl').classList.toggle('on',id==='ghl');
   $('#page-playbook').classList.toggle('on',id==='playbook');
   $('#page-playdetail').classList.toggle('on',id==='playdetail');
@@ -2059,6 +2064,7 @@ function setPage(id){
   if(id==='localpresence') openLocalPresence();
   if(id==='approvals') openApprovals();
   if(id==='billing') openBilling();
+  if(id==='owneradmin') renderOwnerAdmin();
   if(id==='ghl') openGhl();
   if(id==='playbook') openPlaybook();
   if(id==='playdetail') renderPlayDetail();
@@ -7703,24 +7709,30 @@ function setBilling(box){
   card.append(plan); card.append(el('div','verdict tight','💳 Paid plans & Stripe billing are coming soon, you’ll manage your subscription here.'));
   box.append(card);
 }
-async function renderBusinessAdmin(box){
+async function renderOwnerAdmin(){
+  const box=$('#owneradmin-body'); if(!box) return;
+  box.innerHTML='';
+  if(!IS_ADMIN){ box.append(el('p','mdesc','This page is for the Miles owner.')); return; }
   const wrap=el('div','mcard'); wrap.style.maxWidth='1100px';
-  wrap.append(el('h3',null,'Business'));
-  wrap.append(el('p','mdesc','Who signed up, who is paying, and how much they use. Paying amounts stay Not connected until Stripe is wired.'));
+  wrap.append(el('h3',null,'Admin'));
+  wrap.append(el('p','mdesc','Signups, plans, and usage from stored accounts. Amounts stay Not connected until Stripe or OpenRouter has a real number.'));
   if(!REMOTE){ box.append(wrap); return; }
   const res=await fetchJson('/api/admin/business', null, 12000);
   const view=res.data;
   if(!res.ok || !view || !view.totals){ wrap.append(el('p','md-explain', (res.data&&res.data.error)||'The business list did not load.')); box.append(wrap); return; }
   const t=view.totals;
   const line=(label, value)=> { const p=el('p','appsub'); p.textContent=label+': '+(value==null?'':value); return p; };
-  wrap.append(line('Signups', t.signups), line('Signups this week', t.signupsThisWeek), line('Paying customers', t.paying), line('Free to paid', t.freeToPaidRate), line('MRR', t.mrr), line('Credits consumed', t.creditsConsumed), line('OpenRouter cost', t.openRouterCost), line('Reached 3 tools', t.reachedThreeTools), line('Launched', t.launched), line('Close to the end of free credits', t.nearCreditEnd), line('At risk', t.atRisk));
+  wrap.append(line('Signups today', t.signupsToday), line('Signups 7 days', t.signupsThisWeek), line('Signups 30 days', t.signups30d), line('On free credits', t.onFreeCredits), line('Trials', t.trials), line('Paying', t.paying), line('Past due', t.pastDue), line('Canceled', t.canceled), line('MRR', t.mrr), line('Revenue this month', t.revenueThisMonth), line('OpenRouter cost', t.openRouterCost), line('Profit', t.profit), line('At risk', t.atRisk));
+  wrap.append(el('h3',null,'At risk'));
+  if(!(view.atRiskAccounts||[]).length) wrap.append(el('p','mdesc','No accounts are on the at-risk list.'));
+  (view.atRiskAccounts||[]).forEach(row=>wrap.append(line(row.businessName+' ('+row.email+')', (row.reasons||[]).join(', '))));
   (view.funnel||[]).forEach(step=>wrap.append(line(step.step, step.count+' (drop off '+step.dropOff+')')));
   (view.sources||[]).forEach(src=>wrap.append(line('Source '+src.source, src.count)));
   const filter=el('input'); filter.placeholder='Filter by name, email, or status'; filter.style.cssText='margin:8px 0;width:100%;max-width:360px';
   wrap.append(filter);
   const table=el('table','md-table');
-  const headers=['Business','Email','Signed up','Plan','Status','Paid / mo','Credits left','Tools','Launched','Last active','Source','Profit','Leads','Spend','Errors'];
-  const keys=['businessName','email','signupDate','plan','status','monthlyPaid','freeCreditsRemaining','toolsConnected','launched','lastActive','source','profit','leads','adSpendManaged','errors'];
+  const headers=['Business','Email','Plan','Status','MRR','Credits left','Serve cost','Profit','Tools','Last active','Source','Leads','Errors'];
+  const keys=['businessName','email','plan','status','monthlyPaid','freeCreditsRemaining','serveCost','profit','toolsConnected','lastActive','source','leads','errors'];
   let sortKey='signupDate', sortDir=-1, query='';
   const head=el('tr');
   headers.forEach((label, i)=>{ const th=el('th',null,label); th.style.cursor='pointer'; th.onclick=()=>{ if(sortKey===keys[i]) sortDir*=-1; else { sortKey=keys[i]; sortDir=1; } draw(); }; head.append(th); });
@@ -7734,28 +7746,50 @@ async function renderBusinessAdmin(box){
     rows.forEach(row=>{
       const tr=el('tr');
       const err=(row.errors.googleReads||0)+(row.errors.launches||0)+(row.errors.crawls||0);
-      const cells=[row.businessName, row.email, (row.signupDate||'').slice(0,10), row.plan, row.status, row.monthlyPaid, row.freeCreditsRemaining+' of '+row.freeCreditsGrant, (row.toolsConnected==='Not connected'?'Not connected':row.toolsConnected+' ('+(row.tools||[]).join(', ')+')'), row.launched?'yes':'no', row.lastActive?String(row.lastActive).slice(0,10):'', row.signupSource.utmSource+(row.signupSource.utmCampaign?(' / '+row.signupSource.utmCampaign):''), row.unprofitable==='Not connected'?'Not connected':(row.unprofitable?'Unprofitable '+row.profit:row.profit), row.leads+' leads, '+row.bookedJobs+' jobs', row.adSpendManaged, String(err)];
+      const cells=[row.businessName, row.email, row.plan, row.status, row.monthlyPaid, row.freeCreditsRemaining+' of '+row.freeCreditsGrant, row.serveCost, row.profit, (row.toolsConnected==='Not connected'?'Not connected':row.toolsConnected+' ('+(row.tools||[]).join(', ')+')'), row.lastActive?String(row.lastActive).slice(0,10):'', row.signupSource.utmSource+(row.signupSource.utmCampaign?(' / '+row.signupSource.utmCampaign):''), row.leads+' leads, '+row.bookedJobs+' jobs', String(err)];
       cells.forEach(value=>{ const td=el('td'); td.textContent=value==null?'':String(value); tr.append(td); });
       const act=el('td');
-      const add=el('button','md-ghost','Add $25'); add.onclick=async()=>{ await fetch('/api/admin/credits',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:row.id,amount:25})}); toast('Credits added'); };
-      const trial=el('button','md-ghost','Extend 14 days'); trial.onclick=async()=>{ await fetch('/api/admin/trial',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:row.id,days:14})}); toast('Trial note extended'); };
-      const pause=el('button','md-ghost', row.status==='churned'?'Resume':'Pause'); pause.onclick=async()=>{ await fetch('/api/admin/pause',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:row.id, paused:row.status!=='churned'})}); location.reload(); };
+      const post=async(url, body, done)=>{ const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); const d=await r.json().catch(()=>({})); toast(d.error||done); if(r.ok) renderOwnerAdmin(); };
+      const typed=(label, word, action, extra)=>{ const value=window.prompt(label); if(value!==word){ toast('Not confirmed'); return; } post('/api/admin/billing', Object.assign({id:row.id, action:action, confirm:word}, extra||{}), 'Saved'); };
+      const add=el('button','md-ghost','Add $25'); add.onclick=()=>post('/api/admin/credits',{id:row.id,amount:25},'Credits added');
+      const remove=el('button','md-ghost','Remove $25'); remove.onclick=()=>post('/api/admin/credits',{id:row.id,amount:25,remove:true},'Credits removed');
+      const trial=el('button','md-ghost','Extend 14 days'); trial.onclick=()=>post('/api/admin/trial',{id:row.id,days:14},'Trial note extended');
+      const pause=el('button','md-ghost', row.paused?'Resume':'Pause'); pause.onclick=()=>post('/api/admin/pause',{id:row.id, paused:!row.paused}, row.paused?'Resumed':'Paused');
       const viewAs=el('button','md-ghost','View'); viewAs.onclick=async()=>{ await fetch('/api/admin/impersonate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:row.id})}); location.reload(); };
-      act.append(add, trial, pause, viewAs); tr.append(act); tb.append(tr);
+      const up=el('button','md-ghost','Upgrade'); up.onclick=()=>post('/api/admin/billing',{id:row.id, action:'upgrade', band:'growth'},'Upgrade sent');
+      const down=el('button','md-ghost','Downgrade'); down.onclick=()=>post('/api/admin/billing',{id:row.id, action:'downgrade', band:'starter'},'Downgrade sent');
+      const later=el('button','md-ghost','Cancel at period end'); later.onclick=()=>post('/api/admin/billing',{id:row.id, action:'cancel'},'Cancel scheduled');
+      const now=el('button','md-ghost','Cancel now'); now.onclick=()=>typed('Type CANCEL NOW to cancel this subscription immediately.','CANCEL NOW','cancel_now');
+      const free=el('button','md-ghost','Move to free'); free.onclick=()=>post('/api/admin/billing',{id:row.id, action:'free'},'Moved toward free');
+      const refund=el('button','md-ghost','Refund last payment'); refund.onclick=()=>typed('Type REFUND to refund the last Stripe payment.','REFUND','refund');
+      const coupon=el('button','md-ghost','Apply coupon'); coupon.onclick=()=>{ const code=window.prompt('Stripe coupon id'); if(!code) return; post('/api/admin/billing',{id:row.id, action:'coupon', coupon:code},'Coupon sent'); };
+      act.append(add, remove, trial, pause, viewAs, up, down, later, now, free, refund, coupon); tr.append(act); tb.append(tr);
     });
   };
   filter.oninput=()=>{ query=filter.value||''; draw(); };
   draw();
   wrap.append(table);
+  const audit=el('div'); audit.id='admin-audit';
+  wrap.append(el('h3',null,'Audit log'));
+  wrap.append(audit);
   box.append(wrap);
+  const log=await fetchJson('/api/admin/audit', null, 8000);
+  if(log.ok && log.data && Array.isArray(log.data.entries)){
+    if(!log.data.entries.length) audit.append(el('p','mdesc','No admin actions yet.'));
+    log.data.entries.slice(0,40).forEach(entry=>{
+      const p=el('p','appsub');
+      p.textContent=(entry.ts||'').slice(0,16)+' '+entry.action+' '+entry.note;
+      audit.append(p);
+    });
+  } else audit.append(el('p','mdesc','The audit log did not load.'));
 }
 // Owner-only: see everyone who signed up, remove accounts, gate signups.
 async function setAdmin(box){
   box.append(el('div','appsub','Loading...'));
   let d={}; if(REMOTE){ const admin=await fetchJson('/api/admin', null, 8000); if(admin.data) d=admin.data; if(!admin.ok){ box.innerHTML=''; box.append(el('p','md-explain','The user list did not load. Try again.')); return; } }
   box.innerHTML='';
-  if(!d.isAdmin){ box.append(el('div','verdict tight','Only the workspace owner can manage users here.')); return; }
-  renderBusinessAdmin(box);
+  if(admin.status===403 || !d.isAdmin){ box.append(el('div','verdict tight','Only the workspace owner can manage users here.')); return; }
+  const open=el('p','mdesc'); open.append(document.createTextNode('The business dashboard is on its own page. ')); const link=el('a',null,'Open Admin'); link.href='/admin'; open.append(link); box.append(open);
   const diag=el('div','mcard'); diag.style.maxWidth='760px';
   diag.innerHTML='<h3>Google Ads read</h3><p class="mdesc">Runs the campaign list for this signed-in account. Shows the customer id, the login customer id, the HTTP status, the row count, and the error text. No tokens.</p>';
   const diagBtn=el('button','go','Check Google Ads read');
@@ -9316,6 +9350,7 @@ async function authInit(){
     const d=await r.json(); const u=d.user||{};
     sessionId = u.id || sessionId;
     ME = u; PROFILE = d.profile||{}; IS_ADMIN = !!d.admin;
+    const navAdmin=document.getElementById('nav-admin'); if(navAdmin) navAdmin.hidden=!IS_ADMIN;
     loadDeploy(); loadAutopilot();
     $('#user-email').textContent = u.email||'';
     $('#user-av').textContent = ((u.name||u.email||'?')[0]||'?').toUpperCase();
@@ -9723,7 +9758,7 @@ function openPlayDetail(){
   card.append(el('p',null,p.results));
   box.append(card);
 }
-(async()=>{ await authInit(); await loadPacks(); await fetchConnections(); updateConnStat(); renderTabs(); renderCards(); loadActivePlaybooks(); setPage('overview'); handleBillingReturn(); })();
+(async()=>{ await authInit(); await loadPacks(); await fetchConnections(); updateConnStat(); renderTabs(); renderCards(); loadActivePlaybooks(); setPage(location.pathname==='/admin' && IS_ADMIN ? 'owneradmin' : 'overview'); handleBillingReturn(); })();
 </script>
 </body>
 </html>

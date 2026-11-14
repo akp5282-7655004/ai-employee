@@ -153,5 +153,63 @@ export async function stampCustomer(customerId: string, userId: string): Promise
   await stripe.customers.update(customerId, { metadata: { milesUserId: userId } });
 }
 
+/** Change the price on an existing subscription. The price id comes from env. */
+export async function setSubscriptionPrice(subscriptionId: string, priceId: string): Promise<{ ok: true } | { error: string }> {
+  if (!stripeReady() || !priceId) return { error: 'Stripe not connected' };
+  try {
+    const stripe = await getClient();
+    const sub = await stripe.subscriptions.retrieve(subscriptionId);
+    const item = sub.items?.data?.[0];
+    if (!item) return { error: 'Stripe not connected' };
+    await stripe.subscriptions.update(subscriptionId, {
+      items: [{ id: item.id, price: priceId }],
+      proration_behavior: 'create_prorations',
+    });
+    return { ok: true };
+  } catch (err) {
+    return { error: `Couldn't reach Stripe: ${(err as Error).message}` };
+  }
+}
+
+/** Cancel at period end, or immediately. */
+export async function cancelStripeSubscription(subscriptionId: string, atPeriodEnd: boolean): Promise<{ ok: true } | { error: string }> {
+  if (!stripeReady()) return { error: 'Stripe not connected' };
+  try {
+    const stripe = await getClient();
+    if (atPeriodEnd) await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true });
+    else await stripe.subscriptions.cancel(subscriptionId);
+    return { ok: true };
+  } catch (err) {
+    return { error: `Couldn't reach Stripe: ${(err as Error).message}` };
+  }
+}
+
+/** Refund the newest charge Stripe has for this customer. */
+export async function refundLatestCharge(customerId: string): Promise<{ ok: true; amount: number } | { error: string }> {
+  if (!stripeReady()) return { error: 'Stripe not connected' };
+  try {
+    const stripe = await getClient();
+    const charges = await stripe.charges.list({ customer: customerId, limit: 1 });
+    const charge = charges.data[0];
+    if (!charge || charge.refunded) return { error: 'No payment to refund.' };
+    await stripe.refunds.create({ charge: charge.id });
+    return { ok: true, amount: Math.round(charge.amount) / 100 };
+  } catch (err) {
+    return { error: `Couldn't reach Stripe: ${(err as Error).message}` };
+  }
+}
+
+/** Attach a coupon that already exists in Stripe. */
+export async function applySubscriptionCoupon(subscriptionId: string, couponId: string): Promise<{ ok: true } | { error: string }> {
+  if (!stripeReady() || !couponId) return { error: 'Stripe not connected' };
+  try {
+    const stripe = await getClient();
+    await stripe.subscriptions.update(subscriptionId, { discounts: [{ coupon: couponId }] });
+    return { ok: true };
+  } catch (err) {
+    return { error: `Couldn't reach Stripe: ${(err as Error).message}` };
+  }
+}
+
 /** Reset the client between tests, or after env vars change. */
 export function resetStripeClient(): void { client = undefined; }

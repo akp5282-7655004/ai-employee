@@ -85,6 +85,6 @@ describe('admin business view', () => {
     expect(row.errors.googleReads).toBe(1);
     expect(row.profit).toBe('Not connected');
     expect(view.sources[0]).toEqual({ source: 'newsletter', count: 1 });
-    expect(view.funnel.map((step) => step.step)).toEqual(['Signed up', 'Setup done', '3 tools', 'Launched', 'Paid']);
+    expect(view.funnel.map((step) => step.step)).toEqual(['Signed up', 'Connected 3 tools', 'Launched first campaign', 'Became paying']);
   });
 });

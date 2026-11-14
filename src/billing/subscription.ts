@@ -13,7 +13,7 @@
  */
 import { BANDS, creditState, writeCredits, type Band } from './credits.js';
 
-export type SubStatus = 'none' | 'active' | 'past_due' | 'canceled';
+export type SubStatus = 'none' | 'trialing' | 'active' | 'past_due' | 'canceled';
 
 export interface BillingState {
   stripeCustomerId?: string;
@@ -21,6 +21,10 @@ export interface BillingState {
   band?: Band['key'];
   status: SubStatus;
   currentPeriodEnd?: string; // ISO
+  /** Dollars Stripe actually charged for the latest paid invoice. Not a plan list price. */
+  mrr?: number;
+  lastPayment?: { amount: number; at: string; invoiceId: string };
+  cancelAtPeriodEnd?: boolean;
   /** Stripe invoice ids already granted for — a webhook can arrive more than
    *  once for the same invoice, and this is what stops a double grant. */
   grantedInvoices: string[];
@@ -42,7 +46,7 @@ export function emptyBilling(): BillingState {
 /** Read `data.billing` back, dropping anything malformed rather than trusting it. */
 export function billingState(data: Record<string, unknown>): BillingState {
   const raw = (data.billing ?? {}) as Partial<BillingState>;
-  const status: SubStatus = ['none', 'active', 'past_due', 'canceled'].includes(raw.status as string)
+  const status: SubStatus = ['none', 'trialing', 'active', 'past_due', 'canceled'].includes(raw.status as string)
     ? (raw.status as SubStatus) : 'none';
   const band = raw.band === 'launch' || BANDS.some((b) => b.key === raw.band) ? (raw.band as Band['key']) : undefined;
   return {
@@ -51,6 +55,11 @@ export function billingState(data: Record<string, unknown>): BillingState {
     band,
     status,
     currentPeriodEnd: typeof raw.currentPeriodEnd === 'string' ? raw.currentPeriodEnd : undefined,
+    mrr: typeof raw.mrr === 'number' && Number.isFinite(raw.mrr) ? raw.mrr : undefined,
+    lastPayment: raw.lastPayment && typeof raw.lastPayment === 'object' && typeof raw.lastPayment.amount === 'number' && typeof raw.lastPayment.at === 'string' && typeof raw.lastPayment.invoiceId === 'string'
+      ? { amount: raw.lastPayment.amount, at: raw.lastPayment.at, invoiceId: raw.lastPayment.invoiceId }
+      : undefined,
+    cancelAtPeriodEnd: raw.cancelAtPeriodEnd === true,
     grantedInvoices: Array.isArray(raw.grantedInvoices) ? raw.grantedInvoices.filter((x) => typeof x === 'string').slice(-MAX_GRANTED_INVOICES) : [],
     grantKeys: Array.isArray(raw.grantKeys) ? raw.grantKeys.filter((x) => typeof x === 'string').slice(-5000) : undefined,
     grantAmounts: raw.grantAmounts && typeof raw.grantAmounts === 'object' ? raw.grantAmounts : undefined,
@@ -92,9 +101,34 @@ export interface RenewalResult {
  * `bandKey` comes from the Stripe Price on the invoice line, resolved by the
  * caller (stripe.ts) since only it knows the price-id → band mapping.
  */
+export function mapStripeStatus(status: string | undefined): SubStatus {
+  if (status === 'trialing') return 'trialing';
+  if (status === 'active') return 'active';
+  if (status === 'past_due' || status === 'unpaid') return 'past_due';
+  if (status === 'canceled' || status === 'incomplete_expired') return 'canceled';
+  return 'none';
+}
+
+/** Subscription created or updated. Rewriting the same ids is safe to repeat. */
+export function syncSubscription(
+  data: Record<string, unknown>,
+  args: { customerId?: string; subscriptionId: string; status?: string; bandKey?: Band['key']; periodEnd?: string; cancelAtPeriodEnd?: boolean },
+): void {
+  const b = billingState(data);
+  if (b.stripeSubscriptionId && b.stripeSubscriptionId !== args.subscriptionId) return;
+  if (args.customerId) b.stripeCustomerId = args.customerId;
+  b.stripeSubscriptionId = args.subscriptionId;
+  const mapped = mapStripeStatus(args.status);
+  if (mapped !== 'none') b.status = mapped;
+  if (args.bandKey && (args.bandKey === 'launch' || BANDS.some((row) => row.key === args.bandKey))) b.band = args.bandKey;
+  if (args.periodEnd) b.currentPeriodEnd = args.periodEnd;
+  if (args.cancelAtPeriodEnd != null) b.cancelAtPeriodEnd = args.cancelAtPeriodEnd;
+  saveBilling(data, b);
+}
+
 export function applyRenewal(
   data: Record<string, unknown>,
-  args: { invoiceId: string; customerId: string; subscriptionId: string; bandKey: Band['key']; periodEnd: string },
+  args: { invoiceId: string; customerId: string; subscriptionId: string; bandKey: Band['key']; periodEnd: string; amountUsd?: number; paidAt?: string },
 ): RenewalResult {
   const b = billingState(data);
   const seen = new Set([...(b.grantKeys ?? []), ...b.grantedInvoices]);
@@ -124,6 +158,10 @@ export function applyRenewal(
   b.band = band.key;
   b.status = 'active';
   b.currentPeriodEnd = args.periodEnd;
+  if (typeof args.amountUsd === 'number' && Number.isFinite(args.amountUsd)) {
+    b.mrr = Math.round(args.amountUsd * 100) / 100;
+    b.lastPayment = { amount: b.mrr, at: args.paidAt || new Date().toISOString(), invoiceId: args.invoiceId };
+  }
   b.grantKeys = [...(b.grantKeys ?? b.grantedInvoices), args.invoiceId].slice(-5000);
   b.grantedInvoices = b.grantKeys.slice(-MAX_GRANTED_INVOICES);
   b.grantAmounts = { ...(b.grantAmounts ?? {}), [args.invoiceId]: band.monthlyCredits };
