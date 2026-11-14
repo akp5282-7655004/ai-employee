@@ -9,7 +9,13 @@ function server() {
   const connector = {
     name: 'mock',
     async createConnectToken() { return { token: 't', expiresAt: '2099-01-01', connectUrl: 'https://connect.example' }; },
-    async listAccounts() { return []; },
+    async listAccounts() {
+      return [
+        { id: 'g', app: 'google_my_business', externalUserId: 'nav', name: 'Profile', healthy: true },
+        { id: 'm', app: 'facebook_pages', externalUserId: 'nav', name: 'Page', healthy: true },
+        { id: 'c', app: 'gohighlevel', externalUserId: 'nav', name: 'CRM', healthy: true },
+      ];
+    },
     async runAction() { calls.push('run'); return { ok: false, actionId: 'x', app: 'google_ads', output: null }; },
     async launchCampaign() { calls.push('launch'); return { ok: false, live: false, steps: [] }; },
     async setGoogleCampaignStatus() { calls.push('status'); return { ok: false, live: false, called: false, note: 'no' }; },

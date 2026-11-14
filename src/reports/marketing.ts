@@ -31,6 +31,8 @@ export interface ReportKpi {
   value: string;
   compare: string;
   sample: boolean;
+  /** none hides the badge. Used when the card is an empty real read, not a sample. */
+  badge?: 'live' | 'sample' | 'none';
   delta: 'up' | 'down' | 'flat' | 'none';
   spark: number[];
 }
@@ -207,14 +209,14 @@ function pct(part: number, whole: number): string {
   return `${Math.round((part / whole) * 1000) / 10}%`;
 }
 
-function kpi(label: string, value: string, compareText: string, current: number | null, previous: number | null, spark: number[], sample: boolean): ReportKpi {
+function kpi(label: string, value: string, compareText: string, current: number | null, previous: number | null, spark: number[], sample: boolean, badge?: ReportKpi['badge']): ReportKpi {
   let delta: ReportKpi['delta'] = 'none';
   if (!sample && previous != null && current != null) {
     if (current > previous) delta = 'up';
     else if (current < previous) delta = 'down';
     else delta = 'flat';
   }
-  return { label, value, compare: compareText, sample, delta, spark };
+  return { label, value, compare: compareText, sample, badge: badge ?? (sample ? 'sample' : 'live'), delta, spark };
 }
 
 function compare(current: number, previous: number | null): string {
@@ -398,7 +400,7 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
   if (hasLedger) tiles.push(kpi('Leads', count(leadsNow), compare(leadsNow, leadsPrev), leadsNow, leadsPrev, [], false));
   else tiles.push(kpi('Leads', count(plan.totalLeads), 'Sample data. Tracked leads replace this when your CRM sends events.', null, null, plan.days.map((day) => day.leads), true));
   if (adsConnected && hasLedger && leadsNow > 0) tiles.push(kpi('Cost per lead', money(adSpend / leadsNow), 'Spend divided by tracked leads. Ad conversions are not used.', null, null, [], false));
-  else if (adsConnected) tiles.push(kpi('Cost per lead', 'Not tracked yet', 'Cost per lead appears once leads come in from your CRM or call tracking.', null, null, [], false));
+  else if (adsConnected) tiles.push(kpi('Cost per lead', 'Not tracked yet', 'Cost per lead appears once leads come in from your CRM or call tracking.', null, null, [], false, 'none'));
   else tiles.push(kpi('Cost per lead', money(plan.cpl), 'Sample data. This is not your cost per lead.', null, null, [], true));
   const factor = window.days / 30;
   let projection = 'No budget projection is saved yet. Save one on the campaign plan before this can compare booked jobs with the plan.';

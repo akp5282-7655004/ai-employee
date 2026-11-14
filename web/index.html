@@ -3762,29 +3762,47 @@ async function dashQueue(wrap, label){
 async function openOverview(){
   const box=$('#overview-body'); if(!box) return;
   const gen=++overviewGen;
-  // Paint the last dashboard immediately. The refresh below replaces it.
-  if(ANDASH&&ANDASH.kpis) renderOverview(ANDASH, MILES_HOME||{}, OPERATOR);
-  else box.innerHTML='<p class="appsub">Loading your dashboard…</p>';
+  // Stay on the loading line until we know whether the dashboard is unlocked.
+  // Painting the last dashboard first detached its buttons when the setup card replaced it.
+  if(!(box.querySelector('.mcard') && box.textContent && box.textContent.indexOf('of 3 connected')>=0)) box.innerHTML='<p class="appsub">Loading your dashboard…</p>';
   let d=ANDASH||{}, miles=MILES_HOME||{}, op=OPERATOR;
+  let setup=null;
   if(REMOTE){
-    const [dash, home, oper]=await Promise.all([
+    const [dash, home, oper, prog]=await Promise.all([
       fetchJson('/api/dashboard?range='+encodeURIComponent(MKT_RANGE), null, 8000),
       fetchJson('/api/miles/home', null, 8000),
       fetchJson('/api/dashboard/operator', null, 8000),
+      fetchJson('/api/setup/tools', null, 8000),
     ]);
     if(dash.data&&dash.data.kpis){ d=dash.data; ANDASH=dash.data; }
     if(home.data&&typeof home.data==='object'){ miles=home.data; MILES_HOME=home.data; }
     if(oper.data&&oper.data.operator){ op=oper.data.operator; OPERATOR=oper.data.operator; }
     if(!dash.ok && !home.ok && !oper.ok) d=Object.assign({}, d, {_loadError:true});
+    if(prog.data) setup=prog.data;
   }
   if(gen!==overviewGen) return;
+  if(setup && setup.ready===false){
+    box.innerHTML='';
+    const card=el('div','mcard');
+    card.append(el('h3',null, setup.headline||'Connect your tools'));
+    card.append(el('p','mdesc', setup.detail||'Connect at least 3 tools so Miles can pull real data.'));
+    (setup.items||[]).forEach(item=>{
+      const row=el('div','appsub', (item.connected?'Connected: ':'Not yet: ')+item.label);
+      card.append(row);
+    });
+    const go=el('button','go','Open Integrations'); go.style.marginTop='12px';
+    go.onclick=()=>{ if(typeof setPage==='function') setPage('integrations'); };
+    card.append(go);
+    box.append(card);
+    return;
+  }
   renderOverview(d, miles, op);
   openCmdCenter();
 }
 function mdSample(){ return el('span','md-sample','SAMPLE'); }
 function mdLive(){ return el('span','md-live','\u2713 Live'); }
-function mdBadge(sample){ return sample?mdSample():mdLive(); }
-function repBadge(sample){ return el('span', sample?'rep-sample':'rep-live', sample?'Sample data':'\u2713 Live'); }
+function mdBadge(sample, skip){ if(skip) return null; return sample?mdSample():mdLive(); }
+function repBadge(sample, badge){ const kind=badge||(sample?'sample':'live'); if(kind==='none') return null; return el('span', kind==='sample'?'rep-sample':'rep-live', kind==='sample'?'Sample data':'\u2713 Live'); }
 function runPlaybook(card, miles){
   const btn=el('button','md-run','Run');
   btn.type='button';
@@ -3884,7 +3902,7 @@ function renderOverview(d, miles, op){
     const right=el('span');
     right.append(el('span','md-num', value||'n/a'));
     if(goal) right.append(document.createTextNode(' / '+goal));
-    right.append(document.createTextNode(' ')); right.append(mdBadge(sample));
+    if(value!=='Not tracked yet'){ right.append(document.createTextNode(' ')); const badge=mdBadge(sample); if(badge) right.append(badge); }
     head.append(lab, right); wrap.append(head);
     if(bar!=null){ const b=el('div','md-bar'); const i=el('i'); i.style.width=Math.round(bar)+'%'; b.append(i); wrap.append(b); }
     return wrap;
@@ -7678,12 +7696,59 @@ function setBilling(box){
   card.append(plan); card.append(el('div','verdict tight','💳 Paid plans & Stripe billing are coming soon, you’ll manage your subscription here.'));
   box.append(card);
 }
+async function renderBusinessAdmin(box){
+  const wrap=el('div','mcard'); wrap.style.maxWidth='1100px';
+  wrap.append(el('h3',null,'Business'));
+  wrap.append(el('p','mdesc','Who signed up, who is paying, and how much they use. Paying amounts stay Not connected until Stripe is wired.'));
+  if(!REMOTE){ box.append(wrap); return; }
+  const res=await fetchJson('/api/admin/business', null, 12000);
+  const view=res.data;
+  if(!res.ok || !view || !view.totals){ wrap.append(el('p','md-explain', (res.data&&res.data.error)||'The business list did not load.')); box.append(wrap); return; }
+  const t=view.totals;
+  const line=(label, value)=> { const p=el('p','appsub'); p.textContent=label+': '+(value==null?'':value); return p; };
+  wrap.append(line('Signups', t.signups), line('Signups this week', t.signupsThisWeek), line('Paying customers', t.paying), line('Free to paid', t.freeToPaidRate), line('MRR', t.mrr), line('Credits consumed', t.creditsConsumed), line('OpenRouter cost', t.openRouterCost), line('Reached 3 tools', t.reachedThreeTools), line('Launched', t.launched), line('Close to the end of free credits', t.nearCreditEnd), line('At risk', t.atRisk));
+  (view.funnel||[]).forEach(step=>wrap.append(line(step.step, step.count+' (drop off '+step.dropOff+')')));
+  (view.sources||[]).forEach(src=>wrap.append(line('Source '+src.source, src.count)));
+  const filter=el('input'); filter.placeholder='Filter by name, email, or status'; filter.style.cssText='margin:8px 0;width:100%;max-width:360px';
+  wrap.append(filter);
+  const table=el('table','md-table');
+  const headers=['Business','Email','Signed up','Plan','Status','Paid / mo','Credits left','Tools','Launched','Last active','Source','Profit','Leads','Spend','Errors'];
+  const keys=['businessName','email','signupDate','plan','status','monthlyPaid','freeCreditsRemaining','toolsConnected','launched','lastActive','source','profit','leads','adSpendManaged','errors'];
+  let sortKey='signupDate', sortDir=-1, query='';
+  const head=el('tr');
+  headers.forEach((label, i)=>{ const th=el('th',null,label); th.style.cursor='pointer'; th.onclick=()=>{ if(sortKey===keys[i]) sortDir*=-1; else { sortKey=keys[i]; sortDir=1; } draw(); }; head.append(th); });
+  const thead=el('thead'); thead.append(head); table.append(thead);
+  const tb=el('tbody'); table.append(tb);
+  const draw=()=>{
+    tb.innerHTML='';
+    const q=query.toLowerCase();
+    const rows=(view.accounts||[]).filter(row=>!q || (row.businessName+' '+row.email+' '+row.status).toLowerCase().includes(q));
+    rows.sort((a,b)=>{ const av=a[sortKey], bv=b[sortKey]; return (av>bv?1:av<bv?-1:0)*sortDir; });
+    rows.forEach(row=>{
+      const tr=el('tr');
+      const err=(row.errors.googleReads||0)+(row.errors.launches||0)+(row.errors.crawls||0);
+      const cells=[row.businessName, row.email, (row.signupDate||'').slice(0,10), row.plan, row.status, row.monthlyPaid, row.freeCreditsRemaining+' of '+row.freeCreditsGrant, (row.toolsConnected==='Not connected'?'Not connected':row.toolsConnected+' ('+(row.tools||[]).join(', ')+')'), row.launched?'yes':'no', row.lastActive?String(row.lastActive).slice(0,10):'', row.signupSource.utmSource+(row.signupSource.utmCampaign?(' / '+row.signupSource.utmCampaign):''), row.unprofitable==='Not connected'?'Not connected':(row.unprofitable?'Unprofitable '+row.profit:row.profit), row.leads+' leads, '+row.bookedJobs+' jobs', row.adSpendManaged, String(err)];
+      cells.forEach(value=>{ const td=el('td'); td.textContent=value==null?'':String(value); tr.append(td); });
+      const act=el('td');
+      const add=el('button','md-ghost','Add $25'); add.onclick=async()=>{ await fetch('/api/admin/credits',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:row.id,amount:25})}); toast('Credits added'); };
+      const trial=el('button','md-ghost','Extend 14 days'); trial.onclick=async()=>{ await fetch('/api/admin/trial',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:row.id,days:14})}); toast('Trial note extended'); };
+      const pause=el('button','md-ghost', row.status==='churned'?'Resume':'Pause'); pause.onclick=async()=>{ await fetch('/api/admin/pause',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:row.id, paused:row.status!=='churned'})}); location.reload(); };
+      const viewAs=el('button','md-ghost','View'); viewAs.onclick=async()=>{ await fetch('/api/admin/impersonate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:row.id})}); location.reload(); };
+      act.append(add, trial, pause, viewAs); tr.append(act); tb.append(tr);
+    });
+  };
+  filter.oninput=()=>{ query=filter.value||''; draw(); };
+  draw();
+  wrap.append(table);
+  box.append(wrap);
+}
 // Owner-only: see everyone who signed up, remove accounts, gate signups.
 async function setAdmin(box){
   box.append(el('div','appsub','Loading...'));
   let d={}; if(REMOTE){ const admin=await fetchJson('/api/admin', null, 8000); if(admin.data) d=admin.data; if(!admin.ok){ box.innerHTML=''; box.append(el('p','md-explain','The user list did not load. Try again.')); return; } }
   box.innerHTML='';
   if(!d.isAdmin){ box.append(el('div','verdict tight','Only the workspace owner can manage users here.')); return; }
+  renderBusinessAdmin(box);
   const diag=el('div','mcard'); diag.style.maxWidth='760px';
   diag.innerHTML='<h3>Google Ads read</h3><p class="mdesc">Runs the campaign list for this signed-in account. Shows the customer id, the login customer id, the HTTP status, the row count, and the error text. No tokens.</p>';
   const diagBtn=el('button','go','Check Google Ads read');
@@ -9250,6 +9315,14 @@ async function authInit(){
     applyIdentity();
     const fb=$('#fb-btn'); if(fb){ fb.style.display=''; fb.onclick=openFeedback; }
     if(!d.profile){ buildProfileForm($('#onboard-form'),{}); $('#onboard').classList.add('on'); }
+    if(d.impersonating){
+      let bar=document.getElementById('imp-banner');
+      if(!bar){ bar=el('div'); bar.id='imp-banner'; bar.style.cssText='background:#1b8552;color:#fff;padding:8px 14px;font-size:13px;font-weight:700'; document.body.prepend(bar); }
+      bar.textContent='Viewing '+d.impersonating.email+' read only. Changes are blocked.';
+      const stop=el('button',null,'Stop'); stop.style.cssText='margin-left:12px;background:#fff;color:#111;border:0;border-radius:999px;padding:4px 10px;font-weight:800;cursor:pointer';
+      stop.onclick=async()=>{ await fetch('/api/admin/impersonate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({stop:true})}); location.reload(); };
+      bar.append(stop);
+    }
   }catch(e){}
 }
 
@@ -9368,7 +9441,7 @@ function renderReport(report){
       const c=el('div','rep-tile');
       const head=el('div','rep-whead');
       head.append(el('div','appsub',t.label));
-      head.append(repBadge(!!t.sample));
+      const tileBadge=repBadge(!!t.sample, t.value==='Not tracked yet'?'none':(t.badge||'')); if(tileBadge) head.append(tileBadge);
       c.append(head);
       const row=el('div'); row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px';
       row.append(el('b',null,t.value));
@@ -9442,7 +9515,7 @@ function renderReport(report){
       const card=el('div','rep-widget span-'+span);
       const head=el('div','rep-whead');
       head.append(el('b',null,widget.title));
-      head.append(repBadge(!!widget.sample));
+      const chartBadge=repBadge(!!widget.sample, widget.headline==='Not tracked yet'||widget.badge==='none'?'none':''); if(chartBadge) head.append(chartBadge);
       card.append(head);
       const box=el('div','rep-chartbox');
       if(widget.kind==='bar') box.style.height=Math.max(220, ((widget.points||[]).length*36)+48)+'px';

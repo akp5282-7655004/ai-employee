@@ -38,6 +38,8 @@ export interface ChartWidget {
   kind: 'line' | 'bar' | 'donut' | 'funnel' | 'gauge';
   title: string;
   sample: boolean;
+  /** none hides the badge on an empty real read. */
+  badge?: 'live' | 'sample' | 'none';
   note: string;
   unit: 'money' | 'count' | 'rate';
   /** Grid columns out of 6. Mixed sizes, not one chart per row. */
@@ -475,7 +477,7 @@ export function buildReportCharts(args: {
 const UNTRACKED_CPL = 'Cost per lead appears once leads come in from your CRM or call tracking.';
 
 function untrackedCpl(): ChartWidget {
-  return { kind: 'line', title: 'Cost per lead', sample: false, note: UNTRACKED_CPL, unit: 'money', span: 3, headline: 'Not tracked yet', points: [] };
+  return { kind: 'line', title: 'Cost per lead', sample: false, badge: 'none', note: UNTRACKED_CPL, unit: 'money', span: 3, headline: 'Not tracked yet', points: [] };
 }
 
 function googleCpl(args: { hasLedger: boolean }, plan: SamplePlan, connected: boolean, dated: boolean, leads: { label: string; value: number }[], spend: { label: string; value: number }[]): ChartWidget {
