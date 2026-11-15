@@ -11,6 +11,7 @@ import { listPacks } from '../packs/index.js';
 import { cplBandForGoal, type CplBand } from '../agents/goalcheck.js';
 import { playbookCplBand, playbookTrades } from '../agents/playbook.js';
 import { tradeKey } from '../agents/feasibility.js';
+import { audiencesFor, tradePlaybook } from '../playbooks/load.js';
 import { SEVEN_SKILLS } from '../skills/seven.js';
 import { SKILL_CATALOG } from '../skills/catalog.js';
 
@@ -135,6 +136,9 @@ export function buildSkillsBoard(input: SkillsBoardInput = {}): SkillsBoard {
         { label: 'Season', text: plain(trade.season) },
         { label: 'Campaign structure', text: structureLines(trade.structure) },
         { label: 'Pack', text: packName(trade.key) },
+        { label: 'Loaded playbook', text: plain(`${tradePlaybook(trade.label).name}. Version ${tradePlaybook(trade.label).version}.`) },
+        { label: 'Key rule', text: plain(tradePlaybook(trade.label).operatingRules?.[0] || 'Optimize to cost per booked job, not cost per lead.') },
+        { label: 'Audiences', text: plain(audiencesFor(trade.label).segments.map((row) => row.name).join(', ') || 'Master template audience rules. No trade segments on file.') },
       ],
     });
   }

@@ -1,0 +1,369 @@
+{
+  "defaults": {
+    "version": "2026-11-15",
+    "country": "US",
+    "base_rule": {
+      "age_min": 30,
+      "age_max": null,
+      "homeowner": true,
+      "zip_median_income_floor": 70000,
+      "zip_owner_occupied_min_pct": 60
+    },
+    "platform_rules": {
+      "meta": {
+        "location_mode": "people_living_in",
+        "location_unit": "zip_list_from_scoring",
+        "advantage_plus_audience": true,
+        "hard_controls": [
+          "location",
+          "age_min (max 25 under Advantage+)",
+          "custom_audience_exclusions",
+          "language"
+        ],
+        "age_note": "Advantage+ lets the hard age minimum go no higher than 25. To enforce 30+, switch to original audience (Advantage+ off) or use 25 as control + age suggestion. Default: control 25, suggestion = segment age range; review age breakdown weekly and move to original audience if >20% of spend goes below segment age_min.",
+        "income": "No reliable US household-income targeting; the ZIP list is the income filter.",
+        "special_ad_category": "None for home services. Declare Financial Products only if the ad is about a loan or credit offer itself."
+      },
+      "google_search": {
+        "location": "zip_list_or_radius, presence only (people in or regularly in)",
+        "demographics_mode": "observation first; bid adjustments after 30 conversions",
+        "household_income_tiers": [
+          "Top 10%",
+          "11-20%",
+          "21-30%",
+          "31-40%",
+          "41-50%",
+          "Lower 50%",
+          "Unknown"
+        ],
+        "income_note": "Top 50% starts near the US median household income ($83,730 in 2024). A $70K floor sits inside 'Lower 50%', so never exclude Lower 50% or Unknown on Search; use bid adjustments.",
+        "detailed_demographics": "Homeowners (observe or target); exclude Renters only where segment allows"
+      },
+      "google_lsa": "No demographic targeting: service area (ZIPs) and job types only. ZIP scoring decides the service-area list.",
+      "pmax_demand_gen": "Audience signals: customer list, website visitors, Homeowners detailed demographic, in-market home services segments."
+    },
+    "always_exclude": [
+      "customers_last_12_months (unless retention campaign)",
+      "open_leads_and_estimates",
+      "employees",
+      "out_of_service_area"
+    ],
+    "never_use": [
+      "race, ethnicity, religion or other protected traits",
+      "proxies for protected traits"
+    ]
+  },
+  "trades": {
+    "roofing": {
+      "title": "Roofing",
+      "segments": [
+        {
+          "id": "roof_replacement",
+          "name": "Replacement prospects",
+          "demand": "planned",
+          "age": "35-65+",
+          "zip_income": "median >= $70K: cash offer; $50-70K: financing-first; under $50K: skip prospecting",
+          "homeowner": "required (single-family)",
+          "zip_filters": "owner-occupied >= 60%; median year built <= 2005; single-family detached share high",
+          "meta": "Advantage+ on; control age 25, suggestion 35-65+; interests as suggestions: home improvement, roofing, home insurance",
+          "google": "Search: replacement keywords; observe Homeowners, age 35+, HHI tiers; exclude Renters",
+          "seed": "closed-won roof customers (lookalike / Customer Match)"
+        },
+        {
+          "id": "roof_storm",
+          "name": "Storm-hit ZIPs",
+          "demand": "event",
+          "age": "30-65+",
+          "zip_income": "no income filter",
+          "homeowner": "required",
+          "zip_filters": "ZIPs with hail >= 1 in. or wind >= 60 mph in last 7 days",
+          "meta": "Advantage+ on; geo = affected ZIPs only; control age 25",
+          "google": "Search + LSA: storm/leak repair terms in affected ZIPs; no demographic exclusions",
+          "seed": "past customers in affected ZIPs (SMS)"
+        },
+        {
+          "id": "roof_flat_urban",
+          "name": "Flat-roof / rowhome",
+          "demand": "planned",
+          "age": "35-65+",
+          "zip_income": "median >= $50K, financing-first creative",
+          "homeowner": "required",
+          "zip_filters": "rowhome / attached housing share high; owner-occupied >= 50%",
+          "meta": "separate ad set and creative; same controls",
+          "google": "separate ad group: flat roof, rubber roof, roof coating",
+          "seed": "flat-roof customers"
+        }
+      ]
+    },
+    "hvac": {
+      "title": "HVAC",
+      "segments": [
+        {
+          "id": "hvac_emergency",
+          "name": "No heat / no AC",
+          "demand": "emergency",
+          "age": "25-65+",
+          "zip_income": "no income filter",
+          "homeowner": "preferred, not required (landlords and renters call too)",
+          "zip_filters": "service area only",
+          "meta": "not primary; retargeting only",
+          "google": "Search + LSA: repair terms; no demographic exclusions; run nights/weekends only if phones answered",
+          "seed": "none"
+        },
+        {
+          "id": "hvac_replacement",
+          "name": "System replacement",
+          "demand": "planned",
+          "age": "35-65+",
+          "zip_income": "median >= $70K: cash or financing; $55-70K: financing-first",
+          "homeowner": "required",
+          "zip_filters": "owner-occupied >= 60%; median year built <= 2012 (systems 12-15+ yrs)",
+          "meta": "Advantage+ on; control age 25, suggestion 35-65+",
+          "google": "Search: replacement/heat pump terms; observe Homeowners, age; exclude Renters",
+          "seed": "past repair customers with equipment 12+ yrs old"
+        },
+        {
+          "id": "hvac_membership",
+          "name": "Tune-up and membership",
+          "demand": "recurring",
+          "age": "40-65+",
+          "zip_income": "median >= $70K",
+          "homeowner": "required",
+          "zip_filters": "past customers first; then high-score ZIPs",
+          "meta": "custom audience of past customers + lookalike",
+          "google": "Customer Match; Demand Gen to past customers",
+          "seed": "all past customers"
+        }
+      ]
+    },
+    "plumbing": {
+      "title": "Plumbing",
+      "segments": [
+        {
+          "id": "plumb_emergency",
+          "name": "Leak / clog / no hot water",
+          "demand": "emergency",
+          "age": "25-65+",
+          "zip_income": "no income filter",
+          "homeowner": "not required",
+          "zip_filters": "service area only",
+          "meta": "not primary",
+          "google": "LSA + Search carry 85% of budget; no demographic exclusions",
+          "seed": "none"
+        },
+        {
+          "id": "plumb_water_heater",
+          "name": "Water heater replacement",
+          "demand": "planned",
+          "age": "35-65+",
+          "zip_income": "median >= $60K",
+          "homeowner": "required",
+          "zip_filters": "median year built 8-15+ yrs ago; owner-occupied >= 60%",
+          "meta": "Advantage+ on; control age 25, suggestion 35-65+",
+          "google": "Search: water heater terms; observe Homeowners",
+          "seed": "customers with water heater install date 8+ yrs ago"
+        },
+        {
+          "id": "plumb_repipe_sewer",
+          "name": "Repipe / sewer line",
+          "demand": "planned",
+          "age": "40-65+",
+          "zip_income": "median >= $70K or financing",
+          "homeowner": "required",
+          "zip_filters": "median year built <= 1980",
+          "meta": "Advantage+ on; older-home ZIPs only",
+          "google": "Search: repipe, sewer camera, sewer line replacement",
+          "seed": "past sewer/drain customers"
+        },
+        {
+          "id": "plumb_property_mgr",
+          "name": "Landlords / property managers",
+          "demand": "recurring",
+          "age": "30-65+",
+          "zip_income": "no income filter",
+          "homeowner": "n/a",
+          "zip_filters": "rental-heavy ZIPs",
+          "meta": "lead form for commercial accounts",
+          "google": "Search: commercial plumber, property management plumbing",
+          "seed": "commercial customers"
+        }
+      ]
+    },
+    "electrical": {
+      "title": "Electrical",
+      "segments": [
+        {
+          "id": "elec_emergency",
+          "name": "Outage / safety emergency",
+          "demand": "emergency",
+          "age": "25-65+",
+          "zip_income": "no income filter",
+          "homeowner": "not required",
+          "zip_filters": "service area only",
+          "meta": "not primary",
+          "google": "Search + LSA: emergency electrician terms",
+          "seed": "none"
+        },
+        {
+          "id": "elec_panel",
+          "name": "Panel / service upgrade",
+          "demand": "planned",
+          "age": "35-65+",
+          "zip_income": "median >= $70K",
+          "homeowner": "required",
+          "zip_filters": "median year built <= 1990; owner-occupied >= 60%",
+          "meta": "Advantage+ on; control age 25, suggestion 35-65+",
+          "google": "Search: panel upgrade, 200 amp; observe Homeowners",
+          "seed": "past service-call customers in older homes"
+        },
+        {
+          "id": "elec_generator",
+          "name": "Standby generator",
+          "demand": "planned",
+          "age": "45-65+",
+          "zip_income": "median >= $100K or median home value top third of service area",
+          "homeowner": "required",
+          "zip_filters": "outage/storm-exposed ZIPs; natural gas available",
+          "meta": "Advantage+ on; suggestion 45-65+",
+          "google": "Search: whole home generator; HHI bid +, observe Top 30%",
+          "seed": "generator owners (lookalike)"
+        },
+        {
+          "id": "elec_ev",
+          "name": "EV charger + panel",
+          "demand": "planned",
+          "age": "30-55",
+          "zip_income": "median >= $100K",
+          "homeowner": "required",
+          "zip_filters": "newer, higher-income ZIPs; EV adoption",
+          "meta": "suggestion 30-55; interests: electric vehicles",
+          "google": "Search: EV charger installation; in-market EV segments",
+          "seed": "EV charger customers"
+        }
+      ]
+    },
+    "painting": {
+      "title": "Painting",
+      "segments": [
+        {
+          "id": "paint_exterior",
+          "name": "Exterior repaint",
+          "demand": "planned",
+          "age": "40-65+",
+          "zip_income": "median >= $75K",
+          "homeowner": "required (single-family)",
+          "zip_filters": "owner-occupied >= 65%; wood/older siding; median home value above area median",
+          "meta": "Advantage+ on; suggestion 40-65+; before/after creative",
+          "google": "Search: house painters, exterior painting; observe Homeowners; exclude Renters",
+          "seed": "past exterior customers"
+        },
+        {
+          "id": "paint_interior_cabinet",
+          "name": "Interior / cabinets",
+          "demand": "planned",
+          "age": "30-55",
+          "zip_income": "median >= $90K",
+          "homeowner": "required",
+          "zip_filters": "recent movers; higher home value",
+          "meta": "suggestion 30-55; recent movers if available",
+          "google": "Search: interior painting, cabinet painting",
+          "seed": "past interior customers"
+        },
+        {
+          "id": "paint_hoa_pm",
+          "name": "HOAs / property managers",
+          "demand": "recurring",
+          "age": "35-65+",
+          "zip_income": "no income filter",
+          "homeowner": "n/a",
+          "zip_filters": "HOA-dense ZIPs",
+          "meta": "lead form for commercial",
+          "google": "Search: HOA painting, commercial painting",
+          "seed": "commercial customers"
+        }
+      ]
+    },
+    "solar": {
+      "title": "Solar",
+      "segments": [
+        {
+          "id": "solar_savings",
+          "name": "Bill savings (lease/PPA or financed)",
+          "demand": "planned",
+          "age": "35-65",
+          "zip_income": "median >= $75K (credit approval)",
+          "homeowner": "required (single-family)",
+          "zip_filters": "high utility rates; net metering available; roof age under 15 yrs or bundle re-roof; low tree cover",
+          "meta": "Advantage+ on; suggestion 35-65; qualifying lead form (owner, utility, bill, roof age)",
+          "google": "Search: solar panels [city], solar lease; observe Homeowners; exclude Renters",
+          "seed": "installed customers (lookalike)"
+        },
+        {
+          "id": "solar_battery",
+          "name": "Battery / backup",
+          "demand": "planned",
+          "age": "40-65+",
+          "zip_income": "median >= $90K",
+          "homeowner": "required",
+          "zip_filters": "outage-prone ZIPs",
+          "meta": "suggestion 40-65+; outage-triggered",
+          "google": "Search: solar battery, home battery backup",
+          "seed": "past solar customers without battery"
+        }
+      ]
+    },
+    "landscaping": {
+      "title": "Landscaping",
+      "segments": [
+        {
+          "id": "land_maintenance",
+          "name": "Recurring maintenance",
+          "demand": "recurring",
+          "age": "40-65+",
+          "zip_income": "median >= $100K",
+          "homeowner": "required (single-family detached)",
+          "zip_filters": "larger lots; route clustering near current customers",
+          "meta": "Advantage+ on; suggestion 40-65+; geo = route ZIPs",
+          "google": "Search: lawn maintenance, lawn care service; observe Homeowners",
+          "seed": "recurring customers (lookalike)"
+        },
+        {
+          "id": "land_cleanup",
+          "name": "Spring / fall cleanup",
+          "demand": "seasonal",
+          "age": "35-65+",
+          "zip_income": "median >= $70K",
+          "homeowner": "required",
+          "zip_filters": "owner-occupied >= 65%",
+          "meta": "suggestion 35-65+",
+          "google": "Search: spring cleanup, leaf removal",
+          "seed": "past cleanup customers (upsell to recurring)"
+        },
+        {
+          "id": "land_hardscape",
+          "name": "Hardscape / design",
+          "demand": "planned",
+          "age": "35-60",
+          "zip_income": "median >= $120K or home value top third",
+          "homeowner": "required",
+          "zip_filters": "higher home value; larger lots",
+          "meta": "suggestion 35-60; project photo creative",
+          "google": "Search: patio installation, landscape design",
+          "seed": "project customers"
+        },
+        {
+          "id": "land_snow",
+          "name": "Snow removal (north)",
+          "demand": "seasonal",
+          "age": "35-65+",
+          "zip_income": "median >= $70K",
+          "homeowner": "required",
+          "zip_filters": "snowfall days; current maintenance customers first",
+          "meta": "past customers + route ZIPs Oct-Nov",
+          "google": "Search: snow removal [city]",
+          "seed": "maintenance customers"
+        }
+      ]
+    }
+  }
+}

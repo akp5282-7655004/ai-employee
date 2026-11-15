@@ -1,0 +1,225 @@
+{
+  "id": "roofing",
+  "name": "Miles Roofing Playbook",
+  "label": "Roofing",
+  "version": "2026-11-15",
+  "summary": "Lead with full replacement plus financing; win storms with fast, honest inspections; never promise an insurance outcome. Use with the Miles Master Template (deploy logic, ZIP scoring, customer journey).",
+  "sections": [
+    {
+      "title": "Intro",
+      "lines": [
+        "Miles Roofing Playbook",
+        "Nov 15, 2026",
+        "Lead with full replacement plus financing; win storms with fast, honest inspections; never promise an insurance outcome. Use with the Miles Master Template (deploy logic, ZIP scoring, customer journey)."
+      ]
+    },
+    {
+      "title": "1. At a glance",
+      "lines": [
+        "Item",
+        "Default",
+        "Demand type",
+        "Planned replacement (long research) + storm/leak emergencies",
+        "Lead service line",
+        "Full roof replacement",
+        "Front door",
+        "Free inspection with photo report",
+        "Typical economics (Philly build)",
+        "Blended ticket ~$14,000; 35–45% gross margin; allowable cost per sold job 2,000",
+        "Real closer",
+        "Financing (\"from ~$149/mo\"), not the discount",
+        "Product split",
+        "Flat/low-slope (rowhomes, urban) vs pitched shingle (suburban): separate ads, geo and landing pages"
+      ]
+    },
+    {
+      "title": "2. Seasonality by region",
+      "lines": [
+        "Region",
+        "Peak",
+        "Secondary",
+        "Slow",
+        "Play",
+        "Cold North",
+        "Sep–Nov (\"before winter\")",
+        "Apr–Jun",
+        "Dec–Mar",
+        "Winter: leak repair, ice dams, retargeting; CPMs drop",
+        "Mixed",
+        "Sep–Nov",
+        "Mar–May storms",
+        "Dec–Feb",
+        "Philly pattern: spring storms, summer steady, fall gold window",
+        "Storm belt",
+        "Apr–Jun hail",
+        "Jul–Sep",
+        "Dec–Feb",
+        "Pre-load storm budget each spring; inspection offer within days of hail",
+        "Hot-humid South",
+        "Pre-hurricane May–Jun; post-storm Aug–Nov",
+        "Spring",
+        "Short",
+        "Hurricane prep, wind mitigation, post-storm tarping",
+        "Hot-dry Southwest",
+        "Pre-monsoon May–Jun",
+        "Oct–Apr",
+        "Jul–Aug heat",
+        "Tile and foam/coatings; monsoon leak calls",
+        "Marine West",
+        "Jun–Sep dry window",
+        "Spring",
+        "Nov–Feb rain",
+        "Book dry-season installs early; moss and leak repair in winter",
+        "The core hail belt (TX, OK, KS, CO, NE, MO, IA) peaks March–August, heaviest April–June. About 40% of very large hail in 2022–2024 fell outside that region, so hail triggers run everywhere."
+      ]
+    },
+    {
+      "title": "3. Location signals (add to ZIP score)",
+      "lines": [
+        "Median year built and roof age: housing 15–25+ years old without a recent re-roof scores high.",
+        "Hail and wind event history (NOAA storm reports) in the last 1–3 years.",
+        "Owner-occupied single-family share; skip rental-heavy and condo ZIPs for retail replacement.",
+        "Housing stock: rowhome/flat-roof ZIPs get the flat-roof creative; suburban ZIPs get pitched shingle.",
+        "Affordability: ticket ÷ median income. Financing-first creative where the ratio is high."
+      ]
+    },
+    {
+      "title": "4. Demographics and audiences",
+      "lines": [
+        "Buyer: homeowner, typically 35–70, in the home 5+ years; older homeowners respond to warranty and trust, younger ones to financing and speed.",
+        "Meta: homeowners in scored ZIPs, Advantage+ audience; instant form set to Higher intent. Don't declare the Housing special ad category (roofing is a service).",
+        "Messaging: local crew, not a storm chaser; photos of the actual roof; honest \"coating vs replacement\" content.",
+        "Audience spec for Miles",
+        "Load with the Audience framework in the Master Template. Emergency segments get no income or homeowner filter and start at 25+; planned segments use the filters below. Ages are starting points: Miles tightens them from closed-won CRM data after 30 booked jobs.",
+        "Segment",
+        "Demand",
+        "Age",
+        "ZIP income rule",
+        "Homeowner",
+        "ZIP filters",
+        "Meta",
+        "Google",
+        "Seed list",
+        "Replacement prospects",
+        "planned",
+        "35-65+",
+        "median >= $70K: cash offer; $50-70K: financing-first; under $50K: skip prospecting",
+        "required (single-family)",
+        "owner-occupied >= 60%; median year built <= 2005; single-family detached share high",
+        "Advantage+ on; control age 25, suggestion 35-65+; interests as suggestions: home improvement, roofing, home insurance",
+        "Search: replacement keywords; observe Homeowners, age 35+, HHI tiers; exclude Renters",
+        "closed-won roof customers (lookalike / Customer Match)",
+        "Storm-hit ZIPs",
+        "event",
+        "30-65+",
+        "no income filter",
+        "required",
+        "ZIPs with hail >= 1 in. or wind >= 60 mph in last 7 days",
+        "Advantage+ on; geo = affected ZIPs only; control age 25",
+        "Search + LSA: storm/leak repair terms in affected ZIPs; no demographic exclusions",
+        "past customers in affected ZIPs (SMS)",
+        "Flat-roof / rowhome",
+        "planned",
+        "35-65+",
+        "median >= $50K, financing-first creative",
+        "required",
+        "rowhome / attached housing share high; owner-occupied >= 50%",
+        "separate ad set and creative; same controls",
+        "separate ad group: flat roof, rubber roof, roof coating",
+        "flat-roof customers",
+        "Exclude in every segment: customers from the last 12 months (except retention campaigns), open leads and estimates, employees, out-of-area ZIPs."
+      ]
+    },
+    {
+      "title": "5. Offer stack",
+      "lines": [
+        "Rung",
+        "Offer",
+        "Front door",
+        "Free 10-point inspection with photos",
+        "Core",
+        "$500 off full replacement, booked by [date], + financing from $[X]/mo",
+        "Stack",
+        "Free gutter cleaning or guards with install; [X]-year workmanship warranty",
+        "Upsell",
+        "Gutters, ventilation, skylights, impact-resistant (Class 4) shingles in hail ZIPs",
+        "Retention",
+        "Annual roof check; gutter cleaning coupon; storm re-inspection for past customers",
+        "Emergency",
+        "Same-day leak repair / emergency tarp; no discount"
+      ]
+    },
+    {
+      "title": "6. Channels and campaign build",
+      "lines": [
+        "Google Search: split replacement vs repair vs storm; negatives: DIY, jobs, materials, \"shingle prices\", unwanted roof types. LSA on.",
+        "Meta: 2 prospecting ad sets (flat vs pitched) on ABO + 1 retargeting campaign (social proof, price transparency, deadline). $20/day retargeting is enough to start.",
+        "CTA: Get Quote. Landing page: replacement-only, gallery, financing, warranty, certifications.",
+        "Budget lean: Search/LSA for repair and storm intent; Meta carries more weight for planned replacement than in other trades."
+      ]
+    },
+    {
+      "title": "7. Triggers Miles watches",
+      "lines": [
+        "Trigger",
+        "Proposal",
+        "Hail ≥ 1\" or wind ≥ 60 mph reported in service ZIPs",
+        "Storm-inspection campaign in affected ZIPs within 24–48 hrs + SMS to past customers in those ZIPs",
+        "First freeze forecast (north)",
+        "Shift to leak / ice dam repair",
+        "Named storm forecast (south)",
+        "Pre-storm inspection, post-storm tarping and repair",
+        "Sep 1",
+        "Launch \"before winter\" replacement push"
+      ]
+    },
+    {
+      "title": "8. After the job and retention",
+      "lines": [
+        "Day 0: crew cleanup photos; thank-you coupon toward gutters or next service; honest review ask to everyone.",
+        "Day 7: referral offer with neighborhood photos (with permission): \"recent work near [street]\".",
+        "Month 11: annual roof check reminder. After any storm: free re-inspection text to past customers in hit ZIPs."
+      ]
+    },
+    {
+      "title": "9. Compliance and watch-outs",
+      "lines": [
+        "Never promise insurance will pay, waive deductibles, or act as a public adjuster unless licensed; many states regulate this.",
+        "Only claim scarcity and deadlines that are true; roofing buyers are suspicious and neighbors talk.",
+        "Financing language can trip Meta review; submit ads 24 hrs early."
+      ]
+    },
+    {
+      "title": "10. Deploy checklist",
+      "lines": [
+        "☐ Confirm roof types installed (flat, shingle, metal, tile) and remove the rest from ads",
+        "☐ Score ZIPs; tag flat-roof vs pitched ZIPs; pull hail history",
+        "☐ Load offer stack with real financing terms and warranty years",
+        "☐ Build Search, LSA, Meta (2 prospecting + retargeting) and replacement landing page",
+        "☐ Arm hail/wind, freeze and storm triggers",
+        "☐ Turn on speed-to-lead, estimate follow-up, post-job, referral and storm re-inspection automations",
+        "☐ Get owner approval, launch, touch nothing days 1–3",
+        "Sources: hail season by state · hail outside Hail Alley (PropertyCasualty360 / Verisk) · economics from the Philadelphia $500-off roofing build."
+      ]
+    }
+  ],
+  "negatives": [
+    "DIY",
+    "jobs",
+    "materials",
+    "shingle prices",
+    "unwanted roof types"
+  ],
+  "keywords": [
+    "replacement keywords",
+    "storm",
+    "leak repair terms in affected ZIPs"
+  ],
+  "economics": {
+    "ticket": 14000,
+    "grossMargin": "35-45%",
+    "allowableCostPerSoldJob": 2000,
+    "financingFromMonthly": 149,
+    "source": "Typical economics (Philly build) in the roofing playbook"
+  }
+}

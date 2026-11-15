@@ -1,0 +1,226 @@
+{
+  "id": "plumbing",
+  "name": "Miles Plumbing Playbook",
+  "label": "Plumbing",
+  "version": "2026-11-15",
+  "summary": "Answer every call in under a minute, lead paid budget with water heater replacement, and pre-load spend before the first hard freeze. Use with the Miles Master Template (deploy logic, ZIP scoring, customer journey).",
+  "sections": [
+    {
+      "title": "Intro",
+      "lines": [
+        "Miles Plumbing Playbook",
+        "Nov 15, 2026",
+        "Answer every call in under a minute, lead paid budget with water heater replacement, and pre-load spend before the first hard freeze. Use with the Miles Master Template (deploy logic, ZIP scoring, customer journey)."
+      ]
+    },
+    {
+      "title": "1. At a glance",
+      "lines": [
+        "Item",
+        "Default",
+        "Demand type",
+        "Mostly emergency (leaks, clogs, no hot water); some planned (repipes, water treatment)",
+        "Lead service line",
+        "Water heater replacement (highest margin to lead with)",
+        "Cost per lead to hold against",
+        "110 (Miles plumbing pack)",
+        "Budget split",
+        "Search 45 / LSA 40 / Meta 15",
+        "Biggest leak",
+        "Unanswered LSA leads",
+        "Equipment clock",
+        "Tank water heaters last about 8–12 years; tankless up to ~20"
+      ]
+    },
+    {
+      "title": "2. Seasonality by region",
+      "lines": [
+        "Plumbing has no clean season; the hooks are freeze events, holidays, and equipment age.",
+        "Region",
+        "Peak",
+        "Play",
+        "Cold North",
+        "Dec–Feb freezes; spring thaw sump and flooding",
+        "Pre-freeze pipe protection Oct–Nov; burst-pipe emergency Dec–Feb",
+        "Mixed",
+        "First hard freeze; Thanksgiving to New Year drain load",
+        "Pre-load budget before the first freeze forecast",
+        "Hot-humid South",
+        "Rare freezes hit hardest (pipes unprotected); storm flooding",
+        "Freeze-event surge campaigns; slab leaks; hurricane season sump/backflow",
+        "Hot-dry Southwest",
+        "Hard water year-round",
+        "Water softeners, tankless, slab leaks",
+        "Marine West",
+        "Rainy-season drains, sewer lines",
+        "Sewer camera inspections, root intrusion",
+        "Holiday spike: Thanksgiving through New Year (kitchen drains, guests, garbage disposals) in every region."
+      ]
+    },
+    {
+      "title": "3. Location signals (add to ZIP score)",
+      "lines": [
+        "Median year built: pre-1980 housing means galvanized or cast iron pipes (repipe and sewer-line candidates); 8–12-year-old housing means first water heater replacement.",
+        "Freeze days per year and how rare freezes are (rare-freeze ZIPs surge hardest).",
+        "Water hardness (softener and tankless upsell).",
+        "Slab vs basement foundations (slab-leak vs sump/backflow demand)."
+      ]
+    },
+    {
+      "title": "4. Demographics and audiences",
+      "lines": [
+        "Emergency buyer: anyone with a leak; searches \"plumber near me\" and calls the first answered number with good reviews.",
+        "Planned buyer: homeowner 35–70 replacing a water heater, softener, or repiping; compares price and warranty.",
+        "Landlords and property managers: recurring work, volume pricing.",
+        "Audiences: past customers by water heater install date; homeowners in older-housing ZIPs; retargeting to estimates.",
+        "Audience spec for Miles",
+        "Load with the Audience framework in the Master Template. Emergency segments get no income or homeowner filter and start at 25+; planned segments use the filters below. Ages are starting points: Miles tightens them from closed-won CRM data after 30 booked jobs.",
+        "Segment",
+        "Demand",
+        "Age",
+        "ZIP income rule",
+        "Homeowner",
+        "ZIP filters",
+        "Meta",
+        "Google",
+        "Seed list",
+        "Leak / clog / no hot water",
+        "emergency",
+        "25-65+",
+        "no income filter",
+        "not required",
+        "service area only",
+        "not primary",
+        "LSA + Search carry 85% of budget; no demographic exclusions",
+        "none",
+        "Water heater replacement",
+        "planned",
+        "35-65+",
+        "median >= $60K",
+        "required",
+        "median year built 8-15+ yrs ago; owner-occupied >= 60%",
+        "Advantage+ on; control age 25, suggestion 35-65+",
+        "Search: water heater terms; observe Homeowners",
+        "customers with water heater install date 8+ yrs ago",
+        "Repipe / sewer line",
+        "planned",
+        "40-65+",
+        "median >= $70K or financing",
+        "required",
+        "median year built <= 1980",
+        "Advantage+ on; older-home ZIPs only",
+        "Search: repipe, sewer camera, sewer line replacement",
+        "past sewer/drain customers",
+        "Landlords / property managers",
+        "recurring",
+        "30-65+",
+        "no income filter",
+        "n/a",
+        "rental-heavy ZIPs",
+        "lead form for commercial accounts",
+        "Search: commercial plumber, property management plumbing",
+        "commercial customers",
+        "Exclude in every segment: customers from the last 12 months (except retention campaigns), open leads and estimates, employees, out-of-area ZIPs."
+      ]
+    },
+    {
+      "title": "5. Offer stack",
+      "lines": [
+        "Rung",
+        "Offer",
+        "Front door",
+        "$[X] diagnostic credited to repair, or waived dispatch fee with qualifying repair",
+        "Core",
+        "$[X] off water heater replacement, installed in 24 hrs",
+        "Upsell",
+        "Tankless, softener / filtration, whole-home repipe, sewer camera inspection",
+        "Membership",
+        "Annual plumbing check: water heater flush, drain and fixture check, priority service",
+        "Retention",
+        "Water heater age reminders; second-service credit",
+        "Emergency",
+        "24/7, plumber at your door in [60] minutes, no overtime fee; never discount"
+      ]
+    },
+    {
+      "title": "6. Channels and campaign build",
+      "lines": [
+        "LSA and Search carry 85% of budget; split emergency (\"burst pipe\", \"leak\", \"clogged\"), water heater, sewer/drain, and planned work.",
+        "Negatives: jobs, plumbing school, DIY, parts, \"how to\", supply houses.",
+        "Missed-call text-back and after-hours answering are mandatory before launch; unanswered LSA leads are the biggest waste.",
+        "Meta: water heater age and freeze-prep creative to past customers and scored ZIPs."
+      ]
+    },
+    {
+      "title": "7. Triggers Miles watches",
+      "lines": [
+        "Trigger",
+        "Proposal",
+        "Forecast ≤ 20°F, or first freeze of the season",
+        "Pre-freeze SMS to past customers; raise emergency budget 48 hrs out",
+        "Freeze in a rare-freeze ZIP (South)",
+        "Surge burst-pipe campaign; extend hours if capacity allows",
+        "Heavy rain / flood watch",
+        "Sump pump, backflow, sewer backup campaign",
+        "Mid-November",
+        "Holiday drain-cleaning campaign",
+        "Water heater install date + 8 years",
+        "Replacement reactivation sequence"
+      ]
+    },
+    {
+      "title": "8. After the job and retention",
+      "lines": [
+        "Record water heater brand, size, install date in CRM on every visit.",
+        "Thank-you coupon toward drain cleaning or next service; honest review ask to everyone.",
+        "Plumbing reactivation email: \"Your water heater is [X] years old. Most tanks last 8 to 12.\""
+      ]
+    },
+    {
+      "title": "9. Compliance and watch-outs",
+      "lines": [
+        "\"Free\" only if truly free; diagnostic credits must state terms.",
+        "Don't promise arrival times you can't meet; speed is the brand.",
+        "Water treatment health claims need proof; keep claims to taste, scale, and appliance life."
+      ]
+    },
+    {
+      "title": "10. Deploy checklist",
+      "lines": [
+        "☐ Confirm 24/7 coverage and after-hours answering",
+        "☐ Score ZIPs with housing age and freeze profile",
+        "☐ Load water heater, emergency promise, and membership offers",
+        "☐ Build LSA + Search by service; water heater landing page",
+        "☐ Import past customers with water heater dates; arm freeze and holiday triggers",
+        "☐ Turn on missed-call text-back, speed-to-lead, post-job and reactivation automations",
+        "☐ Owner approval, launch",
+        "Sources: water heater lifespan (Angi) · tankless lifespan (Bob Vila) · CPL, budget split and leak from the Miles plumbing playbook."
+      ]
+    }
+  ],
+  "negatives": [
+    "jobs",
+    "plumbing school",
+    "DIY",
+    "parts",
+    "how to",
+    "supply houses"
+  ],
+  "keywords": [
+    "water heater terms",
+    "repipe",
+    "sewer camera",
+    "sewer line replacement",
+    "commercial plumber",
+    "property management plumbing"
+  ],
+  "economics": {
+    "costPerLead": 110,
+    "budgetSplit": {
+      "search": 45,
+      "lsa": 40,
+      "meta": 15
+    },
+    "source": "At a glance in the plumbing playbook"
+  }
+}

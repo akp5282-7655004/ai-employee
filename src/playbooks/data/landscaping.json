@@ -1,0 +1,229 @@
+{
+  "id": "landscaping",
+  "name": "Miles Landscaping Playbook",
+  "label": "Landscaping",
+  "version": "2026-11-15",
+  "summary": "Sell the season before it starts, turn every one-time cleanup into a recurring contract, and fill winter with snow, lighting and design work. Use with the Miles Master Template (deploy logic, ZIP scoring, customer journey).",
+  "sections": [
+    {
+      "title": "Intro",
+      "lines": [
+        "Miles Landscaping Playbook",
+        "Nov 15, 2026",
+        "Sell the season before it starts, turn every one-time cleanup into a recurring contract, and fill winter with snow, lighting and design work. Use with the Miles Master Template (deploy logic, ZIP scoring, customer journey)."
+      ]
+    },
+    {
+      "title": "1. At a glance",
+      "lines": [
+        "Item",
+        "Default",
+        "Demand type",
+        "Seasonal + recurring (maintenance, lawn programs) + projects (installs, hardscape)",
+        "Lead service line",
+        "Recurring maintenance contract (weekly/biweekly)",
+        "Front door",
+        "Spring or fall cleanup, or a free property estimate",
+        "Recurring programs",
+        "Lawn treatment programs of about 4–8 applications a year; aeration and overseeding",
+        "Project work",
+        "Hardscape (patios, walls), installs, irrigation, lighting",
+        "Winter revenue (north)",
+        "Snow removal contracts, holiday lighting"
+      ]
+    },
+    {
+      "title": "2. Seasonality by region",
+      "lines": [
+        "Region",
+        "Peak",
+        "Steady",
+        "Second peak",
+        "Slow / winter play",
+        "Cold North",
+        "Apr–Jun",
+        "Jul–Sep",
+        "Oct–Nov fall cleanup",
+        "Dec–Mar: snow contracts, holiday lighting, design consults",
+        "Mixed",
+        "Mar–Jun",
+        "Jul–Sep",
+        "Oct–Nov",
+        "Dec–Feb: hardscape design, lighting, early-booking",
+        "Hot-humid South",
+        "Mar–May",
+        "Year-round mowing",
+        "Oct–Nov overseeding",
+        "Dec–Feb: installs, irrigation checks",
+        "Hot-dry Southwest",
+        "Feb–Apr, Oct–Nov",
+        "Irrigation year-round",
+        "Fall planting",
+        "Jun–Aug heat: xeriscape design, irrigation repair",
+        "Marine West",
+        "Apr–Jun",
+        "Summer irrigation",
+        "Oct–Nov",
+        "Winter: drainage, pruning, design",
+        "Marketing calendar: publish spring content and open spring booking Jan–Feb; sell snow contracts Oct–Nov for Nov–Mar service."
+      ]
+    },
+    {
+      "title": "3. Location signals (add to ZIP score)",
+      "lines": [
+        "Lot size and single-family detached share (bigger lots = bigger tickets).",
+        "Income and home value: maintenance contracts and hardscape sell in higher-income ZIPs.",
+        "HOA density (community contracts and standards).",
+        "Snowfall days (north) for snow removal add-on.",
+        "Drive time and route density: tight routes are the profit lever, so favor clustered ZIPs."
+      ]
+    },
+    {
+      "title": "4. Demographics and audiences",
+      "lines": [
+        "Maintenance buyer: dual-income or older homeowners (45–75) who value time; buy on reliability.",
+        "Project buyer: 35–60, higher income, staying in the home; buys on design and photos.",
+        "Commercial / HOA: multi-year contracts; reliability and scorecards.",
+        "Audiences: homeowners in clustered high-income ZIPs; neighbors of current customers (route density); past one-time customers for recurring conversion.",
+        "Audience spec for Miles",
+        "Load with the Audience framework in the Master Template. Emergency segments get no income or homeowner filter and start at 25+; planned segments use the filters below. Ages are starting points: Miles tightens them from closed-won CRM data after 30 booked jobs.",
+        "Segment",
+        "Demand",
+        "Age",
+        "ZIP income rule",
+        "Homeowner",
+        "ZIP filters",
+        "Meta",
+        "Google",
+        "Seed list",
+        "Recurring maintenance",
+        "recurring",
+        "40-65+",
+        "median >= $100K",
+        "required (single-family detached)",
+        "larger lots; route clustering near current customers",
+        "Advantage+ on; suggestion 40-65+; geo = route ZIPs",
+        "Search: lawn maintenance, lawn care service; observe Homeowners",
+        "recurring customers (lookalike)",
+        "Spring / fall cleanup",
+        "seasonal",
+        "35-65+",
+        "median >= $70K",
+        "required",
+        "owner-occupied >= 65%",
+        "suggestion 35-65+",
+        "Search: spring cleanup, leaf removal",
+        "past cleanup customers (upsell to recurring)",
+        "Hardscape / design",
+        "planned",
+        "35-60",
+        "median >= $120K or home value top third",
+        "required",
+        "higher home value; larger lots",
+        "suggestion 35-60; project photo creative",
+        "Search: patio installation, landscape design",
+        "project customers",
+        "Snow removal (north)",
+        "seasonal",
+        "35-65+",
+        "median >= $70K",
+        "required",
+        "snowfall days; current maintenance customers first",
+        "past customers + route ZIPs Oct-Nov",
+        "Search: snow removal [city]",
+        "maintenance customers",
+        "Exclude in every segment: customers from the last 12 months (except retention campaigns), open leads and estimates, employees, out-of-area ZIPs."
+      ]
+    },
+    {
+      "title": "5. Offer stack",
+      "lines": [
+        "Rung",
+        "Offer",
+        "Front door",
+        "Spring or fall cleanup at $[X]; free estimate",
+        "Core",
+        "First mow free (or $[X] off first month) with a season contract signed by [date]",
+        "Early booking",
+        "[10–20]% off when the season is prepaid or booked before [date]",
+        "Upsell",
+        "Lawn program, aeration/overseeding, mulch, irrigation, landscape lighting, hardscape",
+        "Winter",
+        "Snow removal season contract (north); holiday lighting install/takedown",
+        "Retention",
+        "Renewal before season with \"same crew, same day\"; referral credit for neighbors who sign"
+      ]
+    },
+    {
+      "title": "6. Channels and campaign build",
+      "lines": [
+        "Local SEO: separate pages for spring cleanup, fall cleanup, lawn maintenance, landscape installation, irrigation, hardscaping, and snow removal (north) per real service city.",
+        "Search + LSA for \"lawn care [city]\", \"landscaping near me\"; negatives: jobs, DIY, mowers, garden center, seeds.",
+        "Meta: before/after projects; neighborhood targeting around existing routes; door hangers on the current route.",
+        "Every cleanup gets a follow-up quote for recurring maintenance."
+      ]
+    },
+    {
+      "title": "7. Triggers Miles watches",
+      "lines": [
+        "Trigger",
+        "Proposal",
+        "First week of consistent highs ≥ 55–60°F",
+        "Launch spring cleanup + maintenance signup",
+        "Mid-season (Jun–Jul)",
+        "Text recurring clients a check-in + review ask",
+        "Oct 1 (north)",
+        "Fall cleanup + snow contract campaign",
+        "First snowfall forecast",
+        "Snow removal last-call campaign",
+        "Drought / watering restrictions",
+        "Irrigation audit, xeriscape design"
+      ]
+    },
+    {
+      "title": "8. After the job and retention",
+      "lines": [
+        "Convert one-time jobs: cleanup customers get a recurring maintenance quote within 48 hrs.",
+        "Mid-season check-in text to recurring clients, then honest review ask to everyone (reviews peak at project completion and mid-season).",
+        "Renewal sequence 30 days before season; snow customers get early spring renewal."
+      ]
+    },
+    {
+      "title": "9. Compliance and watch-outs",
+      "lines": [
+        "Pesticide/fertilizer applications need state licensing; follow state notification rules.",
+        "Respect local watering restrictions and noise ordinances in ads and service promises.",
+        "Don't oversell capacity in spring; cap new contracts by route capacity."
+      ]
+    },
+    {
+      "title": "10. Deploy checklist",
+      "lines": [
+        "☐ Confirm services (maintenance, lawn programs, hardscape, irrigation, snow, lighting) and licensing",
+        "☐ Score ZIPs on lot size, income, HOA density, route clustering, snowfall",
+        "☐ Load cleanup, season contract, early-booking, winter offers",
+        "☐ Build seasonal service pages, Search + LSA, Meta around routes",
+        "☐ Arm spring warm-up, fall, snow and drought triggers",
+        "☐ Turn on cleanup-to-recurring follow-up, mid-season check-in, renewal and referral automations",
+        "☐ Owner approval, launch",
+        "Sources: seasonal demand curve (LandscapeDesk) · lawn programs 4–8 applications (LeadGen Economy) · content windows and mid-season review timing (W3era) · early-booking discounts (Landscaping cost guide)"
+      ]
+    }
+  ],
+  "negatives": [
+    "jobs",
+    "DIY",
+    "mowers",
+    "garden center",
+    "seeds"
+  ],
+  "keywords": [
+    "lawn maintenance",
+    "lawn care service",
+    "spring cleanup",
+    "leaf removal",
+    "patio installation",
+    "landscape design",
+    "snow removal [city]"
+  ]
+}

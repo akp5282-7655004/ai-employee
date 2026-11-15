@@ -5,6 +5,7 @@
  */
 import { playbookTrades } from '../agents/playbook.js';
 import { RULEBOOK_DEFAULTS, STANDARD_NEGATIVES } from '../agents/rulebook.js';
+import { tradePlaybook } from '../playbooks/load.js';
 
 const EXTRA_JUNK: Record<string, string[]> = {
   painting: ['paint color', 'paint colors', 'colour chart', 'sherwin williams', 'home depot paint'],
@@ -39,6 +40,8 @@ export function rulesFromPlaybook(row: Partial<SkillRules> & { key: string; labe
 export function rulesForTrade(trade?: string): SkillRules {
   const name = (trade || '').toLowerCase();
   const hit = playbookTrades().find((row) => name.includes(row.key) || name.includes(row.label.toLowerCase()));
-  if (!hit) return rulesFromPlaybook({ key: 'default', label: 'Home services' });
-  return rulesFromPlaybook({ key: hit.key, label: hit.label });
+  const doc = tradePlaybook(trade);
+  const junkTerms = [...new Set([...STANDARD_NEGATIVES, ...doc.negatives, ...(EXTRA_JUNK[hit?.key || doc.id] ?? [])])];
+  if (!hit) return rulesFromPlaybook({ key: doc.id, label: doc.label, junkTerms });
+  return rulesFromPlaybook({ key: hit.key, label: hit.label, junkTerms });
 }

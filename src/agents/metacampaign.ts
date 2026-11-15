@@ -7,6 +7,8 @@
  * reviews before spending a cent.
  */
 import { buildPlaybook } from './playbook.js';
+import { applyAudienceRules, guardCopy } from '../playbooks/guard.js';
+import { audiencesFor } from '../playbooks/load.js';
 
 export interface MetaAdCopy {
   primaryText: string;
@@ -32,6 +34,9 @@ export interface MetaCampaignSpec {
   geo: MetaGeo;
   ageMin: number;
   ageMax: number;
+  /** Advantage+ cannot set a hard minimum above 25. The segment age is a suggestion. */
+  ageSuggestion?: string;
+  exclusions?: string[];
   ad: MetaAdCopy;
   status: 'PAUSED';
 }
@@ -104,15 +109,18 @@ export function buildMetaCampaignSpec(input: MetaCampaignInput, ctx: MetaCampaig
   if (city && !cities.some((c) => c.toLowerCase() === city.toLowerCase())) cities.unshift(city);
   const dailyBudget = input.dailyBudget != null ? Math.max(0, Math.round(input.dailyBudget)) : pb.economics.testBudgetDaily;
   const website = cleanUrl(input.website);
+  const audience = applyAudienceRules(ctx.industry, audiencesFor(ctx.industry).segments);
 
   const offerLine = ownerText(pb.offer.engineered);
-  const primaryText = ownerText(input.primaryText || [
+  const drafted = ownerText(input.primaryText || [
     offerLine + '.',
     pb.offer.reasonWhy,
     pb.offer.stack.join(' '),
     input.financing ? pb.offer.financing : '',
     'Licensed and insured, real local crew. Tap below for a fast, no-pressure quote.',
   ].filter(Boolean).join('\n\n')).slice(0, 600);
+  const checked = guardCopy(drafted);
+  const primaryText = checked.ok ? checked.text : ownerText('Licensed and insured, real local crew. Tap below for a fast, no-pressure quote.');
 
   const headline = ownerText(input.headline || offerLine.split(',')[0] || '').slice(0, 40) || `${ctx.business || trade} in ${ctx.city || 'your area'}`;
   const description = ownerText(input.description || pb.offer.riskReversal[0] || 'Licensed and insured. Free estimate').slice(0, 60);
@@ -128,8 +136,10 @@ export function buildMetaCampaignSpec(input: MetaCampaignInput, ctx: MetaCampaig
     website,
     imageUrl,
     geo: { countries: ['US'], zips, cities: cities.slice(0, 10) },
-    ageMin: 30,
+    ageMin: audience.metaAgeControl,
     ageMax: 65,
+    ageSuggestion: audience.metaAgeSuggestion,
+    exclusions: audience.alwaysExclude,
     ad: {
       primaryText,
       headline,

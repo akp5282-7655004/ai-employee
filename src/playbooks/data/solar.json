@@ -1,0 +1,199 @@
+{
+  "id": "solar",
+  "name": "Miles Solar Playbook",
+  "label": "Solar",
+  "version": "2026-11-15",
+  "summary": "Sell the monthly bill, not the panels: in 2026 homeowners who buy get no federal credit, so lead with leases/PPAs or financed savings, and qualify hard on roof, shade and utility rules. Use with the Miles Master Template (deploy logic, ZIP scoring, customer journey).",
+  "sections": [
+    {
+      "title": "Intro",
+      "lines": [
+        "Miles Solar Playbook",
+        "Nov 15, 2026",
+        "Sell the monthly bill, not the panels: in 2026 homeowners who buy get no federal credit, so lead with leases/PPAs or financed savings, and qualify hard on roof, shade and utility rules. Use with the Miles Master Template (deploy logic, ZIP scoring, customer journey)."
+      ]
+    },
+    {
+      "title": "1. At a glance",
+      "lines": [
+        "Item",
+        "Default",
+        "Demand type",
+        "Planned, long cycle (weeks to months), high ticket",
+        "Lead offer",
+        "Free savings analysis using the homeowner's actual utility bill",
+        "2026 rule change",
+        "The 30% homeowner credit (25D) ended for systems after Dec 31, 2025. Third-party-owned systems (leases, PPAs, prepaid leases) can still carry a business credit (48E), with a placed-in-service deadline at the end of 2027 for projects not safe-harbored",
+        "What sells now",
+        "Lease / PPA with low or $0 down; batteries for outage-prone areas; state incentives and net metering where they exist",
+        "Qualification",
+        "Roof age and condition, orientation and shade, homeownership, credit for financing, utility rate"
+      ]
+    },
+    {
+      "title": "2. Seasonality by region",
+      "lines": [
+        "Sales run year-round; bills and installs drive the peaks.",
+        "Region",
+        "Interest peak",
+        "Install constraint",
+        "Play",
+        "Hot-dry Southwest",
+        "May–Sep (cooling bills)",
+        "Extreme heat slows crews",
+        "Bill-shock campaigns in summer",
+        "Hot-humid South",
+        "Jun–Sep bills; hurricane season",
+        "Storm season",
+        "Solar + battery backup",
+        "Mixed",
+        "Summer bills; fall",
+        "Winter weather",
+        "Spring and fall install pushes",
+        "Cold North",
+        "Spring and summer",
+        "Snow Dec–Mar",
+        "Sell in fall/winter for spring installs",
+        "Marine West",
+        "Spring–summer",
+        "Rainy season",
+        "Battery + time-of-use rate messaging",
+        "Deadline marketing: projects relying on the business credit must be placed in service by Dec 31, 2027 unless safe-harbored, so expect a \"speed over spec\" rush through 2027. Only use deadline copy that matches the installer's financing partners."
+      ]
+    },
+    {
+      "title": "3. Location signals (add to ZIP score)",
+      "lines": [
+        "Utility rates and net metering / export rules for the ZIP's utility (the biggest driver of savings).",
+        "State incentives and property/sales tax exemptions.",
+        "Owner-occupied single-family share; roof age (re-roof before solar if the roof is 15+ years old).",
+        "Sun exposure and tree cover; outage frequency (battery demand).",
+        "Income and credit profile for financing vs lease."
+      ]
+    },
+    {
+      "title": "4. Demographics and audiences",
+      "lines": [
+        "Savings buyer: homeowner 35–65 with high electric bills; wants a clear monthly number.",
+        "Resilience buyer: outage-prone areas; wants battery backup.",
+        "Values buyer: environmentally motivated, higher income; wants ownership and quality equipment.",
+        "Audiences: homeowners in high-rate utility territories, EV owners, past roofing/electrical customers (cross-sell), retargeting to calculator users.",
+        "Audience spec for Miles",
+        "Load with the Audience framework in the Master Template. Emergency segments get no income or homeowner filter and start at 25+; planned segments use the filters below. Ages are starting points: Miles tightens them from closed-won CRM data after 30 booked jobs.",
+        "Segment",
+        "Demand",
+        "Age",
+        "ZIP income rule",
+        "Homeowner",
+        "ZIP filters",
+        "Meta",
+        "Google",
+        "Seed list",
+        "Bill savings (lease/PPA or financed)",
+        "planned",
+        "35-65",
+        "median >= $75K (credit approval)",
+        "required (single-family)",
+        "high utility rates; net metering available; roof age under 15 yrs or bundle re-roof; low tree cover",
+        "Advantage+ on; suggestion 35-65; qualifying lead form (owner, utility, bill, roof age)",
+        "Search: solar panels [city], solar lease; observe Homeowners; exclude Renters",
+        "installed customers (lookalike)",
+        "Battery / backup",
+        "planned",
+        "40-65+",
+        "median >= $90K",
+        "required",
+        "outage-prone ZIPs",
+        "suggestion 40-65+; outage-triggered",
+        "Search: solar battery, home battery backup",
+        "past solar customers without battery",
+        "Exclude in every segment: customers from the last 12 months (except retention campaigns), open leads and estimates, employees, out-of-area ZIPs."
+      ]
+    },
+    {
+      "title": "5. Offer stack",
+      "lines": [
+        "Rung",
+        "Offer",
+        "Front door",
+        "Free bill-based savings analysis + satellite roof design",
+        "Core (lease/PPA)",
+        "$[0] down, fixed rate [¢]/kWh or $[X]/mo, escalator disclosed",
+        "Core (purchase)",
+        "Financed system from $[X]/mo; state incentives listed",
+        "Upsell",
+        "Battery storage, EV charger, critter guard, roof replacement bundle",
+        "Retention",
+        "Annual production check; panel cleaning; referral credit after a referred system is installed"
+      ]
+    },
+    {
+      "title": "6. Channels and campaign build",
+      "lines": [
+        "Search: \"solar panels [city]\", \"solar lease\", \"solar battery\"; negatives: jobs, DIY kits, portable panels, \"free solar\" scam terms.",
+        "Meta: bill-savings creative, customer bill-before/after (with consent), battery backup; lead form with utility and homeownership questions.",
+        "Qualify before booking: homeowner, utility, monthly bill, roof age, shade. Book in-home or virtual design consults.",
+        "Long nurture: 30–90 day email/SMS sequence with savings examples and FAQs."
+      ]
+    },
+    {
+      "title": "7. Triggers Miles watches",
+      "lines": [
+        "Trigger",
+        "Proposal",
+        "Utility rate increase announced",
+        "Rate-hike savings campaign in that utility's ZIPs",
+        "Heat wave / high-bill month",
+        "Bill-shock creative; raise budget",
+        "Major outage",
+        "Battery backup campaign",
+        "Financing or incentive change",
+        "Pause and rewrite offers before any ad runs again"
+      ]
+    },
+    {
+      "title": "8. After the job and retention",
+      "lines": [
+        "Install day photos; production monitoring set up; 30-day savings check.",
+        "Thank-you credit toward a service visit; honest review ask to everyone.",
+        "Referral program paid after the referred system is installed; neighbor postcards around installs."
+      ]
+    },
+    {
+      "title": "9. Compliance and watch-outs",
+      "lines": [
+        "Never claim a federal tax credit for homeowner-purchased systems in 2026; never say \"free solar\" or imply a government program.",
+        "Lease/PPA ads must state it's a lease or PPA, the term, and any escalator; savings claims need assumptions shown.",
+        "Many states regulate door-to-door and solar sales disclosures; follow state rules and the financing partner's ad guidelines.",
+        "Recheck incentive copy every quarter; this area changed fast in 2025–2026."
+      ]
+    },
+    {
+      "title": "10. Deploy checklist",
+      "lines": [
+        "☐ Confirm business model (lease/PPA partners, purchase financing, batteries) and licensed areas",
+        "☐ Score ZIPs on utility rate, net metering, homeownership, roof age, outages",
+        "☐ Load offers with real lease/PPA terms; legal check on every claim",
+        "☐ Build Search + Meta with qualifying lead form; savings-analysis landing page",
+        "☐ Turn on long nurture, consult reminders, post-install and referral automations",
+        "☐ Owner approval, launch",
+        "Sources: 25D ended; 48E for leases/PPAs (Solar.com) · TPO deadlines (EnergySage) · 2027 install deadline and market shift (pv magazine)"
+      ]
+    }
+  ],
+  "negatives": [
+    "jobs",
+    "DIY kits",
+    "portable panels",
+    "free solar"
+  ],
+  "keywords": [
+    "solar panels [city]",
+    "solar lease",
+    "solar battery",
+    "home battery backup",
+    "solar panels [city]",
+    "solar lease",
+    "solar battery"
+  ]
+}
