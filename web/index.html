@@ -674,6 +674,92 @@
   .md-tilebox .v{font-size:28px;font-weight:800;letter-spacing:-.03em;margin-top:4px;color:#111;}
   .md-tilebox .d{font-size:12.5px;font-weight:700;color:#1b8552;margin-top:2px;}
   .md-tilebox .s{font-size:12.5px;color:#6e6e76;margin-top:4px;}
+  .ad-page{display:flex;flex-direction:column;gap:16px;max-width:100%;min-width:0;}
+  .ad-intro{margin:0;color:var(--graphite);font-size:14.5px;line-height:1.45;max-width:68ch;}
+  .ad-sec{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:8px 12px;border-radius:12px;width:fit-content;}
+  .ad-sec.blue{background:#E7EEF8;color:#1d4f96;}
+  .ad-sec.green{background:#E6F2EB;color:#14663d;}
+  .ad-sec.amber{background:#F3EFE2;color:#6e5316;}
+  .ad-sec.purple{background:#EFE8FF;color:#4c3296;}
+  .ad-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;}
+  .ad-kpi{position:relative;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 16px 14px 18px;box-shadow:0 1px 2px rgba(16,16,20,.04);min-width:0;overflow:hidden;}
+  .ad-kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;}
+  .ad-kpi.blue::before{background:#2B6FCB;}
+  .ad-kpi.green::before{background:#1B8552;}
+  .ad-kpi.purple::before{background:#6B46C1;}
+  .ad-kpi.amber::before{background:#C4841D;}
+  .ad-kpi.red::before{background:#A45359;}
+  .ad-kpi-top{display:flex;align-items:center;gap:8px;}
+  .ad-ico{width:28px;height:28px;border-radius:10px;display:grid;place-items:center;flex:none;}
+  .ad-kpi.blue .ad-ico{background:#E7EEF8;color:#2B6FCB;}
+  .ad-kpi.green .ad-ico{background:#E6F2EB;color:#1B8552;}
+  .ad-kpi.purple .ad-ico{background:#EFE8FF;color:#6B46C1;}
+  .ad-kpi.amber .ad-ico{background:#F3EFE2;color:#86651C;}
+  .ad-kpi.red .ad-ico{background:#F6EAEB;color:#A45359;}
+  .ad-k{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+  .ad-v{margin-top:8px;font-size:24px;font-weight:800;letter-spacing:-.03em;color:var(--ink);line-height:1.1;}
+  .ad-v.muted{color:var(--muted);font-size:15px;font-weight:700;letter-spacing:0;}
+  .ad-card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px 16px 12px;box-shadow:0 1px 2px rgba(16,16,20,.04);min-width:0;}
+  .ad-funnelbox{position:relative;height:210px;}
+  .ad-funnelbox canvas{width:100% !important;height:100% !important;}
+  .ad-conv{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+  .ad-conv span{font-size:12px;font-weight:700;color:var(--graphite);background:var(--panel-2);border-radius:999px;padding:4px 10px;}
+  .ad-risk{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+  .ad-riskcard{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 1px 2px rgba(16,16,20,.04);}
+  .ad-riskcard b{display:block;font-size:15px;letter-spacing:-.02em;}
+  .ad-riskcard .em{color:var(--muted);font-size:12.5px;margin-top:2px;}
+  .ad-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+  .ad-chip{font-size:11px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;border-radius:999px;padding:4px 8px;}
+  .ad-chip.amber{background:#F3EFE2;color:#6e5316;}
+  .ad-chip.blue{background:#E7EEF8;color:#1d4f96;}
+  .ad-chip.red{background:#F6EAEB;color:#8d3d43;}
+  .ad-chip.purple{background:#EFE8FF;color:#4c3296;}
+  .ad-chip.green{background:#E6F2EB;color:#14663d;}
+  .ad-search{display:flex;gap:8px;align-items:center;margin:0 0 12px;}
+  .ad-search input{margin:0;flex:1;min-width:0;}
+  .ad-scroll{overflow:auto;max-height:640px;border:1px solid var(--line);border-radius:18px;background:var(--card);}
+  .ad-scroll .md-table{margin:0;}
+  .ad-scroll th{position:sticky;top:0;background:var(--card);z-index:1;}
+  .ad-scroll td,.ad-scroll th{padding-left:12px;}
+  .ad-scroll tr{cursor:pointer;}
+  .ad-scroll tr:hover td{background:#fafafa;}
+  .ad-badge{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;border-radius:999px;padding:3px 8px;white-space:nowrap;}
+  .ad-badge.blue{background:#E7EEF8;color:#1d4f96;}
+  .ad-badge.green{background:#E6F2EB;color:#14663d;}
+  .ad-badge.purple{background:#EFE8FF;color:#4c3296;}
+  .ad-badge.amber{background:#F3EFE2;color:#6e5316;}
+  .ad-badge.red{background:#F6EAEB;color:#8d3d43;}
+  .ad-badge.mute{background:#F4F4F5;color:#3F3F46;}
+  .ad-cards{display:none;}
+  .ad-acard{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 1px 2px rgba(16,16,20,.04);}
+  .ad-acard b{font-size:16px;letter-spacing:-.02em;}
+  .ad-nums{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0;}
+  .ad-nums span{display:block;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+  .ad-nums strong{font-size:15px;}
+  .ad-backdrop{position:fixed;inset:0;background:rgba(17,17,18,.45);z-index:80;display:flex;justify-content:flex-end;}
+  .ad-sheet{background:var(--card);width:min(440px,100%);height:100%;overflow:auto;padding:18px 18px 32px;box-shadow:-8px 0 30px rgba(16,16,20,.12);}
+  .ad-sheet h3{margin:0;font-size:22px;letter-spacing:-.03em;}
+  .ad-group{margin-top:16px;}
+  .ad-group h4{margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;}
+  .ad-group.plan h4{color:#1d4f96;}
+  .ad-group.bill h4{color:#8d3d43;}
+  .ad-group.cred h4{color:#14663d;}
+  .ad-group.acct h4{color:#4c3296;}
+  .ad-acts{display:flex;flex-wrap:wrap;gap:8px;}
+  .ad-act{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 12px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;}
+  .ad-act.danger{background:#F6EAEB;border-color:#E7C9CC;color:#8d3d43;}
+  .ad-close{border:0;background:#F4F4F5;border-radius:999px;padding:8px 12px;font:inherit;font-weight:800;cursor:pointer;}
+  .ad-sources{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+  @media(max-width:1100px){.ad-kpis{grid-template-columns:repeat(3,minmax(0,1fr));}}
+  @media(max-width:768px){
+    .ad-kpis,.ad-risk{grid-template-columns:1fr 1fr;}
+    .ad-risk{grid-template-columns:1fr;}
+    .ad-scroll{display:none;}
+    .ad-cards{display:flex;flex-direction:column;gap:10px;}
+    .ad-page{overflow-x:hidden;}
+    .ad-backdrop{align-items:flex-end;}
+    .ad-sheet{width:100%;height:92vh;border-radius:18px 18px 0 0;}
+  }
   .md-table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:12px;}
   .md-table th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8a8a92;font-weight:700;text-align:left;padding:8px 8px 8px 0;border-bottom:1px solid #eee;}
   .md-table td{padding:12px 8px 12px 0;border-bottom:1px solid #f2f2f4;vertical-align:top;}
@@ -1269,7 +1355,7 @@
     </section>
 
     <section class="page" id="page-owneradmin">
-      <div id="owneradmin-body" style="max-width:1100px"></div>
+      <div id="owneradmin-body" style="max-width:1180px"></div>
     </section>
     <section class="page" id="page-billing">
       <div id="bill-body" style="max-width:860px"></div>
@@ -7713,75 +7799,261 @@ async function renderOwnerAdmin(){
   const box=$('#owneradmin-body'); if(!box) return;
   box.innerHTML='';
   if(!IS_ADMIN){ box.append(el('p','mdesc','This page is for the Miles owner.')); return; }
-  const wrap=el('div','mcard'); wrap.style.maxWidth='1100px';
-  wrap.append(el('h3',null,'Admin'));
-  wrap.append(el('p','mdesc','Signups, plans, and usage from stored accounts. Amounts stay Not connected until Stripe or OpenRouter has a real number.'));
-  if(!REMOTE){ box.append(wrap); return; }
+  const page=el('div','ad-page');
+  page.append(el('p','ad-intro','Signups, plans, and usage from stored accounts. Amounts stay Not connected until Stripe or OpenRouter has a real number.'));
+  if(!REMOTE){ box.append(page); return; }
   const res=await fetchJson('/api/admin/business', null, 12000);
   const view=res.data;
-  if(!res.ok || !view || !view.totals){ wrap.append(el('p','md-explain', (res.data&&res.data.error)||'The business list did not load.')); box.append(wrap); return; }
+  if(!res.ok || !view || !view.totals){ page.append(el('p','md-explain', (res.data&&res.data.error)||'The business list did not load.')); box.append(page); return; }
   const t=view.totals;
-  const line=(label, value)=> { const p=el('p','appsub'); p.textContent=label+': '+(value==null?'':value); return p; };
-  wrap.append(line('Signups today', t.signupsToday), line('Signups 7 days', t.signupsThisWeek), line('Signups 30 days', t.signups30d), line('On free credits', t.onFreeCredits), line('Trials', t.trials), line('Paying', t.paying), line('Past due', t.pastDue), line('Canceled', t.canceled), line('MRR', t.mrr), line('Revenue this month', t.revenueThisMonth), line('OpenRouter cost', t.openRouterCost), line('Profit', t.profit), line('At risk', t.atRisk));
-  wrap.append(el('h3',null,'At risk'));
-  if(!(view.atRiskAccounts||[]).length) wrap.append(el('p','mdesc','No accounts are on the at-risk list.'));
-  (view.atRiskAccounts||[]).forEach(row=>wrap.append(line(row.businessName+' ('+row.email+')', (row.reasons||[]).join(', '))));
-  (view.funnel||[]).forEach(step=>wrap.append(line(step.step, step.count+' (drop off '+step.dropOff+')')));
-  (view.sources||[]).forEach(src=>wrap.append(line('Source '+src.source, src.count)));
-  const filter=el('input'); filter.placeholder='Filter by name, email, or status'; filter.style.cssText='margin:8px 0;width:100%;max-width:360px';
-  wrap.append(filter);
+  const svg=(d)=>'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>';
+  const show=(value)=>{
+    if(value==null || value==='Not connected') return { text:'Not connected', muted:true };
+    return { text:String(value), muted:false };
+  };
+  const moneyText=(value)=>{
+    const s=show(value);
+    if(s.muted) return s;
+    const n=Number(value);
+    if(!Number.isFinite(n)) return s;
+    return { text:(n<0?'-$':'$')+Math.abs(n).toLocaleString('en-US', {maximumFractionDigits:2}), muted:false };
+  };
+  const kpi=(tone, icon, label, shown)=>{
+    const card=el('article','ad-kpi '+tone);
+    const top=el('div','ad-kpi-top');
+    const ico=el('span','ad-ico'); ico.innerHTML=icon;
+    top.append(ico, el('span','ad-k', label));
+    card.append(top);
+    const v=el('div','ad-v'+(shown.muted?' muted':''), shown.text);
+    card.append(v);
+    return card;
+  };
+  const kpis=el('div','ad-kpis');
+  const userIco=svg('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>');
+  const cardIco=svg('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>');
+  const alertIco=svg('<path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 4.3 1.8 19a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/>');
+  kpis.append(
+    kpi('blue', userIco, 'Signups today', show(t.signupsToday)),
+    kpi('blue', userIco, 'Signups 7 days', show(t.signupsThisWeek)),
+    kpi('blue', userIco, 'Signups 30 days', show(t.signups30d)),
+    kpi('green', cardIco, 'Free credits', show(t.onFreeCredits)),
+    kpi('purple', userIco, 'Trials', show(t.trials)),
+    kpi('green', cardIco, 'Paying', show(t.paying)),
+    kpi('red', alertIco, 'Past due', show(t.pastDue)),
+    kpi('red', alertIco, 'Canceled', show(t.canceled)),
+    kpi('green', cardIco, 'MRR', moneyText(t.mrr)),
+    kpi('green', cardIco, 'Revenue this month', moneyText(t.revenueThisMonth)),
+    kpi('amber', alertIco, 'OpenRouter cost', moneyText(t.openRouterCost)),
+    kpi(typeof t.profit==='number' && t.profit<0?'red':'green', cardIco, 'Profit', moneyText(t.profit)),
+    kpi('amber', alertIco, 'At risk', show(t.atRisk))
+  );
+  page.append(kpis);
+
+  page.append(el('div','ad-sec blue','Signup funnel'));
+  const funnelCard=el('div','ad-card');
+  const steps=view.funnel||[];
+  const first=steps[0]&&Number(steps[0].count)||0;
+  const canvas=el('canvas'); canvas.setAttribute('aria-label','Signup funnel');
+  const chartBox=el('div','ad-funnelbox'); chartBox.append(canvas); funnelCard.append(chartBox);
+  const conv=el('div','ad-conv');
+  steps.forEach(step=>{
+    const pct=first?Math.round((Number(step.count)||0)/first*100):0;
+    conv.append(el('span',null, step.step+': '+step.count+' ('+pct+'%)'));
+  });
+  funnelCard.append(conv);
+  const sources=el('div','ad-sources');
+  (view.sources||[]).forEach(src=>sources.append(el('span','ad-chip blue', src.source+' '+src.count)));
+  if((view.sources||[]).length) funnelCard.append(sources);
+  page.append(funnelCard);
+  if(window.Chart){
+    const gradient=(c)=>{
+      const chart=c.chart; const area=chart.chartArea;
+      if(!area) return '#2B6FCB';
+      const g=chart.ctx.createLinearGradient(area.left,0,area.right,0);
+      g.addColorStop(0,'#111112');
+      g.addColorStop(0.55,'#2B6FCB');
+      g.addColorStop(1,'#1B8552');
+      return g;
+    };
+    new Chart(canvas, {
+      type:'bar',
+      data:{ labels:steps.map(s=>s.step), datasets:[{ data:steps.map(s=>Number(s.count)||0), backgroundColor:gradient, borderRadius:8, barThickness:18 }] },
+      options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{ beginAtZero:true, grid:{color:'#E6E6EA'}, ticks:{color:'#3F3F46', precision:0} }, y:{ grid:{display:false}, ticks:{color:'#111112', font:{weight:'700'}} } } }
+    });
+  }
+
+  page.append(el('div','ad-sec amber','At risk'));
+  const risk=el('div','ad-risk');
+  const chipFor=(reason)=>{
+    const map={
+      'low credits':['Low credits','amber'],
+      'no login 7 days':['Inactive 7+ days','blue'],
+      'payment failed':['Payment failed','red'],
+      'errors spike':['Errors','red'],
+      'no leads after launch':['No leads','purple']
+    };
+    return map[reason]||[reason,'amber'];
+  };
+  if(!(view.atRiskAccounts||[]).length) risk.append(el('p','mdesc','No accounts are on the at-risk list.'));
+  (view.atRiskAccounts||[]).forEach(row=>{
+    const card=el('article','ad-riskcard');
+    const left=el('div');
+    left.append(el('b',null, row.businessName||'Untitled'));
+    left.append(el('div','em', row.email||''));
+    const chips=el('div','ad-chips');
+    (row.reasons||[]).forEach(reason=>{ const pair=chipFor(reason); chips.append(el('span','ad-chip '+pair[1], pair[0])); });
+    left.append(chips);
+    const viewBtn=el('button','ad-act','View');
+    viewBtn.onclick=async()=>{ await fetch('/api/admin/impersonate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:row.id})}); location.reload(); };
+    card.append(left, viewBtn);
+    risk.append(card);
+  });
+  page.append(risk);
+
+  page.append(el('div','ad-sec green','Accounts'));
+  const accountsCard=el('div','ad-card');
+  const search=el('div','ad-search');
+  const filter=el('input','f'); filter.placeholder='Search name, email, plan, or status'; filter.setAttribute('aria-label','Search accounts');
+  search.append(filter);
+  accountsCard.append(search);
+  const scroll=el('div','ad-scroll');
   const table=el('table','md-table');
-  const headers=['Business','Email','Plan','Status','MRR','Credits left','Serve cost','Profit','Tools','Last active','Source','Leads','Errors'];
-  const keys=['businessName','email','plan','status','monthlyPaid','freeCreditsRemaining','serveCost','profit','toolsConnected','lastActive','source','leads','errors'];
+  const headers=['Business','Email','Plan','Status','MRR','Credits left','Serve cost','Profit','Tools','Last active','Source','Leads','Errors',''];
+  const keys=['businessName','email','plan','status','monthlyPaid','freeCreditsRemaining','serveCost','profit','toolsConnected','lastActive','source','leads','errors','actions'];
   let sortKey='signupDate', sortDir=-1, query='';
   const head=el('tr');
-  headers.forEach((label, i)=>{ const th=el('th',null,label); th.style.cursor='pointer'; th.onclick=()=>{ if(sortKey===keys[i]) sortDir*=-1; else { sortKey=keys[i]; sortDir=1; } draw(); }; head.append(th); });
+  headers.forEach((label, i)=>{ const th=el('th',null,label); if(label){ th.style.cursor='pointer'; th.onclick=()=>{ if(sortKey===keys[i]) sortDir*=-1; else { sortKey=keys[i]; sortDir=1; } draw(); }; } head.append(th); });
   const thead=el('thead'); thead.append(head); table.append(thead);
-  const tb=el('tbody'); table.append(tb);
+  const tb=el('tbody'); table.append(tb); scroll.append(table); accountsCard.append(scroll);
+  const cards=el('div','ad-cards'); accountsCard.append(cards);
+  const badge=(text, tone)=>el('span','ad-badge '+tone, text);
+  const statusTone=(status)=>({ 'free credits':'green', trial:'purple', active:'green', 'past due':'red', canceled:'red', 'credits exhausted':'amber' }[status]||'mute');
+  const cellText=(row, key)=>{
+    const err=(row.errors.googleReads||0)+(row.errors.launches||0)+(row.errors.crawls||0);
+    if(key==='monthlyPaid'||key==='serveCost'||key==='profit') return moneyText(row[key]).text;
+    if(key==='freeCreditsRemaining') return row.freeCreditsRemaining+' of '+row.freeCreditsGrant;
+    if(key==='toolsConnected') return row.toolsConnected==='Not connected'?'Not connected':String(row.toolsConnected);
+    if(key==='lastActive') return row.lastActive?String(row.lastActive).slice(0,10):'';
+    if(key==='source') return (row.signupSource&&row.signupSource.utmSource||'')+(row.signupSource&&row.signupSource.utmCampaign?(' / '+row.signupSource.utmCampaign):'');
+    if(key==='leads') return row.leads+' leads, '+row.bookedJobs+' jobs';
+    if(key==='errors') return String(err);
+    return row[key]==null?'':String(row[key]);
+  };
+  const post=async(url, body, done)=>{ const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); const d=await r.json().catch(()=>({})); toast(d.error||done); if(r.ok) renderOwnerAdmin(); };
+  const typed=(row, label, word, action)=>{ const value=window.prompt(label); if(value!==word){ toast('Not confirmed'); return; } post('/api/admin/billing', {id:row.id, action:action, confirm:word}, 'Saved'); };
+  let backdrop=null;
+  const closeSheet=()=>{ if(backdrop) backdrop.remove(); backdrop=null; };
+  const openSheet=(row)=>{
+    closeSheet();
+    backdrop=el('div','ad-backdrop');
+    backdrop.onclick=(e)=>{ if(e.target===backdrop) closeSheet(); };
+    const sheet=el('aside','ad-sheet'); sheet.setAttribute('role','dialog'); sheet.setAttribute('aria-label','Account actions');
+    const headRow=el('div'); headRow.style.cssText='display:flex;justify-content:space-between;gap:8px;align-items:flex-start';
+    const title=el('div'); title.append(el('h3',null, row.businessName||'Account')); title.append(el('div','em', row.email||''));
+    const close=el('button','ad-close','Close'); close.onclick=closeSheet;
+    headRow.append(title, close); sheet.append(headRow);
+    const facts=el('div','ad-nums');
+    [['Plan', row.plan],['Status', row.status],['MRR', moneyText(row.monthlyPaid).text],['Credits left', row.freeCreditsRemaining+' of '+row.freeCreditsGrant],['Serve cost', moneyText(row.serveCost).text],['Profit', moneyText(row.profit).text],['Tools', cellText(row,'toolsConnected')],['Last active', cellText(row,'lastActive')],['Source', cellText(row,'source')],['Leads', cellText(row,'leads')],['Errors', cellText(row,'errors')]].forEach(pair=>{
+      const bit=el('div'); bit.append(el('span',null,pair[0])); bit.append(el('strong',null, pair[1]==null?'':String(pair[1]))); facts.append(bit);
+    });
+    sheet.append(facts);
+    const group=(cls, name, buttons)=>{
+      const g=el('div','ad-group '+cls); g.setAttribute('data-ad-group', name);
+      g.append(el('h4',null, name));
+      const acts=el('div','ad-acts ad-actions');
+      buttons.forEach(btn=>acts.append(btn));
+      g.append(acts); sheet.append(g);
+    };
+    const act=(label, fn, danger)=>{ const b=el('button', danger?'ad-act danger':'ad-act', label); b.type='button'; b.onclick=fn; return b; };
+    group('plan','Plan', [
+      act('Upgrade', ()=>post('/api/admin/billing',{id:row.id, action:'upgrade', band:'growth'},'Upgrade sent')),
+      act('Downgrade', ()=>post('/api/admin/billing',{id:row.id, action:'downgrade', band:'starter'},'Downgrade sent')),
+      act('Move to free', ()=>post('/api/admin/billing',{id:row.id, action:'free'},'Moved toward free'))
+    ]);
+    group('bill','Billing', [
+      act('Cancel at period end', ()=>post('/api/admin/billing',{id:row.id, action:'cancel'},'Cancel scheduled')),
+      act('Cancel now', ()=>typed(row,'Type CANCEL NOW to cancel this subscription immediately.','CANCEL NOW','cancel_now'), true),
+      act('Refund', ()=>typed(row,'Type REFUND to refund the last Stripe payment.','REFUND','refund'), true),
+      act('Apply coupon', ()=>{ const code=window.prompt('Stripe coupon id'); if(!code) return; post('/api/admin/billing',{id:row.id, action:'coupon', coupon:code},'Coupon sent'); })
+    ]);
+    group('cred','Credits and trial', [
+      act('Add $25', ()=>post('/api/admin/credits',{id:row.id,amount:25},'Credits added')),
+      act('Remove $25', ()=>post('/api/admin/credits',{id:row.id,amount:25,remove:true},'Credits removed')),
+      act('Extend 14 days', ()=>post('/api/admin/trial',{id:row.id,days:14},'Trial note extended'))
+    ]);
+    group('acct','Account', [
+      act(row.paused?'Resume':'Pause', ()=>post('/api/admin/pause',{id:row.id, paused:!row.paused}, row.paused?'Resumed':'Paused')),
+      act('View as user', async()=>{ await fetch('/api/admin/impersonate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:row.id})}); location.reload(); })
+    ]);
+    backdrop.append(sheet);
+    document.body.append(backdrop);
+  };
   const draw=()=>{
-    tb.innerHTML='';
+    tb.innerHTML=''; cards.innerHTML='';
     const q=query.toLowerCase();
-    const rows=(view.accounts||[]).filter(row=>!q || (row.businessName+' '+row.email+' '+row.status).toLowerCase().includes(q));
+    const rows=(view.accounts||[]).filter(row=>!q || (row.businessName+' '+row.email+' '+row.status+' '+row.plan).toLowerCase().includes(q));
     rows.sort((a,b)=>{ const av=a[sortKey], bv=b[sortKey]; return (av>bv?1:av<bv?-1:0)*sortDir; });
     rows.forEach(row=>{
       const tr=el('tr');
-      const err=(row.errors.googleReads||0)+(row.errors.launches||0)+(row.errors.crawls||0);
-      const cells=[row.businessName, row.email, row.plan, row.status, row.monthlyPaid, row.freeCreditsRemaining+' of '+row.freeCreditsGrant, row.serveCost, row.profit, (row.toolsConnected==='Not connected'?'Not connected':row.toolsConnected+' ('+(row.tools||[]).join(', ')+')'), row.lastActive?String(row.lastActive).slice(0,10):'', row.signupSource.utmSource+(row.signupSource.utmCampaign?(' / '+row.signupSource.utmCampaign):''), row.leads+' leads, '+row.bookedJobs+' jobs', String(err)];
-      cells.forEach(value=>{ const td=el('td'); td.textContent=value==null?'':String(value); tr.append(td); });
+      ['businessName','email','plan','status','monthlyPaid','freeCreditsRemaining','serveCost','profit','toolsConnected','lastActive','source','leads','errors'].forEach(key=>{
+        const td=el('td');
+        if(key==='plan') td.append(badge(cellText(row,key), 'blue'));
+        else if(key==='status') td.append(badge(cellText(row,key), statusTone(row.status)));
+        else if((key==='monthlyPaid'||key==='serveCost'||key==='profit') && (row[key]==null || row[key]==='Not connected')){ const s=el('span','ad-v muted'); s.style.fontSize='13px'; s.textContent='Not connected'; td.append(s); }
+        else td.textContent=cellText(row, key);
+        tr.append(td);
+      });
       const act=el('td');
-      const post=async(url, body, done)=>{ const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); const d=await r.json().catch(()=>({})); toast(d.error||done); if(r.ok) renderOwnerAdmin(); };
-      const typed=(label, word, action, extra)=>{ const value=window.prompt(label); if(value!==word){ toast('Not confirmed'); return; } post('/api/admin/billing', Object.assign({id:row.id, action:action, confirm:word}, extra||{}), 'Saved'); };
-      const add=el('button','md-ghost','Add $25'); add.onclick=()=>post('/api/admin/credits',{id:row.id,amount:25},'Credits added');
-      const remove=el('button','md-ghost','Remove $25'); remove.onclick=()=>post('/api/admin/credits',{id:row.id,amount:25,remove:true},'Credits removed');
-      const trial=el('button','md-ghost','Extend 14 days'); trial.onclick=()=>post('/api/admin/trial',{id:row.id,days:14},'Trial note extended');
-      const pause=el('button','md-ghost', row.paused?'Resume':'Pause'); pause.onclick=()=>post('/api/admin/pause',{id:row.id, paused:!row.paused}, row.paused?'Resumed':'Paused');
-      const viewAs=el('button','md-ghost','View'); viewAs.onclick=async()=>{ await fetch('/api/admin/impersonate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:row.id})}); location.reload(); };
-      const up=el('button','md-ghost','Upgrade'); up.onclick=()=>post('/api/admin/billing',{id:row.id, action:'upgrade', band:'growth'},'Upgrade sent');
-      const down=el('button','md-ghost','Downgrade'); down.onclick=()=>post('/api/admin/billing',{id:row.id, action:'downgrade', band:'starter'},'Downgrade sent');
-      const later=el('button','md-ghost','Cancel at period end'); later.onclick=()=>post('/api/admin/billing',{id:row.id, action:'cancel'},'Cancel scheduled');
-      const now=el('button','md-ghost','Cancel now'); now.onclick=()=>typed('Type CANCEL NOW to cancel this subscription immediately.','CANCEL NOW','cancel_now');
-      const free=el('button','md-ghost','Move to free'); free.onclick=()=>post('/api/admin/billing',{id:row.id, action:'free'},'Moved toward free');
-      const refund=el('button','md-ghost','Refund last payment'); refund.onclick=()=>typed('Type REFUND to refund the last Stripe payment.','REFUND','refund');
-      const coupon=el('button','md-ghost','Apply coupon'); coupon.onclick=()=>{ const code=window.prompt('Stripe coupon id'); if(!code) return; post('/api/admin/billing',{id:row.id, action:'coupon', coupon:code},'Coupon sent'); };
-      act.append(add, remove, trial, pause, viewAs, up, down, later, now, free, refund, coupon); tr.append(act); tb.append(tr);
+      const open=el('button','ad-act','Actions'); open.type='button';
+      open.onclick=(e)=>{ e.stopPropagation(); openSheet(row); };
+      act.append(open); tr.append(act);
+      tr.onclick=()=>openSheet(row);
+      tb.append(tr);
+      const card=el('article','ad-acard');
+      card.append(el('b',null, row.businessName||'Untitled'));
+      card.append(el('div','em', row.email||''));
+      const chips=el('div','ad-chips');
+      chips.append(badge(cellText(row,'plan'),'blue'), badge(cellText(row,'status'), statusTone(row.status)));
+      card.append(chips);
+      const nums=el('div','ad-nums');
+      [['MRR', cellText(row,'monthlyPaid')],['Credits', cellText(row,'freeCreditsRemaining')],['Profit', cellText(row,'profit')],['Leads', cellText(row,'leads')]].forEach(pair=>{
+        const bit=el('div'); bit.append(el('span',null,pair[0])); bit.append(el('strong',null,pair[1])); nums.append(bit);
+      });
+      card.append(nums);
+      const openCard=el('button','ad-act','Actions'); openCard.type='button'; openCard.onclick=()=>openSheet(row);
+      card.append(openCard);
+      card.onclick=(e)=>{ if(e.target===openCard) return; openSheet(row); };
+      cards.append(card);
     });
   };
   filter.oninput=()=>{ query=filter.value||''; draw(); };
   draw();
-  wrap.append(table);
-  const audit=el('div'); audit.id='admin-audit';
-  wrap.append(el('h3',null,'Audit log'));
-  wrap.append(audit);
-  box.append(wrap);
+  page.append(accountsCard);
+
+  page.append(el('div','ad-sec purple','Audit log'));
+  const auditCard=el('div','ad-card'); auditCard.id='admin-audit';
+  page.append(auditCard);
+  box.append(page);
   const log=await fetchJson('/api/admin/audit', null, 8000);
   if(log.ok && log.data && Array.isArray(log.data.entries)){
-    if(!log.data.entries.length) audit.append(el('p','mdesc','No admin actions yet.'));
-    log.data.entries.slice(0,40).forEach(entry=>{
-      const p=el('p','appsub');
-      p.textContent=(entry.ts||'').slice(0,16)+' '+entry.action+' '+entry.note;
-      audit.append(p);
-    });
-  } else audit.append(el('p','mdesc','The audit log did not load.'));
+    if(!log.data.entries.length) auditCard.append(el('p','mdesc','No admin actions yet.'));
+    else {
+      const at=el('table','md-table');
+      const hr=el('tr'); ['When','Action','Note'].forEach(h=>hr.append(el('th',null,h)));
+      const hd=el('thead'); hd.append(hr); at.append(hd);
+      const body=el('tbody');
+      log.data.entries.slice(0,40).forEach(entry=>{
+        const tr=el('tr');
+        [ (entry.ts||'').replace('T',' ').slice(0,16), entry.action||'', entry.note||'' ].forEach(value=>{ const td=el('td'); td.textContent=value; tr.append(td); });
+        body.append(tr);
+      });
+      at.append(body); auditCard.append(at);
+    }
+  } else auditCard.append(el('p','mdesc','The audit log did not load.'));
+  if(!window.__adEsc){
+    window.__adEsc=true;
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ const open=document.querySelector('.ad-backdrop'); if(open) open.remove(); } });
+  }
 }
 // Owner-only: see everyone who signed up, remove accounts, gate signups.
 async function setAdmin(box){

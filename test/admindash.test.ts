@@ -26,6 +26,13 @@ const ADMIN_ROUTES: { method: 'GET' | 'POST' | 'PUT'; url: string; payload?: unk
 describe('owner admin dashboard', () => {
   it('hides the admin nav until the signed-in user is the owner', () => {
     const html = readFileSync(join(process.cwd(), 'web', 'index.html'), 'utf8');
+    expect(html).toContain('data-ad-group');
+    expect(html).toContain("group('plan','Plan'");
+    expect(html).toContain("group('bill','Billing'");
+    expect(html).toContain('Credits and trial');
+    expect(html).toContain("group('acct','Account'");
+    expect(html).toContain('CANCEL NOW');
+    expect(html).toContain('REFUND');
     expect(html).toMatch(/id="nav-admin"[^>]*hidden/);
     expect(html).toContain("location.pathname==='/admin' && IS_ADMIN");
     expect(html).not.toMatch(/nav-admin[^>]*>[^<]*\u2014/);
