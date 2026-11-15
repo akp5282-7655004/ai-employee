@@ -5,6 +5,7 @@
  */
 import { LAUNCH_GRANT, creditState } from '../billing/credits.js';
 import { billingState } from '../billing/subscription.js';
+import { accountMoney, rollMoney, upcomingRenewals, type AccountMoney, type MoneyPeriod, type RenewalRow } from './money.js';
 
 export type AccountStatus = 'free credits' | 'trial' | 'active' | 'past due' | 'canceled' | 'credits exhausted';
 
@@ -48,6 +49,11 @@ export interface AdminAccountRow {
   errors: { googleReads: number; launches: number; crawls: number };
   atRisk: boolean;
   nearCreditEnd: boolean;
+  periodRevenue: number | 'Not connected';
+  periodCost: number | 'no data';
+  periodProfit: number | 'Not connected' | 'no data';
+  renewsAt: string | null;
+  renewState: 'renews' | 'cancels' | 'past_due' | null;
 }
 
 export interface AdminBusinessView {
@@ -77,6 +83,10 @@ export interface AdminBusinessView {
     atRiskAccounts: { id: string; businessName: string; email: string; reasons: string[] }[];
   sources: { source: string; count: number }[];
   accounts: AdminAccountRow[];
+  period: MoneyPeriod;
+  otherMonthlyUsd: number;
+  money: AccountMoney;
+  renewals: RenewalRow[] | 'Connect Stripe to see renewals';
 }
 
 const WEEK_MS = 7 * 86_400_000;
@@ -143,7 +153,7 @@ export function accountRow(input: AdminAccountInput): AdminAccountRow {
     businessName: text(profile.businessName) || text(input.name) || 'Untitled',
     email: input.email,
     signupDate: input.createdAt,
-    plan: paying ? (billing.band || 'paying') : 'free',
+    plan: (billing.band === 'starter' || billing.band === 'growth' || billing.band === 'scale') ? billing.band : 'free',
     status,
     monthlyPaid,
     freeCreditsUsed: Math.min(used, LAUNCH_GRANT),
@@ -171,17 +181,64 @@ export function accountRow(input: AdminAccountInput): AdminAccountRow {
     riskReasons,
     atRisk: riskReasons.length > 0,
     nearCreditEnd,
+    periodRevenue: 'Not connected',
+    periodCost: 'no data',
+    periodProfit: 'Not connected',
+    renewsAt: null,
+    renewState: null,
   };
 }
 
-export function buildAdminBusiness(rows: AdminAccountInput[], opts?: { now?: string; stripeReady?: boolean }): AdminBusinessView {
-  const nowMs = opts?.now ? Date.parse(opts.now) : Date.now();
-  const accounts = rows.map((row) => accountRow({ ...row, now: opts?.now }));
+function serveParts(data: Record<string, unknown>): { textCosts: { at: string; usd: number }[]; mediaCosts: { at: string; usd: number }[]; lifetimeTextUsd: number | null } {
+  const log = Array.isArray(data.serveLog) ? data.serveLog as { at?: string; kind?: string; usd?: number }[] : [];
+  const textCosts = log.filter((row) => row.kind === 'text' && typeof row.at === 'string' && typeof row.usd === 'number').map((row) => ({ at: row.at as string, usd: row.usd as number }));
+  const mediaCosts = log.filter((row) => row.kind === 'media' && typeof row.at === 'string' && typeof row.usd === 'number').map((row) => ({ at: row.at as string, usd: row.usd as number }));
+  return { textCosts, mediaCosts, lifetimeTextUsd: typeof data.openRouterCostUsd === 'number' ? data.openRouterCostUsd : null };
+}
+
+function paymentsOf(data: Record<string, unknown>): { payments: { at: string; usd: number }[]; refunds: { at: string; usd: number }[] } {
+  const billing = billingState(data);
+  const payments = billing.payments?.length
+    ? billing.payments.map((row) => ({ at: row.at, usd: row.amount }))
+    : billing.lastPayment ? [{ at: billing.lastPayment.at, usd: billing.lastPayment.amount }] : [];
+  const refunds = (billing.refunds ?? []).map((row) => ({ at: row.at, usd: row.amount }));
+  return { payments, refunds };
+}
+
+export function buildAdminBusiness(rows: AdminAccountInput[], opts?: { now?: string; stripeReady?: boolean; period?: MoneyPeriod; otherMonthlyUsd?: number }): AdminBusinessView {
+  const nowIso = opts?.now ?? new Date().toISOString();
+  const nowMs = Date.parse(nowIso);
+  const period = opts?.period ?? 'month';
+  const otherMonthlyUsd = typeof opts?.otherMonthlyUsd === 'number' && opts.otherMonthlyUsd > 0 ? opts.otherMonthlyUsd : 0;
+  const stripeReady = opts?.stripeReady === true;
+  const monies = rows.map((row) => {
+    const moneyRows = paymentsOf(row.data);
+    const serve = serveParts(row.data);
+    return accountMoney({ ...moneyRows, ...serve, stripeReady, period, now: nowIso, otherMonthlyUsd: 0 });
+  });
+  const accounts = rows.map((row, index) => {
+    const base = accountRow({ ...row, now: nowIso });
+    const billing = billingState(row.data);
+    const paid = billing.band === 'starter' || billing.band === 'growth' || billing.band === 'scale';
+    const renewState = !paid || !billing.currentPeriodEnd ? null
+      : billing.status === 'past_due' ? 'past_due' as const
+      : billing.cancelAtPeriodEnd ? 'cancels' as const
+      : (billing.status === 'active' || billing.status === 'trialing') ? 'renews' as const
+      : null;
+    const money = monies[index]!;
+    return {
+      ...base,
+      periodRevenue: money.revenue,
+      periodCost: money.cost,
+      periodProfit: money.profit,
+      renewsAt: renewState ? billing.currentPeriodEnd ?? null : null,
+      renewState,
+    };
+  });
   const dayStart = nowMs - 86_400_000;
   const weekStart = nowMs - WEEK_MS;
   const monthStart = nowMs - 30 * 86_400_000;
   const signed = (since: number) => accounts.filter((row) => Date.parse(row.signupDate) >= since).length;
-  const stripeReady = opts?.stripeReady === true;
   const payingCount = accounts.filter((row) => row.status === 'active').length;
   const reached = accounts.filter((row) => typeof row.toolsConnected === 'number' && row.toolsConnected >= 3).length;
   const launched = accounts.filter((row) => row.launched).length;
@@ -246,5 +303,37 @@ export function buildAdminBusiness(rows: AdminAccountInput[], opts?: { now?: str
     atRiskAccounts: accounts.filter((row) => row.atRisk).map((row) => ({ id: row.id, businessName: row.businessName, email: row.email, reasons: row.riskReasons })),
     sources: [...sourceMap.entries()].map(([source, count]) => ({ source, count })).sort((a, b) => b.count - a.count),
     accounts,
+    period,
+    otherMonthlyUsd,
+    money: rollMoney(monies, otherMonthlyUsd, period === 'all' ? spanMonths(rows, nowIso) : 1),
+    renewals: upcomingRenewals(rows.map((row) => {
+      const billing = billingState(row.data);
+      const profile = (row.data.profile ?? {}) as { businessName?: string };
+      return {
+        id: row.id,
+        businessName: text(profile.businessName) || text(row.name) || 'Untitled',
+        email: row.email,
+        plan: billing.band,
+        status: billing.status,
+        renewsAt: billing.currentPeriodEnd,
+        amount: billing.mrr,
+        cancelAtPeriodEnd: billing.cancelAtPeriodEnd,
+      };
+    }), nowIso, stripeReady),
   };
+}
+
+function spanMonths(rows: AdminAccountInput[], nowIso: string): number {
+  const stamps: number[] = [];
+  for (const row of rows) {
+    const paid = paymentsOf(row.data);
+    const serve = serveParts(row.data);
+    for (const item of [...paid.payments, ...paid.refunds, ...serve.textCosts, ...serve.mediaCosts]) stamps.push(Date.parse(item.at));
+  }
+  const end = Date.parse(nowIso);
+  const finite = stamps.filter((ts) => Number.isFinite(ts));
+  if (!finite.length || !Number.isFinite(end)) return 1;
+  const start = new Date(Math.min(...finite));
+  const finish = new Date(end);
+  return Math.max(1, (finish.getUTCFullYear() - start.getUTCFullYear()) * 12 + (finish.getUTCMonth() - start.getUTCMonth()) + 1);
 }

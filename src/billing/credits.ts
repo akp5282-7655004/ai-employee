@@ -15,6 +15,7 @@
  */
 
 import { claimCostItem } from './costsink.js';
+import { isMediaKind, mediaCost } from './media.js';
 import { textQuote } from './textprice.js';
 
 export interface Band {
@@ -336,6 +337,14 @@ function addOpenRouter(data: Record<string, unknown>, serveUsd: number): void {
   data.openRouterCostUsd = Math.round((prev + serveUsd) * 1e6) / 1e6;
 }
 
+/** Dated serve cost so a month can be totaled without guessing. */
+function logServe(data: Record<string, unknown>, kind: 'text' | 'media', usd: number, now: Date): void {
+  if (!(usd > 0)) return;
+  const log = Array.isArray(data.serveLog) ? data.serveLog as { at?: string; kind?: string; usd?: number }[] : [];
+  log.unshift({ at: now.toISOString(), kind, usd: Math.round(usd * 1e6) / 1e6 });
+  data.serveLog = log.slice(0, 500);
+}
+
 export function chargeCredits(
   data: Record<string, unknown>,
   item: string,
@@ -432,7 +441,11 @@ export function chargeCredits(
     };
   }
 
-  if (quote?.serveUsd) addOpenRouter(data, quote.serveUsd);
+  if (quote?.serveUsd) {
+    addOpenRouter(data, quote.serveUsd);
+    logServe(data, 'text', quote.serveUsd, now);
+  }
+  if (isMediaKind(item)) logServe(data, 'media', mediaCost(item), now);
   const ledger = [{ ts: now.toISOString(), item, cost, note }, ...before.ledger].slice(0, LEDGER_CAP);
   const spent = Math.round((before.spent + cost) * 1e6) / 1e6;
   persist({ granted, spent, topUps, toppedUpThisMonth, ledger });
