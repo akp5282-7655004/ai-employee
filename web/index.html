@@ -683,6 +683,20 @@
   .own-page{display:flex;flex-direction:column;gap:16px;max-width:100%;min-width:0;}
   .own-totals{background:#111;color:#fff;border-radius:24px;padding:16px 16px 14px;}
   .own-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;}
+  .own-money{grid-template-columns:repeat(4,minmax(0,1fr));}
+  .own-period{display:flex;gap:6px;margin:14px 0 8px;}
+  .own-period button.on{background:#111;color:#fff;border-color:#111;}
+  .own-break{font-size:12px;color:#c9c4bc;margin-top:6px;}
+  .own-other{display:flex;align-items:center;gap:8px;margin-top:10px;color:#c9c4bc;font-size:12px;}
+  .own-other input{width:88px;background:#1c1c20;color:#fff;border:1px solid #34343a;border-radius:8px;padding:6px 8px;}
+  .own-renew{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line);}
+  .own-renew .who{font-weight:650;}
+  .own-plan.growth{background:#E7F0FF;color:#1D4ED8;}
+  .own-plan.scale{background:#F3E8FF;color:#6B21A8;}
+  .own-mark{display:inline-flex;width:16px;height:16px;border-radius:50%;align-items:center;justify-content:center;font-size:11px;margin-right:6px;}
+  .own-mark.renews{background:#16a34a;color:#fff;}
+  .own-mark.cancels{background:#d97706;color:#fff;}
+  .own-mark.past_due{background:#dc2626;color:#fff;}
   .own-tile{position:relative;overflow:hidden;background:#1c1c20;border-radius:16px;padding:12px 12px 12px 14px;min-height:108px;display:flex;flex-direction:column;min-width:0;}
   .own-tile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;}
   .own-tile.blue::before{background:#2B6FCB;}
@@ -790,7 +804,7 @@
   .own-handle{display:none;}
   @media(max-width:1100px) and (min-width:768px){.own-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
   @media(max-width:767px){
-    .own-grid{grid-template-columns:1fr 1fr;gap:8px;}
+    .own-grid, .own-money{grid-template-columns:1fr 1fr;gap:8px;}
     .own-mid{grid-template-columns:1fr;}
     .own-value{font-size:26px;}
     .own-value.gold{font-size:15px;}
@@ -7848,7 +7862,7 @@ async function renderOwnerAdmin(){
   if(!IS_ADMIN){ box.append(el('p','mdesc','This page is for the Miles owner.')); return; }
   const page=el('div','own-page');
   if(!REMOTE){ box.append(page); return; }
-  const res=await fetchJson('/api/admin/business', null, 12000);
+  const res=await fetchJson('/api/admin/business?period='+encodeURIComponent(window.adminPeriod||'month'), null, 12000);
   const view=res.data;
   if(!res.ok || !view || !view.totals){ page.append(el('p','md-explain', (res.data&&res.data.error)||'The business list did not load.')); box.append(page); return; }
   const t=view.totals;
@@ -7895,6 +7909,46 @@ async function renderOwnerAdmin(){
   totals.append(grid);
   totals.append(el('div','own-foot', 'Revenue and profit show once Stripe and your AI cost source report real numbers. Signups today '+(t.signupsToday==null?0:t.signupsToday)+' · last 7 days '+(t.signupsThisWeek==null?0:t.signupsThisWeek)+' · last 30 days '+(t.signups30d==null?0:t.signups30d)+'.'));
   page.append(totals);
+
+  const figures=view.money||{};
+  const periodBar=el('div','own-period');
+  [['month','This month'],['30','Last 30 days'],['all','All time']].forEach(pair=>{
+    const btn=el('button','own-btn tiny'+( (window.adminPeriod||'month')===pair[0]?' on':''), pair[1]);
+    btn.onclick=()=>{ window.adminPeriod=pair[0]; renderOwnerAdmin(); };
+    periodBar.append(btn);
+  });
+  page.append(periodBar);
+  const moneyPanel=el('section','own-totals');
+  const moneyGrid=el('div','own-grid own-money');
+  const moneyTile=(tone, label, value, sub)=>{
+    const tile=el('div','own-tile '+tone);
+    tile.append(el('div','own-k', label));
+    const shown=value==='Not connected'||value==='no data'||value==='-'?String(value):(typeof value==='number'?'$'+value.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):String(value||'-'));
+    tile.append(el('div', (value==='Not connected'||value==='no data')?'own-value gold':'own-value', shown));
+    if(sub) tile.append(el('div','own-break', sub));
+    return tile;
+  };
+  const part=(name, value)=>name+' '+(value==='no data'?'no data':(typeof value==='number'?'$'+value.toFixed(2):String(value)));
+  const otherNote=figures.otherMonths>1?('other $'+(figures.other||0).toFixed(2)+' ($'+(view.otherMonthlyUsd||0)+'/mo for '+figures.otherMonths+' months)'):part('other', figures.other||0);
+  const costSub=part('AI text', figures.text)+' · '+part('media', figures.media)+' · '+otherNote;
+  const profitTone=typeof figures.profit==='number' && figures.profit<0 ? 'red' : 'green';
+  moneyGrid.append(
+    moneyTile('amber','COST', figures.cost, costSub),
+    moneyTile('green','REVENUE', figures.revenue, figures.revenue==='Not connected'?'connect Stripe':''),
+    moneyTile(profitTone,'PROFIT', figures.profit, ''),
+    moneyTile('blue','MARGIN', typeof figures.margin==='number'?figures.margin+'%':figures.margin, '')
+  );
+  moneyPanel.append(moneyGrid);
+  const otherRow=el('div','own-other');
+  otherRow.append(document.createTextNode('Other monthly costs (hosting and the rest)'));
+  const otherInput=el('input'); otherInput.type='number'; otherInput.min='0'; otherInput.step='1'; otherInput.value=String(view.otherMonthlyUsd||0);
+  otherInput.onchange=async()=>{
+    await fetch('/api/admin/settings',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({otherMonthlyUsd:Number(otherInput.value)||0})});
+    renderOwnerAdmin();
+  };
+  otherRow.append(otherInput);
+  moneyPanel.append(otherRow);
+  page.append(moneyPanel);
 
   const mid=el('div','own-mid');
   const funnel=el('section','own-card');
@@ -7969,6 +8023,32 @@ async function renderOwnerAdmin(){
   mid.append(riskCard);
   page.append(mid);
 
+  const renewCard=el('section','own-card');
+  renewCard.append(el('h2',null,'UPCOMING RENEWALS'));
+  const renewals=view.renewals;
+  if(typeof renewals==='string'){
+    renewCard.append(el('p','own-lead', renewals || 'Connect Stripe to see renewals'));
+  } else if(!renewals || !renewals.length){
+    renewCard.append(el('p','own-lead', 'No paying accounts have a renewal date yet.'));
+  } else {
+    renewals.forEach(row=>{
+      const line=el('div','own-renew');
+      const who=el('div');
+      who.append(el('div','who', row.businessName||'Untitled'));
+      const badge=el('span','own-plan '+(row.plan||'free'), String(row.plan||'').toUpperCase());
+      who.append(badge);
+      const whenText=row.renewsAt?new Date(row.renewsAt).toLocaleDateString('en-US',{month:'short', day:'numeric', year:'numeric'}):'-';
+      const extra=row.state==='cancels'?('Cancels on '+whenText):(row.state==='past_due'?'Past due':'');
+      who.append(el('div','bmail', whenText+' · '+(row.daysLabel||'')+(extra?' · '+extra:'')));
+      const amt=el('div');
+      const mark=el('span','own-mark '+(row.state||'renews'), row.state==='renews'?'✓':'');
+      amt.append(mark, document.createTextNode(typeof row.amount==='number'?('$'+row.amount.toFixed(2)):'Not connected'));
+      line.append(who, amt);
+      renewCard.append(line);
+    });
+  }
+  page.append(renewCard);
+
   const accounts=el('section','own-card'); accounts.id='accounts';
   const ahead=el('div','own-ahead');
   ahead.append(el('h2',null,'ACCOUNTS'));
@@ -7996,7 +8076,7 @@ async function renderOwnerAdmin(){
   const wrap=el('div','own-tablewrap');
   const table=el('table','own-accounts');
   const hr=el('tr');
-  ['BUSINESS','PLAN','CREDITS','TOOLS','LAST ACTIVE','LEADS','ERRORS',''].forEach(h=>hr.append(el('th',null,h)));
+  ['BUSINESS','PLAN','COST','REVENUE','PROFIT','RENEWS','CREDITS','TOOLS','LAST ACTIVE','LEADS','ERRORS',''].forEach(h=>hr.append(el('th',null,h)));
   const thead=el('thead'); thead.append(hr); table.append(thead);
   const tb=el('tbody'); table.append(tb); wrap.append(table); accounts.append(wrap);
   const cards=el('div','own-cards'); accounts.append(cards);
@@ -8116,6 +8196,15 @@ async function renderOwnerAdmin(){
       const tr=el('tr');
       const biz=el('td'); const cell=el('div','own-biz'); cell.append(el('div','bname', row.businessName||'Untitled')); cell.append(el('div','bmail', row.email||'')); biz.append(cell); tr.append(biz);
       const planTd=el('td'); planTd.append(el('span','own-plan '+plan.cls, plan.text)); tr.append(planTd);
+      const dollars=(value)=>value==='Not connected'||value==='no data'||value==='-'?String(value):(typeof value==='number'?'$'+value.toFixed(2):'-');
+      tr.append(el('td',null, dollars(row.periodCost)));
+      tr.append(el('td',null, dollars(row.periodRevenue)));
+      tr.append(el('td',null, dollars(row.periodProfit)));
+      const renewTd=el('td');
+      if(row.renewsAt && row.renewState){
+        renewTd.append(el('span','own-mark '+row.renewState, row.renewState==='renews'?'✓':''), document.createTextNode(' '+when(row.renewsAt)));
+      } else renewTd.textContent='-';
+      tr.append(renewTd);
       const cred=el('td'); cred.append(creditHtml(row)); tr.append(cred);
       tr.append(el('td',null, toolsText(row)));
       tr.append(el('td','muted', when(row.lastActive)));
@@ -8132,7 +8221,7 @@ async function renderOwnerAdmin(){
       top.append(left, el('span','own-plan '+plan.cls, plan.text));
       card.append(top);
       const meta=el('div','own-meta');
-      [['CREDITS', null],['TOOLS', toolsText(row)],['LAST ACTIVE', when(row.lastActive)],['LEADS', row.leads+' · '+row.bookedJobs],['ERRORS', String(errors)]].forEach(pair=>{
+      [['COST', dollars(row.periodCost)],['REVENUE', dollars(row.periodRevenue)],['PROFIT', dollars(row.periodProfit)],['RENEWS', row.renewsAt?when(row.renewsAt):'-'],['CREDITS', null],['TOOLS', toolsText(row)],['LAST ACTIVE', when(row.lastActive)],['LEADS', row.leads+' · '+row.bookedJobs],['ERRORS', String(errors)]].forEach(pair=>{
         const bit=el('div'); bit.append(el('div','k', pair[0]));
         if(pair[0]==='CREDITS') bit.append(creditHtml(row));
         else if(pair[0]==='ERRORS') bit.append(el('div', errors>0?'own-err hot':'own-err muted', pair[1]));

@@ -24,6 +24,9 @@ export interface BillingState {
   /** Dollars Stripe actually charged for the latest paid invoice. Not a plan list price. */
   mrr?: number;
   lastPayment?: { amount: number; at: string; invoiceId: string };
+  /** Paid invoices Stripe reported, newest last. Used for period revenue. */
+  payments?: { invoiceId: string; amount: number; at: string }[];
+  refunds?: { id: string; amount: number; at: string }[];
   cancelAtPeriodEnd?: boolean;
   /** Stripe invoice ids already granted for — a webhook can arrive more than
    *  once for the same invoice, and this is what stops a double grant. */
@@ -59,12 +62,32 @@ export function billingState(data: Record<string, unknown>): BillingState {
     lastPayment: raw.lastPayment && typeof raw.lastPayment === 'object' && typeof raw.lastPayment.amount === 'number' && typeof raw.lastPayment.at === 'string' && typeof raw.lastPayment.invoiceId === 'string'
       ? { amount: raw.lastPayment.amount, at: raw.lastPayment.at, invoiceId: raw.lastPayment.invoiceId }
       : undefined,
+    payments: readPayments(raw.payments),
+    refunds: readRefunds(raw.refunds),
     cancelAtPeriodEnd: raw.cancelAtPeriodEnd === true,
     grantedInvoices: Array.isArray(raw.grantedInvoices) ? raw.grantedInvoices.filter((x) => typeof x === 'string').slice(-MAX_GRANTED_INVOICES) : [],
     grantKeys: Array.isArray(raw.grantKeys) ? raw.grantKeys.filter((x) => typeof x === 'string').slice(-5000) : undefined,
     grantAmounts: raw.grantAmounts && typeof raw.grantAmounts === 'object' ? raw.grantAmounts : undefined,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
   };
+}
+
+function readPayments(value: unknown): { invoiceId: string; amount: number; at: string }[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const rows = value.filter((row): row is { invoiceId: string; amount: number; at: string } => {
+    const item = row as { amount?: number; at?: string; invoiceId?: string };
+    return typeof item.amount === 'number' && typeof item.at === 'string' && typeof item.invoiceId === 'string';
+  }).slice(-200);
+  return rows.length ? rows : undefined;
+}
+
+function readRefunds(value: unknown): { id: string; amount: number; at: string }[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const rows = value.filter((row): row is { id: string; amount: number; at: string } => {
+    const item = row as { amount?: number; at?: string; id?: string };
+    return typeof item.amount === 'number' && typeof item.at === 'string' && typeof item.id === 'string';
+  }).slice(-200);
+  return rows.length ? rows : undefined;
 }
 
 function saveBilling(data: Record<string, unknown>, b: BillingState): void {
@@ -160,7 +183,12 @@ export function applyRenewal(
   b.currentPeriodEnd = args.periodEnd;
   if (typeof args.amountUsd === 'number' && Number.isFinite(args.amountUsd)) {
     b.mrr = Math.round(args.amountUsd * 100) / 100;
-    b.lastPayment = { amount: b.mrr, at: args.paidAt || new Date().toISOString(), invoiceId: args.invoiceId };
+    const at = args.paidAt || new Date().toISOString();
+    b.lastPayment = { amount: b.mrr, at, invoiceId: args.invoiceId };
+    const payments = b.payments ?? [];
+    if (!payments.some((row) => row.invoiceId === args.invoiceId)) {
+      b.payments = [...payments, { invoiceId: args.invoiceId, amount: b.mrr, at }].slice(-200);
+    }
   }
   b.grantKeys = [...(b.grantKeys ?? b.grantedInvoices), args.invoiceId].slice(-5000);
   b.grantedInvoices = b.grantKeys.slice(-MAX_GRANTED_INVOICES);
@@ -168,6 +196,16 @@ export function applyRenewal(
   b.baseInvoices = prior.baseInvoices;
   saveBilling(data, b);
   return { applied: true, band: band.key, granted: band.monthlyCredits };
+}
+
+/** A refund Stripe confirmed. The same id is not stored twice. */
+export function recordRefund(data: Record<string, unknown>, args: { id: string; amount: number; at?: string }): void {
+  if (!args.id || !(args.amount > 0)) return;
+  const b = billingState(data);
+  const refunds = b.refunds ?? [];
+  if (refunds.some((row) => row.id === args.id)) return;
+  b.refunds = [...refunds, { id: args.id, amount: Math.round(args.amount * 100) / 100, at: args.at || new Date().toISOString() }].slice(-200);
+  saveBilling(data, b);
 }
 
 /** A payment failed — the account keeps working (monitoring is never gated

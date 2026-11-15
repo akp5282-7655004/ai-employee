@@ -76,7 +76,7 @@ import {
   applySubscriptionCoupon, bandForPriceId, cancelStripeSubscription, createCheckoutSession, createPortalSession, createTopUpPaymentIntent, priceIdForBand,
   refundLatestCharge, setSubscriptionPrice, stampCustomer, stripeReady, userIdForCustomer, userIdForSubscription, verifyWebhook, type PaidBand,
 } from './billing/stripe.js';
-import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, syncSubscription, updateBand } from './billing/subscription.js';
+import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, recordRefund, syncSubscription, updateBand } from './billing/subscription.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
 import { buildBundle, competitorAudit, crawlFacts, performanceAudit, readPublicPage, setupPlacement, websiteAudit } from './agents/journey.js';
 import { planGo } from './agents/milesrun.js';
@@ -704,12 +704,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!e || isDemoAccount(e)) return false;
     return u.email.toLowerCase() === e;
   };
-  const getAdminSettings = async (): Promise<{ inviteOnly: boolean; allowed: string[] }> => {
+  const getAdminSettings = async (): Promise<{ inviteOnly: boolean; allowed: string[]; otherMonthlyUsd: number }> => {
     const id = await adminUserId();
-    if (!id) return { inviteOnly: false, allowed: [] };
+    if (!id) return { inviteOnly: false, allowed: [], otherMonthlyUsd: 0 };
     const data = await authStore.getUserData(id);
-    const s = (data.adminSettings ?? {}) as { inviteOnly?: boolean; allowed?: string[] };
-    return { inviteOnly: !!s.inviteOnly, allowed: Array.isArray(s.allowed) ? s.allowed : [] };
+    const s = (data.adminSettings ?? {}) as { inviteOnly?: boolean; allowed?: string[]; otherMonthlyUsd?: number };
+    const other = typeof s.otherMonthlyUsd === 'number' && s.otherMonthlyUsd >= 0 ? s.otherMonthlyUsd : 0;
+    return { inviteOnly: !!s.inviteOnly, allowed: Array.isArray(s.allowed) ? s.allowed : [], otherMonthlyUsd: other };
   };
 
   // ── invite links: the owner mints a shareable sign-up URL ──
@@ -1162,7 +1163,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return setupProgress({ apps, website: profile.website });
   });
 
-  app.get('/api/admin/business', async (req, reply) => {
+  app.get<{ Querystring: { period?: string } }>('/api/admin/business', async (req, reply) => {
     const actor = await getUser(req);
     if (!actor) return reply.code(401).send({ error: 'not signed in' });
     if (!(await isAdmin(actor))) return reply.code(403).send({ error: 'owner only' });
@@ -1174,7 +1175,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       try { apps = (await accountsList(user.id)).map((account) => account.app); } catch { apps = null; }
       rows.push({ id: user.id, email: user.email, name: user.name, createdAt: user.createdAt, data, apps });
     }
-    return buildAdminBusiness(rows, { stripeReady: stripeReady() });
+    const period = req.query?.period === '30' || req.query?.period === 'all' ? req.query.period : 'month';
+    const settings = await getAdminSettings();
+    return buildAdminBusiness(rows, { stripeReady: stripeReady(), period, otherMonthlyUsd: settings.otherMonthlyUsd });
   });
 
   const adminActor = async (req: FastifyRequest, reply: FastifyReply) => {
@@ -1310,6 +1313,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       if (!sub.stripeCustomerId) return reply.code(400).send({ error: 'This account has no Stripe customer yet.' });
       const res = await refundLatestCharge(sub.stripeCustomerId);
       if ('error' in res) return reply.code(502).send({ error: res.error });
+      recordRefund(data, { id: `refund-${Date.now()}`, amount: res.amount });
+      await authStore.setUserData(id, data);
       note = `Refund $${res.amount.toFixed(2)}`;
     } else if (action === 'coupon') {
       const coupon = String(req.body?.coupon || '').trim();
@@ -1410,11 +1415,17 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const id = await adminUserId();
     if (!id) return reply.code(400).send({ error: 'no owner resolved' });
     const data = await authStore.getUserData(id);
+    const current = (data.adminSettings ?? {}) as { inviteOnly?: boolean; allowed?: string[]; otherMonthlyUsd?: number };
+    const postedOther = (req.body as { otherMonthlyUsd?: number } | undefined)?.otherMonthlyUsd;
+    const otherMonthlyUsd = typeof postedOther === 'number' && postedOther >= 0 && postedOther <= 100000
+      ? postedOther
+      : (typeof current.otherMonthlyUsd === 'number' ? current.otherMonthlyUsd : 0);
     data.adminSettings = {
-      inviteOnly: !!req.body?.inviteOnly,
+      inviteOnly: typeof req.body?.inviteOnly === 'boolean' ? req.body.inviteOnly : !!current.inviteOnly,
       allowed: Array.isArray(req.body?.allowed)
-        ? req.body!.allowed!.map((e) => String(e).trim().toLowerCase()).filter((e) => e.includes('@')).slice(0, 500)
-        : [],
+        ? req.body.allowed.map((e) => String(e).trim().toLowerCase()).filter((e) => e.includes('@')).slice(0, 500)
+        : (Array.isArray(current.allowed) ? current.allowed : []),
+      otherMonthlyUsd,
     };
     await authStore.setUserData(id, data);
     return { ok: true };
