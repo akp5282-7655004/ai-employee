@@ -178,6 +178,9 @@ describe('owner money route', () => {
       expect(html).toContain('UPCOMING RENEWALS');
       expect(html).toContain('Connect Stripe to see renewals');
       expect(html).toContain('RENEWS');
+      expect(html).toContain('const profitRaw=figures.profit;');
+      expect(html).toContain("bothMissing?'Revenue and profit show once Stripe and your AI cost source report real numbers. ':'");
+      expect(html).not.toContain('connect AI costs');
       expect(html).not.toMatch(/UPCOMING RENEWALS[\s\S]{0,80}\u2014/);
     } finally {
       delete process.env.ADMIN_EMAIL;

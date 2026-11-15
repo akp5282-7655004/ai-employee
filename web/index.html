@@ -7897,20 +7897,32 @@ async function renderOwnerAdmin(){
   const payingSub=isMissing(t.paying)?'connect Stripe':(isMissing(t.pastDue)?'connect Stripe':(t.pastDue+' past due · '+(isMissing(t.canceled)?'connect Stripe':t.canceled+' canceled')));
   const trialSub=isMissing(t.trials)?'Not connected':(t.trials+' trials');
   const mrrShown=money(t.mrr);
-  const profitShown=money(t.profit);
+  const figures=view.money||{};
+  const periodKey=window.adminPeriod||'month';
+  const periodName=periodKey==='30'?'last 30 days':periodKey==='all'?'all time':'this month';
+  const profitRaw=figures.profit;
+  const profitIsNumber=typeof profitRaw==='number';
+  const profitShown=profitIsNumber?((profitRaw<0?'-$':'$')+Math.abs(profitRaw).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})):(profitRaw==='no data'?'no data':null);
+  const profitSub=profitIsNumber?periodName:(profitRaw==='no data'?'no cost logged for this period':'connect Stripe');
+  const profitTile=tile(profitIsNumber && profitRaw<0?'red':'green', trend, 'PROFIT', profitShown, profitSub);
+  if(profitRaw==='no data'){
+    const node=profitTile.querySelector('.own-value');
+    if(node){ node.className='own-value gold'; node.textContent='no data'; }
+  }
   grid.append(
     tile('blue', people, 'ACCOUNTS', t.signups, (t.signups30d==null?0:t.signups30d)+' new in 30 days'),
     tile('green', cardIco, 'PAYING', isMissing(t.paying)?null:t.paying, payingSub),
     tile('purple', gift, 'ON FREE CREDITS', t.onFreeCredits, trialSub),
     tile('amber', alertIco, 'AT RISK', t.atRisk, 'see below'),
     tile('green', dollar, 'MRR', mrrShown==null?null:mrrShown, mrrShown==null?'connect Stripe':'from Stripe invoices'),
-    tile(typeof t.profit==='number' && t.profit<0?'red':'green', trend, 'PROFIT', profitShown==null?null:profitShown, profitShown==null?'connect AI costs':'revenue minus serve cost')
+    profitTile
   );
   totals.append(grid);
-  totals.append(el('div','own-foot', 'Revenue and profit show once Stripe and your AI cost source report real numbers. Signups today '+(t.signupsToday==null?0:t.signupsToday)+' · last 7 days '+(t.signupsThisWeek==null?0:t.signupsThisWeek)+' · last 30 days '+(t.signups30d==null?0:t.signups30d)+'.'));
+  const signupLine='Signups today '+(t.signupsToday==null?0:t.signupsToday)+' · last 7 days '+(t.signupsThisWeek==null?0:t.signupsThisWeek)+' · last 30 days '+(t.signups30d==null?0:t.signups30d)+'.';
+  const bothMissing=figures.revenue==='Not connected' && (profitRaw==='Not connected' || profitRaw==null);
+  totals.append(el('div','own-foot', (bothMissing?'Revenue and profit show once Stripe and your AI cost source report real numbers. ':'')+signupLine));
   page.append(totals);
 
-  const figures=view.money||{};
   const periodBar=el('div','own-period');
   [['month','This month'],['30','Last 30 days'],['all','All time']].forEach(pair=>{
     const btn=el('button','own-btn tiny'+( (window.adminPeriod||'month')===pair[0]?' on':''), pair[1]);
