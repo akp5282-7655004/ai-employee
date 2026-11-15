@@ -122,6 +122,32 @@ It upgrades in place: **Claude** understanding when `ANTHROPIC_API_KEY` is set
 when served, and falls back to an inline copy of the engine only when opened as a
 standalone file (the shareable demo).
 
+## Stripe billing
+
+Stripe holds the card and the subscription. Miles stores the customer id, subscription id, plan, status, the amount Stripe actually charged, and the period end. If the env vars are empty, plan actions say "Stripe not connected" and the rest of the app still runs.
+
+Set these in the host environment (see `.env.example`):
+
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_STARTER`
+- `STRIPE_PRICE_GROWTH`
+- `STRIPE_PRICE_SCALE`
+- `APP_URL` (public origin, no trailing path)
+- `ADMIN_EMAIL` (the only account that can open `/admin`)
+
+Webhook URL to register: `https://<APP_URL host>/api/stripe/webhook`
+
+Events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`. Also register `payment_intent.succeeded` and `payment_intent.payment_failed` if you use credit top-ups.
+
+In the Stripe Dashboard:
+
+1. Create three recurring monthly Prices, one each for Starter, Growth, and Scale. Copy each Price id into the matching env var. The charge is whatever amount you set on that Price.
+2. Developers, Webhooks, Add endpoint. Paste the webhook URL. Select the events above. Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
+3. Settings, Billing, Customer portal. Turn the portal on. Allow customers to switch plans and cancel. Save.
+
+Customers upgrade from Plan and Credits (Stripe Checkout) and manage or cancel from the same page (Customer Portal). The owner dashboard is `/admin`.
+
 ## What's next
 
 The engine, connector, agent loop, and a web surface all exist and run offline.
