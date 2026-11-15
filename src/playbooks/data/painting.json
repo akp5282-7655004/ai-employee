@@ -1,0 +1,205 @@
+{
+  "id": "painting",
+  "name": "Miles Painting Playbook",
+  "label": "Painting",
+  "version": "2026-11-15",
+  "summary": "Book exteriors before the weather window opens, switch to interiors and cabinets when it closes, and let local SEO and before/after photos do the heavy lifting. Use with the Miles Master Template (deploy logic, ZIP scoring, customer journey).",
+  "sections": [
+    {
+      "title": "Intro",
+      "lines": [
+        "Miles Painting Playbook",
+        "Nov 15, 2026",
+        "Book exteriors before the weather window opens, switch to interiors and cabinets when it closes, and let local SEO and before/after photos do the heavy lifting. Use with the Miles Master Template (deploy logic, ZIP scoring, customer journey)."
+      ]
+    },
+    {
+      "title": "1. At a glance",
+      "lines": [
+        "Item",
+        "Default",
+        "Demand type",
+        "Planned; buyers collect 2–3 quotes",
+        "Lead service lines",
+        "Exterior repaint (spring–fall); interior and cabinet refinishing (winter)",
+        "Front door",
+        "Free color consult + written estimate",
+        "Weather rule",
+        "Standard exterior latex needs about 50°F+ during application and cure; cold-weather lines go down to 35°F and extend the season by up to ~2 months",
+        "Proven channel",
+        "Local SEO: Painters in Philly drove 1,418 leads with $0 paid"
+      ]
+    },
+    {
+      "title": "2. Seasonality by region",
+      "lines": [
+        "Region",
+        "Exterior window",
+        "Interior focus",
+        "Booking push",
+        "Cold North",
+        "Late May–early Oct",
+        "Nov–Apr",
+        "Sell exterior Feb–Apr for summer slots",
+        "Mixed",
+        "Apr–Oct",
+        "Nov–Mar",
+        "Sell exterior Jan–Mar; fall exterior Aug–Sep",
+        "Hot-humid South",
+        "Oct–May (avoid peak heat and rain)",
+        "Jun–Sep",
+        "Watch humidity and afternoon storms",
+        "Hot-dry Southwest",
+        "Oct–Apr",
+        "May–Sep",
+        "Avoid surfaces over 90°F",
+        "Marine West",
+        "Jun–Sep dry window",
+        "Oct–May",
+        "Book dry-season slots early",
+        "Ideal exterior conditions are about 50–80°F with humidity around 40–70%. Overnight lows matter as much as daytime highs."
+      ]
+    },
+    {
+      "title": "3. Location signals (add to ZIP score)",
+      "lines": [
+        "Median year built and siding type: wood-sided and older homes repaint more often.",
+        "Home value and income: premium paint, cabinet refinishing, and color design sell in higher-value ZIPs.",
+        "Recent home sales (move-in interior repaints) and HOA communities (scheduled exterior cycles).",
+        "Pre-1978 housing share: lead-safe practices required (see compliance)."
+      ]
+    },
+    {
+      "title": "4. Demographics and audiences",
+      "lines": [
+        "Exterior buyer: homeowner 40–70, longer tenure, preparing to sell or protecting the house.",
+        "Interior / cabinet buyer: 30–55, recent movers and remodel-minded; design-driven.",
+        "Property managers and HOAs: recurring turnover and community repaint contracts.",
+        "Audiences: recent movers, home-improvement interests in scored ZIPs, past customers for the next room.",
+        "Audience spec for Miles",
+        "Load with the Audience framework in the Master Template. Emergency segments get no income or homeowner filter and start at 25+; planned segments use the filters below. Ages are starting points: Miles tightens them from closed-won CRM data after 30 booked jobs.",
+        "Segment",
+        "Demand",
+        "Age",
+        "ZIP income rule",
+        "Homeowner",
+        "ZIP filters",
+        "Meta",
+        "Google",
+        "Seed list",
+        "Exterior repaint",
+        "planned",
+        "40-65+",
+        "median >= $75K",
+        "required (single-family)",
+        "owner-occupied >= 65%; wood/older siding; median home value above area median",
+        "Advantage+ on; suggestion 40-65+; before/after creative",
+        "Search: house painters, exterior painting; observe Homeowners; exclude Renters",
+        "past exterior customers",
+        "Interior / cabinets",
+        "planned",
+        "30-55",
+        "median >= $90K",
+        "required",
+        "recent movers; higher home value",
+        "suggestion 30-55; recent movers if available",
+        "Search: interior painting, cabinet painting",
+        "past interior customers",
+        "HOAs / property managers",
+        "recurring",
+        "35-65+",
+        "no income filter",
+        "n/a",
+        "HOA-dense ZIPs",
+        "lead form for commercial",
+        "Search: HOA painting, commercial painting",
+        "commercial customers",
+        "Exclude in every segment: customers from the last 12 months (except retention campaigns), open leads and estimates, employees, out-of-area ZIPs."
+      ]
+    },
+    {
+      "title": "5. Offer stack",
+      "lines": [
+        "Rung",
+        "Offer",
+        "Front door",
+        "Free color consult + written estimate within [48] hrs",
+        "Core",
+        "$[X] off exterior repaint booked by [date] (early-booking discount)",
+        "Off-season",
+        "$[X] off interior rooms or cabinet refinishing Nov–Mar",
+        "Upsell",
+        "Trim, doors, decks/stain, cabinet refinishing, power washing",
+        "Retention",
+        "Next-room credit; touch-up visit at year 1; 5–7-year exterior repaint reminder"
+      ]
+    },
+    {
+      "title": "6. Channels and campaign build",
+      "lines": [
+        "Local SEO + Google Business Profile first: service pages (exterior, interior, cabinets) + location pages for real service areas; project photos every job.",
+        "Search + LSA for \"house painters [city]\", \"cabinet painting\"; negatives: jobs, DIY, paint store, art, auto painting.",
+        "Meta: before/after video and carousel; early-booking exterior offer Jan–Apr; interior offer in fall.",
+        "Yard signs and neighbor postcards around active exterior jobs (with permission)."
+      ]
+    },
+    {
+      "title": "7. Triggers Miles watches",
+      "lines": [
+        "Trigger",
+        "Proposal",
+        "10-day forecast: lows consistently ≥ 50°F",
+        "Open exterior campaigns in that region",
+        "Forecast lows dropping below 50°F",
+        "Shift budget to interior and cabinet offers",
+        "January 15",
+        "Early-booking exterior campaign",
+        "Rain-delay week",
+        "Text booked customers; offer interior swap slots"
+      ]
+    },
+    {
+      "title": "8. After the job and retention",
+      "lines": [
+        "Before/after photos on every job (with consent) for GBP, site and Meta.",
+        "Thank-you coupon toward the next room; honest review ask to everyone; referral offer with a neighborhood project photo.",
+        "Exterior repaint reminder at year 5–7; touch-up visit at year 1."
+      ]
+    },
+    {
+      "title": "9. Compliance and watch-outs",
+      "lines": [
+        "Homes built before 1978: follow EPA lead-safe (RRP) rules and use certified renovators.",
+        "Don't promise exterior start dates the weather can't support; state weather-delay terms.",
+        "Use only real job photos in ads."
+      ]
+    },
+    {
+      "title": "10. Deploy checklist",
+      "lines": [
+        "☐ Confirm services (exterior, interior, cabinets, commercial) and RRP certification",
+        "☐ Map region; set the exterior/interior switch dates and temperature triggers",
+        "☐ Load early-booking, off-season interior, and next-room offers",
+        "☐ Build GBP, service and location pages; Search + LSA; Meta before/after",
+        "☐ Turn on estimate follow-up (multi-quote buyers), post-job photo capture, review and referral automations",
+        "☐ Owner approval, launch",
+        "Sources: 50°F minimum and 8-hour cure (Diamond Vogel) · 35°F products extend season ~2 months (Sherwin-Williams) · ideal temperature and humidity (Ring's End) · Painters in Philly results from Akhil's 1SEO work."
+      ]
+    }
+  ],
+  "negatives": [
+    "jobs",
+    "DIY",
+    "paint store",
+    "art",
+    "auto painting"
+  ],
+  "keywords": [
+    "house painters",
+    "exterior painting",
+    "interior painting",
+    "cabinet painting",
+    "HOA painting",
+    "commercial painting"
+  ]
+}

@@ -7,6 +7,8 @@
  * the LLM but the structure never depends on it.
  */
 
+import { tradePlaybook } from '../playbooks/load.js';
+
 export type MatchType = 'broad' | 'phrase' | 'exact';
 export interface KeywordSpec {
   text: string;
@@ -440,6 +442,8 @@ export function buildCampaignSpec(input: CampaignInput, ctx: CampaignCtx, role: 
   const locations = input.locations && input.locations.length ? input.locations : ctx.city ? [ctx.city] : [city];
   const finalUrl = (input.finalUrl || '').trim() || 'https://example.com';
   const brand = businessNameOf({ ...ctx, city });
+  const playbookNegatives = tradePlaybook(ctx.trade).negatives.map((row) => row.toLowerCase());
+  const negatives = [...new Set([...NEGATIVES, ...playbookNegatives])];
   const spec: CampaignSpec = {
     name,
     dailyBudget: budget,
@@ -448,8 +452,8 @@ export function buildCampaignSpec(input: CampaignInput, ctx: CampaignCtx, role: 
     locations,
     language: 'English',
     finalUrl,
-    adGroups: themes.map((theme) => ({ name: theme, keywords: keywordsFor(theme, { ...ctx, city }, NEGATIVES), rsa: rsaFor(theme, { ...ctx, city }, brand) })),
-    negatives: NEGATIVES,
+    adGroups: themes.map((theme) => ({ name: theme, keywords: keywordsFor(theme, { ...ctx, city }, negatives), rsa: rsaFor(theme, { ...ctx, city }, brand) })),
+    negatives,
     status: 'PAUSED',
     businessName: brand,
     displayPaths: displayPathsOf(themes),

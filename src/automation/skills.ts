@@ -4,6 +4,7 @@
  * when the caller passes one. The default summary is a template.
  */
 import { cplBandForGoal } from '../agents/goalcheck.js';
+import { tradePlaybook } from '../playbooks/load.js';
 import type { SkillRules } from './rules.js';
 
 export type SkillKey = 'wasted-spend' | 'negative-keywords' | 'budget-pacing' | 'conversion-tracking' | 'weekly-report';
@@ -200,6 +201,17 @@ export function weeklyReport(input: DailyInput, findings: Finding[], write?: Sum
   if (input.channels.meta && input.metaSpend != null) parts.push(`Meta spend on file is ${money(input.metaSpend)}.`);
   if (input.channels.gbp && input.gbpCalls != null) parts.push(`Google Business Profile calls on file: ${input.gbpCalls}.`);
   if (input.channels.ghl && input.ghlLeads != null) parts.push(`GoHighLevel leads on file: ${input.ghlLeads}.`);
+  const book = tradePlaybook(input.trade);
+  const target = book.economics?.allowableCostPerSoldJob;
+  const booked = input.bookedJobs;
+  if (target && booked > 0) {
+    const actual = input.campaigns.reduce((sum, row) => sum + (row.spend || 0), 0) / booked;
+    parts.push(`Playbook target cost per booked job is ${money(target)}. On file it is ${money(actual)}.`);
+  } else if (book.economics?.costPerLead) {
+    parts.push(`Playbook cost per lead to hold is ${money(book.economics.costPerLead)}.`);
+  } else {
+    parts.push(`${book.label} playbook version ${book.version} does not set a numeric ROAS. Miles still optimizes to cost per booked job.`);
+  }
   const draft = plain(parts.join(' '));
   const detail = plain(write ? write(draft) : draft);
   return { id: 'weekly-report', skill: 'weekly-report', title: 'Weekly report', detail };

@@ -9,6 +9,7 @@ import { extractPageLinks, parseSiteHtml, type SiteImport } from '../research/si
 import { CHANNELS } from '../research/competitive.js';
 import { feasibility, playbookCard, type Feasibility, type PlaybookCard } from './feasibility.js';
 import { DEFAULT_CAPS, type Caps, type MilesArea, type MilesMode } from './policy.js';
+import { tradePlaybook } from '../playbooks/load.js';
 
 export interface CrawlInput {
   businessName?: string;
@@ -244,7 +245,7 @@ export function buildBundle(input: CrawlInput & SetupAnswers & { mode?: MilesMod
     day: `Day ${i + 1}`,
     caption: `${facts.profile.businessName || 'We'} do ${services[i % services.length] || trade} in ${city}. Ask about timing.`,
     status: 'needs_approval' as const,
-    note: 'Draft only. Miles does not publish a post until the mode and a connected page allow it. No image was generated.',
+    note: `Draft only. Miles does not publish a post until the mode and a connected page allow it. No image was generated. Playbook ${tradePlaybook(trade).label}, version ${tradePlaybook(trade).version}.`,
   }));
   const caps: Caps = {
     dailyBudget: input.caps?.dailyBudget ?? daily,

@@ -1,0 +1,211 @@
+{
+  "id": "hvac",
+  "name": "Miles HVAC Playbook",
+  "label": "HVAC",
+  "version": "2026-11-15",
+  "summary": "Win the first hot and first cold weeks with speed, fill the shoulder seasons with tune-ups and memberships, and sell replacements on monthly payment. Use with the Miles Master Template (deploy logic, ZIP scoring, customer journey).",
+  "sections": [
+    {
+      "title": "Intro",
+      "lines": [
+        "Miles HVAC Playbook",
+        "Nov 15, 2026",
+        "Win the first hot and first cold weeks with speed, fill the shoulder seasons with tune-ups and memberships, and sell replacements on monthly payment. Use with the Miles Master Template (deploy logic, ZIP scoring, customer journey)."
+      ]
+    },
+    {
+      "title": "1. At a glance",
+      "lines": [
+        "Item",
+        "Default",
+        "Demand type",
+        "Emergency (no heat / no AC) + planned replacement + recurring maintenance",
+        "Lead service lines",
+        "System replacement; repair; tune-up as front door",
+        "Front door",
+        "$[XX] pre-season tune-up (21-point) or diagnostic credited to repair",
+        "Recurring engine",
+        "Comfort club membership: 2 tune-ups/yr, priority service, 10–15% off repairs",
+        "Replacement closer",
+        "Financing + good/better/best options",
+        "2026 context",
+        "New systems use A2L refrigerants (R-454B or R-32); R-410A service refrigerant is getting more expensive; the federal 25C heat pump credit no longer applies to 2026 installs"
+      ]
+    },
+    {
+      "title": "2. Seasonality by region",
+      "lines": [
+        "Region",
+        "Cooling peak",
+        "Heating peak",
+        "Shoulder (tune-ups, memberships)",
+        "Cold North",
+        "Jul–Aug (short)",
+        "Nov–Mar (dominant)",
+        "Apr–Jun, Sep–Oct",
+        "Mixed",
+        "Jun–Aug",
+        "Dec–Feb",
+        "Launch AC tune-ups late March; furnace tune-ups late August",
+        "Hot-humid South",
+        "Apr–Oct (dominant)",
+        "Short cold snaps",
+        "Feb–Mar, Nov",
+        "Hot-dry Southwest",
+        "May–Sep (extreme)",
+        "Minimal",
+        "Feb–Apr, Oct–Nov",
+        "Marine West",
+        "Heat waves only",
+        "Nov–Mar (mild)",
+        "Spring; heat pump conversions",
+        "Off-season reactivation converts at about half the in-season rate, so time sends to the shoulder before each peak."
+      ]
+    },
+    {
+      "title": "3. Location signals (add to ZIP score)",
+      "lines": [
+        "Median year built: systems 12–15+ years old are replacement-ready.",
+        "Cooling and heating degree days for the ZIP (sizes demand per season).",
+        "Fuel mix: gas-heat ZIPs vs all-electric (heat pump) ZIPs need different creative.",
+        "Owner-occupied share and income; financing-first where ticket ÷ income is high.",
+        "Utility or state rebates available in the ZIP (federal credits are gone; local rebates are now the incentive story)."
+      ]
+    },
+    {
+      "title": "4. Demographics and audiences",
+      "lines": [
+        "Emergency buyer: any homeowner, decides in minutes; wins on answer speed, same-day slots, and reviews.",
+        "Replacement buyer: homeowner 40–70 with an older system; compares 2–3 quotes; wants payment, warranty, and comfort.",
+        "Seniors: safety and reliability messaging (no-heat risk); offer priority membership.",
+        "Audiences: past customers by equipment age; homeowners in scored ZIPs; retargeting to estimate-not-sold.",
+        "Audience spec for Miles",
+        "Load with the Audience framework in the Master Template. Emergency segments get no income or homeowner filter and start at 25+; planned segments use the filters below. Ages are starting points: Miles tightens them from closed-won CRM data after 30 booked jobs.",
+        "Segment",
+        "Demand",
+        "Age",
+        "ZIP income rule",
+        "Homeowner",
+        "ZIP filters",
+        "Meta",
+        "Google",
+        "Seed list",
+        "No heat / no AC",
+        "emergency",
+        "25-65+",
+        "no income filter",
+        "preferred, not required (landlords and renters call too)",
+        "service area only",
+        "not primary; retargeting only",
+        "Search + LSA: repair terms; no demographic exclusions; run nights/weekends only if phones answered",
+        "none",
+        "System replacement",
+        "planned",
+        "35-65+",
+        "median >= $70K: cash or financing; $55-70K: financing-first",
+        "required",
+        "owner-occupied >= 60%; median year built <= 2012 (systems 12-15+ yrs)",
+        "Advantage+ on; control age 25, suggestion 35-65+",
+        "Search: replacement/heat pump terms; observe Homeowners, age; exclude Renters",
+        "past repair customers with equipment 12+ yrs old",
+        "Tune-up and membership",
+        "recurring",
+        "40-65+",
+        "median >= $70K",
+        "required",
+        "past customers first; then high-score ZIPs",
+        "custom audience of past customers + lookalike",
+        "Customer Match; Demand Gen to past customers",
+        "all past customers",
+        "Exclude in every segment: customers from the last 12 months (except retention campaigns), open leads and estimates, employees, out-of-area ZIPs."
+      ]
+    },
+    {
+      "title": "5. Offer stack",
+      "lines": [
+        "Rung",
+        "Offer",
+        "Front door",
+        "$[XX] tune-up through [date] or diagnostic credited to repair",
+        "Core",
+        "$[X] off a new system + financing from $[X]/mo",
+        "Upsell",
+        "Air quality (filtration, UV), smart thermostat, duct sealing, surge protection",
+        "Membership",
+        "Comfort club: 2 tune-ups, priority, repair discount, no overtime fees",
+        "Retention",
+        "Filter reminder; pre-season check; membership renewal with \"you saved $X\"",
+        "Emergency",
+        "Same-day no-heat / no-AC; no discount, sell speed",
+        "Repair-vs-replace angle: systems on R-410A still get serviced, but refrigerant leaks are getting costlier; age + leak + repair cost is the replacement conversation. Never say R-410A systems must be replaced."
+      ]
+    },
+    {
+      "title": "6. Channels and campaign build",
+      "lines": [
+        "Google Search + LSA carry emergency demand; split \"AC repair\", \"furnace repair\", \"AC/furnace replacement\", \"heat pump\".",
+        "Negatives: jobs, HVAC school, DIY, parts, filters, window units, car AC.",
+        "Meta: retargeting and tune-up/membership offers to past customers and lookalikes; replacement financing creative.",
+        "Dayparting: keep emergency campaigns running nights and weekends only if phones are answered."
+      ]
+    },
+    {
+      "title": "7. Triggers Miles watches",
+      "lines": [
+        "Trigger",
+        "Proposal",
+        "Forecast ≥ 90°F (or local top 10% heat) within 5 days",
+        "Raise AC repair budget, push same-day slots, pause tune-up ads",
+        "Forecast ≤ 20°F / first freeze",
+        "Raise heating repair budget; no-heat landing page",
+        "3 weeks before each season",
+        "Tune-up campaign + reactivation to past customers by equipment age",
+        "Membership expiry − 30 days",
+        "Renewal sequence"
+      ]
+    },
+    {
+      "title": "8. After the job and retention",
+      "lines": [
+        "Every repair: offer membership on site; thank-you coupon for next tune-up; honest review ask to everyone.",
+        "Every install: record equipment, install date and warranty in CRM; 30-day comfort check; annual tune-up reminder at month 11.",
+        "Equipment-age reactivation (6 touches, 21 days) from the Master Template."
+      ]
+    },
+    {
+      "title": "9. Compliance and watch-outs",
+      "lines": [
+        "Don't advertise federal tax credits for 2026 installs; check state and utility rebates before using any rebate claim.",
+        "Refrigerant claims must be accurate: no \"R-410A is banned\" scare copy.",
+        "Membership terms must list exclusions; never imply it covers excluded repairs."
+      ]
+    },
+    {
+      "title": "10. Deploy checklist",
+      "lines": [
+        "☐ Confirm services (gas, heat pump, ductless, commercial) and brands carried",
+        "☐ Map region and set seasonal calendar; set heat and cold triggers",
+        "☐ Load tune-up, replacement financing, and membership offers with real terms",
+        "☐ Build Search + LSA by service, Meta retargeting, replacement and repair landing pages",
+        "☐ Import past customers with equipment age; schedule pre-season reactivation",
+        "☐ Turn on missed-call text-back (critical for HVAC), estimate follow-up, post-job and membership automations",
+        "☐ Owner approval, launch",
+        "Sources: 25C heat pump credit ended (Budget Heating, citing IRS) · refrigerant rules (Kele, 2026) · R-410A service vs new equipment (gcn.com) · seasonal timing from the HVAC reactivation sequence."
+      ]
+    }
+  ],
+  "negatives": [
+    "jobs",
+    "HVAC school",
+    "DIY",
+    "parts",
+    "filters",
+    "window units",
+    "car AC"
+  ],
+  "keywords": [
+    "repair terms",
+    "replacement",
+    "heat pump terms"
+  ]
+}

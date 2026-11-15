@@ -1,0 +1,214 @@
+{
+  "id": "electrical",
+  "name": "Miles Electrical Playbook",
+  "label": "Electrical",
+  "version": "2026-11-15",
+  "summary": "Capture safety emergencies fast, then grow ticket size with panel upgrades, generators and EV chargers sold on load, outages and safety. Use with the Miles Master Template (deploy logic, ZIP scoring, customer journey).",
+  "sections": [
+    {
+      "title": "Intro",
+      "lines": [
+        "Miles Electrical Playbook",
+        "Nov 15, 2026",
+        "Capture safety emergencies fast, then grow ticket size with panel upgrades, generators and EV chargers sold on load, outages and safety. Use with the Miles Master Template (deploy logic, ZIP scoring, customer journey)."
+      ]
+    },
+    {
+      "title": "1. At a glance",
+      "lines": [
+        "Item",
+        "Default",
+        "Demand type",
+        "Emergency (outage, sparking, breaker trips) + upgrade projects",
+        "Lead service lines",
+        "Panel / service upgrade; whole-home standby generator; EV charger install",
+        "Front door",
+        "$[X] electrical safety inspection",
+        "Upsell path",
+        "Inspection → panel upgrade → generator or EV charger → whole-home surge protection",
+        "2026 context",
+        "Federal 30C home EV charger credit ended for chargers placed in service after June 30, 2026"
+      ]
+    },
+    {
+      "title": "2. Seasonality by region",
+      "lines": [
+        "Region",
+        "Peak",
+        "Play",
+        "Hot-humid South / Atlantic coast",
+        "Hurricane season Jun 1–Nov 30; sell generators Mar–May before it",
+        "Pre-season generator push; post-storm repairs and inspections",
+        "Cold North",
+        "Ice storms Dec–Feb; holiday lighting Nov–Dec",
+        "Generators before winter; heat-load panel issues",
+        "Mixed",
+        "Summer storms; holiday lighting",
+        "Generators + surge protection; EV and remodel panel upgrades year-round",
+        "Hot-dry Southwest",
+        "Summer load (AC), monsoon outages",
+        "Panel capacity for AC, solar-ready panels",
+        "All regions",
+        "Remodel season (spring–fall); EV purchases",
+        "Panel upgrades tied to kitchens, hot tubs, EVs, home offices"
+      ]
+    },
+    {
+      "title": "3. Location signals (add to ZIP score)",
+      "lines": [
+        "Median year built: older homes often have smaller panels or outdated wiring; pre-1980 homes get the safety-inspection front door.",
+        "Outage frequency and storm exposure (hurricane, ice storm) for generator ZIPs.",
+        "Natural gas availability (generator fuel) vs propane.",
+        "EV adoption and newer high-income ZIPs for charger + panel bundles.",
+        "Home value: generators and service upgrades are premium tickets."
+      ]
+    },
+    {
+      "title": "4. Demographics and audiences",
+      "lines": [
+        "Emergency buyer: any homeowner; trust and speed.",
+        "Generator buyer: homeowner 45–75, higher income, work-from-home or medical-equipment needs, in outage-prone ZIPs.",
+        "EV / remodel buyer: 30–55, higher income, newer vehicles, renovating.",
+        "Audiences: past customers in generator ZIPs before storm season; EV owners and home-improvement interests; realtor/inspection referrals for older homes.",
+        "Audience spec for Miles",
+        "Load with the Audience framework in the Master Template. Emergency segments get no income or homeowner filter and start at 25+; planned segments use the filters below. Ages are starting points: Miles tightens them from closed-won CRM data after 30 booked jobs.",
+        "Segment",
+        "Demand",
+        "Age",
+        "ZIP income rule",
+        "Homeowner",
+        "ZIP filters",
+        "Meta",
+        "Google",
+        "Seed list",
+        "Outage / safety emergency",
+        "emergency",
+        "25-65+",
+        "no income filter",
+        "not required",
+        "service area only",
+        "not primary",
+        "Search + LSA: emergency electrician terms",
+        "none",
+        "Panel / service upgrade",
+        "planned",
+        "35-65+",
+        "median >= $70K",
+        "required",
+        "median year built <= 1990; owner-occupied >= 60%",
+        "Advantage+ on; control age 25, suggestion 35-65+",
+        "Search: panel upgrade, 200 amp; observe Homeowners",
+        "past service-call customers in older homes",
+        "Standby generator",
+        "planned",
+        "45-65+",
+        "median >= $100K or median home value top third of service area",
+        "required",
+        "outage/storm-exposed ZIPs; natural gas available",
+        "Advantage+ on; suggestion 45-65+",
+        "Search: whole home generator; HHI bid +, observe Top 30%",
+        "generator owners (lookalike)",
+        "EV charger + panel",
+        "planned",
+        "30-55",
+        "median >= $100K",
+        "required",
+        "newer, higher-income ZIPs; EV adoption",
+        "suggestion 30-55; interests: electric vehicles",
+        "Search: EV charger installation; in-market EV segments",
+        "EV charger customers",
+        "Exclude in every segment: customers from the last 12 months (except retention campaigns), open leads and estimates, employees, out-of-area ZIPs."
+      ]
+    },
+    {
+      "title": "5. Offer stack",
+      "lines": [
+        "Rung",
+        "Offer",
+        "Front door",
+        "$[X] safety inspection (smoke/CO detector check included)",
+        "Core",
+        "$[X] off panel upgrade; or EV charger + panel bundle",
+        "Premium",
+        "Whole-home standby generator with financing from $[X]/mo; $[X] off before [storm-season date]",
+        "Upsell",
+        "Whole-home surge protection, dedicated circuits, lighting",
+        "Membership",
+        "Annual generator maintenance plan; electrical safety check",
+        "Emergency",
+        "Same-day for outages, burning smells, sparking; no discount"
+      ]
+    },
+    {
+      "title": "6. Channels and campaign build",
+      "lines": [
+        "Search + LSA: split emergency, panel upgrade, generator, EV charger, lighting.",
+        "Negatives: jobs, apprenticeship, DIY, portable generators (unless sold), parts.",
+        "Meta: generator pre-season creative with real install photos; EV charger creative to EV-interest audiences.",
+        "Landing pages per project: panel upgrade, generator, EV charger; each with financing and permit/licensing proof."
+      ]
+    },
+    {
+      "title": "7. Triggers Miles watches",
+      "lines": [
+        "Trigger",
+        "Proposal",
+        "March 1 (hurricane regions)",
+        "Generator pre-season campaign + past-customer SMS",
+        "Named storm or ice storm forecast",
+        "Generator inspection/maintenance push to existing owners; emergency budget up",
+        "After a regional outage",
+        "\"Never again\" generator campaign in affected ZIPs (tasteful, 3–7 days after)",
+        "November",
+        "Holiday lighting and surge protection"
+      ]
+    },
+    {
+      "title": "8. After the job and retention",
+      "lines": [
+        "Every service call: offer the safety inspection or surge protection; record panel size and age in CRM.",
+        "Generator installs: maintenance plan at install; annual service reminder.",
+        "Thank-you coupon toward next service; honest review ask to everyone."
+      ]
+    },
+    {
+      "title": "9. Compliance and watch-outs",
+      "lines": [
+        "License, permit, and inspection claims must be true; show license number where required.",
+        "Don't advertise the federal EV charger credit for installs after June 30, 2026; check state and utility rebates.",
+        "Post-outage ads: no fear exploitation or price-gouging language."
+      ]
+    },
+    {
+      "title": "10. Deploy checklist",
+      "lines": [
+        "☐ Confirm services (generators and brands, EV chargers, panels, commercial)",
+        "☐ Score ZIPs on housing age, outage exposure, gas availability, income",
+        "☐ Load inspection, panel, generator, EV offers with real financing",
+        "☐ Build Search + LSA by service; project landing pages",
+        "☐ Arm storm-season and outage triggers",
+        "☐ Turn on speed-to-lead, estimate follow-up (long-cycle generator quotes), post-job and maintenance-plan automations",
+        "☐ Owner approval, launch",
+        "Sources: 30C EV charger credit end date (EnergySage) · Atlantic hurricane season dates and panel upgrades for generators · generator demand in hurricane and ice-storm areas (Builder)"
+      ]
+    }
+  ],
+  "negatives": [
+    "jobs",
+    "apprenticeship",
+    "DIY",
+    "portable generators",
+    "parts"
+  ],
+  "keywords": [
+    "emergency electrician terms",
+    "panel upgrade",
+    "200 amp",
+    "whole home generator",
+    "EV charger installation",
+    "panel upgrade",
+    "generator",
+    "EV charger",
+    "lighting."
+  ]
+}

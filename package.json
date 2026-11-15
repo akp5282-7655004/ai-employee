@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && cp -r src/playbooks/data src/playbooks/audiences dist/playbooks/",
     "demo": "tsx scripts/demo.ts",
     "demo:connect": "tsx scripts/demo-connect.ts",
     "demo:agent": "tsx scripts/demo-agent.ts",

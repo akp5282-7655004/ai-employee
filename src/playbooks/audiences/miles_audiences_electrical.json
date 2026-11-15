@@ -1,0 +1,107 @@
+{
+  "trade": "Electrical",
+  "defaults": {
+    "version": "2026-11-15",
+    "country": "US",
+    "base_rule": {
+      "age_min": 30,
+      "age_max": null,
+      "homeowner": true,
+      "zip_median_income_floor": 70000,
+      "zip_owner_occupied_min_pct": 60
+    },
+    "platform_rules": {
+      "meta": {
+        "location_mode": "people_living_in",
+        "location_unit": "zip_list_from_scoring",
+        "advantage_plus_audience": true,
+        "hard_controls": [
+          "location",
+          "age_min (max 25 under Advantage+)",
+          "custom_audience_exclusions",
+          "language"
+        ],
+        "age_note": "Advantage+ lets the hard age minimum go no higher than 25. To enforce 30+, switch to original audience (Advantage+ off) or use 25 as control + age suggestion. Default: control 25, suggestion = segment age range; review age breakdown weekly and move to original audience if >20% of spend goes below segment age_min.",
+        "income": "No reliable US household-income targeting; the ZIP list is the income filter.",
+        "special_ad_category": "None for home services. Declare Financial Products only if the ad is about a loan or credit offer itself."
+      },
+      "google_search": {
+        "location": "zip_list_or_radius, presence only (people in or regularly in)",
+        "demographics_mode": "observation first; bid adjustments after 30 conversions",
+        "household_income_tiers": [
+          "Top 10%",
+          "11-20%",
+          "21-30%",
+          "31-40%",
+          "41-50%",
+          "Lower 50%",
+          "Unknown"
+        ],
+        "income_note": "Top 50% starts near the US median household income ($83,730 in 2024). A $70K floor sits inside 'Lower 50%', so never exclude Lower 50% or Unknown on Search; use bid adjustments.",
+        "detailed_demographics": "Homeowners (observe or target); exclude Renters only where segment allows"
+      },
+      "google_lsa": "No demographic targeting: service area (ZIPs) and job types only. ZIP scoring decides the service-area list.",
+      "pmax_demand_gen": "Audience signals: customer list, website visitors, Homeowners detailed demographic, in-market home services segments."
+    },
+    "always_exclude": [
+      "customers_last_12_months (unless retention campaign)",
+      "open_leads_and_estimates",
+      "employees",
+      "out_of_service_area"
+    ],
+    "never_use": [
+      "race, ethnicity, religion or other protected traits",
+      "proxies for protected traits"
+    ]
+  },
+  "segments": [
+    {
+      "id": "elec_emergency",
+      "name": "Outage / safety emergency",
+      "demand": "emergency",
+      "age": "25-65+",
+      "zip_income": "no income filter",
+      "homeowner": "not required",
+      "zip_filters": "service area only",
+      "meta": "not primary",
+      "google": "Search + LSA: emergency electrician terms",
+      "seed": "none"
+    },
+    {
+      "id": "elec_panel",
+      "name": "Panel / service upgrade",
+      "demand": "planned",
+      "age": "35-65+",
+      "zip_income": "median >= $70K",
+      "homeowner": "required",
+      "zip_filters": "median year built <= 1990; owner-occupied >= 60%",
+      "meta": "Advantage+ on; control age 25, suggestion 35-65+",
+      "google": "Search: panel upgrade, 200 amp; observe Homeowners",
+      "seed": "past service-call customers in older homes"
+    },
+    {
+      "id": "elec_generator",
+      "name": "Standby generator",
+      "demand": "planned",
+      "age": "45-65+",
+      "zip_income": "median >= $100K or median home value top third of service area",
+      "homeowner": "required",
+      "zip_filters": "outage/storm-exposed ZIPs; natural gas available",
+      "meta": "Advantage+ on; suggestion 45-65+",
+      "google": "Search: whole home generator; HHI bid +, observe Top 30%",
+      "seed": "generator owners (lookalike)"
+    },
+    {
+      "id": "elec_ev",
+      "name": "EV charger + panel",
+      "demand": "planned",
+      "age": "30-55",
+      "zip_income": "median >= $100K",
+      "homeowner": "required",
+      "zip_filters": "newer, higher-income ZIPs; EV adoption",
+      "meta": "suggestion 30-55; interests: electric vehicles",
+      "google": "Search: EV charger installation; in-market EV segments",
+      "seed": "EV charger customers"
+    }
+  ]
+}
