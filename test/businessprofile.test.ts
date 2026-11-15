@@ -259,6 +259,9 @@ describe('business profile honesty', () => {
     expect(html).not.toContain('data-group="know"');
     expect(html).toContain('id="biz-body"');
     expect(html).toContain('YOUR BUSINESS');
+    expect(html).toContain('data-bizstat');
+    expect(html).toContain('Could not save, Retry');
+    expect(html).toContain("editing?'Done':'Edit'");
   });
 });
 

@@ -849,7 +849,7 @@
   .org-depts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
   .org-dept{border:1px solid #ececef;border-radius:14px;padding:12px;background:#fff;}
   .org-skill{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:4px 0;}
-  .lib-card{aspect-ratio:1;box-sizing:border-box;background:#fff;border:1px solid #ececef;border-radius:18px;padding:16px;display:flex;flex-direction:column;text-align:left;cursor:pointer;font-family:inherit;color:#111;box-shadow:0 1px 2px rgba(16,16,20,.04);min-width:0;width:100%;}
+  .lib-card{aspect-ratio:1;box-sizing:border-box;background:#fff;border:1px solid #ececef;border-radius:18px;padding:16px;display:flex;flex-direction:column;text-align:left;cursor:pointer;font-family:inherit;color:#111;box-shadow:0 1px 2px rgba(16,16,20,.04);min-width:0;width:100%;overflow:hidden;}
   .lib-card:hover{border-color:#111;}
   .lib-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
   .lib-ico{width:36px;height:36px;border-radius:12px;background:#111;color:#fff;display:grid;place-items:center;flex:none;}
@@ -858,8 +858,8 @@
   .lib-badge.on{background:#e7f6ee;color:#1b8552;}
   .lib-name{margin:12px 0 6px;font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.15;}
   .lib-sum{margin:0;color:#3f3f46;font-size:13.5px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
-  .lib-facts{margin-top:auto;padding-top:10px;display:flex;flex-direction:column;gap:4px;min-height:0;}
-  .lib-fact{font-size:12.5px;color:#6e6e76;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .lib-facts{margin-top:auto;padding-top:10px;display:flex;flex-direction:column;gap:4px;min-height:0;min-width:0;overflow:hidden;}
+  .lib-fact{font-size:12.5px;color:#6e6e76;min-width:0;max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
   .modalbox.lib-wide{max-width:640px;}
   .lib-detail h2{margin:0 28px 6px 0;font-size:22px;letter-spacing:-.02em;}
   .lib-detail p{margin:0 0 10px;line-height:1.45;color:#3f3f46;}
@@ -1064,9 +1064,13 @@
   .yb-card h3{margin:0;font-size:13.5px;letter-spacing:.04em;text-transform:uppercase;font-weight:800;}
   .yb-cardhead{display:flex;align-items:center;gap:8px;}
   .yb-badge{margin-left:auto;font-size:11px;font-weight:800;border-radius:999px;padding:3px 8px;white-space:nowrap;}
+  .yb-savestat{border:0;background:transparent;font:inherit;font-size:12px;font-weight:800;color:#1b8552;padding:8px 6px;min-height:36px;cursor:default;white-space:nowrap;}
+  .yb-savestat.saving{color:#6e6e76;}
+  .yb-savestat.error{color:#a45359;cursor:pointer;text-decoration:underline;}
+  .yb-savestat[hidden]{display:none;}
   .yb-badge.add{background:#fde7c7;color:#9a5b12;}
   .yb-badge.ok{background:#e5f6ec;color:#1b8552;}
-  .yb-edit{background:none;border:0;padding:0;font-weight:800;font-size:12px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:inherit;color:#111;}
+  .yb-edit{background:none;border:0;padding:8px 10px;min-height:36px;font-weight:800;font-size:12px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:inherit;color:#111;}
   .yb-blurb{margin:6px 0 12px;color:#8a8a92;font-size:13px;}
   .yb-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px 16px;}
   .yb-field.wide{grid-column:1/-1;}
@@ -1087,7 +1091,7 @@
   .yb-photos{display:flex;gap:10px;flex-wrap:wrap;}
   .yb-slot{position:relative;width:92px;height:92px;border:1px dashed #d5d5dc;border-radius:14px;display:grid;place-items:center;background:#fafafa;cursor:pointer;overflow:hidden;font-weight:800;color:#8a8a92;}
   .yb-slot img{width:100%;height:100%;object-fit:cover;}
-  .yb-x{position:absolute;top:4px;right:4px;width:18px;height:18px;border:0;border-radius:999px;background:#111;color:#fff;cursor:pointer;line-height:1;}
+  .yb-x{position:absolute;top:4px;right:4px;width:28px;height:28px;border:0;border-radius:999px;background:#111;color:#fff;cursor:pointer;line-height:1;}
   .yb-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-top:1px solid #f2f2f4;font-size:14.5px;}
   .yb-row:first-of-type{border-top:0;}
   .yb-pillstat{font-size:12px;font-weight:800;border-radius:999px;padding:4px 8px;}
@@ -1170,6 +1174,8 @@
   #set-subtabs{display:none;}
   @media(max-width:760px){
     .main{padding:16px 16px 72px;}
+    .pagehead{min-width:0;}
+    .pagehead h2{min-width:0;overflow:hidden;text-overflow:ellipsis;}
     .pagehead h2,.ln-title,.md-greet,.yb-title h1{font-size:24px;}
     .pagetabs,.subtabs{gap:6px;margin-bottom:14px;}
     .mcard{padding:16px;}
@@ -1204,7 +1210,7 @@
           <a data-page="audit" data-pages="audit" data-tabs="Site &amp; Competitor Audits">Audits</a>
           <a data-page="analytics" data-pages="analytics,meters" data-tabs="Analytics|Benchmarks" data-nostrip="1">Analytics</a>
           <a data-page="recs" data-pages="recs,growth" data-tabs="Recommendations|Growth Autopilot">Recommendations</a>
-          <a data-page="skills" data-pages="skills,market,ghl" data-tabs="Skills|Marketplace|GHL Workflows">Playbooks</a>
+          <a data-page="skills" data-pages="skills,market,ghl" data-tabs="Skills|Marketplace|CRM workflows">Playbooks</a>
         </div>
       </div>
       <div class="navgroup" data-group="account">
@@ -2058,7 +2064,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',library:'Skills and Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',playdetail:'Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',approvals:'Approvals & Autonomy',billing:'Plan & Credits',fblaunch:'Facebook',reports:'Reports',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',owneradmin:'ADMIN',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled',wireframe:'Agent Wireframe',autopilot:'Autonomy',skills:'Playbooks',library:'Skills & Playbooks',meters:'Benchmarks',analytics:'Analytics',recs:'Recommendations',cads:'Competitors',research:'Demographics',weather:'Weather',adstudio:'Ad Copy',playbook:'Plan',playdetail:'Playbook',launch:'Launch',localpresence:'Local Presence',approvals:'Approvals',billing:'Plan & Credits',fblaunch:'Facebook',reports:'Reports',autohub:'Automations',health:'System Health',ghl:'CRM workflows',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Edit',studio:'Studio',hub:'Projects',brand:'Brand',assets:'Assets',audit:'Audits',calendar:'Schedule',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',owneradmin:'ADMIN',market:'Marketplace',chat:'Chat with Miles'};
 // A destination can own several pages, Launch owns the plan, both channel
 // launchers and the ad-copy writer. The nav lists the destination; its pages
 // become a tab strip, so a four-step job stops looking like four unrelated
@@ -2241,7 +2247,7 @@ function updateConnStat(){
 }
 // True when live AND in production (customers can connect their own accounts).
 function connLiveForCustomers(){ return !!(CONN.hub && CONN.hub.ready && CONN.hub.env==='production'); }
-document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>setPage(a.dataset.page));
+document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>{ if(typeof closeOnboard==='function') closeOnboard(); setPage(a.dataset.page); });
 // Collapsible nav groups: expand the group holding the active page; a header click
 // toggles its group open (accordion, opening one collapses the others).
 function openNavGroupFor(id){
@@ -6963,7 +6969,7 @@ function newCampaign(){ showModal('<h3 style="margin:0 0 14px">New project</h3><
   const go=()=>{ const n=$('#nc-name').value.trim(); if(!n) return; HUB.campaigns.unshift({id:newId(),name:n,createdAt:new Date().toISOString(),items:[]}); saveHub(); queueChange('campaign','New campaign: '+n); closeModal(); renderHub(); };
   $('#nc-go').onclick=go; $('#nc-name').addEventListener('keydown',e=>{ if(e.key==='Enter') go(); }); setTimeout(()=>$('#nc-name').focus(),40); }
 const newProjectBtn=document.getElementById('new-project');
-if(newProjectBtn) newProjectBtn.onclick=async()=>{ setPage('hub'); if(!HUB_LOADED) await loadHub(); newCampaign(); };
+if(newProjectBtn) newProjectBtn.onclick=async()=>{ if(typeof closeOnboard==='function') closeOnboard(); setPage('hub'); if(!HUB_LOADED) await loadHub(); newCampaign(); };
 function addImageItem(cid){ showModal('<h3 style="margin:0 0 14px">Add image</h3><input class="f" id="im-url" placeholder="Image URL (https://…)" style="margin:0"><input class="f" id="im-cap" placeholder="Caption (optional)" style="margin:8px 0 0"><button class="go" id="im-go" style="margin-top:14px;width:100%">Add image</button>');
   $('#im-go').onclick=()=>{ const url=$('#im-url').value.trim(); if(!url) return; const c=HUB.campaigns.find(x=>x.id===cid); c.items.unshift({id:newId(),type:'image',imageUrl:url,caption:$('#im-cap').value.trim(),createdAt:new Date().toISOString()}); saveHub(); closeModal(); renderHub(); }; setTimeout(()=>$('#im-url').focus(),40); }
 function addNoteItem(cid){ showModal('<h3 style="margin:0 0 14px">Add note</h3><textarea class="f" id="nt-text" placeholder="Write a note, idea, or copy…" style="margin:0;min-height:96px"></textarea><button class="go" id="nt-go" style="margin-top:14px;width:100%">Add note</button>');
@@ -6979,7 +6985,7 @@ function saveCreativeToCampaign(cr){ pickCampaign((cid)=>{ const c=HUB.campaigns
 function downscaleImage(file, maxDim, type){ return new Promise((resolve,reject)=>{ const fr=new FileReader(); fr.onload=()=>{ const img=new Image(); img.onload=()=>{ let w=img.width,h=img.height; const s=Math.min(1,maxDim/Math.max(w,h)); w=Math.round(w*s); h=Math.round(h*s); const cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h); resolve(type==='image/png'?cv.toDataURL('image/png'):cv.toDataURL('image/jpeg',0.82)); }; img.onerror=reject; img.src=fr.result; }; fr.onerror=reject; fr.readAsDataURL(file); }); }
 let ASSETS={photos:[]}, ASSETS_LOADED=false;
 async function loadAssets(){ if(!REMOTE){ ASSETS_LOADED=true; return; } try{ const r=await fetch('/api/assets'); const d=await r.json(); ASSETS=d.assets||{photos:[]}; if(!ASSETS.photos) ASSETS.photos=[]; }catch(e){} ASSETS_LOADED=true; }
-async function saveAssets(){ if(!REMOTE) return; try{ await fetch('/api/assets',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({assets:ASSETS})}); }catch(e){} }
+async function saveAssets(){ if(!REMOTE) return false; try{ const r=await fetch('/api/assets',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({assets:ASSETS})}); return r.ok; }catch(e){ return false; } }
 async function openAssets(){ if(!ASSETS_LOADED) await loadAssets(); renderAssets(); }
 function renderAssets(){
   const lb=$('#logo-box');
@@ -6993,11 +6999,11 @@ function renderAssets(){
   for(const p of photos){ const it=el('div','photo-item'); const im=el('img'); im.src=p.url; im.alt=''; const d=el('button','photo-del','×'); d.onclick=()=>{ ASSETS.photos=ASSETS.photos.filter(x=>x.id!==p.id); saveAssets(); renderAssets(); }; it.append(im,d); g.append(it); }
 }
 $('#logo-box').onclick=()=>$('#logo-input').click();
-$('#logo-input').onchange=async(e)=>{ const f=e.target.files[0]; if(!f)return; try{ ASSETS.logo=await downscaleImage(f,320,'image/png'); await saveAssets(); renderAssets(); }catch(err){} e.target.value=''; };
+$('#logo-input').onchange=async(e)=>{ const f=e.target.files[0]; if(!f)return; const note=$('#assets-note'); if(note) note.textContent='Saving...'; try{ ASSETS.logo=await downscaleImage(f,320,'image/png'); const ok=await saveAssets(); renderAssets(); if(note) note.textContent=ok?'Saved ✓':'Could not save, Retry'; }catch(err){ if(note) note.textContent='Could not save, Retry'; } e.target.value=''; };
 $('#logo-remove').onclick=async()=>{ delete ASSETS.logo; await saveAssets(); renderAssets(); };
 $('#photo-add').onclick=()=>$('#photo-input').click();
 $('#photo-input').onchange=async(e)=>{ const files=[...e.target.files]; for(const f of files){ try{ const url=await downscaleImage(f,1024,'image/jpeg'); (ASSETS.photos=ASSETS.photos||[]).push({id:newId(),url,caption:''}); }catch(err){} } await saveAssets(); renderAssets(); e.target.value=''; };
-$('#assets-save').onclick=async()=>{ ASSETS.tagline=$('#as-tagline').value.trim(); ASSETS.services=$('#as-services').value.trim(); ASSETS.brandColor=$('#as-color').value.trim(); ASSETS.phone=$('#as-phone').value.trim(); ASSETS.website=$('#as-website').value.trim(); ASSETS.differentiators=$('#as-diff').value.trim(); const btn=$('#assets-save'); btn.disabled=true; await saveAssets(); queueChange('assets','Brand assets updated'); $('#assets-note').textContent='Saved ✓'; btn.disabled=false; setTimeout(()=>{$('#assets-note').textContent='';},2200); };
+$('#assets-save').onclick=async()=>{ ASSETS.tagline=$('#as-tagline').value.trim(); ASSETS.services=$('#as-services').value.trim(); ASSETS.brandColor=$('#as-color').value.trim(); ASSETS.phone=$('#as-phone').value.trim(); ASSETS.website=$('#as-website').value.trim(); ASSETS.differentiators=$('#as-diff').value.trim(); const btn=$('#assets-save'); const note=$('#assets-note'); btn.disabled=true; if(note) note.textContent='Saving...'; const ok=await saveAssets(); if(ok && typeof queueChange==='function') queueChange('assets','Brand assets updated'); if(note) note.textContent=ok?'Saved ✓':'Could not save, Retry'; btn.disabled=false; if(ok) setTimeout(()=>{ if(note && note.textContent==='Saved ✓') note.textContent=''; },2200); };
 $('#as-import').onclick=async()=>{ const url=$('#as-import-url').value.trim(); if(!url) return; if(!REMOTE){ $('#assets-note').textContent='Website import runs on the deployed app.'; return; }
   // capture whatever they've already typed so we don't overwrite it
   ASSETS.tagline=$('#as-tagline').value.trim(); ASSETS.services=$('#as-services').value.trim(); ASSETS.brandColor=$('#as-color').value.trim(); ASSETS.phone=$('#as-phone').value.trim(); ASSETS.website=$('#as-website').value.trim(); ASSETS.differentiators=$('#as-diff').value.trim();
@@ -7052,11 +7058,11 @@ async function renderCompetitive(){
   const ch=el('div'); ch.style.margin='18px 0 0';
   ch.append(el('div','layer-label','WHAT EACH CHANNEL CAN SEE'));
   for(const c of (d.audit?.channels||d.channels||[])){
-    const row=el('div'); row.style.cssText='display:flex;gap:10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line)';
-    const n=el('b',null,c.label); n.style.cssText='flex:0 0 190px;font-size:12.5px';
+    const row=el('div'); row.style.cssText='display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line)';
+    const n=el('b',null,c.label); n.style.cssText='flex:1 1 140px;min-width:0;font-size:12.5px';
     const [t,fg]=CCOVER[c.coverage]||CCOVER.none;
-    const tag=el('span',null,t); tag.style.cssText='flex:0 0 120px;font-size:11px;font-weight:700;color:'+fg;
-    const w=el('span',null,c.note); w.style.cssText='flex:1;font-size:12px;color:var(--muted);line-height:1.45';
+    const tag=el('span',null,t); tag.style.cssText='flex:0 0 auto;font-size:11px;font-weight:700;color:'+fg;
+    const w=el('span',null,c.note); w.style.cssText='flex:1 1 100%;min-width:0;font-size:12px;color:var(--muted);line-height:1.45';
     row.append(n,tag,w); ch.append(row);
   }
   body.append(ch);
@@ -7788,7 +7794,7 @@ function setAccount(box){
   card.append(account, pw);
   box.append(card);
   $('#set-name').value=savedAccountName(SETTINGS.account); $('#set-email').value=SETTINGS.account.email||'';
-  save.onclick=async()=>{ if(!REMOTE) return; save.disabled=true; const name=$('#set-name').value.trim(); await fetch('/api/account',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({name})}); SETTINGS.account.name=name; ME.name=name; applyIdentity(); note.textContent='Saved ✓'; save.disabled=false; setTimeout(()=>note.textContent='',2000); };
+  save.onclick=async()=>{ if(!REMOTE) return; save.disabled=true; note.textContent='Saving...'; const name=$('#set-name').value.trim(); let ok=false; try{ const r=await fetch('/api/account',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({name})}); ok=r.ok; }catch(e){ ok=false; } if(ok){ SETTINGS.account.name=name; ME.name=name; applyIdentity(); note.textContent='Saved ✓'; } else note.textContent='Could not save, Retry'; save.disabled=false; if(ok) setTimeout(()=>{ if(note.textContent==='Saved ✓') note.textContent=''; },2000); };
   pwbtn.onclick=async()=>{ if(!REMOTE) return; pwbtn.disabled=true; const r=await fetch('/auth/change-password',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({current:$('#set-pw-cur').value,next:$('#set-pw-new').value})}); const d=await r.json().catch(()=>({})); pwnote.textContent=r.ok?'Password updated ✓':(d.error||'Failed'); if(r.ok){ $('#set-pw-cur').value=''; $('#set-pw-new').value=''; } pwbtn.disabled=false; setTimeout(()=>pwnote.textContent='',3500); };
 }
 function setTeam(box){
@@ -9136,7 +9142,7 @@ async function openChat(seed){ await enterChat(); if(seed){ await resetSession()
 
 $('#hgo').onclick=()=>{const v=$('#hprompt').value.trim();if(v)openChat(v);};
 $('#hprompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#hgo').click();}});
-document.querySelectorAll('[data-ask]').forEach(n=>n.onclick=()=>enterChat());
+document.querySelectorAll('[data-ask]').forEach(n=>n.onclick=()=>{ if(typeof closeOnboard==='function') closeOnboard(); enterChat(); });
 $('#csend').onclick=()=>send();
 $('#cmode').onchange=()=>{ chatMode=$('#cmode').value; };
 // Microphone, speak to Miles. Uses the browser's built-in speech recognition
@@ -9328,6 +9334,8 @@ let YBEDIT={};
 let bizSaveKind={profile:false,brand:false,plan:false};
 let bizTimer=0;
 let bizLoad=0;
+let bizGen=0;
+let BIZ_STATUS={};
 const BIZ_CHIP={
   'Most profitable jobs':'topServices','Current offer':'currentOffers','Main competitors':'competitors','Tagline':'tagline','Job photos':'photos','Year founded':'yearStarted','Business name':'businessName','Trade':'industry','Phone':'phone','Website':'website','Service area':'serviceAreas','Services':'services','Goal':'goal','Daily budget':'dailyBudget','Leads you want':'leadsPerDay'
 };
@@ -9352,13 +9360,38 @@ function bizProfilePayload(d){
   return payload;
 }
 function bizKit(d){ return { name:d.businessName||'', tagline:d.tagline||'', colors:d.colors||[], fonts:d.fonts||'', voice:d.voice||'', audience:d.audience||'', avoid:d.avoid||'', logoUrl:d.logoUrl||'' }; }
-function scheduleBizSave(kind){
-  bizSaveKind[kind]=true; bizSaveKind.profile=true;
-  const note=$('#biz-save-note'); if(note) note.textContent='Saving...';
-  clearTimeout(bizTimer); bizTimer=setTimeout(flushBiz, 650);
+function setBizStatus(sectionId, state, kind){
+  if(!sectionId) return;
+  const prev=BIZ_STATUS[sectionId]||{};
+  BIZ_STATUS[sectionId]={state, kind:kind||prev.kind||'profile'};
+  paintBizStatus();
 }
-async function flushBiz(){
+function paintBizStatus(){
+  document.querySelectorAll('[data-bizstat]').forEach(node=>{
+    const st=BIZ_STATUS[node.dataset.bizstat];
+    node.className='yb-savestat'+(st?(' '+st.state):'');
+    if(!st){ node.hidden=true; node.textContent=''; node.disabled=true; node.onclick=null; return; }
+    node.hidden=false;
+    if(st.state==='saving'){ node.textContent='Saving...'; node.disabled=true; node.onclick=null; }
+    else if(st.state==='saved'){ node.textContent='Saved ✓'; node.disabled=true; node.onclick=null; }
+    else {
+      node.textContent='Could not save, Retry';
+      node.disabled=false;
+      node.onclick=()=>{ setBizStatus(node.dataset.bizstat, 'saving', st.kind); scheduleBizSave(st.kind, node.dataset.bizstat); };
+    }
+  });
+}
+function scheduleBizSave(kind, sectionId){
+  bizSaveKind[kind]=true; bizSaveKind.profile=true;
+  const sec=sectionId || (kind==='brand'?'brand':kind==='plan'?'goals':'basics');
+  setBizStatus(sec, 'saving', kind);
+  const note=$('#biz-save-note'); if(note) note.textContent='Saving...';
+  const gen=++bizGen;
+  clearTimeout(bizTimer); bizTimer=setTimeout(()=>flushBiz(gen), 650);
+}
+async function flushBiz(gen){
   const kind=bizSaveKind; bizSaveKind={profile:false,brand:false,plan:false};
+  const pending=Object.keys(BIZ_STATUS).filter(id=>BIZ_STATUS[id]&&BIZ_STATUS[id].state==='saving');
   const d=(YB.view&&YB.view.draft)||{};
   const note=$('#biz-save-note');
   try{
@@ -9387,11 +9420,20 @@ async function flushBiz(){
         if(!qr.ok) toast('The profile saved. The Google plan did not update.');
       }
     }
-    if(note) note.textContent='Changes save automatically. Miles uses the new details from the next thing it makes.';
+    if(gen===bizGen){
+      pending.forEach(id=>{ if(BIZ_STATUS[id]&&BIZ_STATUS[id].state==='saving') BIZ_STATUS[id].state='saved'; });
+      paintBizStatus();
+      if(note) note.textContent='Saved. Miles uses the new details from the next thing it makes.';
+    }
   }catch(e){
-    if(note) note.textContent='Could not save. Try again.';
+    if(gen===bizGen){
+      pending.forEach(id=>{ if(BIZ_STATUS[id]&&BIZ_STATUS[id].state==='saving') BIZ_STATUS[id].state='error'; });
+      paintBizStatus();
+      if(note) note.textContent='Could not save. Use Retry on the card.';
+    }
     return;
   }
+  if(gen!==bizGen) return;
   const ae=document.activeElement;
   const typing=ae&&ae.closest&&ae.closest('#biz-body')&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
   if(!typing) await loadProfile();
@@ -9399,7 +9441,7 @@ async function flushBiz(){
 function bindBiz(node, id, draftKey){
   node.dataset.biz=id;
   node.value=YB.view.draft[draftKey]??'';
-  const on=()=>{ YB.view.draft[draftKey]=node.value; scheduleBizSave(bizKind(id)); };
+  const on=()=>{ YB.view.draft[draftKey]=node.value; scheduleBizSave(bizKind(id), sectionOf(id)); };
   node.addEventListener('input', on);
   node.addEventListener('change', on);
 }
@@ -9489,6 +9531,12 @@ function bizDisplay(f){
     String(f.value).split(/[,\n]/).map(s=>s.trim()).filter(Boolean).forEach(s=>row.append(el('span','yb-pill', s)));
     return row;
   }
+  const drafted=YB.view&&YB.view.draft?YB.view.draft[f.id]:'';
+  if(!f.filled && drafted!=null && String(drafted).trim()){
+    const v=el('div','yb-v');
+    v.append(document.createTextNode(String(drafted)));
+    return v;
+  }
   if(!f.filled){
     if(f.connect){ const b=el('button','yb-add','Connect'); b.type='button'; b.onclick=()=>connectApp(f.connect); return b; }
     const b=el('button','yb-add', f.hint||'+ Add'); b.type='button';
@@ -9519,8 +9567,12 @@ function cardHead(sec){
   const head=el('div','yb-cardhead');
   head.append(el('h3', null, sec.title));
   head.append(el('span', 'yb-badge '+(sec.emptyCount?'add':'ok'), sec.emptyCount?sec.badge:'Complete'));
-  const edit=el('button','yb-edit','Edit'); edit.type='button';
-  edit.onclick=()=>{ YBEDIT[sec.id]=!YBEDIT[sec.id]; renderBusiness($('#biz-body'), YB.view, YB.miles); };
+  const stat=el('button','yb-savestat'); stat.type='button'; stat.dataset.bizstat=sec.id; stat.hidden=true;
+  head.append(stat);
+  const editing=!!YBEDIT[sec.id];
+  const edit=el('button','yb-edit', editing?'Done':'Edit'); edit.type='button';
+  edit.setAttribute('aria-label', (editing?'Done editing ':'Edit ')+(sec.title||'this card'));
+  edit.onclick=()=>{ YBEDIT[sec.id]=!editing; renderBusiness($('#biz-body'), YB.view, YB.miles); };
   head.append(edit);
   return head;
 }
@@ -9557,10 +9609,13 @@ function renderPhotos(sec){
   upload.onclick=()=>file.click();
   file.onchange=async()=>{
     const files=[...(file.files||[])];
+    setBizStatus('photos','saving','profile');
     if(!ASSETS_LOADED) await loadAssets();
     for(const f of files){ try{ const url=await downscaleImage(f, 1024, 'image/jpeg'); (ASSETS.photos=ASSETS.photos||[]).push({id:newId(), url, caption:''}); }catch(e){} }
-    await saveAssets();
-    await loadProfile();
+    const ok=await saveAssets();
+    setBizStatus('photos', ok?'saved':'error', 'profile');
+    if(ok) await loadProfile();
+    else paintBizStatus();
   };
   row.append(upload);
   (YB.view.photos||[]).forEach(p=>{
@@ -9568,13 +9623,16 @@ function renderPhotos(sec){
     const im=el('img'); im.src=p.url; im.alt='Job photo';
     const del=el('button','yb-x','×'); del.type='button';
     del.onclick=async()=>{
+      setBizStatus('photos','saving','profile');
       if(!ASSETS_LOADED) await loadAssets();
       const list=ASSETS.photos||[];
       const at=list.findIndex(ph=>ph&&ph.url===p.url);
       if(at>=0) list.splice(at,1);
       ASSETS.photos=list;
-      await saveAssets();
-      await loadProfile();
+      const ok=await saveAssets();
+      setBizStatus('photos', ok?'saved':'error', 'profile');
+      if(ok) await loadProfile();
+      else paintBizStatus();
     };
     slot.append(im, del); row.append(slot);
   });
@@ -9769,6 +9827,7 @@ function renderBusiness(box, view, miles){
   next.append(dash, document.createTextNode(' and '), launch, document.createTextNode('.'));
   foot.append(save, next);
   box.append(foot);
+  paintBizStatus();
 }
 async function loadProfile(){
   const box=$('#biz-body'); if(!box) return;
