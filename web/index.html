@@ -674,91 +674,136 @@
   .md-tilebox .v{font-size:28px;font-weight:800;letter-spacing:-.03em;margin-top:4px;color:#111;}
   .md-tilebox .d{font-size:12.5px;font-weight:700;color:#1b8552;margin-top:2px;}
   .md-tilebox .s{font-size:12.5px;color:#6e6e76;margin-top:4px;}
-  .ad-page{display:flex;flex-direction:column;gap:16px;max-width:100%;min-width:0;}
-  .ad-intro{margin:0;color:var(--graphite);font-size:14.5px;line-height:1.45;max-width:68ch;}
-  .ad-sec{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:8px 12px;border-radius:12px;width:fit-content;}
-  .ad-sec.blue{background:#E7EEF8;color:#1d4f96;}
-  .ad-sec.green{background:#E6F2EB;color:#14663d;}
-  .ad-sec.amber{background:#F3EFE2;color:#6e5316;}
-  .ad-sec.purple{background:#EFE8FF;color:#4c3296;}
-  .ad-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;}
-  .ad-kpi{position:relative;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 16px 14px 18px;box-shadow:0 1px 2px rgba(16,16,20,.04);min-width:0;overflow:hidden;}
-  .ad-kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;}
-  .ad-kpi.blue::before{background:#2B6FCB;}
-  .ad-kpi.green::before{background:#1B8552;}
-  .ad-kpi.purple::before{background:#6B46C1;}
-  .ad-kpi.amber::before{background:#C4841D;}
-  .ad-kpi.red::before{background:#A45359;}
-  .ad-kpi-top{display:flex;align-items:center;gap:8px;}
-  .ad-ico{width:28px;height:28px;border-radius:10px;display:grid;place-items:center;flex:none;}
-  .ad-kpi.blue .ad-ico{background:#E7EEF8;color:#2B6FCB;}
-  .ad-kpi.green .ad-ico{background:#E6F2EB;color:#1B8552;}
-  .ad-kpi.purple .ad-ico{background:#EFE8FF;color:#6B46C1;}
-  .ad-kpi.amber .ad-ico{background:#F3EFE2;color:#86651C;}
-  .ad-kpi.red .ad-ico{background:#F6EAEB;color:#A45359;}
-  .ad-k{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
-  .ad-v{margin-top:8px;font-size:24px;font-weight:800;letter-spacing:-.03em;color:var(--ink);line-height:1.1;}
-  .ad-v.muted{color:var(--muted);font-size:15px;font-weight:700;letter-spacing:0;}
-  .ad-card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px 16px 12px;box-shadow:0 1px 2px rgba(16,16,20,.04);min-width:0;}
-  .ad-funnelbox{position:relative;height:210px;}
-  .ad-funnelbox canvas{width:100% !important;height:100% !important;}
-  .ad-conv{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
-  .ad-conv span{font-size:12px;font-weight:700;color:var(--graphite);background:var(--panel-2);border-radius:999px;padding:4px 10px;}
-  .ad-risk{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
-  .ad-riskcard{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 1px 2px rgba(16,16,20,.04);}
-  .ad-riskcard b{display:block;font-size:15px;letter-spacing:-.02em;}
-  .ad-riskcard .em{color:var(--muted);font-size:12.5px;margin-top:2px;}
-  .ad-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
-  .ad-chip{font-size:11px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;border-radius:999px;padding:4px 8px;}
-  .ad-chip.amber{background:#F3EFE2;color:#6e5316;}
-  .ad-chip.blue{background:#E7EEF8;color:#1d4f96;}
-  .ad-chip.red{background:#F6EAEB;color:#8d3d43;}
-  .ad-chip.purple{background:#EFE8FF;color:#4c3296;}
-  .ad-chip.green{background:#E6F2EB;color:#14663d;}
-  .ad-search{display:flex;gap:8px;align-items:center;margin:0 0 12px;}
-  .ad-search input{margin:0;flex:1;min-width:0;}
-  .ad-scroll{overflow:auto;max-height:640px;border:1px solid var(--line);border-radius:18px;background:var(--card);}
-  .ad-scroll .md-table{margin:0;}
-  .ad-scroll th{position:sticky;top:0;background:var(--card);z-index:1;}
-  .ad-scroll td,.ad-scroll th{padding-left:12px;}
-  .ad-scroll tr{cursor:pointer;}
-  .ad-scroll tr:hover td{background:#fafafa;}
-  .ad-badge{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;border-radius:999px;padding:3px 8px;white-space:nowrap;}
-  .ad-badge.blue{background:#E7EEF8;color:#1d4f96;}
-  .ad-badge.green{background:#E6F2EB;color:#14663d;}
-  .ad-badge.purple{background:#EFE8FF;color:#4c3296;}
-  .ad-badge.amber{background:#F3EFE2;color:#6e5316;}
-  .ad-badge.red{background:#F6EAEB;color:#8d3d43;}
-  .ad-badge.mute{background:#F4F4F5;color:#3F3F46;}
-  .ad-cards{display:none;}
-  .ad-acard{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 1px 2px rgba(16,16,20,.04);}
-  .ad-acard b{font-size:16px;letter-spacing:-.02em;}
-  .ad-nums{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0;}
-  .ad-nums span{display:block;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
-  .ad-nums strong{font-size:15px;}
-  .ad-backdrop{position:fixed;inset:0;background:rgba(17,17,18,.45);z-index:80;display:flex;justify-content:flex-end;}
-  .ad-sheet{background:var(--card);width:min(440px,100%);height:100%;overflow:auto;padding:18px 18px 32px;box-shadow:-8px 0 30px rgba(16,16,20,.12);}
-  .ad-sheet h3{margin:0;font-size:22px;letter-spacing:-.03em;}
-  .ad-group{margin-top:16px;}
-  .ad-group h4{margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;}
-  .ad-group.plan h4{color:#1d4f96;}
-  .ad-group.bill h4{color:#8d3d43;}
-  .ad-group.cred h4{color:#14663d;}
-  .ad-group.acct h4{color:#4c3296;}
-  .ad-acts{display:flex;flex-wrap:wrap;gap:8px;}
-  .ad-act{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 12px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;}
-  .ad-act.danger{background:#F6EAEB;border-color:#E7C9CC;color:#8d3d43;}
-  .ad-close{border:0;background:#F4F4F5;border-radius:999px;padding:8px 12px;font:inherit;font-weight:800;cursor:pointer;}
-  .ad-sources{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
-  @media(max-width:1100px){.ad-kpis{grid-template-columns:repeat(3,minmax(0,1fr));}}
-  @media(max-width:768px){
-    .ad-kpis,.ad-risk{grid-template-columns:1fr 1fr;}
-    .ad-risk{grid-template-columns:1fr;}
-    .ad-scroll{display:none;}
-    .ad-cards{display:flex;flex-direction:column;gap:10px;}
-    .ad-page{overflow-x:hidden;}
-    .ad-backdrop{align-items:flex-end;}
-    .ad-sheet{width:100%;height:92vh;border-radius:18px 18px 0 0;}
+  body.on-admin .app{height:auto;min-height:100dvh;align-items:stretch;}
+  body.on-admin .main{overflow:visible;}
+  body.on-admin .side{height:auto;min-height:100%;align-self:stretch;}
+  body.on-admin .pagehead{align-items:baseline;flex-wrap:wrap;gap:8px;}
+  body.on-admin #ptitle{font-size:28px;letter-spacing:-.03em;}
+  body.on-admin #admin-sub{color:#6e6e76;font-size:14.5px;font-weight:500;letter-spacing:0;}
+  .own-page{display:flex;flex-direction:column;gap:16px;max-width:100%;min-width:0;}
+  .own-totals{background:#111;color:#fff;border-radius:24px;padding:16px 16px 14px;}
+  .own-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;}
+  .own-tile{position:relative;overflow:hidden;background:#1c1c20;border-radius:16px;padding:12px 12px 12px 14px;min-height:108px;display:flex;flex-direction:column;min-width:0;}
+  .own-tile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;}
+  .own-tile.blue::before{background:#2B6FCB;}
+  .own-tile.green::before{background:#1B8552;}
+  .own-tile.purple::before{background:#6B46C1;}
+  .own-tile.amber::before{background:#C4841D;}
+  .own-tile.red::before{background:#A45359;}
+  .own-tile-top{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .own-chip{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:none;}
+  .own-tile.blue .own-chip{background:#E7EEF8;color:#2B6FCB;}
+  .own-tile.green .own-chip{background:#E6F2EB;color:#1B8552;}
+  .own-tile.purple .own-chip{background:#EFE8FF;color:#6B46C1;}
+  .own-tile.amber .own-chip{background:#F3EFE2;color:#86651C;}
+  .own-tile.red .own-chip{background:#F6EAEB;color:#A45359;}
+  .own-chip svg{width:14px;height:14px;display:block;}
+  .own-label{font-size:10px;font-weight:700;letter-spacing:.08em;color:#b0b0b6;line-height:1.2;}
+  .own-value{font-size:30px;font-weight:800;letter-spacing:-.04em;line-height:1;color:#fff;}
+  .own-value.gold{font-size:18px;letter-spacing:-.03em;color:#e0b15a;padding-top:6px;line-height:1.15;}
+  .own-sub{margin-top:auto;padding-top:8px;font-size:11.5px;color:#9a9aa2;}
+  .own-foot{margin-top:12px;padding:2px 6px;font-size:12.5px;color:#b8b8be;line-height:1.45;}
+  .own-mid{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;}
+  .own-card{background:#fff;border:1px solid rgba(17,17,17,.04);border-radius:20px;padding:20px 20px 18px;box-shadow:0 1px 2px rgba(16,16,20,.04);min-width:0;}
+  .own-card h2{margin:0;font-size:13px;font-weight:800;letter-spacing:.06em;}
+  .own-lead{margin:6px 0 16px;color:#8a8a92;font-size:13.5px;}
+  .own-funnel{display:grid;grid-template-columns:158px minmax(0,1fr) 28px 92px;align-items:center;gap:10px;margin-bottom:12px;}
+  .own-fname{font-size:13.5px;color:#222;font-weight:500;}
+  .own-track{height:12px;background:#ececf0;border-radius:999px;overflow:hidden;}
+  .own-bar{height:100%;border-radius:999px;background:linear-gradient(90deg,#111827 0%,#1d4ed8 42%,#0f9f6e 78%,#16a34a 100%);}
+  .own-fcount{font-weight:800;font-size:14px;text-align:right;}
+  .own-fdrop{font-size:12px;color:#8a8a92;text-align:right;}
+  .own-fdrop.down{color:#A45359;font-weight:700;}
+  .own-callout{margin-top:8px;background:#F3EFE2;border:1px solid #ead9b3;color:#5c4716;border-radius:12px;padding:10px 12px;font-size:13px;}
+  .own-riskhead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+  .own-risk{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px;border-radius:14px;margin-bottom:10px;}
+  .own-risk.hot{background:#F6EAEB;border:1px solid #E7C9CC;}
+  .own-risk.quiet{background:#f7f7f9;border:1px solid #ececef;}
+  .own-risk b{display:block;font-size:14px;margin-bottom:4px;}
+  .own-risk p{margin:0 0 8px;font-size:13px;color:#5c5c64;line-height:1.4;}
+  .own-rchips{display:flex;flex-wrap:wrap;gap:6px;}
+  .own-rchip{font-size:10px;font-weight:800;letter-spacing:.05em;border-radius:999px;padding:3px 8px;text-transform:uppercase;}
+  .own-rchip.red{background:#F6EAEB;color:#A45359;}
+  .own-rchip.amber{background:#F3EFE2;color:#86651C;}
+  .own-rchip.blue{background:#E7EEF8;color:#1d4f96;}
+  .own-rchip.purple{background:#EFE8FF;color:#4c3296;}
+  .own-ahead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+  .own-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:auto;}
+  .own-search{display:flex;align-items:center;gap:8px;background:#f3f3f5;border-radius:999px;padding:7px 12px;min-width:220px;color:#8a8a92;}
+  .own-search input{border:0;background:transparent;outline:none;font:inherit;font-size:13px;width:150px;color:#111;}
+  .own-filters{display:flex;gap:6px;flex-wrap:wrap;}
+  .own-filter{border:0;background:#f0f0f3;color:#333;border-radius:999px;padding:6px 11px;font-size:11.5px;font-weight:800;letter-spacing:.04em;cursor:pointer;font-family:inherit;}
+  .own-filter.on{background:#111;color:#fff;}
+  .own-hide{display:flex;align-items:center;gap:6px;font-size:13px;color:#8a8a92;}
+  .own-tablewrap{overflow:auto;}
+  table.own-accounts{width:100%;border-collapse:collapse;font-size:13.5px;}
+  table.own-accounts th{position:sticky;top:0;background:#fff;text-align:left;font-size:10.5px;font-weight:700;letter-spacing:.08em;color:#8a8a92;padding:8px 10px 10px 0;border-bottom:1px solid #ececef;white-space:nowrap;z-index:1;}
+  table.own-accounts td{padding:14px 10px 14px 0;border-bottom:1px solid #f2f2f4;vertical-align:middle;color:#222;}
+  .own-biz .bname{font-weight:800;font-size:14px;}
+  .own-biz .bmail{color:#8a8a92;font-size:12.5px;margin-top:2px;word-break:break-word;}
+  .own-plan{display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;letter-spacing:.06em;border-radius:8px;padding:4px 8px;line-height:1.15;text-align:center;min-width:72px;}
+  .own-plan.starter{background:#E6F2EB;color:#14663d;}
+  .own-plan.free{background:#EFE8FF;color:#4c3296;}
+  .own-credits{font-variant-numeric:tabular-nums;font-weight:650;}
+  .own-credits .slash{color:#b0b0b6;font-weight:500;}
+  .own-err{font-weight:800;}
+  .own-err.hot{color:#A45359;}
+  .own-err.muted{color:#8a8a92;font-weight:600;}
+  .own-rowacts{display:flex;align-items:center;justify-content:flex-end;gap:6px;white-space:nowrap;}
+  .own-btn{border-radius:999px;padding:8px 14px;font-size:12.5px;font-weight:700;border:1px solid #e4e4e8;background:#fff;color:#111;cursor:pointer;font-family:inherit;}
+  .own-btn.dark{background:#111;color:#fff;border-color:#111;}
+  .own-btn.tiny{padding:6px 11px;font-size:12px;}
+  .own-btn.danger{color:#c03532;border-color:#f0b8b6;background:#fff;}
+  .own-btn.danger-soft{color:#c03532;background:#fff5f5;border-color:#f5c9c7;}
+  .own-btn:disabled{opacity:.45;cursor:not-allowed;}
+  .own-showing{margin-top:8px;font-size:12.5px;color:#8a8a92;}
+  .own-cards{display:none;}
+  .own-acct{border:1px solid #ececef;border-radius:16px;padding:14px;background:#fff;}
+  .own-acct-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px;}
+  .own-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;font-size:13px;}
+  .own-meta .k{font-size:10px;font-weight:700;letter-spacing:.06em;color:#8a8a92;}
+  .own-audit{margin-top:0;}
+  .own-audit h2{margin:0 0 12px;}
+  .own-empty{background:#f4f4f6;border-radius:12px;padding:14px;color:#8a8a92;font-size:13.5px;line-height:1.5;}
+  .own-log{width:100%;border-collapse:collapse;font-size:13px;}
+  .own-log th{text-align:left;font-size:10.5px;letter-spacing:.08em;color:#8a8a92;padding:8px 10px 8px 0;border-bottom:1px solid #ececef;}
+  .own-log td{padding:10px 10px 10px 0;border-bottom:1px solid #f2f2f4;vertical-align:top;}
+  .own-scrim{display:none;position:fixed;inset:0;background:rgba(17,17,17,.48);z-index:70;}
+  body.own-manage-open .own-scrim{display:block;}
+  .own-manage{display:none;position:fixed;top:0;right:0;bottom:0;width:420px;background:#fff;z-index:80;overflow:auto;padding:22px 22px 28px;box-shadow:-8px 0 30px rgba(17,17,17,.12);}
+  body.own-manage-open .own-manage{display:block;}
+  .own-manage h3{margin:0;font-size:24px;letter-spacing:-.03em;font-weight:800;line-height:1.15;}
+  .own-mail{color:#8a8a92;font-size:14px;margin-top:3px;}
+  .own-mtop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px;}
+  .own-mgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;margin-bottom:22px;}
+  .own-mgrid .k{font-size:10px;font-weight:800;letter-spacing:.08em;color:#8a8a92;margin-bottom:3px;}
+  .own-mgrid .v{font-size:15px;font-weight:700;}
+  .own-mgrid .v.gold{color:#9a6410;}
+  .own-mgrid .v.err{color:#A45359;}
+  .own-group{margin-bottom:18px;}
+  .own-glabel{font-size:11px;font-weight:800;letter-spacing:.08em;margin-bottom:8px;}
+  .own-glabel.plan{color:#2B6FCB;}
+  .own-glabel.billing{color:#A45359;}
+  .own-glabel.credits{color:#1B8552;}
+  .own-glabel.account{color:#6B46C1;}
+  .own-gacts{display:flex;flex-wrap:wrap;gap:8px;}
+  .own-handle{display:none;}
+  @media(max-width:1100px) and (min-width:768px){.own-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
+  @media(max-width:767px){
+    .own-grid{grid-template-columns:1fr 1fr;gap:8px;}
+    .own-mid{grid-template-columns:1fr;}
+    .own-value{font-size:26px;}
+    .own-value.gold{font-size:15px;}
+    .own-funnel{grid-template-columns:minmax(0,1fr) auto auto;gap:6px;}
+    .own-funnel .own-track{grid-column:1 / -1;}
+    .own-tools{width:100%;margin-left:0;}
+    .own-search{min-width:0;flex:1 1 100%;}
+    .own-search input{width:100%;}
+    .own-tablewrap, table.own-accounts{display:none;}
+    .own-cards{display:flex;flex-direction:column;gap:10px;}
+    .own-page{overflow-x:hidden;}
+    .own-manage{top:auto;left:0;width:100%;max-height:92vh;border-radius:20px 20px 0 0;box-shadow:0 -8px 30px rgba(17,17,17,.16);padding-top:10px;}
+    .own-handle{display:block;width:40px;height:4px;border-radius:4px;background:#d0d0d6;margin:4px auto 14px;}
   }
   .md-table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:12px;}
   .md-table th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8a8a92;font-weight:700;text-align:left;padding:8px 8px 8px 0;border-bottom:1px solid #eee;}
@@ -1169,7 +1214,7 @@
   <main class="main">
     <div class="pagehead">
       <button class="navtoggle" id="navtoggle" type="button" aria-label="Menu" aria-expanded="false"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
-      <h2 id="ptitle">Dashboard</h2><div class="sp"></div>
+      <h2 id="ptitle">Dashboard</h2><span id="admin-sub" hidden>Owner only. Every account, what it pays, and who needs a nudge.</span><div class="sp"></div>
       <button class="askbtn" data-ask><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 1.9 4.8L19 9l-4 3.5L16 18l-4-2.4L8 18l1-5.5L5 9l5.1-1.2Z"/></svg> Ask Miles</button>
       <button class="tbtn" id="theme" title="Theme">◑</button>
     </div>
@@ -1999,7 +2044,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',library:'Skills and Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',playdetail:'Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',approvals:'Approvals & Autonomy',billing:'Plan & Credits',fblaunch:'Facebook',reports:'Reports',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',owneradmin:'Admin',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled Tasks',wireframe:'Agent Wireframe',autopilot:'Autopilot',skills:'Skills & Playbooks',library:'Skills and Playbooks',meters:'Meters',analytics:'Analytics',recs:'Recommendations',cads:'Competitor Ads',research:'Research',weather:'Weather Triggers',adstudio:'Ad Studio',playbook:'Campaign Playbook',playdetail:'Playbook',launch:'Launch a Campaign',localpresence:'Local Presence',approvals:'Approvals & Autonomy',billing:'Plan & Credits',fblaunch:'Facebook',reports:'Reports',autohub:'Automation Hub',health:'System Health',ghl:'GHL Automations',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Editor',studio:'Creative Studio',hub:'Marketing Hub',brand:'Brand Guidelines',assets:'Brand Assets',audit:'Website Audit',calendar:'Content Calendar',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',owneradmin:'ADMIN',market:'Marketplace',chat:'Chat with Miles'};
 // A destination can own several pages, Launch owns the plan, both channel
 // launchers and the ad-copy writer. The nav lists the destination; its pages
 // become a tab strip, so a four-step job stops looking like four unrelated
@@ -2072,6 +2117,8 @@ function renderSubTabs(id){
 }
 function setPage(id){
   document.body.classList.toggle('on-dash', id==='overview' || id==='launch' || id==='library' || id==='reports');
+  document.body.classList.toggle('on-admin', id==='owneradmin');
+  const adminSub=document.getElementById('admin-sub'); if(adminSub) adminSub.hidden=id!=='owneradmin';
   document.body.classList.toggle('on-biz', id==='profile');
   document.body.classList.toggle('on-chat', id==='chat');
   const askNav=document.querySelector('.side .newtask');
@@ -7799,262 +7846,336 @@ async function renderOwnerAdmin(){
   const box=$('#owneradmin-body'); if(!box) return;
   box.innerHTML='';
   if(!IS_ADMIN){ box.append(el('p','mdesc','This page is for the Miles owner.')); return; }
-  const page=el('div','ad-page');
-  page.append(el('p','ad-intro','Signups, plans, and usage from stored accounts. Amounts stay Not connected until Stripe or OpenRouter has a real number.'));
+  const page=el('div','own-page');
   if(!REMOTE){ box.append(page); return; }
   const res=await fetchJson('/api/admin/business', null, 12000);
   const view=res.data;
   if(!res.ok || !view || !view.totals){ page.append(el('p','md-explain', (res.data&&res.data.error)||'The business list did not load.')); box.append(page); return; }
   const t=view.totals;
-  const svg=(d)=>'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>';
-  const show=(value)=>{
-    if(value==null || value==='Not connected') return { text:'Not connected', muted:true };
-    return { text:String(value), muted:false };
-  };
-  const moneyText=(value)=>{
-    const s=show(value);
-    if(s.muted) return s;
+  const svg=(d)=>'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>';
+  const isMissing=(value)=>value==null || value==='Not connected';
+  const money=(value)=>{
+    if(isMissing(value)) return null;
     const n=Number(value);
-    if(!Number.isFinite(n)) return s;
-    return { text:(n<0?'-$':'$')+Math.abs(n).toLocaleString('en-US', {maximumFractionDigits:2}), muted:false };
+    if(!Number.isFinite(n)) return String(value);
+    return (n<0?'-$':'$')+Math.abs(n).toLocaleString('en-US',{maximumFractionDigits:2});
   };
-  const kpi=(tone, icon, label, shown)=>{
-    const card=el('article','ad-kpi '+tone);
-    const top=el('div','ad-kpi-top');
-    const ico=el('span','ad-ico'); ico.innerHTML=icon;
-    top.append(ico, el('span','ad-k', label));
+  const tile=(tone, icon, label, value, sub)=>{
+    const card=el('article','own-tile '+tone);
+    const top=el('div','own-tile-top');
+    const chip=el('span','own-chip'); chip.innerHTML=icon;
+    top.append(chip, el('span','own-label', label));
     card.append(top);
-    const v=el('div','ad-v'+(shown.muted?' muted':''), shown.text);
+    const shown=isMissing(value);
+    const v=el('div', shown?'own-value gold':'own-value', shown?'Not connected':String(value));
     card.append(v);
+    card.append(el('div','own-sub', sub));
     return card;
   };
-  const kpis=el('div','ad-kpis');
-  const userIco=svg('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>');
+  const people=svg('<path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="3"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 4.13a4 4 0 0 1 0 7.75"/>');
   const cardIco=svg('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>');
-  const alertIco=svg('<path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 4.3 1.8 19a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/>');
-  kpis.append(
-    kpi('blue', userIco, 'Signups today', show(t.signupsToday)),
-    kpi('blue', userIco, 'Signups 7 days', show(t.signupsThisWeek)),
-    kpi('blue', userIco, 'Signups 30 days', show(t.signups30d)),
-    kpi('green', cardIco, 'Free credits', show(t.onFreeCredits)),
-    kpi('purple', userIco, 'Trials', show(t.trials)),
-    kpi('green', cardIco, 'Paying', show(t.paying)),
-    kpi('red', alertIco, 'Past due', show(t.pastDue)),
-    kpi('red', alertIco, 'Canceled', show(t.canceled)),
-    kpi('green', cardIco, 'MRR', moneyText(t.mrr)),
-    kpi('green', cardIco, 'Revenue this month', moneyText(t.revenueThisMonth)),
-    kpi('amber', alertIco, 'OpenRouter cost', moneyText(t.openRouterCost)),
-    kpi(typeof t.profit==='number' && t.profit<0?'red':'green', cardIco, 'Profit', moneyText(t.profit)),
-    kpi('amber', alertIco, 'At risk', show(t.atRisk))
+  const gift=svg('<rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18"/>');
+  const alertIco=svg('<path d="M12 9v4M12 17h.01"/><path d="M10.3 4.7 2.8 18a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 4.7a2 2 0 0 0-3.4 0z"/>');
+  const dollar=svg('<path d="M12 2v20M17 7.5c0-1.9-2.2-3.5-5-3.5S7 5.6 7 7.5 9.2 11 12 11s5 1.6 5 3.5-2.2 3.5-5 3.5-5-1.6-5-3.5"/>');
+  const trend=svg('<path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/>');
+  const totals=el('section','own-totals');
+  const grid=el('div','own-grid');
+  const payingSub=isMissing(t.paying)?'connect Stripe':(isMissing(t.pastDue)?'connect Stripe':(t.pastDue+' past due · '+(isMissing(t.canceled)?'connect Stripe':t.canceled+' canceled')));
+  const trialSub=isMissing(t.trials)?'Not connected':(t.trials+' trials');
+  const mrrShown=money(t.mrr);
+  const profitShown=money(t.profit);
+  grid.append(
+    tile('blue', people, 'ACCOUNTS', t.signups, (t.signups30d==null?0:t.signups30d)+' new in 30 days'),
+    tile('green', cardIco, 'PAYING', isMissing(t.paying)?null:t.paying, payingSub),
+    tile('purple', gift, 'ON FREE CREDITS', t.onFreeCredits, trialSub),
+    tile('amber', alertIco, 'AT RISK', t.atRisk, 'see below'),
+    tile('green', dollar, 'MRR', mrrShown==null?null:mrrShown, mrrShown==null?'connect Stripe':'from Stripe invoices'),
+    tile(typeof t.profit==='number' && t.profit<0?'red':'green', trend, 'PROFIT', profitShown==null?null:profitShown, profitShown==null?'connect AI costs':'revenue minus serve cost')
   );
-  page.append(kpis);
+  totals.append(grid);
+  totals.append(el('div','own-foot', 'Revenue and profit show once Stripe and your AI cost source report real numbers. Signups today '+(t.signupsToday==null?0:t.signupsToday)+' · last 7 days '+(t.signupsThisWeek==null?0:t.signupsThisWeek)+' · last 30 days '+(t.signups30d==null?0:t.signups30d)+'.'));
+  page.append(totals);
 
-  page.append(el('div','ad-sec blue','Signup funnel'));
-  const funnelCard=el('div','ad-card');
+  const mid=el('div','own-mid');
+  const funnel=el('section','own-card');
+  funnel.append(el('h2',null,'WHERE ACCOUNTS GET STUCK'));
+  const sources=view.sources||[];
+  const total=Number(t.signups)||0;
+  const lead=sources.length===1?('All '+total+' came in '+sources[0].source+'.'):(sources.length?sources.map(s=>s.source+' '+s.count).join(', '):'No signup source is stored yet.');
+  const leadEl=el('p','own-lead', lead); funnel.append(leadEl);
   const steps=view.funnel||[];
-  const first=steps[0]&&Number(steps[0].count)||0;
-  const canvas=el('canvas'); canvas.setAttribute('aria-label','Signup funnel');
-  const chartBox=el('div','ad-funnelbox'); chartBox.append(canvas); funnelCard.append(chartBox);
-  const conv=el('div','ad-conv');
-  steps.forEach(step=>{
-    const pct=first?Math.round((Number(step.count)||0)/first*100):0;
-    conv.append(el('span',null, step.step+': '+step.count+' ('+pct+'%)'));
+  const first=steps[0]?Number(steps[0].count)||0:0;
+  let biggest=null;
+  steps.forEach((step, index)=>{
+    const count=Number(step.count)||0;
+    const width=first?Math.max(0, Math.min(100, Math.round(count/first*100))):0;
+    const drop=index===0?0:Math.max(0, (Number(steps[index-1].count)||0)-count);
+    if(index>0 && (!biggest || drop>biggest.drop)) biggest={drop, name:step.step, of:first};
+    const row=el('div','own-funnel');
+    row.append(el('div','own-fname', step.step));
+    const track=el('div','own-track');
+    const bar=el('div','own-bar'); bar.style.width=width+'%'; track.append(bar);
+    row.append(track);
+    row.append(el('div','own-fcount', String(count)));
+    row.append(el('div', drop>0?'own-fdrop down':'own-fdrop', drop>0?('-'+drop+' dropped'):''));
+    funnel.append(row);
   });
-  funnelCard.append(conv);
-  const sources=el('div','ad-sources');
-  (view.sources||[]).forEach(src=>sources.append(el('span','ad-chip blue', src.source+' '+src.count)));
-  if((view.sources||[]).length) funnelCard.append(sources);
-  page.append(funnelCard);
-  if(window.Chart){
-    const gradient=(c)=>{
-      const chart=c.chart; const area=chart.chartArea;
-      if(!area) return '#2B6FCB';
-      const g=chart.ctx.createLinearGradient(area.left,0,area.right,0);
-      g.addColorStop(0,'#111112');
-      g.addColorStop(0.55,'#2B6FCB');
-      g.addColorStop(1,'#1B8552');
-      return g;
-    };
-    new Chart(canvas, {
-      type:'bar',
-      data:{ labels:steps.map(s=>s.step), datasets:[{ data:steps.map(s=>Number(s.count)||0), backgroundColor:gradient, borderRadius:8, barThickness:18 }] },
-      options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{ beginAtZero:true, grid:{color:'#E6E6EA'}, ticks:{color:'#3F3F46', precision:0} }, y:{ grid:{display:false}, ticks:{color:'#111112', font:{weight:'700'}} } } }
-    });
-  }
+  const dropCopy=biggest&&biggest.drop>0
+    ? ('Biggest drop: '+biggest.drop+' of '+biggest.of+' stopped at '+biggest.name+'. That is the step to fix first.')
+    : 'No step is losing accounts yet.';
+  funnel.append(el('div','own-callout', dropCopy));
+  mid.append(funnel);
 
-  page.append(el('div','ad-sec amber','At risk'));
-  const risk=el('div','ad-risk');
-  const chipFor=(reason)=>{
-    const map={
-      'low credits':['Low credits','amber'],
-      'no login 7 days':['Inactive 7+ days','blue'],
-      'payment failed':['Payment failed','red'],
-      'errors spike':['Errors','red'],
-      'no leads after launch':['No leads','purple']
-    };
-    return map[reason]||[reason,'amber'];
+  const riskCard=el('section','own-card');
+  const riskHead=el('div','own-riskhead');
+  const riskTitle=el('div');
+  riskTitle.append(el('h2',null,'AT RISK · '+(t.atRisk==null?0:t.atRisk)));
+  riskTitle.append(el('p','own-lead','Reach out before they go quiet for good.'));
+  const atRisk=view.atRiskAccounts||[];
+  const nudgeAll=el('button','own-btn dark tiny','NUDGE ALL');
+  const emails=atRisk.map(row=>row.email).filter(Boolean);
+  if(!emails.length){ nudgeAll.disabled=true; nudgeAll.title='No email on file to nudge.'; }
+  else nudgeAll.onclick=()=>{ location.href='mailto:'+emails[0]+'?bcc='+encodeURIComponent(emails.slice(1).join(','))+'&subject='+encodeURIComponent('A note from Miles'); };
+  riskHead.append(riskTitle, nudgeAll);
+  riskCard.append(riskHead);
+  const chipMap={
+    'low credits':['Low credits','amber'],
+    'no login 7 days':['Inactive 7+ days','amber'],
+    'payment failed':['Payment failed','red'],
+    'errors spike':['Errors','red'],
+    'no leads after launch':['No leads','amber']
   };
-  if(!(view.atRiskAccounts||[]).length) risk.append(el('p','mdesc','No accounts are on the at-risk list.'));
-  (view.atRiskAccounts||[]).forEach(row=>{
-    const card=el('article','ad-riskcard');
+  if(!atRisk.length) riskCard.append(el('p','own-lead','No accounts are on the at-risk list.'));
+  atRisk.forEach(row=>{
+    const hot=(row.reasons||[]).some(reason=>reason==='errors spike'||reason==='payment failed'||reason==='no leads after launch');
+    const item=el('div', hot?'own-risk hot':'own-risk quiet');
     const left=el('div');
     left.append(el('b',null, row.businessName||'Untitled'));
-    left.append(el('div','em', row.email||''));
-    const chips=el('div','ad-chips');
-    (row.reasons||[]).forEach(reason=>{ const pair=chipFor(reason); chips.append(el('span','ad-chip '+pair[1], pair[0])); });
+    const desc=(row.reasons||[]).map(reason=>(chipMap[reason]||[reason])[0]).join(' · ');
+    left.append(el('p',null, desc||'Needs a look'));
+    const chips=el('div','own-rchips');
+    (row.reasons||[]).forEach(reason=>{ const pair=chipMap[reason]||[reason,'amber']; chips.append(el('span','own-rchip '+pair[1], pair[0])); });
     left.append(chips);
-    const viewBtn=el('button','ad-act','View');
+    const actions=el('div','own-rowacts');
+    const viewBtn=el('button','own-btn dark tiny','VIEW');
     viewBtn.onclick=async()=>{ await fetch('/api/admin/impersonate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:row.id})}); location.reload(); };
-    card.append(left, viewBtn);
-    risk.append(card);
+    const nudge=el('button','own-btn tiny','SEND NUDGE');
+    if(!row.email){ nudge.disabled=true; nudge.title='No email on file to nudge.'; }
+    else nudge.onclick=()=>{ location.href='mailto:'+row.email+'?subject='+encodeURIComponent('A note from Miles'); };
+    actions.append(viewBtn, nudge);
+    item.append(left, actions);
+    riskCard.append(item);
   });
-  page.append(risk);
+  mid.append(riskCard);
+  page.append(mid);
 
-  page.append(el('div','ad-sec green','Accounts'));
-  const accountsCard=el('div','ad-card');
-  const search=el('div','ad-search');
-  const filter=el('input','f'); filter.placeholder='Search name, email, plan, or status'; filter.setAttribute('aria-label','Search accounts');
+  const accounts=el('section','own-card'); accounts.id='accounts';
+  const ahead=el('div','own-ahead');
+  ahead.append(el('h2',null,'ACCOUNTS'));
+  const tools=el('div','own-tools');
+  const search=el('label','own-search');
+  search.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>';
+  const filter=el('input'); filter.type='search'; filter.placeholder='Search name or email'; filter.setAttribute('aria-label','Search name or email');
   search.append(filter);
-  accountsCard.append(search);
-  const scroll=el('div','ad-scroll');
-  const table=el('table','md-table');
-  const headers=['Business','Email','Plan','Status','MRR','Credits left','Serve cost','Profit','Tools','Last active','Source','Leads','Errors',''];
-  const keys=['businessName','email','plan','status','monthlyPaid','freeCreditsRemaining','serveCost','profit','toolsConnected','lastActive','source','leads','errors','actions'];
-  let sortKey='signupDate', sortDir=-1, query='';
-  const head=el('tr');
-  headers.forEach((label, i)=>{ const th=el('th',null,label); if(label){ th.style.cursor='pointer'; th.onclick=()=>{ if(sortKey===keys[i]) sortDir*=-1; else { sortKey=keys[i]; sortDir=1; } draw(); }; } head.append(th); });
-  const thead=el('thead'); thead.append(head); table.append(thead);
-  const tb=el('tbody'); table.append(tb); scroll.append(table); accountsCard.append(scroll);
-  const cards=el('div','ad-cards'); accountsCard.append(cards);
-  const badge=(text, tone)=>el('span','ad-badge '+tone, text);
-  const statusTone=(status)=>({ 'free credits':'green', trial:'purple', active:'green', 'past due':'red', canceled:'red', 'credits exhausted':'amber' }[status]||'mute');
-  const cellText=(row, key)=>{
-    const err=(row.errors.googleReads||0)+(row.errors.launches||0)+(row.errors.crawls||0);
-    if(key==='monthlyPaid'||key==='serveCost'||key==='profit') return moneyText(row[key]).text;
-    if(key==='freeCreditsRemaining') return row.freeCreditsRemaining+' of '+row.freeCreditsGrant;
-    if(key==='toolsConnected') return row.toolsConnected==='Not connected'?'Not connected':String(row.toolsConnected);
-    if(key==='lastActive') return row.lastActive?String(row.lastActive).slice(0,10):'';
-    if(key==='source') return (row.signupSource&&row.signupSource.utmSource||'')+(row.signupSource&&row.signupSource.utmCampaign?(' / '+row.signupSource.utmCampaign):'');
-    if(key==='leads') return row.leads+' leads, '+row.bookedJobs+' jobs';
-    if(key==='errors') return String(err);
-    return row[key]==null?'':String(row[key]);
+  const filters=el('div','own-filters');
+  let mode='all';
+  const chips=[['all','ALL'],['paying','PAYING'],['free','FREE CREDITS'],['errors','HAS ERRORS']];
+  const chipBtns={};
+  chips.forEach(pair=>{
+    const b=el('button','own-filter'+(pair[0]==='all'?' on':''), pair[1]); b.type='button';
+    b.onclick=()=>{ mode=pair[0]; Object.values(chipBtns).forEach(btn=>btn.classList.remove('on')); b.classList.add('on'); draw(); };
+    chipBtns[pair[0]]=b; filters.append(b);
+  });
+  const hide=el('label','own-hide');
+  const hideBox=el('input'); hideBox.type='checkbox';
+  hide.append(hideBox, document.createTextNode(' Hide test accounts'));
+  hideBox.onchange=()=>draw();
+  tools.append(search, filters, hide);
+  ahead.append(tools);
+  accounts.append(ahead);
+  const wrap=el('div','own-tablewrap');
+  const table=el('table','own-accounts');
+  const hr=el('tr');
+  ['BUSINESS','PLAN','CREDITS','TOOLS','LAST ACTIVE','LEADS','ERRORS',''].forEach(h=>hr.append(el('th',null,h)));
+  const thead=el('thead'); thead.append(hr); table.append(thead);
+  const tb=el('tbody'); table.append(tb); wrap.append(table); accounts.append(wrap);
+  const cards=el('div','own-cards'); accounts.append(cards);
+  const showing=el('div','own-showing'); accounts.append(showing);
+  page.append(accounts);
+
+  const errCount=(row)=>(row.errors.googleReads||0)+(row.errors.launches||0)+(row.errors.crawls||0);
+  const isTest=(row)=>{
+    const email=(row.email||'').toLowerCase();
+    return email.startsWith('demo@') || email.includes('+test') || email.includes('milestest') || email.includes('+');
   };
-  const post=async(url, body, done)=>{ const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); const d=await r.json().catch(()=>({})); toast(d.error||done); if(r.ok) renderOwnerAdmin(); };
-  const typed=(row, label, word, action)=>{ const value=window.prompt(label); if(value!==word){ toast('Not confirmed'); return; } post('/api/admin/billing', {id:row.id, action:action, confirm:word}, 'Saved'); };
-  let backdrop=null;
-  const closeSheet=()=>{ if(backdrop) backdrop.remove(); backdrop=null; };
-  const openSheet=(row)=>{
-    closeSheet();
-    backdrop=el('div','ad-backdrop');
-    backdrop.onclick=(e)=>{ if(e.target===backdrop) closeSheet(); };
-    const sheet=el('aside','ad-sheet'); sheet.setAttribute('role','dialog'); sheet.setAttribute('aria-label','Account actions');
-    const headRow=el('div'); headRow.style.cssText='display:flex;justify-content:space-between;gap:8px;align-items:flex-start';
-    const title=el('div'); title.append(el('h3',null, row.businessName||'Account')); title.append(el('div','em', row.email||''));
-    const close=el('button','ad-close','Close'); close.onclick=closeSheet;
-    headRow.append(title, close); sheet.append(headRow);
-    const facts=el('div','ad-nums');
-    [['Plan', row.plan],['Status', row.status],['MRR', moneyText(row.monthlyPaid).text],['Credits left', row.freeCreditsRemaining+' of '+row.freeCreditsGrant],['Serve cost', moneyText(row.serveCost).text],['Profit', moneyText(row.profit).text],['Tools', cellText(row,'toolsConnected')],['Last active', cellText(row,'lastActive')],['Source', cellText(row,'source')],['Leads', cellText(row,'leads')],['Errors', cellText(row,'errors')]].forEach(pair=>{
-      const bit=el('div'); bit.append(el('span',null,pair[0])); bit.append(el('strong',null, pair[1]==null?'':String(pair[1]))); facts.append(bit);
-    });
-    sheet.append(facts);
-    const group=(cls, name, buttons)=>{
-      const g=el('div','ad-group '+cls); g.setAttribute('data-ad-group', name);
-      g.append(el('h4',null, name));
-      const acts=el('div','ad-acts ad-actions');
-      buttons.forEach(btn=>acts.append(btn));
-      g.append(acts); sheet.append(g);
+  const planBadge=(row)=>{
+    const plan=String(row.plan||'').toLowerCase();
+    if(plan==='starter'||plan==='growth'||plan==='scale') return {cls:'starter', text:plan.toUpperCase()};
+    if(row.status==='trial') return {cls:'free', text:'TRIAL'};
+    return {cls:'free', text:'FREE CREDITS'};
+  };
+  const toolsText=(row)=>{
+    if(row.toolsConnected==='Not connected') return 'Not connected';
+    if(Array.isArray(row.tools)&&row.tools.length) return row.tools.join(', ');
+    return 'None';
+  };
+  const when=(iso)=>{
+    if(!iso) return '-';
+    const d=new Date(iso);
+    if(Number.isNaN(d.getTime())) return '-';
+    return d.toLocaleDateString('en-US',{month:'short', day:'numeric'});
+  };
+  const creditHtml=(row)=>{
+    const span=el('span','own-credits');
+    span.append(document.createTextNode(String(row.freeCreditsRemaining)));
+    const slash=el('span','slash',' / '+row.freeCreditsGrant);
+    span.append(slash);
+    return span;
+  };
+  const post=async(url, body, done)=>{ const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); const d=await r.json().catch(()=>({})); toast(d.error||done); if(r.ok){ document.body.classList.remove('own-manage-open'); renderOwnerAdmin(); } };
+  const typed=(row, label, word, action)=>{ const value=window.prompt(label); if(value!==word){ toast('Not confirmed'); return; } post('/api/admin/billing', {id:row.id, action, confirm:word}, 'Saved'); };
+  const scrim=el('div','own-scrim');
+  const manage=el('aside','own-manage'); manage.setAttribute('role','dialog'); manage.setAttribute('aria-label','Manage account');
+  scrim.onclick=()=>document.body.classList.remove('own-manage-open');
+  const openManage=(row)=>{
+    manage.innerHTML='';
+    manage.append(el('div','own-handle'));
+    const top=el('div','own-mtop');
+    const title=el('div');
+    title.append(el('h3',null, row.businessName||'Account'));
+    title.append(el('div','own-mail', row.email||''));
+    const close=el('button','own-btn tiny','Close'); close.onclick=()=>document.body.classList.remove('own-manage-open');
+    top.append(title, close); manage.append(top);
+    const meta=el('div','own-mgrid');
+    const gold=(text)=>isMissing(text);
+    const addMeta=(k, value, cls)=>{
+      const bit=el('div'); bit.append(el('div','k', k));
+      const v=el('div','v'+(cls?' '+cls:''), value==null?'':String(value));
+      bit.append(v); meta.append(bit);
     };
-    const act=(label, fn, danger)=>{ const b=el('button', danger?'ad-act danger':'ad-act', label); b.type='button'; b.onclick=fn; return b; };
-    group('plan','Plan', [
+    addMeta('PLAN', planBadge(row).text);
+    addMeta('STATUS', row.status||'');
+    addMeta('MRR', money(row.monthlyPaid)||'Not connected', money(row.monthlyPaid)? '':'gold');
+    addMeta('CREDITS LEFT', row.freeCreditsRemaining+' of '+row.freeCreditsGrant);
+    addMeta('SERVE COST', money(row.serveCost)||'Not connected', money(row.serveCost)?'':'gold');
+    addMeta('PROFIT', money(row.profit)||'Not connected', money(row.profit)?'':'gold');
+    addMeta('TOOLS', toolsText(row));
+    addMeta('LAST ACTIVE', when(row.lastActive));
+    addMeta('SOURCE', (row.signupSource&&row.signupSource.utmSource)||'direct');
+    addMeta('LEADS', row.leads+' leads, '+row.bookedJobs+' jobs');
+    addMeta('ERRORS', String(errCount(row)), errCount(row)>0?'err':'');
+    manage.append(meta);
+    const group=(cls, name, buttons)=>{
+      const g=el('div','own-group'); g.setAttribute('data-ad-group', name);
+      g.append(el('div','own-glabel '+cls, name));
+      const acts=el('div','own-gacts');
+      buttons.forEach(btn=>acts.append(btn));
+      g.append(acts); manage.append(g);
+    };
+    const act=(label, fn, kind)=>{ const b=el('button','own-btn'+(kind?' '+kind:''), label); b.type='button'; b.onclick=fn; return b; };
+    group('plan','PLAN', [
       act('Upgrade', ()=>post('/api/admin/billing',{id:row.id, action:'upgrade', band:'growth'},'Upgrade sent')),
       act('Downgrade', ()=>post('/api/admin/billing',{id:row.id, action:'downgrade', band:'starter'},'Downgrade sent')),
       act('Move to free', ()=>post('/api/admin/billing',{id:row.id, action:'free'},'Moved toward free'))
     ]);
-    group('bill','Billing', [
+    group('billing','BILLING', [
       act('Cancel at period end', ()=>post('/api/admin/billing',{id:row.id, action:'cancel'},'Cancel scheduled')),
-      act('Cancel now', ()=>typed(row,'Type CANCEL NOW to cancel this subscription immediately.','CANCEL NOW','cancel_now'), true),
-      act('Refund', ()=>typed(row,'Type REFUND to refund the last Stripe payment.','REFUND','refund'), true),
+      act('Cancel now', ()=>typed(row,'Type CANCEL NOW to cancel this subscription immediately.','CANCEL NOW','cancel_now'), 'danger'),
+      act('Refund', ()=>typed(row,'Type REFUND to refund the last Stripe payment.','REFUND','refund'), 'danger-soft'),
       act('Apply coupon', ()=>{ const code=window.prompt('Stripe coupon id'); if(!code) return; post('/api/admin/billing',{id:row.id, action:'coupon', coupon:code},'Coupon sent'); })
     ]);
-    group('cred','Credits and trial', [
+    group('credits','CREDITS AND TRIAL', [
       act('Add $25', ()=>post('/api/admin/credits',{id:row.id,amount:25},'Credits added')),
       act('Remove $25', ()=>post('/api/admin/credits',{id:row.id,amount:25,remove:true},'Credits removed')),
       act('Extend 14 days', ()=>post('/api/admin/trial',{id:row.id,days:14},'Trial note extended'))
     ]);
-    group('acct','Account', [
+    group('account','ACCOUNT', [
       act(row.paused?'Resume':'Pause', ()=>post('/api/admin/pause',{id:row.id, paused:!row.paused}, row.paused?'Resumed':'Paused')),
       act('View as user', async()=>{ await fetch('/api/admin/impersonate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:row.id})}); location.reload(); })
     ]);
-    backdrop.append(sheet);
-    document.body.append(backdrop);
+    document.body.classList.add('own-manage-open');
   };
+  page.append(scrim, manage);
+
+  let query='';
   const draw=()=>{
     tb.innerHTML=''; cards.innerHTML='';
     const q=query.toLowerCase();
-    const rows=(view.accounts||[]).filter(row=>!q || (row.businessName+' '+row.email+' '+row.status+' '+row.plan).toLowerCase().includes(q));
-    rows.sort((a,b)=>{ const av=a[sortKey], bv=b[sortKey]; return (av>bv?1:av<bv?-1:0)*sortDir; });
+    const all=view.accounts||[];
+    const rows=all.filter(row=>{
+      if(hideBox.checked && isTest(row)) return false;
+      if(mode==='paying' && row.status!=='active') return false;
+      if(mode==='free' && row.status!=='free credits' && row.status!=='credits exhausted' && row.status!=='trial') return false;
+      if(mode==='errors' && errCount(row)<=0) return false;
+      if(q && !(row.businessName+' '+row.email).toLowerCase().includes(q)) return false;
+      return true;
+    });
     rows.forEach(row=>{
+      const plan=planBadge(row);
+      const errors=errCount(row);
       const tr=el('tr');
-      ['businessName','email','plan','status','monthlyPaid','freeCreditsRemaining','serveCost','profit','toolsConnected','lastActive','source','leads','errors'].forEach(key=>{
-        const td=el('td');
-        if(key==='plan') td.append(badge(cellText(row,key), 'blue'));
-        else if(key==='status') td.append(badge(cellText(row,key), statusTone(row.status)));
-        else if((key==='monthlyPaid'||key==='serveCost'||key==='profit') && (row[key]==null || row[key]==='Not connected')){ const s=el('span','ad-v muted'); s.style.fontSize='13px'; s.textContent='Not connected'; td.append(s); }
-        else td.textContent=cellText(row, key);
-        tr.append(td);
-      });
-      const act=el('td');
-      const open=el('button','ad-act','Actions'); open.type='button';
-      open.onclick=(e)=>{ e.stopPropagation(); openSheet(row); };
-      act.append(open); tr.append(act);
-      tr.onclick=()=>openSheet(row);
+      const biz=el('td'); const cell=el('div','own-biz'); cell.append(el('div','bname', row.businessName||'Untitled')); cell.append(el('div','bmail', row.email||'')); biz.append(cell); tr.append(biz);
+      const planTd=el('td'); planTd.append(el('span','own-plan '+plan.cls, plan.text)); tr.append(planTd);
+      const cred=el('td'); cred.append(creditHtml(row)); tr.append(cred);
+      tr.append(el('td',null, toolsText(row)));
+      tr.append(el('td','muted', when(row.lastActive)));
+      tr.append(el('td',null, row.leads+' · '+row.bookedJobs));
+      tr.append(el('td', errors>0?'own-err hot':'own-err muted', String(errors)));
+      const acts=el('td'); const rowActs=el('div','own-rowacts');
+      const viewBtn=el('button','own-btn tiny','VIEW'); viewBtn.onclick=async()=>{ await fetch('/api/admin/impersonate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:row.id})}); location.reload(); };
+      const manageBtn=el('button','own-btn dark tiny','MANAGE'); manageBtn.onclick=()=>openManage(row);
+      rowActs.append(viewBtn, manageBtn); acts.append(rowActs); tr.append(acts);
       tb.append(tr);
-      const card=el('article','ad-acard');
-      card.append(el('b',null, row.businessName||'Untitled'));
-      card.append(el('div','em', row.email||''));
-      const chips=el('div','ad-chips');
-      chips.append(badge(cellText(row,'plan'),'blue'), badge(cellText(row,'status'), statusTone(row.status)));
-      card.append(chips);
-      const nums=el('div','ad-nums');
-      [['MRR', cellText(row,'monthlyPaid')],['Credits', cellText(row,'freeCreditsRemaining')],['Profit', cellText(row,'profit')],['Leads', cellText(row,'leads')]].forEach(pair=>{
-        const bit=el('div'); bit.append(el('span',null,pair[0])); bit.append(el('strong',null,pair[1])); nums.append(bit);
+      const card=el('article','own-acct');
+      const top=el('div','own-acct-top');
+      const left=el('div','own-biz'); left.append(el('div','bname', row.businessName||'Untitled')); left.append(el('div','bmail', row.email||''));
+      top.append(left, el('span','own-plan '+plan.cls, plan.text));
+      card.append(top);
+      const meta=el('div','own-meta');
+      [['CREDITS', null],['TOOLS', toolsText(row)],['LAST ACTIVE', when(row.lastActive)],['LEADS', row.leads+' · '+row.bookedJobs],['ERRORS', String(errors)]].forEach(pair=>{
+        const bit=el('div'); bit.append(el('div','k', pair[0]));
+        if(pair[0]==='CREDITS') bit.append(creditHtml(row));
+        else if(pair[0]==='ERRORS') bit.append(el('div', errors>0?'own-err hot':'own-err muted', pair[1]));
+        else bit.append(el('div',null, pair[1]));
+        meta.append(bit);
       });
-      card.append(nums);
-      const openCard=el('button','ad-act','Actions'); openCard.type='button'; openCard.onclick=()=>openSheet(row);
-      card.append(openCard);
-      card.onclick=(e)=>{ if(e.target===openCard) return; openSheet(row); };
+      card.append(meta);
+      const cActs=el('div','own-rowacts');
+      const v2=el('button','own-btn tiny','VIEW'); v2.onclick=viewBtn.onclick;
+      const m2=el('button','own-btn dark tiny','MANAGE'); m2.onclick=()=>openManage(row);
+      cActs.append(v2, m2); card.append(cActs);
       cards.append(card);
     });
+    showing.textContent='Showing '+rows.length+' of '+all.length+' accounts';
   };
   filter.oninput=()=>{ query=filter.value||''; draw(); };
   draw();
-  page.append(accountsCard);
 
-  page.append(el('div','ad-sec purple','Audit log'));
-  const auditCard=el('div','ad-card'); auditCard.id='admin-audit';
-  page.append(auditCard);
+  const audit=el('section','own-card own-audit'); audit.id='admin-audit';
+  audit.append(el('h2',null,'AUDIT LOG'));
+  page.append(audit);
   box.append(page);
   const log=await fetchJson('/api/admin/audit', null, 8000);
-  if(log.ok && log.data && Array.isArray(log.data.entries)){
-    if(!log.data.entries.length) auditCard.append(el('p','mdesc','No admin actions yet.'));
-    else {
-      const at=el('table','md-table');
-      const hr=el('tr'); ['When','Action','Note'].forEach(h=>hr.append(el('th',null,h)));
-      const hd=el('thead'); hd.append(hr); at.append(hd);
-      const body=el('tbody');
-      log.data.entries.slice(0,40).forEach(entry=>{
-        const tr=el('tr');
-        [ (entry.ts||'').replace('T',' ').slice(0,16), entry.action||'', entry.note||'' ].forEach(value=>{ const td=el('td'); td.textContent=value; tr.append(td); });
-        body.append(tr);
-      });
-      at.append(body); auditCard.append(at);
-    }
-  } else auditCard.append(el('p','mdesc','The audit log did not load.'));
-  if(!window.__adEsc){
-    window.__adEsc=true;
-    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ const open=document.querySelector('.ad-backdrop'); if(open) open.remove(); } });
+  if(log.ok && log.data && Array.isArray(log.data.entries) && log.data.entries.length){
+    const at=el('table','own-log');
+    const ahr=el('tr'); ['When','Action','Note'].forEach(h=>ahr.append(el('th',null,h)));
+    const ahd=el('thead'); ahd.append(ahr); at.append(ahd);
+    const body=el('tbody');
+    log.data.entries.slice(0,40).forEach(entry=>{
+      const tr=el('tr');
+      [(entry.ts||'').replace('T',' ').slice(0,16), entry.action||'', entry.note||''].forEach(value=>{ const td=el('td'); td.textContent=value; tr.append(td); });
+      body.append(tr);
+    });
+    at.append(body); audit.append(at);
+  } else if(log.ok){
+    audit.append(el('div','own-empty','No admin actions yet. Every credit change, plan change, refund and cancellation will be listed here with who did it and when.'));
+  } else audit.append(el('p','mdesc','The audit log did not load.'));
+  if(!window.__ownEsc){
+    window.__ownEsc=true;
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') document.body.classList.remove('own-manage-open'); });
   }
 }
+
 // Owner-only: see everyone who signed up, remove accounts, gate signups.
 async function setAdmin(box){
   box.append(el('div','appsub','Loading...'));

@@ -27,12 +27,14 @@ describe('owner admin dashboard', () => {
   it('hides the admin nav until the signed-in user is the owner', () => {
     const html = readFileSync(join(process.cwd(), 'web', 'index.html'), 'utf8');
     expect(html).toContain('data-ad-group');
-    expect(html).toContain("group('plan','Plan'");
-    expect(html).toContain("group('bill','Billing'");
-    expect(html).toContain('Credits and trial');
-    expect(html).toContain("group('acct','Account'");
+    expect(html).toContain("group('plan','PLAN'");
+    expect(html).toContain("group('billing','BILLING'");
+    expect(html).toContain('CREDITS AND TRIAL');
+    expect(html).toContain("group('account','ACCOUNT'");
     expect(html).toContain('CANCEL NOW');
     expect(html).toContain('REFUND');
+    expect(html).toContain('WHERE ACCOUNTS GET STUCK');
+    expect(html).toContain('Hide test accounts');
     expect(html).toMatch(/id="nav-admin"[^>]*hidden/);
     expect(html).toContain("location.pathname==='/admin' && IS_ADMIN");
     expect(html).not.toMatch(/nav-admin[^>]*>[^<]*\u2014/);
