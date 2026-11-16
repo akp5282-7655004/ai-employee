@@ -27,9 +27,26 @@ export interface ChatTurnRequest {
   maxTokens: number;
 }
 
+export interface ChatUsage {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  serveUsd: number;
+}
+
 export interface ChatTurnResult {
   text: string | null;
   toolCalls: ChatToolCall[];
+  usage?: ChatUsage;
+}
+
+export function agentModelName(): string {
+  return process.env.MILES_AGENT_MODEL || process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+}
+
+/** Reserved for later build steps. This phase does not call it. */
+export function agentStrongModelName(): string {
+  return process.env.MILES_AGENT_MODEL_STRONG || 'anthropic/claude-sonnet-4.5';
 }
 
 export type ChatModel = (req: ChatTurnRequest) => Promise<ChatTurnResult | null>;
@@ -51,7 +68,7 @@ async function openRouterChat(req: ChatTurnRequest): Promise<ChatTurnResult | nu
         'X-Title': 'Miles',
       },
       body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
+        model: agentModelName(),
         max_tokens: req.maxTokens,
         usage: { include: true },
         tools: req.tools.map((tool) => ({ type: 'function', function: tool })),
@@ -77,7 +94,7 @@ async function openRouterChat(req: ChatTurnRequest): Promise<ChatTurnResult | nu
     });
     if (!res.ok) return null;
     const data: any = await res.json();
-    const model = String(data?.model ?? process.env.OPENROUTER_MODEL ?? 'openai/gpt-4o-mini');
+    const model = String(data?.model ?? agentModelName());
     const inTok = Number(data?.usage?.prompt_tokens) || 0;
     const outTok = Number(data?.usage?.completion_tokens) || 0;
     const reported = Number(data?.usage?.cost);
@@ -99,7 +116,8 @@ async function openRouterChat(req: ChatTurnRequest): Promise<ChatTurnResult | nu
         })).filter((call: ChatToolCall) => call.name)
       : [];
     if (!text && !toolCalls.length) return null;
-    return { text: text || null, toolCalls };
+    const serveUsd = providerReported ? reported : tokenCostUsd(model, inTok, outTok);
+    return { text: text || null, toolCalls, usage: { model, inputTokens: inTok, outputTokens: outTok, serveUsd } };
   } catch {
     return null;
   }
