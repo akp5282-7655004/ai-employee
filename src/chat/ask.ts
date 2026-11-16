@@ -8,6 +8,7 @@ import { acceptReply, adsPerformanceAnswer, asksAdsPerformance, asksMode, asksSp
 import type { ChatModel, ChatTurnResult, ChatUsage, ChatWireMessage } from './model.js';
 import { intentReply, parseActionIntent, type AgentIntent } from './intent.js';
 import { CHAT_TOOLS, runChatTool, toolStepLabel, type ChatReaders } from './tools.js';
+import { logUngrounded, redactNumbers, unsupportedNumberTokens } from './ground.js';
 
 const TOKENS: Record<string, number> = {
   easy: 320,
@@ -64,7 +65,34 @@ export async function answerChat(args: {
       content: message.text!.trim().slice(0, 4000),
     }));
   const question = [...history].reverse().find((message) => message.role === 'user')?.content || '';
+  const ownerTexts = history.filter((message) => message.role === 'user').map((message) => message.content);
+  const toolTexts: string[] = [];
   const emptyUsage: ChatUsage = { model: '', inputTokens: 0, outputTokens: 0, serveUsd: 0 };
+  const system = milesSystemPrompt(args.snapshot);
+  let usage = emptyUsage;
+  const steps: string[] = [];
+  const wire: ChatWireMessage[] = history.length ? [...history] : [{ role: 'user', content: 'The owner just opened the chat.' }];
+  const ground = async (text: string, canRetry: boolean): Promise<string> => {
+    const bad = unsupportedNumberTokens(text, toolTexts, ownerTexts);
+    if (!bad.length) return text;
+    const values = [...new Set(bad.map((token) => token.raw))];
+    logUngrounded(args.snapshot.tenantId, values);
+    if (canRetry) {
+      wire.push({ role: 'user', content: `Your last answer used numbers that are not in the tool results: ${values.join(', ')}. Use only numbers from the tool data, or say the data is not tracked. Do not invent figures.` });
+      try {
+        const retry = await withTimeout(args.model({ system, messages: wire, tools: CHAT_TOOLS, maxTokens: TOKENS[mode]! }), MODEL_TIMEOUT_MS);
+        if (retry?.text) {
+          usage = addUsage(usage, retry.usage);
+          const cleaned = acceptReply(args.snapshot, question, retry.text).text;
+          const again = unsupportedNumberTokens(cleaned, toolTexts, ownerTexts);
+          if (!again.length) return cleaned;
+          logUngrounded(args.snapshot.tenantId, [...new Set(again.map((token) => token.raw))]);
+          return redactNumbers(cleaned, again);
+        }
+      } catch { /* the first answer is redacted below */ }
+    }
+    return redactNumbers(text, bad);
+  };
   const intent = parseActionIntent(question);
   if (intent) {
     const said = intentReply(intent, args.snapshot.business.name);
@@ -76,20 +104,19 @@ export async function answerChat(args: {
       services: intent.services,
       note: 'Building actions arrives in the next update. Nothing was created or spent.',
     } : null;
-    return { text: said.text, live: false, mode, steps: [], plan, intent: said.ready ? intent : null, next: null, usage: emptyUsage };
+    return { text: await ground(said.text, false), live: false, mode, steps: [], plan, intent: said.ready ? intent : null, next: null, usage: emptyUsage };
   }
-  if (asksMode(question)) return { text: modeAnswer(args.snapshot), live: false, mode, steps: [], plan: null, intent: null, next: null, usage: emptyUsage };
+  if (asksMode(question)) return { text: await ground(modeAnswer(args.snapshot), false), live: false, mode, steps: [], plan: null, intent: null, next: null, usage: emptyUsage };
   const adsQuestion = asksAdsPerformance(question);
   if (asksSpendOrLeads(question) && args.readers.liveSpend) {
     let read: LiveSpendRead | null = null;
     try { read = await args.readers.liveSpend(); } catch { read = null; }
-    if (read && read.connected && !read.sample) return { text: spendLeadAnswer(read), live: false, mode, steps: ['Checking the numbers...'], plan: null, intent: null, next: null, usage: emptyUsage };
+    if (read && read.connected && !read.sample) {
+      toolTexts.push(JSON.stringify(read));
+      return { text: await ground(spendLeadAnswer(read), false), live: false, mode, steps: ['Checking the numbers...'], plan: null, intent: null, next: null, usage: emptyUsage };
+    }
   }
-  const system = milesSystemPrompt(args.snapshot);
   let modelRan = false;
-  let usage = emptyUsage;
-  const steps: string[] = [];
-  const wire = history.length ? history : [{ role: 'user' as const, content: 'The owner just opened the chat.' }];
 
   for (let round = 0; round < MAX_STEPS; round++) {
     let turn: ChatTurnResult | null = null;
@@ -111,6 +138,7 @@ export async function answerChat(args: {
         } catch {
           content = JSON.stringify({ ok: false, error: 'That read took too long. Nothing was changed.' });
         }
+        toolTexts.push(content);
         wire.push({ role: 'tool', content, toolCallId: call.id });
       }
       continue;
@@ -118,13 +146,15 @@ export async function answerChat(args: {
     if (adsQuestion && !steps.some((step) => /campaign/i.test(step))) steps.unshift('Checking campaigns...');
     const accepted = acceptReply(args.snapshot, question, turn.text);
     const next = accepted.fromModel ? null : (adsQuestion ? adsPerformanceAnswer(args.snapshot).next : null);
-    const text = accepted.fromModel ? accepted.text : (adsQuestion ? adsPerformanceAnswer(args.snapshot).text : accepted.text);
+    const raw = accepted.fromModel ? accepted.text : (adsQuestion ? adsPerformanceAnswer(args.snapshot).text : accepted.text);
+    const text = await ground(raw, accepted.fromModel);
     return { text, live: accepted.fromModel, mode, steps, plan: null, intent: null, next, usage };
   }
 
   if (!modelRan && adsQuestion) {
     const ads = adsPerformanceAnswer(args.snapshot);
-    return { text: ads.text, live: false, mode, steps: ['Checking campaigns...'], plan: null, intent: null, next: ads.next, usage };
+    return { text: await ground(ads.text, false), live: false, mode, steps: ['Checking campaigns...'], plan: null, intent: null, next: ads.next, usage };
   }
-  return { text: modelRan ? 'I could not finish that read. Nothing was changed.' : fallbackAnswer(args.snapshot, question), live: false, mode, steps, plan: null, intent: null, next: null, usage };
+  const fallback = modelRan ? 'I could not finish that read. Nothing was changed.' : fallbackAnswer(args.snapshot, question);
+  return { text: await ground(fallback, false), live: false, mode, steps, plan: null, intent: null, next: null, usage };
 }

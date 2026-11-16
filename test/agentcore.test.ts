@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildServer } from '../src/server.js';
 import { MemoryStore } from '../src/db/index.js';
 import { parseActionIntent } from '../src/chat/intent.js';
 import { runChatTool, type ChatReaders } from '../src/chat/tools.js';
 import { answerChat } from '../src/chat/ask.js';
 import { fallbackAnswer } from '../src/chat/prompt.js';
-import { buildAccountSnapshot } from '../src/chat/snapshot.js';
+import { buildAccountSnapshot, type ChatSources } from '../src/chat/snapshot.js';
 import type { ChatModel } from '../src/chat/model.js';
 import { retailFromServe } from '../src/billing/textprice.js';
 
@@ -214,5 +214,128 @@ describe('read-only agent', () => {
     expect(out.steps).toContain('Checking campaigns...');
     expect(out.text.startsWith('Google Ads is connected')).toBe(true);
     expect(out.live).toBe(true);
+  });
+});
+
+function groundSnapshot(over: Partial<ChatSources> = {}) {
+  return buildAccountSnapshot({
+    tenantId: 'tenant-ground',
+    sampleConnector: true,
+    profile: { businessName: 'Secret Painters', industry: 'Painting' },
+    completeness: { percent: 40, filled: 4, total: 10, missing: [], gbp: '' },
+    phase: 'plan',
+    mode: 'hybrid',
+    caps: null,
+    tracking: null,
+    plan: { name: 'Search', dailyBudget: 40, status: 'PAUSED', finalUrl: 'https://example.com', locations: ['Philadelphia'], bidding: 'MAXIMIZE_CLICKS' },
+    milesCampaign: { status: 'paused', name: 'Search' },
+    journey: null,
+    spendRows: [{ platform: 'google', name: 'Search', spend: 80, leads: 4 }],
+    spendReadAt: null,
+    bookedFromJobs: null,
+    bookedFromDeals: null,
+    google: { oauth: false, ready: false, customerId: null, note: 'Not connected', error: null },
+    ghl: { connected: false, detail: 'Not connected' },
+    speedToLead: { enabled: false, today: 0, total: 0, held: 0, canSend: false },
+    social: { facebook: false, instagram: false, linkedin: false, gbp: false },
+    automations: { noShow: false, onboarding: false },
+    events: [],
+    changeLog: [],
+    inbox: [],
+    leads: [],
+    ...over,
+  });
+}
+
+describe('grounded chat numbers', () => {
+  it('retries an invented cost per lead and the final answer drops it', async () => {
+    const warns: string[] = [];
+    const spy = vi.spyOn(console, 'warn').mockImplementation((message?: unknown) => { warns.push(String(message)); });
+    let calls = 0;
+    const model: ChatModel = async (req) => {
+      calls += 1;
+      const retry = req.messages.some((message) => message.content.includes('not in the tool results'));
+      if (!retry) return { text: 'Your cost per lead is $42.', toolCalls: [] };
+      return { text: 'Cost per lead is not in the tool data.', toolCalls: [] };
+    };
+    const out = await answerChat({
+      snapshot: groundSnapshot(),
+      messages: [{ role: 'user', text: 'What is my cost per lead?' }],
+      model,
+      readers,
+    });
+    spy.mockRestore();
+    expect(calls).toBe(2);
+    expect(out.text).not.toMatch(/42/);
+    expect(out.text).toMatch(/not in the tool data/);
+    const logged = warns.join('\n');
+    expect(logged).toContain('ungrounded_chat_number');
+    expect(logged).toContain('tenant-ground');
+    expect(logged).toContain('$42');
+    expect(logged).not.toContain('Secret Painters');
+  });
+
+  it('keeps a grounded dollar, percent, and shorthand figure', async () => {
+    let calls = 0;
+    const model: ChatModel = async (req) => {
+      calls += 1;
+      if (!req.messages.some((message) => message.role === 'tool')) {
+        return { text: null, toolCalls: [{ id: 'c1', name: 'get_metrics', arguments: '{}' }] };
+      }
+      return { text: 'Spend is $1,234.50, the close rate is 12%, and impressions are 1.2k.', toolCalls: [] };
+    };
+    const out = await answerChat({
+      snapshot: groundSnapshot(),
+      messages: [{ role: 'user', text: 'Read the metrics.' }],
+      model,
+      readers: { ...readers, metrics: async () => ({ spend: 1234.5, rate: 0.12, impressions: 1200 }) },
+    });
+    expect(calls).toBe(2);
+    expect(out.text).toContain('$1,234.50');
+    expect(out.text).toContain('12%');
+    expect(out.text).toContain('1.2k');
+  });
+
+  it('keeps a number the owner already typed', async () => {
+    let calls = 0;
+    const model: ChatModel = async () => {
+      calls += 1;
+      return { text: 'I will plan around your $30.', toolCalls: [] };
+    };
+    const out = await answerChat({
+      snapshot: groundSnapshot(),
+      messages: [
+        { role: 'user', text: 'My budget is $30 a day.' },
+        { role: 'assistant', text: 'Got it.' },
+        { role: 'user', text: 'Use that budget.' },
+      ],
+      model,
+      readers,
+    });
+    expect(calls).toBe(1);
+    expect(out.text).toContain('$30');
+  });
+
+  it('says not tracked yet when no tool data supports a number', async () => {
+    const model: ChatModel = async () => ({ text: 'CPL is $42.', toolCalls: [] });
+    const invented = await answerChat({
+      snapshot: groundSnapshot(),
+      messages: [{ role: 'user', text: 'What is my cost per lead?' }],
+      model,
+      readers,
+    });
+    expect(invented.text).toMatch(/not tracked yet/);
+    expect(invented.text).not.toMatch(/\d/);
+
+    const offline = await answerChat({
+      snapshot: groundSnapshot(),
+      messages: [{ role: 'user', text: 'Check campaign status.' }],
+      model: async () => null,
+      readers,
+    });
+    expect(offline.text).toMatch(/not tracked yet/);
+    expect(offline.text).not.toMatch(/\d/);
+    expect(offline.text).not.toContain('80');
+    expect(offline.text).not.toContain('42');
   });
 });
