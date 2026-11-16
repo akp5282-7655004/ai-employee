@@ -2390,6 +2390,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       placement: setupPlacement({ pagesRead: miles.found?.pagesRead ?? 0, hasBundle: !!miles.bundle }),
       trackingProof: trackingProofView(data.trackingProof),
       brief,
+      skillFindings: ((data.automation ?? {}) as { findings?: { skill: string; title: string; detail: string }[] }).findings ?? [],
+      skillReadAt: ((data.automation ?? {}) as { lastRunAt?: string | null }).lastRunAt ?? null,
     };
   });
 
@@ -3088,7 +3090,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const autos = (data.automations ?? {}) as { noShow?: { enabled?: boolean }; onboarding?: { enabled?: boolean } };
     const ghlNow = await ghlLink(u.id);
     const presence = data.localPresence && typeof data.localPresence === 'object' ? Object.keys(data.localPresence as object).length > 0 : false;
-    const autoFile = (data.automation ?? {}) as { log?: { skill: string; title: string; ts: string; effect?: string }[]; kill?: boolean };
+    const autoFile = (data.automation ?? {}) as { log?: { skill: string; title: string; ts: string; effect?: string }[]; kill?: boolean; findings?: { id?: string; skill: string; title?: string; detail?: string }[]; lastRunAt?: string | null };
     const board = buildSkillsBoard({
       trade: p.industry,
       installed: Array.isArray(data.skills) ? data.skills as string[] : [],
@@ -3108,7 +3110,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const creditsNow = creditState(data);
     return publicSafe({
       ...board,
-      org: buildOrgChart({ trade: p.industry, fired: autoFile.log ?? [] }),
+      org: buildOrgChart({ trade: p.industry, fired: autoFile.log ?? [], findings: autoFile.findings ?? [], lastRunAt: autoFile.lastRunAt ?? null }),
+      findings: autoFile.findings ?? [],
+      lastRunAt: autoFile.lastRunAt ?? null,
       upgrade: creditsNow.remaining <= 0 ? CREDIT_PAUSE : null,
       automationPaused: !!(autoFile.kill || miles.bundle?.setup.caps.paused),
     });
@@ -3149,6 +3153,18 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const leads = Array.isArray(data.crmEvents) ? (data.crmEvents as { type?: string }[]).filter((event) => event.type === 'lead' || event.type === 'missed_call').length : (snap?.leads?.length ?? 0);
     const booked = Array.isArray(data.crmEvents) ? (data.crmEvents as { type?: string }[]).filter((event) => event.type === 'closed_won').length : 0;
     const now = new Date();
+    const miles = milesOf(data);
+    const groups = miles.bundle?.spec?.adGroups ?? [];
+    const assets = groups.map((group) => ({
+      adGroup: group.name || 'Ad group',
+      headlines: group.rsa?.headlines ?? [],
+      descriptions: group.rsa?.descriptions ?? [],
+    })).filter((group) => group.headlines.length || group.descriptions.length);
+    const website = profile.website || miles.bundle?.setup.website || '';
+    const finalUrl = miles.bundle?.spec?.finalUrl || website;
+    const ticket = Number(profile.avgTicket);
+    const close = Number(profile.closeRate);
+    const target = Number(profile.targetCpa);
     return {
       now: now.toISOString(),
       trade: profile.industry || '',
@@ -3165,6 +3181,17 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       metaSpend: meta ? metaSpend : null,
       gbpCalls: gbp ? (Array.isArray(snap?.reviews) ? snap!.reviews.length : 0) : null,
       ghlLeads: ghl ? leads : null,
+      website,
+      city: profile.city || '',
+      phone: profile.phone || '',
+      services: profile.services || '',
+      offer: profile.currentOffers || '',
+      avgTicket: Number.isFinite(ticket) && ticket > 0 ? ticket : null,
+      closeRate: Number.isFinite(close) && close > 0 ? close : null,
+      targetCpa: Number.isFinite(target) && target > 0 ? target : null,
+      pages: finalUrl ? [{ url: finalUrl, adGroup: groups[0]?.name, keywords: (groups[0]?.keywords ?? []).map((keyword) => keyword.text), status: null, loadMs: null, html: null }] : [],
+      assets,
+      assetSource: assets.length ? (google ? 'plan' : 'plan') : 'none',
     };
   };
 
@@ -3200,10 +3227,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       upgrade = CREDIT_PAUSE;
       entries = [...planActions(result.findings, { ...guard, creditsLeft: 0 }, now.toISOString()), ...entries];
     } else {
-      const charge = chargeCredits(data, 'skill_run', 'Daily account read', now);
-      if (charge.blocked) upgrade = charge.reason || CREDIT_PAUSE;
-      const after = creditState(data);
-      entries = [...planActions(result.findings, { ...guard, creditsLeft: charge.blocked ? 0 : after.remaining }, now.toISOString()), ...entries];
+      // Rule checks do not call a model, so this read does not draw credits.
+      entries = [...planActions(result.findings, guard, now.toISOString()), ...entries];
     }
     data.automation = { lastRunAt: now.toISOString(), findings: result.findings, log: entries.slice(0, 200), kill: state.kill };
     await authStore.setUserData(u.id, data);

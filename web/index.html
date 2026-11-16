@@ -848,7 +848,11 @@
   .org-line{width:1px;height:16px;background:#ccc;margin:0 auto;}
   .org-depts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
   .org-dept{border:1px solid #ececef;border-radius:14px;padding:12px;background:#fff;}
-  .org-skill{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:4px 0;}
+  .org-skill{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;background:none;border:0;border-top:1px solid #f2f2f4;padding:8px 0;min-height:44px;font:inherit;cursor:pointer;color:inherit;}
+  .org-skill b{font-size:13.5px;}
+  .org-skill .meta{font-size:12px;color:#6e6e76;}
+  .org-find{margin-top:14px;}
+  .org-find h3{margin:0 0 8px;font-size:16px;}
   .lib-card{aspect-ratio:1;box-sizing:border-box;background:#fff;border:1px solid #ececef;border-radius:18px;padding:16px;display:flex;flex-direction:column;text-align:left;cursor:pointer;font-family:inherit;color:#111;box-shadow:0 1px 2px rgba(16,16,20,.04);min-width:0;width:100%;overflow:hidden;}
   .lib-card:hover{border-color:#111;}
   .lib-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
@@ -1971,7 +1975,7 @@ function makeAgent(connector, user) {
         session.pending = null;
         return { text, connectUrl, launched: launched.map((a) => a.label), blocked: blocked.map((a) => ({ label: a.label, app: a.app, actionId: a.actionId })) };
       }
-      if (interp.intent === 'connect') { const u = connector.createConnectToken(user).connectUrl; return { text: 'To connect an app, open the link.', connectUrl: u }; }
+      if (interp.intent === 'connect') { const u = connector.createConnectToken(user).connectUrl; return { text: 'To connect an app, use Connect on the Integrations page. Miles will not paste the connect link in chat.', connectUrl: u }; }
       Object.assign(session.intake, interp.fields);
       if (interp.intent === 'unknown' && missingFields(session.intake).length) {
         return { text: 'I\'m your marketing employee, tell me about the business and I\'ll build a plan. For example: "I run a plumbing shop in Chicago, $3k/month, I want more calls."' };
@@ -3960,6 +3964,7 @@ async function openOverview(){
     go.onclick=()=>{ if(typeof setPage==='function') setPage('integrations'); };
     card.append(go);
     box.append(card);
+    renderSkillFindings(box, miles.skillFindings, miles.skillReadAt);
     return;
   }
   renderOverview(d, miles, op);
@@ -4010,6 +4015,26 @@ async function actDecision(dec, kind){
   } else if(dec.rec){
     await fetch('/api/recommendations/apply',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rec:dec.rec})});
   }
+}
+function renderSkillFindings(parent, findings, readAt){
+  const card=el('section','mcard'); card.id='dash-findings';
+  card.append(el('h3',null,'Today\'s findings'));
+  if(!findings||!findings.length){
+    card.append(el('p','mdesc','No daily read is saved yet. Open Skills & Playbooks and run today\'s read. Miles does not invent findings.'));
+    const go=el('button','go','Open Skills & Playbooks'); go.type='button';
+    go.onclick=()=>setPage('library');
+    card.append(go);
+    parent.append(card);
+    return;
+  }
+  if(readAt) card.append(el('p','appsub','Last read '+new Date(readAt).toLocaleDateString('en-US',{month:'short', day:'numeric'})));
+  findings.slice(0,8).forEach(row=>{
+    const bit=el('div'); bit.style.marginTop='10px';
+    bit.append(el('b',null, row.title||row.skill||'Finding'));
+    bit.append(el('p','mdesc', row.detail||''));
+    card.append(bit);
+  });
+  parent.append(card);
 }
 function renderOverview(d, miles, op){
   const box=$('#overview-body'); if(!box) return; box.innerHTML='';
@@ -4114,6 +4139,7 @@ function renderOverview(d, miles, op){
   }
   grid.append(card, action);
   box.append(grid);
+  renderSkillFindings(box, miles.skillFindings, miles.skillReadAt);
 
   const money=op&&op.money;
   box.append(el('div','md-label','2 · Am I making money?'));
@@ -8798,7 +8824,7 @@ function renderBenchmarks(){
 }
 
 // ═══ integrations (honest, backend-driven) ═══
-let CONN = { hub:{ready:false}, connectedApps:[] };
+var CONN = { hub:{ready:false}, connectedApps:[] };
 async function fetchConnections(){ if(REMOTE){ try{ CONN = await fetch('/api/connections').then(r=>r.json()); }catch(e){} } }
 // Offline/standalone fallback catalogue (the real list comes from /api/apps).
 const FALLBACK_APPS=[
@@ -8825,23 +8851,78 @@ async function fetchApps(q, more){
   }catch(e){}
   APP_LOADING=false;
 }
-async function connectApp(slug){
-  if(!(CONN.hub && CONN.hub.ready)){ setPage('chat'); chat.innerHTML=''; say('emp',"Connections aren't live in this preview yet. Once Miles is fully set up, clicking an app opens a secure link to connect your account."); return; }
-  try{
-    const r = await fetch('/api/connect-token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({app: slug})});
-    const t = await r.json().catch(()=>({}));
-    if(!r.ok || !t.connectUrl){ setPage('chat'); chat.innerHTML=''; say('emp','⚠️ Couldn’t start the connection right now. Please try again in a moment.'); return; }
-    const w = window.open(t.connectUrl,'_blank','noopener');
-    if(!w){ setPage('chat'); chat.innerHTML=''; say('emp','I opened your secure connect link, but your browser blocked the pop-up. Allow pop-ups for this site, or open it manually: '+t.connectUrl); return; }
-    awaitConnection(slug, w);
-  }catch(e){ setPage('chat'); chat.innerHTML=''; say('emp','⚠️ Connection error: '+e.message); }
+function connectHost(){
+  const page=document.querySelector('.page.on')||document.querySelector('.main');
+  let slot=document.getElementById('connect-status');
+  if(!slot){
+    slot=el('div'); slot.id='connect-status';
+    if(page) page.insertBefore(slot, page.firstChild);
+  } else if(page && slot.parentElement!==page) page.insertBefore(slot, page.firstChild);
+  return slot;
 }
-// After the OAuth pop-up opens, watch for the account to appear and then
-// auto-refresh the integrations grid + dashboard, so connecting is truly
-// one-click: the customer never has to reload or hunt for a refresh button.
-function awaitConnection(slug, w){
+function showConnectCard(slot, opts){
+  if(!slot) return;
+  slot.innerHTML='';
+  const card=el('div','mcard'); card.id='connect-card';
+  card.append(el('h3',null, opts.title||'Connect'));
+  card.append(el('p','mdesc', opts.body||''));
+  if(opts.button){
+    const b=el('button','go', opts.button); b.type='button';
+    b.onclick=opts.onClick;
+    card.append(b);
+  }
+  slot.append(card);
+}
+function connectLabel(slug){ return String(slug||'this app').replace(/_/g,' '); }
+function beginConnect(slug){
+  const popup=window.open('about:blank','miles_connect','width=520,height=760');
+  connectApp(slug, popup);
+}
+async function connectApp(slug, popup){
+  const slot=connectHost();
+  const name=connectLabel(slug);
+  const closePopup=()=>{ try{ if(popup && !popup.closed) popup.close(); }catch(e){} };
+  if(!(CONN.hub && CONN.hub.ready)){
+    closePopup();
+    showConnectCard(slot,{ title:'Connect '+name, body:'Connections are not live in this preview yet. Once Miles is fully set up, this button opens a secure window on this page.' });
+    return;
+  }
+  showConnectCard(slot,{ title:'Connect '+name, body:'Starting the secure connect window.' });
+  try{
+    const r=await fetch('/api/connect-token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({app:slug})});
+    const t=await r.json().catch(()=>({}));
+    if(!r.ok || !t.connectUrl){
+      closePopup();
+      showConnectCard(slot,{ title:'Not connected, try again', body:'Could not start the connection for '+name+'. Nothing was linked.', button:'Try again', onClick:()=>beginConnect(slug) });
+      return;
+    }
+    const url=t.connectUrl;
+    let opened=!!(popup && !popup.closed);
+    if(opened){
+      try{ popup.location.href=url; }catch(e){ opened=false; closePopup(); }
+    }
+    if(!opened){
+      const retry=()=>{
+        const w=window.open(url,'miles_connect','width=520,height=760');
+        if(!w){
+          showConnectCard(slot,{ title:'Open connect window', body:'The browser is still blocking the window. Allow pop-ups for this site, then press the button again. Miles stays on this page.', button:'Open connect window', onClick:retry });
+          return;
+        }
+        awaitConnection(slug, w, slot);
+      };
+      showConnectCard(slot,{ title:'Open connect window', body:'The browser blocked the connect window. Press the button to open it. Miles stays on this page.', button:'Open connect window', onClick:retry });
+      return;
+    }
+    awaitConnection(slug, popup, slot);
+  }catch(e){
+    closePopup();
+    showConnectCard(slot,{ title:'Not connected, try again', body:'The connection did not start. Nothing was linked.', button:'Try again', onClick:()=>beginConnect(slug) });
+  }
+}
+function awaitConnection(slug, w, slot){
   const before=(CONN.connectedApps||[]).slice(); const started=Date.now(); let busy=false;
-  toast('Opening your secure connect window…');
+  const name=connectLabel(slug);
+  showConnectCard(slot,{ title:'Connect '+name, body:'Finish the window, then Miles will update the status here.' });
   const timer=setInterval(async()=>{
     if(busy) return; busy=true;
     try{
@@ -8850,12 +8931,15 @@ function awaitConnection(slug, w){
       const popupClosed=!!(w&&w.closed); const timedOut=Date.now()-started>180000;
       if(nowConnected){
         clearInterval(timer);
-        toast('✓ '+slug.replace(/_/g,' ')+' connected, pulling your data now');
-        await loadIntegrations();
-        try{ await openOverview(); }catch(e){}
+        showConnectCard(slot,{ title:'Connected ✓', body:name+' is connected.' });
+        if(typeof loadIntegrations==='function') await loadIntegrations();
       } else if((popupClosed && Date.now()-started>2500) || timedOut){
         clearInterval(timer);
-        await loadIntegrations(); // popup closed, refresh in case detection lagged
+        if(typeof loadIntegrations==='function') await loadIntegrations();
+        const connected=(CONN.connectedApps||[]).includes(slug);
+        showConnectCard(slot, connected
+          ? { title:'Connected ✓', body:name+' is connected.' }
+          : { title:'Not connected, try again', body:'The window closed before '+name+' showed up as connected.', button:'Try again', onClick:()=>beginConnect(slug) });
       }
     }catch(e){}
     busy=false;
@@ -8867,7 +8951,7 @@ function appCard(a, connected){
   if(connected) mid.append(el('div','appsub','1 account connected'));
   c.append(appLogo(a), mid);
   if(connected) c.append(el('div','cdot','✓'));
-  c.onclick=()=>connectApp(a.slug);
+  c.onclick=()=>beginConnect(a.slug);
   return c;
 }
 // The home-services revenue stack, the tools this segment actually runs, grouped
@@ -9538,7 +9622,7 @@ function bizDisplay(f){
     return v;
   }
   if(!f.filled){
-    if(f.connect){ const b=el('button','yb-add','Connect'); b.type='button'; b.onclick=()=>connectApp(f.connect); return b; }
+    if(f.connect){ const b=el('button','yb-add','Connect'); b.type='button'; b.onclick=()=>beginConnect(f.connect); return b; }
     const b=el('button','yb-add', f.hint||'+ Add'); b.type='button';
     b.onclick=()=>openBizEdit(sectionOf(f.id), f.id);
     return b;
@@ -9674,13 +9758,13 @@ function renderAccounts(view){
   const g=view.accounts.google;
   let gAction=null;
   if(g.fix){ gAction=el('button','yb-fix','FIX'); gAction.type='button'; gAction.onclick=()=>bizFixGoogle(); }
-  else if(g.connect){ gAction=el('button','yb-fix','Connect'); gAction.type='button'; gAction.onclick=()=>connectApp('google_ads'); }
+  else if(g.connect){ gAction=el('button','yb-fix','Connect'); gAction.type='button'; gAction.onclick=()=>beginConnect('google_ads'); }
   const gKind=g.pill==='Connected'?'on':(g.fix||g.pill==='Not ready'?'hold':'off');
   card.append(accountRow('Google Ads', g.pill, gKind, gAction));
   if(g.detail && g.detail.replace(/\.$/,'')!==g.pill) card.append(el('p','md-legend', g.detail));
   const h=view.accounts.ghl;
   let hAction=null;
-  if(h.connect){ hAction=el('button','yb-fix','Connect'); hAction.type='button'; hAction.onclick=()=>connectApp('gohighlevel'); }
+  if(h.connect){ hAction=el('button','yb-fix','Connect'); hAction.type='button'; hAction.onclick=()=>beginConnect('gohighlevel'); }
   card.append(accountRow('GoHighLevel', h.pill, h.pill==='Connected'?'on':'off', hAction));
   if(h.detail && h.detail.replace(/\.$/,'')!==h.pill) card.append(el('p','md-legend', h.detail));
   card.append(accountRow('Meta Ads', view.accounts.meta.pill, 'later', null));
@@ -9730,7 +9814,7 @@ function renderBottom(view){
   sright.append(el('span','yb-pillstat '+kind, view.social.pill));
   if(view.social.connectSlug){
     const b=el('button','yb-fix','Connect'); b.type='button';
-    b.onclick=()=>connectApp(view.social.connectSlug);
+    b.onclick=()=>beginConnect(view.social.connectSlug);
     sright.append(b);
   }
   social.append(sright);
@@ -10208,14 +10292,36 @@ async function openLibrary(){
       const card=el('div','org-dept');
       card.append(el('b',null, dept.name||''));
       (dept.skills||[]).forEach(skill=>{
-        const row=el('div','org-skill');
-        row.append(el('span',null, skill.name||''));
-        row.append(el('span',null, (skill.fired||0)+' this week'));
+        const row=el('button','org-skill'); row.type='button';
+        row.append(el('b',null, skill.name||''));
+        const when=skill.lastRun?new Date(skill.lastRun).toLocaleDateString('en-US',{month:'short', day:'numeric'}):'not run';
+        row.append(el('span','meta', (skill.status||'Not run')+' · '+when+' · '+(skill.findings||0)+' open'));
+        row.onclick=()=>paintFindings(skill.key, skill.name);
         card.append(row);
       });
       depts.append(card);
     });
     org.append(depts);
+    const findBox=el('div','org-find mcard'); findBox.id='skill-findings';
+    function paintFindings(key, label){
+      findBox.innerHTML='';
+      findBox.append(el('h3',null, label?('Findings · '+label):'Today\'s findings'));
+      const all=board.findings||[];
+      if(!board.lastRunAt){
+        findBox.append(el('p','mdesc','No daily read is saved yet. Run today\'s read. Miles does not invent findings.'));
+        return;
+      }
+      const rows=key?all.filter(row=>row.skill===key):all;
+      if(!rows.length){ findBox.append(el('p','mdesc','Nothing is open for this skill.')); return; }
+      rows.slice(0,12).forEach(row=>{
+        const bit=el('div'); bit.style.marginTop='10px';
+        bit.append(el('b',null, row.title||row.skill||'Finding'));
+        bit.append(el('p','mdesc', row.detail||''));
+        findBox.append(bit);
+      });
+    }
+    paintFindings('', '');
+    org.append(findBox);
     const fired=(board.org.rulesFired||[]);
     if(fired.length){
       org.append(el('p','mdesc', 'Rules that fired this week'));
@@ -10230,7 +10336,11 @@ async function openLibrary(){
     };
     const run=el('button','go','Run today\'s read'); run.type='button'; run.style.marginLeft='8px';
     run.onclick=async()=>{
-      try{ const r=await(await fetch('/api/automation/read',{method:'POST'})).json(); toast(r.upgrade||(r.ran?'Daily read saved.':'Already read today.')); }catch(e){ toast('The daily read did not finish.'); }
+      run.disabled=true; const old=run.textContent; run.textContent='Saving...';
+      try{
+        const r=await(await fetch('/api/automation/read',{method:'POST'})).json();
+        toast(r.upgrade||(r.ran?'Saved ✓':'Already read today'));
+      }catch(e){ toast('Could not save, Retry'); run.textContent=old; run.disabled=false; return; }
       openLibrary();
     };
     controls.append(kill, run);

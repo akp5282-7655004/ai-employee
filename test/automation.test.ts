@@ -108,7 +108,7 @@ describe('org chart', () => {
       ],
     });
     expect(chart.head).toMatchObject({ name: 'Miles', title: 'Head of Growth', playbook: 'Painting' });
-    expect(chart.departments.map((row) => row.name)).toEqual(['Search terms', 'Bidding and budget', 'Tracking', 'Reporting']);
+    expect(chart.departments.map((row) => row.name)).toEqual(['Search terms', 'Bidding and budget', 'Tracking', 'Reporting', 'Pages', 'Ads', 'People', 'Money']);
     expect(chart.departments[0]!.skills[0]!.fired).toBe(1);
     expect(chart.rulesFired).toHaveLength(1);
     expect(JSON.stringify(chart)).not.toMatch(/searchlight|\u2014/i);
