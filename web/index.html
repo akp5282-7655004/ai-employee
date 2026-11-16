@@ -706,6 +706,27 @@
   .dv2-mini .v{font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .dv2-mini .v.muted{font-size:14px;font-weight:650;color:#8a8a92;letter-spacing:0;}
   .dv2-scroll{overflow-x:auto;max-width:100%;}
+  .dv2-numbers .md-card,
+  .dv2-numbers .dv2-kpis{background:#111112;border-color:#2a2a30;color:#fff;}
+  .dv2-numbers .md-card h3,
+  .dv2-numbers .dv2-kpi .v,
+  .dv2-numbers .md-num,
+  .dv2-numbers .dv2-gauge-stats .num{color:#fff;}
+  .dv2-numbers .dv2-kpi .k,
+  .dv2-numbers .dv2-kpi .s,
+  .dv2-numbers .md-legend,
+  .dv2-numbers .md-row,
+  .dv2-numbers .dv2-gauge-stats .lbl,
+  .dv2-numbers .dv2-gauge-stats .num.muted,
+  .dv2-numbers .dv2-mini .v.muted,
+  .dv2-numbers .md-num.muted{color:#c8c8cc;}
+  .dv2-numbers .dv2-kpi + .dv2-kpi,
+  .dv2-numbers .dv2-kpi:nth-child(n+5){border-color:#2a2a30;}
+  .dv2-numbers .md-pills{background:#1c1c20;border-color:#3a3a42;}
+  .dv2-numbers .md-pills button{color:#d7d7dc;}
+  .dv2-numbers .md-pills button.on{background:#fff;color:#111112;}
+  .dv2-numbers .md-bar{background:#2a2a30;}
+  .dv2-numbers .md-bar i{background:#4b8bf5;}
   .dv2-table{width:100%;border-collapse:collapse;font-size:13.5px;}
   .dv2-table th{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8a8a92;text-align:left;padding:8px 8px 10px;border-bottom:1px solid #e4e4e8;}
   .dv2-table td{padding:10px 8px;border-bottom:1px solid #f2f2f4;vertical-align:top;}
@@ -717,8 +738,13 @@
     .dv2-recs,.dv2-hero,.dv2-rates,.dv2-kpis{grid-template-columns:1fr;}
     .dv2-kpi + .dv2-kpi,.dv2-kpi:nth-child(5){border-left:0;border-top:1px solid #ececef;}
     .dv2-rates .dv2-mini{grid-template-columns:repeat(3,minmax(0,1fr));}
-    .dv2-mini .dv2-kpi{border-top:0;min-height:84px;}
+    .dv2-mini .dv2-kpi{border-top:0;min-height:84px;padding:12px 6px;}
     .dv2-mini .dv2-kpi + .dv2-kpi{border-left:1px solid #ececef;border-top:0;}
+    .dv2-mini .v{overflow:visible;text-overflow:clip;}
+    .dv2-mini .v.muted{font-size:12px;}
+    .dv2-numbers .dv2-kpi + .dv2-kpi,
+    .dv2-numbers .dv2-kpi:nth-child(5),
+    .dv2-numbers .dv2-mini .dv2-kpi + .dv2-kpi{border-color:#2a2a30;}
     .dv2-chart{height:200px;}
     .dv2-gauge-stats .num{font-size:14px;}
   }
@@ -4151,17 +4177,17 @@ function drawRevenueGauge(svg, booked, goal){
     svg.appendChild(p);
   };
   svg.innerHTML='';
-  path(arc(Math.PI, 0), '#e8edf4');
+  path(arc(Math.PI, 0), '#3a3a42');
   if(known && ratio>0) path(arc(Math.PI, mid), '#4b8bf5');
   const needle=document.createElementNS(ns,'line');
   needle.setAttribute('x1', cx); needle.setAttribute('y1', cy);
   needle.setAttribute('x2', cx+(r-10)*Math.cos(mid));
   needle.setAttribute('y2', cy-(r-10)*Math.sin(mid));
-  needle.setAttribute('stroke','#111112'); needle.setAttribute('stroke-width','3.5');
+  needle.setAttribute('stroke','#fff'); needle.setAttribute('stroke-width','3.5');
   needle.setAttribute('stroke-linecap','round');
   svg.appendChild(needle);
   const hub=document.createElementNS(ns,'circle');
-  hub.setAttribute('cx', cx); hub.setAttribute('cy', cy); hub.setAttribute('r','5'); hub.setAttribute('fill','#111112');
+  hub.setAttribute('cx', cx); hub.setAttribute('cy', cy); hub.setAttribute('r','5'); hub.setAttribute('fill','#fff');
   svg.appendChild(hub);
 }
 function monthBuckets(series){
@@ -4385,7 +4411,8 @@ function renderOverview(d, miles, op, setup){
   const numExtra=el('span');
   numExtra.append(document.createTextNode('Last 30 days'));
   if(anySample){ numExtra.append(document.createTextNode(' ')); numExtra.append(mdSample()); }
-  box.append(dv2Head('5 · Your numbers', numExtra));
+  const numbers=el('div','dv2-numbers');
+  numbers.append(dv2Head('5 · Your numbers', numExtra));
   const hero=el('div','dv2-hero');
   const gauge=el('div','md-card');
   const gh=el('div','md-money-h'); gh.append(el('h3',null,'Booked revenue'));
@@ -4420,10 +4447,10 @@ function renderOverview(d, miles, op, setup){
   const tbox=el('div','dv2-chart'); tbox.append(tcanvas); trend.append(tbox);
   const tnote=el('p','md-legend',''); trend.append(tnote);
   hero.append(trend);
-  box.append(hero);
-  box.append(dv2Note(money&&money.headline?money.headline:'Not enough live revenue and spend to say if you are making money.'));
+  numbers.append(hero);
+  numbers.append(dv2Note(money&&money.headline?money.headline:'Not enough live revenue and spend to say if you are making money.'));
 
-  box.append(dv2Head('Am I making money?', anySample?mdSample():mdLive()));
+  numbers.append(dv2Head('Am I making money?', anySample?mdSample():mdLive()));
   const kpis=el('div','dv2-kpis');
   const tiles=(money&&money.tiles)||[];
   const tileOf=(re)=>tiles.find(t=>re.test(t.label));
@@ -4452,18 +4479,18 @@ function renderOverview(d, miles, op, setup){
   cpl.append(el('div','v', 'See channels'));
   cpl.append(el('div','s', 'Shown per channel below when that source has spend and leads.'));
   kpis.append(cpl);
-  box.append(kpis);
-  box.append(dv2Note(anySample?'These money figures are examples until the source for each one connects.':'These money figures are from the sources that are connected.'));
+  numbers.append(kpis);
+  numbers.append(dv2Note(anySample?'These money figures are examples until the source for each one connects.':'These money figures are from the sources that are connected.'));
 
   const leadAnswer=(d.leads&&d.leads.hasData&&d.leads.count)?Math.round(((d.leads.count-(d.leads.uncontacted||0))/d.leads.count)*100):null;
-  box.append(dv2Head('Rates', (d.reviews&&d.reviews.hasData)||leadAnswer!=null?mdLive():null));
+  numbers.append(dv2Head('Rates', (d.reviews&&d.reviews.hasData)||leadAnswer!=null?mdLive():null));
   const rates=el('div','dv2-rates');
   const rateCard=el('div','md-card');
   const rateRow=(label, value)=>{
     const block=el('div'); block.style.marginTop='10px';
     const head=el('div','md-row');
     const val=el('span','md-num', value); val.style.whiteSpace='nowrap';
-    if(value==='Not tracked') val.style.cssText='white-space:nowrap;font-size:14px;font-weight:650;color:#8a8a92;letter-spacing:0;text-transform:none';
+    if(value==='Not tracked'){ val.classList.add('muted'); val.style.cssText='white-space:nowrap;font-size:14px;font-weight:650;letter-spacing:0;text-transform:none'; }
     head.append(el('span',null,label), val);
     block.append(head);
     if(typeof value==='string' && /%$/.test(value)){ const b=el('div','md-bar'); const i=el('i'); i.style.width=value; b.append(i); block.append(b); }
@@ -4485,9 +4512,10 @@ function renderOverview(d, miles, op, setup){
   miniTile('Reviews', (d.reviews&&d.reviews.hasData)?String(d.reviews.count):'Not tracked', !!(d.reviews&&d.reviews.hasData));
   miniTile('Avg rating', (d.reviews&&d.reviews.avg!=null)?String(d.reviews.avg):'Not tracked', !!(d.reviews&&d.reviews.hasData));
   rates.append(mini);
-  box.append(rates);
+  numbers.append(rates);
   const unanswered=(d.leads&&d.leads.hasData)?(d.leads.uncontacted||0)+' of '+d.leads.count+' leads in this window were not marked contacted.':'Answer rate, booking rate, and close rate appear when those counts are live.';
-  box.append(dv2Note(unanswered));
+  numbers.append(dv2Note(unanswered));
+  box.append(numbers);
 
   const cmp=op&&op.compare;
   box.append(dv2Head('6 · How do I compare?', el('span','md-badge', cmp?cmp.badge:'Not connected')));
@@ -4637,7 +4665,7 @@ function renderOverview(d, miles, op, setup){
       const has=series.length && buckets.values.some(v=>v>0);
       if(!has || typeof Chart!=='function'){ tnote.textContent=typeof Chart==='function'?'No month-by-month history is saved yet.':'Chart.js did not load.'; return; }
       if(tbox._chart){ try{ tbox._chart.destroy(); }catch(e){} }
-      tbox._chart=mountDashChart(tcanvas, {type:'bar', data:{labels:buckets.labels, datasets:[{data:buckets.values, backgroundColor:'#4b8bf5', borderRadius:3, maxBarThickness:28}]}, options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{grid:{display:false}}, y:{grid:{color:'#ececef'}, ticks:{maxTicksLimit:4}}}}});
+      tbox._chart=mountDashChart(tcanvas, {type:'bar', data:{labels:buckets.labels, datasets:[{data:buckets.values, backgroundColor:'#4b8bf5', borderRadius:3, maxBarThickness:28}]}, options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{grid:{display:false}, ticks:{color:'#c8c8cc'}}, y:{grid:{color:'#3a3a42'}, border:{display:false}, ticks:{color:'#c8c8cc', maxTicksLimit:4}}}}});
       tnote.textContent=sample?'Example monthly bars from the preview series. Not your account.':'Monthly bars from the connected source.';
     };
     seg.querySelectorAll('button').forEach(b=>b.onclick=()=>{ metric=b.dataset.metric; seg.querySelectorAll('button').forEach(x=>{ x.className=x===b?'on':''; x.setAttribute('aria-pressed', x===b?'true':'false'); }); draw(); });
