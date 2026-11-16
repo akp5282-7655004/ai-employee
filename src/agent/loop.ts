@@ -120,7 +120,7 @@ export class Agent {
       connectUrl = token.connectUrl;
       text +=
         `\nStill need you to connect ${apps.join(', ')} before I can run: ` +
-        `${blocked.map((b) => b.label).join(', ')}.\nConnect here: ${connectUrl}`;
+        `${blocked.map((b) => b.label).join(', ')}. Use Connect on the Integrations page. Miles will not paste the connect link in chat.`;
     }
     s.pending = undefined;
     return {
@@ -137,7 +137,7 @@ export class Agent {
   private async connect(s: Session, app?: string): Promise<{ session: Session; reply: AgentReply }> {
     const token = await this.deps.connector.createConnectToken(s.externalUserId);
     const which = app ? `your ${app} account` : 'an app';
-    return { session: s, reply: { text: `To connect ${which}, open: ${token.connectUrl}`, connectUrl: token.connectUrl } };
+    return { session: s, reply: { text: `To connect ${which}, use Connect on the Integrations page. Miles will not paste the connect link in chat.`, connectUrl: token.connectUrl } };
   }
 
   /** "Do this in my app" — run a real task in a connected tool (contacts, texts, notes, tags). */
@@ -171,7 +171,7 @@ export class Agent {
       try {
         const token = await this.deps.connector.createConnectToken(s.externalUserId);
         connectUrl = token.connectUrl;
-        text += `\nConnect here: ${connectUrl}`;
+        text += `\nUse Connect on the Integrations page. Miles will not paste the connect link in chat.`;
       } catch {
         /* no token available */
       }

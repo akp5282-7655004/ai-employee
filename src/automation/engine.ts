@@ -78,10 +78,13 @@ export function guardAction(input: GuardInput, action: NonNullable<Finding['acti
     },
   });
   if (input.mode === 'manual' || decision.effect === 'skip') {
-    return { effect: 'suggested', reason: 'Manual mode. Miles only suggests this. Nothing was changed.' };
+    return { effect: 'suggested', reason: input.mode === 'manual' ? 'Manual mode. Miles only suggests this. Nothing was changed.' : decision.reason };
   }
   if (decision.effect === 'queue' || decision.effect === 'hold' || input.mode === 'hybrid') {
     return { effect: 'queued', reason: decision.reason };
+  }
+  if (action.kind === 'propose') {
+    return { effect: 'queued', reason: 'This is a proposal. It waits for your tap. Nothing in the ad account was changed.' };
   }
   const raises = action.kind === 'create' || (action.changePct ?? 0) > 0 || action.spend > 0;
   if (raises) {

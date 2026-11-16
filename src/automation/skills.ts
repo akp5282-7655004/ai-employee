@@ -5,12 +5,14 @@
  */
 import { cplBandForGoal } from '../agents/goalcheck.js';
 import { tradePlaybook } from '../playbooks/load.js';
+import { deskSkills } from './desk.js';
 import type { SkillRules } from './rules.js';
 
-export type SkillKey = 'wasted-spend' | 'negative-keywords' | 'budget-pacing' | 'conversion-tracking' | 'weekly-report';
+export type SkillKey = 'wasted-spend' | 'negative-keywords' | 'budget-pacing' | 'conversion-tracking' | 'weekly-report'
+  | 'landing-pages' | 'feed-titles' | 'margin-cac' | 'audits' | 'structure' | 'audiences' | 'seasonal';
 
 export interface SkillAction {
-  kind: 'optimize' | 'create';
+  kind: 'optimize' | 'create' | 'propose';
   title: string;
   spend: number;
   changePct?: number;
@@ -58,6 +60,34 @@ export interface DailyInput {
   metaSpend: number | null;
   gbpCalls: number | null;
   ghlLeads: number | null;
+  /** Final URLs from live ads, plus a page read when one is stored. */
+  pages?: PageSnapshot[];
+  /** Headlines and descriptions from live ads, or from the saved plan. */
+  assets?: AdAsset[];
+  assetSource?: 'live' | 'plan' | 'none';
+  avgTicket?: number | null;
+  closeRate?: number | null;
+  targetCpa?: number | null;
+  services?: string;
+  offer?: string;
+  city?: string;
+  phone?: string;
+  website?: string;
+}
+
+export interface PageSnapshot {
+  url: string;
+  adGroup?: string;
+  keywords?: string[];
+  status?: number | null;
+  loadMs?: number | null;
+  html?: string | null;
+}
+
+export interface AdAsset {
+  adGroup: string;
+  headlines: string[];
+  descriptions: string[];
 }
 
 export type TermJudge = (term: string) => boolean;
@@ -223,5 +253,5 @@ export function runSkills(input: DailyInput, rules: SkillRules, opts?: { judge?:
   const pacing = budgetPacing(input, rules);
   const tracking = conversionTracking(input);
   const report = weeklyReport(input, [...wasted, ...negatives, ...pacing, ...tracking], opts?.write);
-  return [...wasted, ...negatives, ...pacing, ...tracking, report];
+  return [...wasted, ...negatives, ...pacing, ...tracking, report, ...deskSkills(input)];
 }
