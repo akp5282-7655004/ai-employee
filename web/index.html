@@ -848,7 +848,11 @@
   .org-line{width:1px;height:16px;background:#ccc;margin:0 auto;}
   .org-depts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
   .org-dept{border:1px solid #ececef;border-radius:14px;padding:12px;background:#fff;}
-  .org-skill{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:4px 0;}
+  .org-skill{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;background:none;border:0;border-top:1px solid #f2f2f4;padding:8px 0;min-height:44px;font:inherit;cursor:pointer;color:inherit;}
+  .org-skill b{font-size:13.5px;}
+  .org-skill .meta{font-size:12px;color:#6e6e76;}
+  .org-find{margin-top:14px;}
+  .org-find h3{margin:0 0 8px;font-size:16px;}
   .lib-card{aspect-ratio:1;box-sizing:border-box;background:#fff;border:1px solid #ececef;border-radius:18px;padding:16px;display:flex;flex-direction:column;text-align:left;cursor:pointer;font-family:inherit;color:#111;box-shadow:0 1px 2px rgba(16,16,20,.04);min-width:0;width:100%;overflow:hidden;}
   .lib-card:hover{border-color:#111;}
   .lib-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
@@ -3960,6 +3964,7 @@ async function openOverview(){
     go.onclick=()=>{ if(typeof setPage==='function') setPage('integrations'); };
     card.append(go);
     box.append(card);
+    renderSkillFindings(box, miles.skillFindings, miles.skillReadAt);
     return;
   }
   renderOverview(d, miles, op);
@@ -4010,6 +4015,26 @@ async function actDecision(dec, kind){
   } else if(dec.rec){
     await fetch('/api/recommendations/apply',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rec:dec.rec})});
   }
+}
+function renderSkillFindings(parent, findings, readAt){
+  const card=el('section','mcard'); card.id='dash-findings';
+  card.append(el('h3',null,'Today\'s findings'));
+  if(!findings||!findings.length){
+    card.append(el('p','mdesc','No daily read is saved yet. Open Skills & Playbooks and run today\'s read. Miles does not invent findings.'));
+    const go=el('button','go','Open Skills & Playbooks'); go.type='button';
+    go.onclick=()=>setPage('library');
+    card.append(go);
+    parent.append(card);
+    return;
+  }
+  if(readAt) card.append(el('p','appsub','Last read '+new Date(readAt).toLocaleDateString('en-US',{month:'short', day:'numeric'})));
+  findings.slice(0,8).forEach(row=>{
+    const bit=el('div'); bit.style.marginTop='10px';
+    bit.append(el('b',null, row.title||row.skill||'Finding'));
+    bit.append(el('p','mdesc', row.detail||''));
+    card.append(bit);
+  });
+  parent.append(card);
 }
 function renderOverview(d, miles, op){
   const box=$('#overview-body'); if(!box) return; box.innerHTML='';
@@ -4114,6 +4139,7 @@ function renderOverview(d, miles, op){
   }
   grid.append(card, action);
   box.append(grid);
+  renderSkillFindings(box, miles.skillFindings, miles.skillReadAt);
 
   const money=op&&op.money;
   box.append(el('div','md-label','2 · Am I making money?'));
@@ -10266,14 +10292,36 @@ async function openLibrary(){
       const card=el('div','org-dept');
       card.append(el('b',null, dept.name||''));
       (dept.skills||[]).forEach(skill=>{
-        const row=el('div','org-skill');
-        row.append(el('span',null, skill.name||''));
-        row.append(el('span',null, (skill.fired||0)+' this week'));
+        const row=el('button','org-skill'); row.type='button';
+        row.append(el('b',null, skill.name||''));
+        const when=skill.lastRun?new Date(skill.lastRun).toLocaleDateString('en-US',{month:'short', day:'numeric'}):'not run';
+        row.append(el('span','meta', (skill.status||'Not run')+' · '+when+' · '+(skill.findings||0)+' open'));
+        row.onclick=()=>paintFindings(skill.key, skill.name);
         card.append(row);
       });
       depts.append(card);
     });
     org.append(depts);
+    const findBox=el('div','org-find mcard'); findBox.id='skill-findings';
+    function paintFindings(key, label){
+      findBox.innerHTML='';
+      findBox.append(el('h3',null, label?('Findings · '+label):'Today\'s findings'));
+      const all=board.findings||[];
+      if(!board.lastRunAt){
+        findBox.append(el('p','mdesc','No daily read is saved yet. Run today\'s read. Miles does not invent findings.'));
+        return;
+      }
+      const rows=key?all.filter(row=>row.skill===key):all;
+      if(!rows.length){ findBox.append(el('p','mdesc','Nothing is open for this skill.')); return; }
+      rows.slice(0,12).forEach(row=>{
+        const bit=el('div'); bit.style.marginTop='10px';
+        bit.append(el('b',null, row.title||row.skill||'Finding'));
+        bit.append(el('p','mdesc', row.detail||''));
+        findBox.append(bit);
+      });
+    }
+    paintFindings('', '');
+    org.append(findBox);
     const fired=(board.org.rulesFired||[]);
     if(fired.length){
       org.append(el('p','mdesc', 'Rules that fired this week'));
@@ -10288,7 +10336,11 @@ async function openLibrary(){
     };
     const run=el('button','go','Run today\'s read'); run.type='button'; run.style.marginLeft='8px';
     run.onclick=async()=>{
-      try{ const r=await(await fetch('/api/automation/read',{method:'POST'})).json(); toast(r.upgrade||(r.ran?'Daily read saved.':'Already read today.')); }catch(e){ toast('The daily read did not finish.'); }
+      run.disabled=true; const old=run.textContent; run.textContent='Saving...';
+      try{
+        const r=await(await fetch('/api/automation/read',{method:'POST'})).json();
+        toast(r.upgrade||(r.ran?'Saved ✓':'Already read today'));
+      }catch(e){ toast('Could not save, Retry'); run.textContent=old; run.disabled=false; return; }
       openLibrary();
     };
     controls.append(kill, run);
