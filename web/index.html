@@ -9546,7 +9546,7 @@ async function send(text,silent){
     const r=await fetch('/api/chat/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-16),mode:chatMode})});
     const d=await r.json();
     b.className='bubble md'; b.innerHTML='';
-    (d.steps||[]).forEach(step=>{ const line=el('div','appsub', step); b.append(line); });
+    (d.steps||[]).forEach(step=>{ const line=el('div','appsub', step); line.style.margin='0 0 4px'; b.append(line); });
     if(d.plan){
       const card=el('div'); card.style.cssText='border:1px solid var(--line);border-radius:12px;padding:12px;margin:8px 0;display:flex;flex-direction:column;gap:4px';
       card.append(el('b',null,d.plan.title||'Plan'));
@@ -9557,6 +9557,7 @@ async function send(text,silent){
       b.append(card);
     }
     const body=el('div'); body.innerHTML=mdToHtml(d.text||d.error||'I could not answer that. Nothing was changed.'); b.append(body);
+    if(d.next&&d.next.label){ const go=el('button','go', d.next.label); go.type='button'; go.style.marginTop='8px'; go.onclick=()=>setPage(d.next.page||'integrations'); b.append(go); }
     logChat('emp', d.text||''); chat.scrollTop=chat.scrollHeight;
   }catch(e){ b.textContent='I could not reach the server just now. Try again.'; }
 }

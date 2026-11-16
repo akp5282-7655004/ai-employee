@@ -4,6 +4,7 @@ import { MemoryStore } from '../src/db/index.js';
 import { parseActionIntent } from '../src/chat/intent.js';
 import { runChatTool, type ChatReaders } from '../src/chat/tools.js';
 import { answerChat } from '../src/chat/ask.js';
+import { fallbackAnswer } from '../src/chat/prompt.js';
 import { buildAccountSnapshot } from '../src/chat/snapshot.js';
 import type { ChatModel } from '../src/chat/model.js';
 import { retailFromServe } from '../src/billing/textprice.js';
@@ -126,9 +127,92 @@ describe('read-only agent', () => {
       model: async () => null,
       readers,
     });
-    expect(out.text).toMatch(/Painters In Philly/);
-    expect(out.text).toMatch(/No spend has been read/);
-    expect(out.text).toMatch(/not connected/i);
+    expect(out.text).toMatch(/^Google Ads is not connected yet, so I cannot see spend or leads this month\./);
+    expect(out.text).not.toMatch(/a company|this business/);
+    expect(out.text.match(/No campaign is on file/g) || []).toHaveLength(0);
+    expect(out.steps).toContain('Checking campaigns...');
+    expect(out.next).toEqual({ label: 'Connect Google Ads', page: 'integrations' });
     expect(out.plan).toBeNull();
+  });
+
+  it('does not repeat the campaign line or dump more than 3 missing items', () => {
+    const snapshot = buildAccountSnapshot({
+      tenantId: 't',
+      sampleConnector: true,
+      profile: { businessName: '', industry: '' },
+      completeness: { percent: 0, filled: 0, total: 10, missing: ['Name', 'Trade', 'Phone', 'Website', 'Services', 'City'], gbp: '' },
+      phase: 'plan',
+      mode: null,
+      caps: null,
+      tracking: null,
+      plan: null,
+      milesCampaign: null,
+      journey: null,
+      spendRows: [],
+      spendReadAt: null,
+      bookedFromJobs: null,
+      bookedFromDeals: null,
+      google: { oauth: false, ready: false, customerId: null, note: 'Not connected', error: null },
+      ghl: { connected: false, detail: 'Not connected' },
+      speedToLead: { enabled: false, today: 0, total: 0, held: 0, canSend: false },
+      social: { facebook: false, instagram: false, linkedin: false, gbp: false },
+      automations: { noShow: false, onboarding: false },
+      events: [],
+      changeLog: [],
+      inbox: [],
+      leads: [],
+    });
+    const ads = fallbackAnswer(snapshot, 'How are my ads doing this month?');
+    expect(ads.startsWith('Google Ads is not connected yet')).toBe(true);
+    expect((ads.match(/No campaign is on file/g) || []).length).toBe(0);
+    expect(ads).not.toMatch(/Website|Services|City/);
+    const role = fallbackAnswer(snapshot, 'what are you here to do');
+    expect(role).not.toMatch(/a company/);
+    expect(role).toMatch(/this account/);
+    expect(role).toMatch(/Name, Trade, Phone/);
+    expect(role).toMatch(/3 more/);
+    expect(role).not.toMatch(/Website/);
+  });
+
+  it('shows Checking campaigns when the model reads campaigns', async () => {
+    const out = await answerChat({
+      snapshot: buildAccountSnapshot({
+        tenantId: 't',
+        sampleConnector: false,
+        profile: { businessName: 'Painters In Philly', industry: 'Painting' },
+        completeness: { percent: 50, filled: 5, total: 10, missing: [], gbp: '' },
+        phase: 'plan',
+        mode: 'hybrid',
+        caps: null,
+        tracking: null,
+        plan: null,
+        milesCampaign: null,
+        journey: null,
+        spendRows: [],
+        spendReadAt: null,
+        bookedFromJobs: null,
+        bookedFromDeals: null,
+        google: { oauth: true, ready: true, customerId: '111', note: 'Ready', error: null },
+        ghl: { connected: false, detail: 'Not connected' },
+        speedToLead: { enabled: false, today: 0, total: 0, held: 0, canSend: false },
+        social: { facebook: false, instagram: false, linkedin: false, gbp: false },
+        automations: { noShow: false, onboarding: false },
+        events: [],
+        changeLog: [],
+        inbox: [],
+        leads: [],
+      }),
+      messages: [{ role: 'user', text: 'How are my ads doing this month?' }],
+      model: async (req) => {
+        if (!req.messages.some((message) => message.role === 'tool')) {
+          return { text: null, toolCalls: [{ id: 'c1', name: 'get_campaigns', arguments: '{}' }] };
+        }
+        return { text: 'Google Ads is connected. No spend has been read this month.', toolCalls: [] };
+      },
+      readers,
+    });
+    expect(out.steps).toContain('Checking campaigns...');
+    expect(out.text.startsWith('Google Ads is connected')).toBe(true);
+    expect(out.live).toBe(true);
   });
 });

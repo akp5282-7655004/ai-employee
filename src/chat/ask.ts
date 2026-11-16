@@ -4,7 +4,7 @@
  * from the snapshot, so chat does not fall back to a generic assistant.
  */
 import type { AccountSnapshot } from './snapshot.js';
-import { acceptReply, asksMode, asksSpendOrLeads, fallbackAnswer, milesSystemPrompt, modeAnswer, spendLeadAnswer, type LiveSpendRead } from './prompt.js';
+import { acceptReply, adsPerformanceAnswer, asksAdsPerformance, asksMode, asksSpendOrLeads, fallbackAnswer, milesSystemPrompt, modeAnswer, spendLeadAnswer, type ChatNext, type LiveSpendRead } from './prompt.js';
 import type { ChatModel, ChatTurnResult, ChatUsage, ChatWireMessage } from './model.js';
 import { intentReply, parseActionIntent, type AgentIntent } from './intent.js';
 import { CHAT_TOOLS, runChatTool, toolStepLabel, type ChatReaders } from './tools.js';
@@ -44,6 +44,7 @@ export interface ChatAnswer {
   steps: string[];
   plan: { title: string; channel: string; locations: string[]; dailyBudget: number | null; services: string[]; note: string } | null;
   intent: AgentIntent | null;
+  next: ChatNext | null;
   usage: ChatUsage;
 }
 
@@ -75,13 +76,14 @@ export async function answerChat(args: {
       services: intent.services,
       note: 'Building actions arrives in the next update. Nothing was created or spent.',
     } : null;
-    return { text: said.text, live: false, mode, steps: [], plan, intent: said.ready ? intent : null, usage: emptyUsage };
+    return { text: said.text, live: false, mode, steps: [], plan, intent: said.ready ? intent : null, next: null, usage: emptyUsage };
   }
-  if (asksMode(question)) return { text: modeAnswer(args.snapshot), live: false, mode, steps: [], plan: null, intent: null, usage: emptyUsage };
+  if (asksMode(question)) return { text: modeAnswer(args.snapshot), live: false, mode, steps: [], plan: null, intent: null, next: null, usage: emptyUsage };
+  const adsQuestion = asksAdsPerformance(question);
   if (asksSpendOrLeads(question) && args.readers.liveSpend) {
     let read: LiveSpendRead | null = null;
     try { read = await args.readers.liveSpend(); } catch { read = null; }
-    if (read && read.connected && !read.sample) return { text: spendLeadAnswer(read), live: false, mode, steps: ['Checking the numbers...'], plan: null, intent: null, usage: emptyUsage };
+    if (read && read.connected && !read.sample) return { text: spendLeadAnswer(read), live: false, mode, steps: ['Checking the numbers...'], plan: null, intent: null, next: null, usage: emptyUsage };
   }
   const system = milesSystemPrompt(args.snapshot);
   let modelRan = false;
@@ -113,9 +115,16 @@ export async function answerChat(args: {
       }
       continue;
     }
+    if (adsQuestion && !steps.some((step) => /campaign/i.test(step))) steps.unshift('Checking campaigns...');
     const accepted = acceptReply(args.snapshot, question, turn.text);
-    return { text: accepted.text, live: accepted.fromModel, mode, steps, plan: null, intent: null, usage };
+    const next = accepted.fromModel ? null : (adsQuestion ? adsPerformanceAnswer(args.snapshot).next : null);
+    const text = accepted.fromModel ? accepted.text : (adsQuestion ? adsPerformanceAnswer(args.snapshot).text : accepted.text);
+    return { text, live: accepted.fromModel, mode, steps, plan: null, intent: null, next, usage };
   }
 
-  return { text: modelRan ? 'I could not finish that read. Nothing was changed.' : fallbackAnswer(args.snapshot, question), live: false, mode, steps, plan: null, intent: null, usage };
+  if (!modelRan && adsQuestion) {
+    const ads = adsPerformanceAnswer(args.snapshot);
+    return { text: ads.text, live: false, mode, steps: ['Checking campaigns...'], plan: null, intent: null, next: ads.next, usage };
+  }
+  return { text: modelRan ? 'I could not finish that read. Nothing was changed.' : fallbackAnswer(args.snapshot, question), live: false, mode, steps, plan: null, intent: null, next: null, usage };
 }

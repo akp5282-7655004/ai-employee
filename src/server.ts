@@ -7484,7 +7484,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (out.usage && out.usage.serveUsd > 0) chargeCredits(saved, 'chat', 'Miles agent', new Date(), out.usage);
     if (out.intent || (out.usage && out.usage.serveUsd > 0)) await authStore.setUserData(u.id, saved);
     if (out.live) await meterUser(u.id, 'text');
-    return { text: out.text, live: out.live, mode: out.mode, steps: out.steps, plan: out.plan };
+    return { text: out.text, live: out.live, mode: out.mode, steps: out.steps, plan: out.plan, next: out.next };
   });
 
   // ── Send an email — Miles drafts it, then sends through the connected Gmail ──

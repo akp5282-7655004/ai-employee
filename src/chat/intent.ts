@@ -47,7 +47,7 @@ export function parseActionIntent(text: string): AgentIntent | null {
 }
 
 export function intentReply(intent: AgentIntent, business: string): { text: string; ready: boolean } {
-  const name = business || 'this business';
+  const name = business.trim() || 'this account';
   if (intent.missing) {
     const ask = intent.missing === 'channel'
       ? `Which channel should I plan for ${name}?`
