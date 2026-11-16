@@ -12,6 +12,12 @@
  * page, malformed JSON-LD or a hostile WAF costs us that one source, not the
  * import. Runs server-side (needs outbound fetch).
  */
+
+// Imported once at load, not per call: a dynamic import per URL raced when the
+// crawl resolved several pages at once, and some calls skipped the test mock
+// and hit real DNS, so the crawl read fewer pages than it fetched for.
+import { lookup } from 'node:dns/promises';
+
 export interface SiteImport {
   website?: string;
   businessName?: string;
@@ -616,7 +622,6 @@ async function isPublicUrl(u: URL): Promise<boolean> {
   if (/^(localhost|.*\.local|.*\.internal|.*\.localhost)$/i.test(host)) return false;
   if (/^[\d.]+$/.test(host) || host.includes(':')) return !isPrivateAddress(host);
   try {
-    const { lookup } = await import('node:dns/promises');
     const addrs = await lookup(host, { all: true });
     return addrs.length > 0 && addrs.every((a) => !isPrivateAddress(a.address));
   } catch { return false; }
