@@ -88,7 +88,7 @@ import { buildGhlPlaybook } from './agents/ghlplaybook.js';
 import { emptyReviewState, reviewAskText, parseRating, type ReviewRequestState } from './agents/reviewrequest.js';
 import { emptyAutomationsState, noShowText, onboardingText, type AutomationsState } from './agents/automations.js';
 import { buildGrowthPlan } from './agents/growth.js';
-import { buildPlaybook, playbookTicket } from './agents/playbook.js';
+import { buildPlaybook, playbookCplBand, playbookTicket } from './agents/playbook.js';
 import { buildMarketingReport, reportRangeId, reportWindow } from './reports/marketing.js';
 import { activePlaybooks } from './agents/activeplaybooks.js';
 import { generateText, textLlmReady } from './llm/text.js';
@@ -785,6 +785,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // (shared office and household IPs must not lock each other out).
   const loginByEmail = new RateLimiter(8, 15 * 60_000);
   const loginByIp = new RateLimiter(50, 15 * 60_000);
+  const chatByUser = new RateLimiter(30, 60_000);
   /** Constant-time token comparison, so a reply's timing reveals nothing. */
   const sameToken = (a: string, b: string): boolean => {
     const x = Buffer.from(a);
@@ -7369,6 +7370,63 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           approvals: approvalLog(data).slice(0, 20).map((entry) => ({ ts: entry.ts, kind: entry.kind, title: entry.title, source: entry.source })),
         };
       },
+      overview: async () => {
+        const snapshot = await chatSnapshotFor(uid);
+        return {
+          business: snapshot.business.name,
+          trade: snapshot.business.trade,
+          mode: snapshot.miles.mode,
+          paused: snapshot.miles.paused,
+          spend: snapshot.performance.spend,
+          leads: snapshot.performance.leads,
+          bookedJobs: snapshot.performance.bookedJobs,
+        };
+      },
+      profile: async () => (await chatSnapshotFor(uid)).business,
+      playbook: async () => {
+        const snapshot = await chatSnapshotFor(uid);
+        const band = playbookCplBand(snapshot.business.trade);
+        return band
+          ? { trade: snapshot.business.trade, costPerLeadLow: band.low, costPerLeadHigh: band.high, note: 'Loaded trade playbook range. Not this account live result.' }
+          : { trade: snapshot.business.trade || null, note: 'No trade playbook is loaded. Miles will not invent a target.' };
+      },
+      campaigns: async () => {
+        const snapshot = await chatSnapshotFor(uid);
+        return { campaigns: snapshot.campaigns, performance: snapshot.performance };
+      },
+      campaignDetail: async () => {
+        const snapshot = await chatSnapshotFor(uid);
+        const resource = snapshot.campaigns.find((campaign) => campaign.resource)?.resource ?? undefined;
+        const liveRead = connector.readGoogleCampaignStatus
+          ? await connector.readGoogleCampaignStatus(uid, resource)
+          : { live: false, called: false, sample: connector.name === 'mock', note: 'This connector cannot read Google campaign status.', campaigns: [] };
+        return { onFile: snapshot.campaigns, liveRead };
+      },
+      metrics: async (args) => {
+        const snapshot = await chatSnapshotFor(uid);
+        const channel = typeof args.channel === 'string' ? args.channel : '';
+        if (/meta|facebook/i.test(channel)) return { connected: false, note: 'Meta ads are not connected. A Facebook Page is not an ad account.' };
+        return { range: typeof args.range === 'string' ? args.range : 'last 30 days', channel: channel || 'all', performance: snapshot.performance };
+      },
+      leadsQuery: async (args) => {
+        const data = await authStore.getUserData(uid);
+        const wanted = typeof args.status === 'string' ? args.status : '';
+        const stored = readLeads(data).filter((lead) => !wanted || lead.status === wanted).slice(0, 20);
+        return { sample: false, note: stored.length ? 'Leads saved on this account.' : 'No leads are saved on this account.', leads: stored.map((lead) => ({ name: lead.name, status: lead.status })) };
+      },
+      approvals: async () => ({ waiting: (await chatSnapshotFor(uid)).inbox }),
+      findings: async () => {
+        const data = await authStore.getUserData(uid);
+        const findings = ((data.automation ?? {}) as { findings?: { title?: string; detail?: string }[] }).findings ?? [];
+        return { findings: findings.slice(0, 8), note: findings.length ? 'From the last daily read.' : 'No daily read is saved yet. Miles will not invent findings.' };
+      },
+      benchmarks: async () => {
+        const snapshot = await chatSnapshotFor(uid);
+        const band = playbookCplBand(snapshot.business.trade);
+        return band
+          ? { trade: snapshot.business.trade, googleAdsCostPerLead: { low: band.low, high: band.high }, note: 'Published trade playbook. Not this account.' }
+          : { trade: snapshot.business.trade || null, note: 'No benchmark is loaded for this trade. Miles will not invent one.' };
+      },
       liveSpend: async () => {
         const period = 'the last 30 days';
         const google = await googleReadiness(uid);
@@ -7404,7 +7462,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   app.post<{ Body: { messages?: Array<{ role?: string; text?: string }>; mode?: string } }>('/api/chat/ask', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
+    const pace = chatByUser.check(u.id);
+    if (!pace.allowed) return reply.code(429).send({ error: `Too many questions. Try again in ${pace.retryAfter} seconds. Nothing was changed.` });
     const mode = ['easy', 'medium', 'high', 'research'].includes(req.body?.mode ?? '') ? req.body!.mode! : 'medium';
+    const before = await authStore.getUserData(u.id);
+    const afford = canAfford(before, 'chat');
+    if (!afford.ok) return { text: afford.reason || 'Out of credits. Nothing was changed.', live: false, mode, steps: [], plan: null };
     const snapshot = await chatSnapshotFor(u.id);
     const out = await answerChat({
       snapshot,
@@ -7413,8 +7476,15 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       model: deps.chatModel ?? defaultChatModel,
       readers: chatReadersFor(u.id),
     });
+    const saved = await authStore.getUserData(u.id);
+    if (out.intent) {
+      const prior = Array.isArray(saved.agentIntents) ? saved.agentIntents as unknown[] : [];
+      saved.agentIntents = [{ ...out.intent, at: new Date().toISOString(), text: (req.body?.messages ?? []).slice(-1)[0]?.text || '' }, ...prior].slice(0, 20);
+    }
+    if (out.usage && out.usage.serveUsd > 0) chargeCredits(saved, 'chat', 'Miles agent', new Date(), out.usage);
+    if (out.intent || (out.usage && out.usage.serveUsd > 0)) await authStore.setUserData(u.id, saved);
     if (out.live) await meterUser(u.id, 'text');
-    return out;
+    return { text: out.text, live: out.live, mode: out.mode, steps: out.steps, plan: out.plan, next: out.next };
   });
 
   // ── Send an email — Miles drafts it, then sends through the connected Gmail ──
