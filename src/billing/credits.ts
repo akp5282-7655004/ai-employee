@@ -149,7 +149,8 @@ export interface CreditState {
   /** Per-item counts this month, for the fair-use ceilings. */
   usedThisMonth: Record<string, number>;
   /** A card charge that has not granted credits yet. */
-  pendingTopUp?: { status: 'awaiting_payment' | 'failed' | 'succeeded' | 'declined'; amount: number; paymentId?: string; detail?: string } | null;
+  /** `startedAt` marks a charge in flight, so a second click cannot start a second one. */
+  pendingTopUp?: { status: 'awaiting_payment' | 'failed' | 'succeeded' | 'declined'; amount: number; paymentId?: string; detail?: string; startedAt?: string } | null;
 }
 
 /** The calendar-month key for a date. Matches usage/meter.ts deliberately. */
@@ -437,7 +438,7 @@ export function chargeCredits(
           (upgrade ? `Upgrading to ${upgrade} costs less than topping up further.` : 'Get in touch to raise it.')
         : before.autoTopUp
           ? `Top-up limit reached. Add credit${upgrade ? ` or upgrade to ${upgrade}` : ''}.`
-          : `Out of credits. Automation is paused. You can still view your reports and data. Add $${band.topUp.toFixed(2)}, turn on auto top-up${upgrade ? `, or upgrade to ${upgrade}` : ''}.`,
+          : outOfCreditsReason(data),
     };
   }
 
@@ -466,15 +467,29 @@ export function canAfford(data: Record<string, unknown>, item: string): { ok: bo
   if (!billingEnforced()) return { ok: true }; // meter runs, wall is off
   const state = creditState(data);
   if (state.remaining > 0) return { ok: true }; // a positive balance always passes
-  const band = bandOf(data);
   // A pending card charge is not credits. Work waits until the payment succeeds.
-  const upgrade = nextBandName(band);
-  return {
-    ok: false,
-    reason:
-      `Out of credits. Automation is paused. You can still view your reports and data. Add $${band.topUp.toFixed(2)}, turn on auto top-up` +
-      `${upgrade ? `, or upgrade to ${upgrade}` : ''}.`,
-  };
+  return { ok: false, reason: outOfCreditsReason(data) };
+}
+
+/**
+ * What an account with an empty balance is told. The next step differs by
+ * where the account stands, and naming the wrong one sends the owner looking
+ * for a button that is not there: a top-up charges the card saved at checkout,
+ * so only an active paid plan can buy one.
+ */
+export function outOfCreditsReason(data: Record<string, unknown>): string {
+  const head = 'Out of credits. Automation is paused. You can still view your reports and data.';
+  const billing = data.billing as { band?: string; status?: string } | undefined;
+  const onPaidBand = BANDS.some((b) => b.key === billing?.band);
+  if (onPaidBand && billing?.status === 'past_due') {
+    return `${head} Your last payment did not go through. Update your card on Plan & Credits.`;
+  }
+  if (onPaidBand && billing?.status === 'active') {
+    const band = bandOf(data);
+    const upgrade = nextBandName(band);
+    return `${head} Add $${band.topUp.toFixed(2)} on Plan & Credits${upgrade ? `, or upgrade to ${upgrade}` : ''}.`;
+  }
+  return `${head} Pick a plan on Plan & Credits to keep going. Plans start at $${BANDS[0]!.monthlyPrice} a month.`;
 }
 
 /** The band above this one, for the upgrade prompt. Undefined at the top. */

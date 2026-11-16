@@ -84,25 +84,80 @@ export async function createPortalSession(customerId: string, returnUrl: string)
 }
 
 /**
- * Start a top-up charge. Credits are not granted here. The webhook grants
- * them only after payment_intent.succeeded for this id.
+ * The card Checkout saved for this customer. A subscription Checkout puts it
+ * on the subscription, not on the customer's invoice settings, so look in
+ * both, then fall back to any card attached to the customer.
+ */
+async function savedCard(
+  stripe: import('stripe').default, customerId: string, subscriptionId?: string,
+): Promise<string | undefined> {
+  const idOf = (v: unknown): string | undefined =>
+    typeof v === 'string' ? v : (v && typeof v === 'object' && typeof (v as { id?: unknown }).id === 'string' ? (v as { id: string }).id : undefined);
+  const customer = await stripe.customers.retrieve(customerId);
+  if (!customer.deleted) {
+    const onCustomer = idOf(customer.invoice_settings?.default_payment_method);
+    if (onCustomer) return onCustomer;
+  }
+  if (subscriptionId) {
+    try {
+      const sub = await stripe.subscriptions.retrieve(subscriptionId);
+      const onSub = idOf(sub.default_payment_method);
+      if (onSub) return onSub;
+    } catch { /* a canceled or missing subscription still leaves the customer's cards */ }
+  }
+  const cards = await stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 });
+  return cards.data[0]?.id;
+}
+
+/**
+ * Charge a top-up to the card already on file, and confirm it in the same call.
+ *
+ * It used to create a bare PaymentIntent with only a customer on it. An intent
+ * like that waits in `requires_payment_method` for a browser to confirm it,
+ * and nothing in Miles ever did: no payment succeeded, no webhook fired, and a
+ * top-up could never add credits. The owner is not on a card form here, so the
+ * charge is off-session against the saved card and either clears now or fails
+ * now with the bank's reason.
+ *
+ * `payment_method_types: ['card']` keeps Stripe from requiring a return URL
+ * for redirect-based methods this flow cannot handle.
+ *
+ * Credits are still not granted here. The caller settles a `succeeded` result
+ * by payment id, and the webhook settles the same id idempotently.
  */
 export async function createTopUpPaymentIntent(args: {
-  userId: string; customerId?: string; amountDollars: number;
-}): Promise<{ paymentId: string } | { error: string }> {
-  if (!args.customerId) return { error: 'Add a card in billing before auto top-up can charge. No credits were added.' };
+  userId: string; customerId?: string; subscriptionId?: string; amountDollars: number; idempotencyKey?: string;
+}): Promise<{ paymentId: string; status: 'succeeded' | 'processing' } | { error: string; paymentId?: string }> {
+  if (!args.customerId) return { error: 'There is no card on file yet. Subscribe to a plan first. No charge was made.' };
   if (!(args.amountDollars > 0)) return { error: 'Top-up amount must be greater than zero.' };
   try {
     const stripe = await getClient();
+    const card = await savedCard(stripe, args.customerId, args.subscriptionId);
+    if (!card) return { error: 'There is no card on file. Open Manage billing to add one. No charge was made.' };
     const intent = await stripe.paymentIntents.create({
       amount: Math.round(args.amountDollars * 100),
       currency: 'usd',
       customer: args.customerId,
+      payment_method: card,
+      payment_method_types: ['card'],
+      off_session: true,
+      confirm: true,
+      description: `Miles credit top-up ($${args.amountDollars.toFixed(2)})`,
       metadata: { milesUserId: args.userId, purpose: 'topup', amountDollars: String(args.amountDollars) },
-    });
-    return { paymentId: intent.id };
+    }, args.idempotencyKey ? { idempotencyKey: args.idempotencyKey } : undefined);
+    if (intent.status === 'succeeded') return { paymentId: intent.id, status: 'succeeded' };
+    if (intent.status === 'processing') return { paymentId: intent.id, status: 'processing' };
+    return {
+      paymentId: intent.id,
+      error: 'Your bank wants to confirm this card before it can be charged. Open Manage billing to update it. No credits were added.',
+    };
   } catch (err) {
-    return { error: `Couldn't reach Stripe: ${(err as Error).message}` };
+    // A declined card is an exception carrying the intent that was attempted.
+    const e = err as { message?: string; payment_intent?: { id?: string } };
+    return {
+      paymentId: e.payment_intent?.id,
+      error: `The card was not charged: ${e.message || 'Stripe did not accept it'} No credits were added.`,
+    };
   }
 }
 
@@ -214,3 +269,40 @@ export async function applySubscriptionCoupon(subscriptionId: string, couponId: 
 
 /** Reset the client between tests, or after env vars change. */
 export function resetStripeClient(): void { client = undefined; }
+
+/**
+ * Ask Stripe what it actually has, for the launch check. Read-only: it looks
+ * up the three configured prices and lists the webhook destinations. A read
+ * that fails is reported as that item's error and never thrown — one missing
+ * permission on a restricted key must not hide every other answer.
+ */
+export async function probeStripe(): Promise<import('../ops/launchcheck.js').StripeProbe> {
+  const { stripeModeOf } = await import('../ops/launchcheck.js');
+  const mode = stripeModeOf(process.env.STRIPE_SECRET_KEY);
+  const stripe = await getClient();
+  // Stripe quotes the offending id back in its message. Ids and keys stay out of the report.
+  const why = (err: unknown) => String((err as Error)?.message || err)
+    .replace(/\b(?:sk|rk|pk|whsec|price|prod|cus|sub|acct|we)_[A-Za-z0-9_]+/g, '[id]')
+    .slice(0, 160);
+
+  const prices: import('../ops/launchcheck.js').StripeProbe['prices'] = {};
+  for (const band of ['starter', 'growth', 'scale'] as const) {
+    const id = priceIdForBand(band);
+    if (!id) continue;
+    try {
+      const p = await stripe.prices.retrieve(id);
+      prices[band] = { active: p.active, livemode: p.livemode, interval: p.recurring?.interval, unitAmount: p.unit_amount };
+    } catch (err) {
+      prices[band] = { error: why(err) };
+    }
+  }
+
+  let webhooks: import('../ops/launchcheck.js').StripeProbe['webhooks'];
+  try {
+    const list = await stripe.webhookEndpoints.list({ limit: 100 });
+    webhooks = list.data.map((h) => ({ url: h.url, status: h.status, events: h.enabled_events ?? [], livemode: h.livemode }));
+  } catch (err) {
+    webhooks = { error: why(err) };
+  }
+  return { mode, prices, webhooks };
+}

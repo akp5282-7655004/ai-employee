@@ -110,7 +110,7 @@ describe('credit metering', () => {
       expect(first.blocked).toBe(false);
       const second = chargeCredits(data, 'video');
       expect(second.blocked).toBe(true); // balance now empty → paused
-      expect(second.reason).toMatch(/upgrade|top.?up/i);
+      expect(second.reason).toMatch(/Pick a plan/); // a free account has no card to top up with
     } finally {
       delete process.env.BILLING_ENFORCE;
     }
@@ -180,6 +180,37 @@ describe('auto top-up', () => {
   });
 });
 
+describe('what an empty balance is told to do next', () => {
+  const empty = (billing?: Record<string, unknown>): Record<string, unknown> => ({ ...(billing ? { billing } : {}), credits: { granted: 0, ledger: [] } });
+  const reason = (data: Record<string, unknown>) => {
+    process.env.BILLING_ENFORCE = '1';
+    try { return canAfford(data, 'video').reason ?? ''; } finally { delete process.env.BILLING_ENFORCE; }
+  };
+
+  it('sends a free account to pick a plan, not to a top-up it cannot buy', () => {
+    // A top-up charges the card saved at checkout. A free account has none.
+    for (const data of [empty(), empty({ band: 'launch', status: 'active' }), empty({ band: 'starter', status: 'canceled' })]) {
+      const r = reason(data);
+      expect(r).toMatch(/Pick a plan on Plan & Credits/);
+      expect(r).toMatch(/\$149 a month/);
+      expect(r).not.toMatch(/Add \$/);
+    }
+  });
+
+  it('offers the top-up for the plan the account is on', () => {
+    expect(reason(empty({ band: 'growth', status: 'active' }))).toMatch(/Add \$50\.00 on Plan & Credits, or upgrade to Scale/);
+    const top = reason(empty({ band: 'scale', status: 'active' }));
+    expect(top).toMatch(/Add \$100\.00 on Plan & Credits\./);
+    expect(top).not.toMatch(/upgrade/); // nothing above Scale
+  });
+
+  it('points a failed payment at the card, since a top-up would be declined too', () => {
+    const r = reason(empty({ band: 'starter', status: 'past_due' }));
+    expect(r).toMatch(/Update your card/);
+    expect(r).not.toMatch(/Add \$/);
+  });
+});
+
 describe('affordability check (pure, no ledger write)', () => {
   it('passes everything while enforcement is off', () => {
     const broke: Record<string, unknown> = { credits: { granted: 0, ledger: [] } };
@@ -189,9 +220,10 @@ describe('affordability check (pure, no ledger write)', () => {
   it('refuses media on an empty balance and says what to do about it', () => {
     process.env.BILLING_ENFORCE = '1';
     try {
-      const broke: Record<string, unknown> = { credits: { granted: 0, ledger: [] } };
+      const broke: Record<string, unknown> = { billing: { band: 'starter', status: 'active' }, credits: { granted: 0, ledger: [] } };
       const v = canAfford(broke, 'video');
       expect(v.ok).toBe(false);
+      expect(v.reason).toMatch(/Add \$25\.00 on Plan & Credits/);
       expect(v.reason).toMatch(/Growth/); // names the upgrade, not just the refusal
       expect(canAfford(broke, 'skill_run').ok).toBe(false);
       expect(canAfford(broke, 'skill_run').reason).toMatch(/still view your reports/);
@@ -275,8 +307,8 @@ describe('credit writes never clobber neighbouring fields', () => {
  * money is worse than pausing their work.
  */
 describe('an empty balance stops output but never monitoring', () => {
-  const broke = (): Record<string, unknown> => ({ credits: { granted: 0, spent: 0, ledger: [] }, billing: { band: 'starter' } });
-  const funded = (): Record<string, unknown> => ({ credits: { granted: 50, spent: 0, ledger: [] }, billing: { band: 'starter' } });
+  const broke = (): Record<string, unknown> => ({ credits: { granted: 0, spent: 0, ledger: [] }, billing: { band: 'starter', status: 'active' } });
+  const funded = (): Record<string, unknown> => ({ credits: { granted: 50, spent: 0, ledger: [] }, billing: { band: 'starter', status: 'active' } });
   const withEnforcement = (fn: () => void) => {
     process.env.BILLING_ENFORCE = '1';
     try { fn(); } finally { delete process.env.BILLING_ENFORCE; }
