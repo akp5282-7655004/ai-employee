@@ -4,6 +4,7 @@
  * never a guessed dollar amount.
  */
 import { LAUNCH_GRANT, creditState } from '../billing/credits.js';
+import { launchCreditStatus } from '../billing/launchcredit.js';
 import { billingState } from '../billing/subscription.js';
 import { accountMoney, rollMoney, upcomingRenewals, type AccountMoney, type MoneyPeriod, type RenewalRow } from './money.js';
 
@@ -34,6 +35,7 @@ export interface AdminAccountRow {
   freeCreditsUsed: number;
   freeCreditsRemaining: number;
   freeCreditsGrant: number;
+  creditFlag: string;
   paidUsage: number | 'Not connected';
   toolsConnected: number | 'Not connected';
   tools: string[];
@@ -159,6 +161,7 @@ export function accountRow(input: AdminAccountInput): AdminAccountRow {
     freeCreditsUsed: Math.min(used, LAUNCH_GRANT),
     freeCreditsRemaining: remaining,
     freeCreditsGrant: LAUNCH_GRANT,
+    creditFlag: launchCreditStatus(data) === 'duplicate' ? 'Duplicate business, $100 not granted' : launchCreditStatus(data),
     paidUsage: paying ? used : (billing.stripeCustomerId ? used : 'Not connected'),
     toolsConnected: toolCount,
     tools: toolNames,

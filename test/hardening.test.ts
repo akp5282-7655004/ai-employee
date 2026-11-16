@@ -108,7 +108,7 @@ describe('not found and errors', () => {
     expect(res.statusCode).toBe(404);
     expect(res.headers['content-type']).toContain('text/html');
     expect(res.body).toContain('Page not found');
-    expect(res.body).toContain('Back to Miles');
+    expect(res.body).toContain('Back to sign in');
     await app.close();
   });
 

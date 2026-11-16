@@ -294,7 +294,7 @@ describe('chat route', () => {
     expect(b.statusCode).toBe(200);
     expect(seen[0]?.system).toContain('Painters In Philly');
     expect(seen[0]?.system).toContain('House painting');
-    expect(seen[0]?.system).toContain('267-333-2939');
+    expect(seen[0]?.system).toContain('+12673332939');
     expect(seen[0]?.system).toMatch(/SAMPLE/);
     expect(seen[0]?.system).not.toContain('Summit Roofing');
     expect(seen[0]?.system).not.toContain('888-555-0199');

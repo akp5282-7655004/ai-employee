@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { reviewAskText, parseRating, routeRating, promoterText, detractorText, recoveryTask } from '../src/agents/reviewrequest.js';
 
 describe('reviewrequest', () => {
-  it('asks 1-10 with the business name', () => {
-    const t = reviewAskText({ business: 'Philly Roofing Co' });
+  it('asks every customer and includes the Google link when one is saved', () => {
+    const t = reviewAskText({ business: 'Philly Roofing Co', googleReviewUrl: 'https://g.page/r/abc/review' });
     expect(t).toContain('Philly Roofing Co');
-    expect(t).toMatch(/1-10/);
+    expect(t).toContain('https://g.page/r/abc/review');
+    expect(t).not.toMatch(/1-10/);
+    expect(t.toLowerCase()).not.toContain('coupon');
   });
 
   it('parses a rating out of free text and rejects out-of-range', () => {

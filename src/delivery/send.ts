@@ -13,9 +13,13 @@ export interface DeliveryStatus {
 }
 
 /** Which channels are live right now, based on configured provider keys. */
+function smtpReady(): boolean {
+  return !!(process.env.SMTP_HOST && process.env.SMTP_FROM);
+}
+
 export function deliveryStatus(): DeliveryStatus {
   return {
-    email: !!process.env.RESEND_API_KEY,
+    email: !!process.env.RESEND_API_KEY || smtpReady(),
     sms: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM),
   };
 }
@@ -26,11 +30,31 @@ export interface SendResult {
   note: string;
 }
 
-/** Send an email via Resend. Returns a clear note (never throws). */
+/** Send an email via Resend, or SMTP when Resend is unset. Returns a clear note (never throws). */
 export async function sendEmail(to: string, subject: string, text: string): Promise<SendResult> {
   const key = process.env.RESEND_API_KEY;
-  if (!key) return { ok: false, channel: 'email', note: 'Email delivery is off — add RESEND_API_KEY in Render to activate.' };
   if (!to) return { ok: false, channel: 'email', note: 'No destination email on file.' };
+  if (!key && smtpReady()) {
+    try {
+      const nodemailer = await import('nodemailer');
+      const port = Number(process.env.SMTP_PORT || 587);
+      const transport = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port,
+        secure: port === 465,
+        auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS || '' } : undefined,
+      });
+      await transport.sendMail({ from: process.env.SMTP_FROM, to, subject, text });
+      return { ok: true, channel: 'email', note: `Emailed to ${to}.` };
+    } catch (err) {
+      console.warn('email skipped', (err as Error).message);
+      return { ok: false, channel: 'email', note: `Email failed: ${(err as Error).message}` };
+    }
+  }
+  if (!key) {
+    console.warn('email skipped: no RESEND_API_KEY or SMTP_HOST');
+    return { ok: false, channel: 'email', note: 'Email delivery is off. Add RESEND_API_KEY or SMTP_HOST in the host environment to activate.' };
+  }
   const from = process.env.RESEND_FROM || 'Miles <onboarding@resend.dev>';
   try {
     const res = await fetch('https://api.resend.com/emails', {

@@ -85,7 +85,7 @@ import { dueSkills, periodKey } from './agents/skillclock.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { facebookDaily, META_NOT_CONNECTED, publicImage } from './agents/metalaunch.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
-import { emptyReviewState, reviewAskText, parseRating, routeRating, promoterText, detractorText, recoveryTask, type ReviewRequestState } from './agents/reviewrequest.js';
+import { emptyReviewState, reviewAskText, parseRating, type ReviewRequestState } from './agents/reviewrequest.js';
 import { emptyAutomationsState, noShowText, onboardingText, type AutomationsState } from './agents/automations.js';
 import { buildGrowthPlan } from './agents/growth.js';
 import { buildPlaybook, playbookTicket } from './agents/playbook.js';
@@ -156,6 +156,9 @@ import {
 } from './agents/speed_to_lead.js';
 import { aggregateNetwork, type WorkspaceSignal } from './usage/network.js';
 import { deliveryStatus, sendEmail, sendSms, smsExcerpt } from './delivery/send.js';
+import { parseBudget, toE164 } from './identity/fields.js';
+import { grantedIdentity, launchCreditStatus, maybeGrantLaunchCredit, LAUNCH_WAIT } from './billing/launchcredit.js';
+import { addLead, leadCounts, readLeads, setLeadStatus } from './crm/leads.js';
 import { searchCompetitors } from './research/places.js';
 import { attributeRevenue } from './revenue/attribution.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
@@ -456,10 +459,32 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     await authStore.claimLaunchSlot(userId);
     const data = await authStore.getUserData(userId);
     Object.assign(data, extra);
-    // Every new account starts with $100. No card is required to sign up.
-    writeCredits(data, { granted: LAUNCH_GRANT, launchOffer: true, spent: 0 });
+    // $100 waits until 3 sources are connected, and only once per business.
+    writeCredits(data, { granted: 0, launchOffer: true, spent: 0 });
+    data.launchCredit = { status: 'pending' };
     data.billing = { status: 'active', band: 'launch', grantedInvoices: [], grantKeys: [] };
     await authStore.setUserData(userId, data);
+  };
+
+  const refreshLaunchCredit = async (userId: string) => {
+    const data = await authStore.getUserData(userId);
+    const profile = (data.profile ?? {}) as Record<string, string>;
+    let apps: string[] = [];
+    try {
+      const listed = await connector.listAccounts(userId);
+      apps = (listed || []).map((account) => account.app);
+    } catch { apps = []; }
+    const progress = setupProgress({ apps, website: profile.website });
+    const users = await authStore.listUsers();
+    const others = [];
+    for (const user of users) {
+      if (user.id === userId) continue;
+      const id = grantedIdentity(await authStore.getUserData(user.id));
+      if (id) others.push(id);
+    }
+    const credit = maybeGrantLaunchCredit(data, progress.ready, others);
+    await authStore.setUserData(userId, data);
+    return { data, progress, credit };
   };
 
   const denyAdSpend = async (userId: string, reply: { code: (n: number) => { send: (b: unknown) => unknown } }): Promise<boolean> => {
@@ -610,14 +635,14 @@ h1{font-size:21px;margin:0 0 8px;font-weight:700;letter-spacing:-.01em}
 .sub{color:#3F3F46;margin:0 0 22px}
 a{display:inline-block;background:#111112;color:#fff;text-decoration:none;padding:10px 20px;border-radius:9px;font-weight:600;font-size:14px}
 </style></head><body><div class="card">
-<div class="code">${code}</div><h1>${heading}</h1><p class="sub">${body}</p><a href="/">Back to Miles</a>
+<div class="code">${code}</div><h1>${heading}</h1><p class="sub">${body}</p><a href="/login">Back to sign in</a>
 </div></body></html>`;
 
   // A mistyped URL used to return a raw Fastify JSON blob. API callers still get
   // JSON (that is what they can parse); a browser gets a page.
   app.setNotFoundHandler(async (req, reply) => {
     if (req.url.startsWith('/api/') || req.url.startsWith('/auth/')) return reply.code(404).send({ error: 'Not found' });
-    return reply.code(404).type('text/html').send(statusPage(404, 'Page not found', 'That link does not lead anywhere. It may have moved, or the address may have a typo.'));
+    return reply.code(404).type('text/html').send(statusPage(404, 'Page not found', 'That link does not lead anywhere. It may have moved, or the address may have a typo. Use the button to go back to sign in.'));
   });
 
   // Never show a stack trace or an internal message to whoever hit the error.
@@ -933,6 +958,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       },
     });
     if (invite && inviteCheck.ok) await markInviteUsed(invite);
+    if (deliveryStatus().email && emailBaseUrl()) {
+      const token = newToken();
+      const saved = await authStore.getUserData(user.id);
+      saved.emailConfirm = { token, exp: Date.now() + 24 * 3600_000 };
+      await authStore.setUserData(user.id, saved);
+      await sendEmail(user.email, 'Confirm your Miles email', `Confirm your email. This link works for 24 hours on any device:\n\n${emailBaseUrl()}/auth/confirm?uid=${encodeURIComponent(user.id)}&token=${token}\n`);
+      await sendEmail(user.email, 'Welcome to Miles', `Welcome to Miles. Sign in at ${emailBaseUrl()}.`);
+    }
     await startSession(reply, user.id);
     return { ok: true, user: { id: user.id, email: user.email, name: user.name } };
   });
@@ -1039,6 +1072,58 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Miles — Terms of Service (${TOS_VERSION})</title><style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:820px;margin:0 auto;padding:32px 20px;color:#1e293b;background:#fff}pre{white-space:pre-wrap;word-wrap:break-word;font-family:inherit;font-size:14px;line-height:1.55}a{color:#4f46e5}</style></head><body><p><a href="/">← Back to Miles</a></p><pre>${esc(tos + subs)}</pre></body></html>`;
     return reply.type('text/html').send(html);
   });
+
+  const supportEmail = () => (process.env.SUPPORT_EMAIL || process.env.ADMIN_EMAIL || 'support@miles.ai').trim();
+
+  app.get('/privacy', async (_req, reply) => {
+    const contact = supportEmail();
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Miles AI privacy policy</title><style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:820px;margin:0 auto;padding:32px 20px;color:#1e293b;background:#fff;line-height:1.55}a{color:#4f46e5}h1{font-size:28px}h2{font-size:18px;margin-top:28px}</style></head><body>
+<p><a href="/login">Back to sign in</a></p>
+<h1>Miles AI privacy policy</h1>
+<p>Miles AI is a marketing employee for local service businesses. This page says what we read, why, and how you delete it.</p>
+<h2>Google Ads</h2>
+<p>When you connect Google Ads, Miles reads campaign names, status, spend, clicks, conversions, search terms, and ad text so it can show your results and suggest changes. Miles does not sell this data. Changes to the ad account wait for your approval unless you chose a mode that allows a change inside the budget caps you set.</p>
+<h2>Meta</h2>
+<p>When a Meta connection is available and you connect it, Miles reads ad account names, campaign status, and spend for the same reason. A Facebook Page connection is not an ads connection. Miles does not sell Meta data.</p>
+<h2>Storage</h2>
+<p>Account data is stored in the Miles database for your workspace. Connected-account access is handled by the connector you authorize. AI text may be sent to the model provider configured on the server so Miles can draft copy. We do not sell personal information.</p>
+<h2>Delete your account and data</h2>
+<p>Sign in, open Settings, and choose Delete account. That disconnects integrations, cancels a Stripe subscription when one exists, deletes the workspace data, and signs you out. You can also email ${contact} and ask us to delete it.</p>
+<h2>Contact</h2>
+<p>Questions: <a href="mailto:${contact}">${contact}</a></p>
+</body></html>`;
+    return reply.type('text/html').send(html);
+  });
+
+  app.get<{ Querystring: { uid?: string; token?: string } }>('/auth/confirm', async (req, reply) => {
+    const uid = req.query.uid || '';
+    const token = req.query.token || '';
+    const user = uid ? await authStore.getUserById(uid) : null;
+    const data = user ? await authStore.getUserData(user.id) : {};
+    const pending = (data.emailConfirm ?? {}) as { token?: string; exp?: number };
+    const expired = !pending.token || !pending.exp || pending.exp < Date.now() || pending.token !== token;
+    const page = (title: string, body: string, resend: boolean) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head><body style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:480px;margin:48px auto;padding:0 20px"><h1>${title}</h1><p>${body}</p>${resend ? `<form method="post" action="/auth/confirm/resend"><input type="hidden" name="email" value="${user?.email || ''}"><button type="submit">Resend confirmation</button></form>` : '<p><a href="/login">Sign in</a></p>'}<p><a href="/login">Back to sign in</a></p></body></html>`;
+    if (!user || expired) return reply.code(400).type('text/html').send(page('This link expired', 'That confirmation link is no longer valid. Request a new one.', true));
+    delete data.emailConfirm;
+    data.emailConfirmedAt = new Date().toISOString();
+    await authStore.setUserData(user.id, data);
+    return reply.type('text/html').send(page('Email confirmed', 'Your email is confirmed. You can sign in on this device or any other.', false));
+  });
+
+  app.post<{ Body: { email?: string } }>('/auth/confirm/resend', async (req, reply) => {
+    const email = (req.body?.email || '').trim().toLowerCase();
+    const user = email ? await authStore.getUserByEmail(email) : null;
+    if (user && deliveryStatus().email) {
+      const data = await authStore.getUserData(user.id);
+      const token = newToken();
+      data.emailConfirm = { token, exp: Date.now() + 24 * 3600_000 };
+      await authStore.setUserData(user.id, data);
+      const base = emailBaseUrl() || '';
+      if (base) await sendEmail(user.email, 'Confirm your Miles email', `Confirm your email (this link works for 24 hours):\n\n${base}/auth/confirm?uid=${encodeURIComponent(user.id)}&token=${token}\n`);
+    }
+    return reply.type('text/html').send('<!doctype html><html><body style="font-family:sans-serif;max-width:480px;margin:48px auto"><p>If that account is waiting on confirmation, a new link is on the way.</p><p><a href="/login">Back to sign in</a></p></body></html>');
+  });
+
   app.post('/auth/login', async (req, reply) => {
     const b = (req.body ?? {}) as { email?: string; password?: string };
     const who = (b.email || '').trim().toLowerCase();
@@ -1156,11 +1241,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   app.get('/api/setup/tools', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    const data = await authStore.getUserData(u.id);
-    const profile = (data.profile ?? {}) as Record<string, string>;
-    let apps: string[] = [];
-    try { apps = (await accountsList(u.id)).map((account) => account.app); } catch { apps = []; }
-    return setupProgress({ apps, website: profile.website });
+    const refreshed = await refreshLaunchCredit(u.id);
+    return { ...refreshed.progress, credit: refreshed.credit.status, creditMessage: refreshed.credit.status === 'granted' ? '$100 in credits is unlocked.' : refreshed.credit.status === 'duplicate' ? 'This business already received the $100 credit.' : LAUNCH_WAIT };
   });
 
   app.get<{ Querystring: { period?: string } }>('/api/admin/business', async (req, reply) => {
@@ -1488,8 +1570,25 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    data.profile = { ...((data.profile as object) ?? {}), ...((req.body as object) ?? {}), updatedAt: new Date().toISOString() };
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const next: Record<string, unknown> = { ...((data.profile as object) ?? {}), ...body, updatedAt: new Date().toISOString() };
+    if ('dailyBudget' in body || 'targetCpa' in body || 'avgTicket' in body) {
+      for (const key of ['dailyBudget', 'targetCpa', 'avgTicket'] as const) {
+        if (!(key in body)) continue;
+        const parsed = parseBudget(body[key], { allowZero: true, max: key === 'avgTicket' ? 10_000_000 : 1_000_000 });
+        if (!parsed.ok) return reply.code(400).send({ error: parsed.error, field: key });
+        next[key] = parsed.value;
+      }
+    }
+    if ('phone' in body) {
+      const phone = toE164(body.phone);
+      if (!phone.ok) return reply.code(400).send({ error: phone.error, field: 'phone' });
+      next.phone = phone.value;
+    }
+    for (const key of Object.keys(next)) if (typeof next[key] === 'string') next[key] = (next[key] as string).trim();
+    data.profile = next;
     await authStore.setUserData(u.id, data);
+    await refreshLaunchCredit(u.id);
     return { ok: true, profile: data.profile };
   });
 
@@ -1503,7 +1602,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return { business: await businessProfileFor(u.id, data), profile };
   });
 
-  type MilesInbox = { id: string; kind: 'create' | 'enable' | 'skill'; title: string; reason: string; status: 'queued' | 'applied' | 'reverted'; skill?: string };
+  type MilesInbox = { id: string; kind: 'create' | 'enable' | 'skill'; title: string; reason: string; status: 'queued' | 'applied' | 'reverted'; queuedAt?: string; skill?: string };
   type MilesFile = {
     phase: 'crawl' | 'questions' | 'ready' | 'running';
     bundle: ReturnType<typeof buildBundle> | null;
@@ -1831,7 +1930,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const spec = miles.bundle.spec;
       if (decisions.enable.effect === 'queue') {
         if (!miles.inbox.some((item) => item.kind === 'enable' && item.status === 'queued')) {
-          miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'enable', title: 'Enable the Google campaign', reason: decisions.enable.reason, status: 'queued' });
+          miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'enable', title: 'Enable the Google campaign', reason: decisions.enable.reason, status: 'queued', queuedAt: new Date().toISOString() });
         }
         const note = `The paused campaign is already in Google. ${decisions.enable.reason} Nothing new was created.`;
         rememberMiles(data, miles, note, true);
@@ -1885,7 +1984,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       data.miles = miles;
     }
     if (decisions.create.effect === 'queue') {
-      miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'create', title: 'Create paused Google Search', reason: decisions.create.reason, status: 'queued' });
+      miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'create', title: 'Create paused Google Search', reason: decisions.create.reason, status: 'queued', queuedAt: new Date().toISOString() });
       miles.phase = 'ready';
       rememberMiles(data, miles, decisions.create.reason, true);
       await authStore.setUserData(uid, data);
@@ -1912,7 +2011,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       try { targets = await connector.listAdTargets(uid); } catch { targets = []; }
     }
     if (!targets.length) {
-      miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'create', title: 'Connect Google Ads', reason: 'Google Ads is not connected, so nothing was created.', status: 'queued' });
+      miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'create', title: 'Connect Google Ads', reason: 'Google Ads is not connected, so nothing was created.', status: 'queued', queuedAt: new Date().toISOString() });
       rememberMiles(data, miles, 'Google Ads is not connected. Nothing was created.');
       await authStore.setUserData(uid, data);
       return { ok: false, error: 'Google Ads is not connected. Nothing was created.', decisions };
@@ -1970,7 +2069,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       enableNote = note;
       rememberMiles(data, miles, note, true);
     } else {
-      miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'enable', title: 'Enable the Google campaign', reason: decisions.enable.reason, status: 'queued' });
+      miles.inbox.unshift({ id: newToken().slice(0, 10), kind: 'enable', title: 'Enable the Google campaign', reason: decisions.enable.reason, status: 'queued', queuedAt: new Date().toISOString() });
       enableNote = `Created paused. ${decisions.enable.reason}`;
       rememberMiles(data, miles, enableNote, true);
     }
@@ -2496,7 +2595,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       masked: 'miles_sk_…' + String(k.key || '').slice(-4),
     }));
     const team = (data.team as any[]) ?? [{ email: u.email, role: 'Owner', status: 'active' }];
-    return { account: { name: u.name ?? '', email: u.email }, keys, team };
+    const notify = (data.notify ?? {}) as { leads?: boolean; decisions?: boolean; weekly?: boolean; billing?: boolean };
+    return { account: { name: u.name ?? '', email: u.email }, keys, team, notify: { leads: notify.leads !== false, decisions: notify.decisions !== false, weekly: notify.weekly !== false, billing: notify.billing !== false } };
   });
   app.put<{ Body: { name?: string } }>('/api/account', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -2511,7 +2611,81 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!b.next || b.next.length < 6) return reply.code(400).send({ error: 'New password must be at least 6 characters.' });
     if (!verifyPassword(b.current ?? '', u.passwordHash)) return reply.code(401).send({ error: 'Your current password is wrong.' });
     await authStore.updateUser(u.id, { passwordHash: hashPassword(b.next) });
+    await authStore.deleteSessionsForUser(u.id);
+    await startSession(reply, u.id);
     return { ok: true };
+  });
+
+  app.post<{ Body: { confirm?: string } }>('/api/account/delete', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (req.body?.confirm !== 'DELETE') return reply.code(400).send({ error: 'Type DELETE to confirm. Nothing was removed.' });
+    const data = await authStore.getUserData(u.id);
+    const sub = billingState(data);
+    if (sub.stripeSubscriptionId && stripeReady()) {
+      try { await cancelStripeSubscription(sub.stripeSubscriptionId, false); } catch { /* recorded below */ }
+    }
+    try {
+      const accounts = await accountsList(u.id);
+      for (const account of accounts) {
+        if (connector.disconnectAccount) await connector.disconnectAccount(u.id, account.id);
+      }
+    } catch { /* local delete still proceeds */ }
+    if (deliveryStatus().email) await sendEmail(u.email, 'Your Miles account was deleted', 'Your Miles account, connected integrations, and workspace data were deleted.');
+    await authStore.deleteSessionsForUser(u.id);
+    await authStore.deleteUser(u.id);
+    reply.header('set-cookie', cookie('', 0));
+    return { ok: true };
+  });
+
+  app.get('/api/leads', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const leads = readLeads(data);
+    return { leads, counts: leadCounts(leads) };
+  });
+
+  app.post<{ Body: { name?: string; phone?: string; confirm?: boolean; id?: string; status?: string; lostReason?: string } }>('/api/leads', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const body = req.body ?? {};
+    if (body.id && body.status) {
+      const next = setLeadStatus(readLeads(data), body.id, body.status as 'new' | 'booked' | 'lost', body.lostReason);
+      if ('error' in next) return reply.code(400).send({ error: next.error });
+      data.leads = next;
+      await authStore.setUserData(u.id, data);
+      return { ok: true, leads: next, counts: leadCounts(next) };
+    }
+    const phone = toE164(body.phone || '');
+    if (!phone.ok) return reply.code(400).send({ error: phone.error, field: 'phone' });
+    const added = addLead(readLeads(data), { name: body.name || '', phone: phone.value, confirm: body.confirm === true }, new Date().toISOString());
+    if (!added.ok) return reply.code(409).send(added);
+    data.leads = added.leads;
+    const notify = (data.notify ?? {}) as { leads?: boolean };
+    if (notify.leads !== false && added.leads[0] && !added.merged) {
+      const notes = Array.isArray(data.notifications) ? data.notifications as { text: string }[] : [];
+      data.notifications = [{ text: `New lead: ${added.leads[0].name}`, at: new Date().toISOString() }, ...notes].slice(0, 40);
+      if (deliveryStatus().email) await sendEmail(u.email, 'New lead in Miles', `${added.leads[0].name} is a new lead.`);
+    }
+    await authStore.setUserData(u.id, data);
+    return { ok: true, leads: added.leads, counts: leadCounts(added.leads) };
+  });
+
+  app.put<{ Body: { leads?: boolean; decisions?: boolean; weekly?: boolean; billing?: boolean } }>('/api/notifications', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const prev = (data.notify ?? {}) as Record<string, boolean>;
+    data.notify = {
+      leads: typeof req.body?.leads === 'boolean' ? req.body.leads : prev.leads !== false,
+      decisions: typeof req.body?.decisions === 'boolean' ? req.body.decisions : prev.decisions !== false,
+      weekly: typeof req.body?.weekly === 'boolean' ? req.body.weekly : prev.weekly !== false,
+      billing: typeof req.body?.billing === 'boolean' ? req.body.billing : prev.billing !== false,
+    };
+    await authStore.setUserData(u.id, data);
+    return { ok: true, notify: data.notify };
   });
   app.post<{ Body: { name?: string } }>('/api/keys', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -2753,6 +2927,28 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const RANGES = new Set(['LAST_7_DAYS', 'LAST_14_DAYS', 'LAST_30_DAYS', 'THIS_MONTH', 'LAST_MONTH']);
     const range = RANGES.has(String(req.query?.range)) ? String(req.query?.range) : 'LAST_30_DAYS';
     const d = await authStore.getUserData(u.id);
+    const notifyPrefs = (d.notify ?? {}) as { decisions?: boolean; weekly?: boolean };
+    const milesBox = (d.miles ?? {}) as { inbox?: { status?: string; queuedAt?: string; title?: string; reminded?: boolean }[] };
+    const stale = (milesBox.inbox || []).filter((item) => item.status === 'queued' && item.queuedAt && !item.reminded && Date.now() - Date.parse(item.queuedAt) >= 48 * 3600_000);
+    if (stale.length && notifyPrefs.decisions !== false) {
+      stale.forEach((item) => { item.reminded = true; });
+      const notes = Array.isArray(d.notifications) ? d.notifications as { text: string; at: string }[] : [];
+      d.notifications = [{ text: `${stale.length} decision${stale.length === 1 ? '' : 's'} waiting more than 48 hours`, at: new Date().toISOString() }, ...notes].slice(0, 40);
+      d.miles = milesBox;
+      await authStore.setUserData(u.id, d);
+      if (deliveryStatus().email) await sendEmail(u.email, 'Decisions waiting in Miles', stale.map((item) => item.title || 'A decision').join('\n'));
+    }
+    if (notifyPrefs.weekly !== false && deliveryStatus().email) {
+      const lastWeekly = Date.parse(String(d.lastWeekly || ''));
+      if (!Number.isFinite(lastWeekly)) {
+        d.lastWeekly = new Date().toISOString();
+        await authStore.setUserData(u.id, d);
+      } else if (Date.now() - lastWeekly >= 7 * 86400_000) {
+        d.lastWeekly = new Date().toISOString();
+        await authStore.setUserData(u.id, d);
+        await sendEmail(u.email, 'Your Miles week', 'Open Miles for this week\'s report.');
+      }
+    }
     const p = (d.profile ?? {}) as Record<string, string>;
     const q = ((d.deploy as { queue?: Array<{ status?: string; ts?: string; label?: string; type?: string }> })?.queue) ?? [];
     const runs = (d.agentRuns as AgentRun[]) ?? [];
@@ -3668,7 +3864,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   app.get('/api/billing', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    const data = await authStore.getUserData(u.id);
+    const data = (await refreshLaunchCredit(u.id)).data;
     // Local only. A platform read here has no bound and left this page on
     // Loading until the browser gave up. Spend for the band comes from the
     // snapshot already stored on the account.
@@ -3705,6 +3901,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       enforced: billingEnforced(),
       paymentsConnected,
       subscription: sub.status === 'none' ? null : sub,
+      launchCredit: launchCreditStatus(data),
+      launchMessage: launchCreditStatus(data) === 'granted' ? '$100 in credits is unlocked.' : launchCreditStatus(data) === 'duplicate' ? 'This business already received the $100 credit.' : LAUNCH_WAIT,
       note: (credits.launchOffer && sub.band !== 'starter' && sub.band !== 'growth' && sub.band !== 'scale'
         ? `Launch offer: $0 a month and $${LAUNCH_GRANT} in credits. $${credits.remaining.toFixed(2)} remaining. Images are $0.10, voiceover is $0.50, video is $1.50. Text, chat, campaign builds, audits, skills, and agent runs also draw from this balance at OpenRouter cost plus a 75% margin. Monitoring stays free. `
         : '') + (paymentsConnected
@@ -3875,6 +4073,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
               const r = applyRenewal(data, { invoiceId: inv.id!, customerId: customerId!, subscriptionId: subId, bandKey, periodEnd, amountUsd, paidAt });
               if (r.applied) appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: 'stripe', source: 'billing', title: `Subscription renewed. ${r.band}, plus $${r.granted} credits` });
             });
+            const paidData = await authStore.getUserData(user.id);
+            const paidUser = await authStore.getUserById(user.id);
+            if (paidUser && (paidData.notify as { billing?: boolean } | undefined)?.billing !== false) {
+              await sendEmail(paidUser.email, 'Miles receipt', `Payment received for the ${bandKey} plan${amountUsd != null ? ` ($${amountUsd.toFixed(2)})` : ''}.`);
+            }
           }
           break;
         }
@@ -3885,6 +4088,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           const user = await findUser(customerId, subId);
           if (user && subId) {
             await authStore.mutateUserData(user.id, (data) => { markPastDue(data, subId); });
+            const failed = await authStore.getUserData(user.id);
+            const failedUser = await authStore.getUserById(user.id);
+            if (failedUser && (failed.notify as { billing?: boolean } | undefined)?.billing !== false) {
+              await sendEmail(failedUser.email, 'Miles payment failed', 'A payment did not go through. Open Settings, then Billing, to update the card.');
+            }
           }
           break;
         }
@@ -6468,7 +6676,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const send = (message: string, verb: string): Promise<boolean> => sendGhl(uid, phone, name, message, verb);
 
     if (event === 'job_complete') {
-      const msg = reviewAskText(ctx);
+      const msg = reviewAskText({ ...ctx, googleReviewUrl: rs.googleReviewUrl });
       const sent = await send(msg, 'Send review request SMS');
       rs.pending = [{ phone, name, at: nowISO }, ...rs.pending.filter((x) => x.phone !== phone)].slice(0, 500);
       rs.log = [{ name: name || 'Customer', phone, outcome: 'asked' as const, at: nowISO }, ...rs.log].slice(0, 200);
@@ -6482,27 +6690,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     // event === 'reply' — grade the score and route.
     const rating = parseRating(String(b.message || b.text || b.body || ''));
     if (rating == null) return { ok: true, sent: false, reason: 'No 1–10 rating found in the reply.' };
-    const route = routeRating(rating);
     const pend = rs.pending.find((x) => x.phone === phone);
     rs.pending = rs.pending.filter((x) => x.phone !== phone);
-    let sent = false;
-    if (route === 'promoter') {
-      const msg = promoterText(ctx, rs.googleReviewUrl);
-      sent = await send(msg, 'Send Google review link SMS');
-      rs.log = [{ name: pend?.name || name || 'Customer', phone, rating, outcome: 'promoter' as const, at: nowISO }, ...rs.log].slice(0, 200);
-      appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `⭐ Promoter (${rating}/10) — sent Google link${name ? ' — ' + name : ''}`, body: msg });
-    } else {
-      const msg = detractorText(ctx);
-      sent = await send(msg, 'Send service-recovery SMS');
-      // Private recovery task for the team — never the public review link.
-      if (canSend && ghlApp) { try { const gate = runSopGate('ghl_send', { mode: 'automate', ghl: { phone, message: recoveryTask(pend?.name || name, rating) } }); if (gate.disposition !== 'block') await connector.runAppTask!({ externalUserId: uid, app: ghlApp, query: 'Create task', params: { title: recoveryTask(pend?.name || name, rating), message: recoveryTask(pend?.name || name, rating), name, phone } }); } catch { /* best effort */ } }
-      rs.log = [{ name: pend?.name || name || 'Customer', phone, rating, outcome: 'detractor' as const, at: nowISO }, ...rs.log].slice(0, 200);
-      appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `⚠︎ Detractor (${rating}/10) — routed to recovery, no public link${name ? ' — ' + name : ''}`, body: msg });
-    }
+    const msg = reviewAskText({ ...ctx, googleReviewUrl: rs.googleReviewUrl });
+    const sent = await send(msg, 'Send review request SMS');
+    rs.log = [{ name: pend?.name || name || 'Customer', phone, rating, outcome: 'asked' as const, at: nowISO }, ...rs.log].slice(0, 200);
+    appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `Review reply from ${name || 'a customer'}`, body: msg });
     bumpMeter(data, 'agent_run');
     data.reviewRequest = rs;
     await authStore.setUserData(uid, data);
-    return { ok: true, sent, event, rating, route };
+    return { ok: true, sent, event, rating, route: 'asked' };
   });
 
   // ── No-Show Recovery (#7) + New Customer Onboarding (#23) — config + status ──
@@ -6878,14 +7075,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
             if (key === 'budget-shifter' && run.approvable === false) {
               const queued = milesTick.inbox.find((item) => item.skill === 'budget-shifter' && item.status === 'queued');
               if (queued) queued.reason = run.summary;
-              else milesTick.inbox.unshift({ id: newToken().slice(0, 10), kind: 'skill', title: run.name, reason: run.summary, status: 'queued', skill: key });
+              else milesTick.inbox.unshift({ id: newToken().slice(0, 10), kind: 'skill', title: run.name, reason: run.summary, status: 'queued', queuedAt: new Date().toISOString(), skill: key });
             } else if (decision.effect === 'apply' && key === 'loser-pauser' && milesTick.campaignResource && connector.setGoogleCampaignStatus) {
               const gate = runSopGate('campaign_pause', { mode: milesTick.bundle.setup.mode, spec: milesTick.bundle.spec });
               const turned = gate.disposition === 'block' ? { ok: false, note: gate.blocks.join(' ') } : await connector.setGoogleCampaignStatus(uid, { campaignResource: milesTick.campaignResource, status: 'PAUSED' });
               if (turned.ok) milesTick.activation = 'paused';
               milesTick.events.unshift({ ts: new Date().toISOString(), text: turned.note });
             } else if (decision.effect === 'queue') {
-              milesTick.inbox.unshift({ id: newToken().slice(0, 10), kind: 'skill', title: run.name, reason: `${decision.reason} ${run.summary}`.slice(0, 240), status: 'queued', skill: key });
+              milesTick.inbox.unshift({ id: newToken().slice(0, 10), kind: 'skill', title: run.name, reason: `${decision.reason} ${run.summary}`.slice(0, 240), status: 'queued', queuedAt: new Date().toISOString(), skill: key });
             }
             changed = true;
           }
@@ -6893,7 +7090,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
             const ctx = await buildSkillCtx(uid, data);
             for (const proposal of housekeepingProposals({ searchTerms: ctx.searchTerms, keywords: [] })) {
               if (milesTick.inbox.some((item) => item.title === proposal.title && item.status === 'queued')) continue;
-              milesTick.inbox.unshift({ id: newToken().slice(0, 10), kind: 'skill', title: proposal.title, reason: proposal.reason, status: 'queued', skill: 'search-term-gold-miner' });
+              milesTick.inbox.unshift({ id: newToken().slice(0, 10), kind: 'skill', title: proposal.title, reason: proposal.reason, status: 'queued', queuedAt: new Date().toISOString(), skill: 'search-term-gold-miner' });
               changed = true;
             }
           }
