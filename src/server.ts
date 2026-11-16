@@ -3391,6 +3391,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     };
   };
 
+  app.get('/api/automation/log', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const state = automationState(data);
+    return { log: state.log.slice(0, 20), findings: state.findings.slice(0, 12), lastRunAt: state.lastRunAt };
+  });
+
   app.post('/api/automation/read', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;

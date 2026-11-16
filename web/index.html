@@ -674,6 +674,40 @@
   .md-tilebox .v{font-size:28px;font-weight:800;letter-spacing:-.03em;margin-top:4px;color:#111;}
   .md-tilebox .d{font-size:12.5px;font-weight:700;color:#1b8552;margin-top:2px;}
   .md-tilebox .s{font-size:12.5px;color:#6e6e76;margin-top:4px;}
+  .dv2-gate{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff6e0;border:1px solid #f0dfaa;border-radius:12px;padding:10px 14px;margin:0 0 18px;}
+  .dv2-gate p{flex:1;min-width:200px;margin:0;font-size:13.5px;color:#3d320e;}
+  .dv2-sec{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:22px 0 10px;}
+  .dv2-sec h2{margin:0;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#111;}
+  .dv2-recs{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .dv2-rec{background:#fff;border:1px solid #ececef;border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;min-width:0;}
+  .dv2-rec h3{margin:0;font-size:16px;letter-spacing:-.01em;}
+  .dv2-rec p{margin:0;color:#6e6e76;font-size:13.5px;line-height:1.45;}
+  .dv2-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;}
+  .dv2-hero{display:grid;grid-template-columns:minmax(260px,.9fr) minmax(0,1.4fr);gap:12px;}
+  .dv2-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:#fff;border:1px solid #ececef;border-radius:16px;overflow:hidden;}
+  .dv2-kpi{padding:16px;min-width:0;}
+  .dv2-kpi + .dv2-kpi{border-left:1px solid #ececef;}
+  .dv2-kpi:nth-child(n+5){border-top:1px solid #ececef;}
+  .dv2-kpi:nth-child(5){border-left:0;}
+  .dv2-kpi .k{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8a8a92;}
+  .dv2-kpi .v{font-size:24px;font-weight:800;letter-spacing:-.03em;margin-top:6px;}
+  .dv2-kpi .s{font-size:12px;color:#6e6e76;margin-top:4px;}
+  .dv2-note{display:flex;gap:8px;margin:8px 2px 0;font-size:13.5px;color:#3a3a42;line-height:1.45;}
+  .dv2-note b{font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding-top:3px;}
+  .dv2-chart{position:relative;height:230px;}
+  .dv2-rates{display:grid;grid-template-columns:1.4fr .8fr;gap:12px;}
+  .dv2-table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  .dv2-table th{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8a8a92;text-align:left;padding:8px 8px 10px;border-bottom:1px solid #e4e4e8;}
+  .dv2-table td{padding:10px 8px;border-bottom:1px solid #f2f2f4;vertical-align:top;}
+  .dv2-table .num{text-align:right;white-space:nowrap;}
+  .dv2-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;}
+  .dv2-tabs button{border:1px solid #e4e4e8;background:#fff;border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .dv2-tabs button.on{background:#111;color:#fff;border-color:#111;}
+  @media (max-width:768px){
+    .dv2-recs,.dv2-hero,.dv2-rates,.dv2-kpis{grid-template-columns:1fr;}
+    .dv2-kpi + .dv2-kpi,.dv2-kpi:nth-child(5){border-left:0;border-top:1px solid #ececef;}
+    .dv2-chart{height:200px;}
+  }
   body.on-admin .app{height:auto;min-height:100dvh;align-items:stretch;}
   body.on-admin .main{overflow:visible;}
   body.on-admin .side{height:auto;min-height:100%;align-self:stretch;}
@@ -3929,48 +3963,6 @@ async function dashQueue(wrap, label){
   if(recs.length>5){ const more=el('div','appsub','+ '+(recs.length-5)+' more, open Recommendations to see the rest.'); more.style.cssText='margin-top:8px;cursor:pointer'; more.onclick=()=>setPage('recs'); wrap.append(more); }
 }
 
-async function openOverview(){
-  const box=$('#overview-body'); if(!box) return;
-  const gen=++overviewGen;
-  // Stay on the loading line until we know whether the dashboard is unlocked.
-  // Painting the last dashboard first detached its buttons when the setup card replaced it.
-  if(!(box.querySelector('.mcard') && box.textContent && box.textContent.indexOf('of 3 connected')>=0)) box.innerHTML='<p class="appsub">Loading your dashboard…</p>';
-  let d=ANDASH||{}, miles=MILES_HOME||{}, op=OPERATOR;
-  let setup=null;
-  if(REMOTE){
-    const [dash, home, oper, prog]=await Promise.all([
-      fetchJson('/api/dashboard?range='+encodeURIComponent(MKT_RANGE), null, 8000),
-      fetchJson('/api/miles/home', null, 8000),
-      fetchJson('/api/dashboard/operator', null, 8000),
-      fetchJson('/api/setup/tools', null, 8000),
-    ]);
-    if(dash.data&&dash.data.kpis){ d=dash.data; ANDASH=dash.data; }
-    if(home.data&&typeof home.data==='object'){ miles=home.data; MILES_HOME=home.data; }
-    if(oper.data&&oper.data.operator){ op=oper.data.operator; OPERATOR=oper.data.operator; }
-    if(!dash.ok && !home.ok && !oper.ok) d=Object.assign({}, d, {_loadError:true});
-    if(prog.data) setup=prog.data;
-  }
-  if(gen!==overviewGen) return;
-  if(setup && setup.ready===false){
-    box.innerHTML='';
-    const card=el('div','mcard');
-    card.append(el('h3',null, setup.headline||'Connect your tools'));
-    card.append(el('p','mdesc', setup.detail||'Connect at least 3 tools so Miles can pull real data.'));
-    (setup.items||[]).forEach(item=>{
-      const row=el('div','appsub', (item.connected?'Connected: ':'Not yet: ')+item.label);
-      card.append(row);
-    });
-    const go=el('button','go','Open Integrations'); go.style.marginTop='12px';
-    go.onclick=()=>{ if(typeof setPage==='function') setPage('integrations'); };
-    card.append(go);
-    box.append(card);
-    renderSkillFindings(box, miles.skillFindings, miles.skillReadAt);
-    renderLeadsCard(box);
-    return;
-  }
-  renderOverview(d, miles, op);
-  openCmdCenter();
-}
 function mdSample(){ return el('span','md-sample','SAMPLE'); }
 function mdLive(){ return el('span','md-live','\u2713 Live'); }
 function mdBadge(sample, skip){ if(skip) return null; return sample?mdSample():mdLive(); }
@@ -4037,40 +4029,87 @@ function renderSkillFindings(parent, findings, readAt){
   });
   parent.append(card);
 }
-async function renderLeadsCard(box){
-  if(!REMOTE) return;
+async function renderLeadsCard(host){
+  const card=host||el('div','md-card');
+  card.dataset.leads='1';
+  card.innerHTML='';
+  if(!REMOTE){ card.append(el('p','md-explain','Leads load after you sign in.')); return card; }
   const res=await fetchJson('/api/leads', null, 8000);
-  const card=el('div','mcard');
-  card.innerHTML='<h3>Leads</h3>';
   const counts=(res.data&&res.data.counts)||{new:0,booked:0,lost:0};
-  card.append(el('p','mdesc', counts.new+' new, '+counts.booked+' booked, '+counts.lost+' lost.'));
+  card.append(el('p','md-legend', counts.new+' new, '+counts.booked+' booked, '+counts.lost+' lost.'));
   const form=el('div'); form.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin:8px 0';
-  form.innerHTML='<input id="lead-name" placeholder="Name" style="flex:1;min-width:120px"><input id="lead-phone" placeholder="Phone" style="flex:1;min-width:120px"><button class="go" id="lead-add" type="button">Add</button>';
+  form.innerHTML='<input id="lead-name" placeholder="Name" aria-label="Lead name" style="flex:1;min-width:120px"><input id="lead-phone" placeholder="Phone" aria-label="Lead phone" style="flex:1;min-width:120px"><button class="md-ask" id="lead-add" type="button">Add</button>';
   card.append(form);
   const note=el('div','appsub'); card.append(note);
-  const list=el('div');
-  for(const lead of ((res.data&&res.data.leads)||[]).slice(0,8)){
-    const row=el('div','appsub', lead.name+' · '+lead.phone+' · '+lead.status);
-    const booked=el('button','ghost','Booked'); booked.type='button';
-    const lost=el('button','ghost','Lost'); lost.type='button';
-    booked.onclick=async()=>{ await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:lead.id,status:'booked'})}); renderLeadsCard(box); };
-    lost.onclick=async()=>{ const reason=prompt('Why was this lead lost?')||''; if(!reason.trim()){ note.textContent='A lost lead needs a reason.'; return; } await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:lead.id,status:'lost',lostReason:reason})}); renderLeadsCard(box); };
-    row.append(booked, lost); list.append(row);
+  const leads=((res.data&&res.data.leads)||[]).slice(0,8);
+  if(!leads.length) card.append(el('p','md-explain','No leads yet. Add one here, or connect a CRM and they will show up.'));
+  for(const lead of leads){
+    const row=el('div','md-crow');
+    row.append(el('b',null, lead.name), el('span','md-legend', lead.phone), el('span','md-legend', lead.status));
+    if(lead.status!=='booked' && lead.status!=='lost'){
+      const booked=el('button','md-ghost','Booked'); booked.type='button';
+      const lost=el('button','md-ghost','Lost'); lost.type='button';
+      booked.onclick=async()=>{ await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:lead.id,status:'booked'})}); renderLeadsCard(card); };
+      lost.onclick=async()=>{ const reason=prompt('Why was this lead lost?')||''; if(!reason.trim()){ note.textContent='A lost lead needs a reason.'; return; } await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:lead.id,status:'lost',lostReason:reason})}); renderLeadsCard(card); };
+      row.append(booked, lost);
+    }
+    card.append(row);
   }
-  card.append(list);
-  const old=box.querySelector('[data-leads]'); if(old) old.remove(); card.dataset.leads='1'; box.append(card);
   const add=card.querySelector('#lead-add');
   if(add) add.onclick=async()=>{
     const r=await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:card.querySelector('#lead-name').value,phone:card.querySelector('#lead-phone').value})});
     const body=await r.json().catch(()=>({}));
-    if(r.status===409 && body.needsConfirm){ if(confirm(body.error||'Same phone, different name. Add anyway?')){ await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:card.querySelector('#lead-name').value,phone:card.querySelector('#lead-phone').value,confirm:true})}); renderLeadsCard(box); } return; }
+    if(r.status===409 && body.needsConfirm){ if(confirm(body.error||'Same phone, different name. Add anyway?')){ await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:card.querySelector('#lead-name').value,phone:card.querySelector('#lead-phone').value,confirm:true})}); renderLeadsCard(card); } return; }
     if(!r.ok){ note.textContent=body.error||'Could not add the lead.'; return; }
-    renderLeadsCard(box);
+    renderLeadsCard(card);
   };
+  return card;
 }
-function renderOverview(d, miles, op){
+
+async function openOverview(){
+  const box=$('#overview-body'); if(!box) return;
+  const gen=++overviewGen;
+  if(!box.querySelector('.md-top')) box.innerHTML='<p class="appsub">Loading your dashboard…</p>';
+  let d=ANDASH||{}, miles=MILES_HOME||{}, op=OPERATOR;
+  let setup=null;
+  if(REMOTE){
+    const [dash, home, oper, prog]=await Promise.all([
+      fetchJson('/api/dashboard?range='+encodeURIComponent(MKT_RANGE), null, 8000),
+      fetchJson('/api/miles/home', null, 8000),
+      fetchJson('/api/dashboard/operator', null, 8000),
+      fetchJson('/api/setup/tools', null, 8000),
+    ]);
+    if(dash.data&&dash.data.kpis){ d=dash.data; ANDASH=dash.data; }
+    if(home.data&&typeof home.data==='object'){ miles=home.data; MILES_HOME=home.data; }
+    if(oper.data&&oper.data.operator){ op=oper.data.operator; OPERATOR=oper.data.operator; }
+    if(!dash.ok && !home.ok && !oper.ok) d=Object.assign({}, d, {_loadError:true});
+    if(prog.data) setup=prog.data;
+  }
+  if(gen!==overviewGen) return;
+  renderOverview(d, miles, op, setup);
+  openCmdCenter();
+}
+function dv2Head(title, extra){
+  const head=el('div','dv2-sec');
+  head.append(el('h2',null,title));
+  if(extra) head.append(extra);
+  return head;
+}
+function dv2Note(text){
+  const p=el('p','dv2-note');
+  p.append(el('b',null,'Miles'), document.createTextNode(text));
+  return p;
+}
+function mountDashChart(canvas, config){
+  if(typeof Chart!=='function') return null;
+  const chart=new Chart(canvas, config);
+  (window.__dashCharts=window.__dashCharts||[]).push(chart);
+  return chart;
+}
+function renderOverview(d, miles, op, setup){
   const box=$('#overview-body'); if(!box) return; box.innerHTML='';
-  miles=miles||{}; op=op||null; d=d||{};
+  if(window.__dashCharts){ window.__dashCharts.forEach(c=>{ try{ c.destroy(); }catch(e){} }); window.__dashCharts=[]; }
+  miles=miles||{}; op=op||null; d=d||{}; setup=setup||null;
   if(d._loadError) box.append(el('p','md-explain','Some dashboard numbers did not load. What is here is saved on this account.'));
   if(d.range) MKT_RANGE=d.range;
   const hr=new Date().getHours();
@@ -4083,7 +4122,6 @@ function renderOverview(d, miles, op){
   const h=el('h1','md-greet', greet+', '+first);
   const meta=el('div','md-date', today+(account?' · '+account:''));
   left.append(h, meta);
-  renderLeadsCard(box);
   const ctrl=el('div','md-controls');
   ctrl.append(el('span','md-modelab','Miles mode'));
   const pills=el('div','md-pills'); pills.setAttribute('role','group'); pills.setAttribute('aria-label','Miles mode');
@@ -4096,26 +4134,32 @@ function renderOverview(d, miles, op){
     b.onclick=async()=>{ const r=await milesPost(b, modeNote, 'Saving...', '/api/miles/mode', {mode:m.id}); if(r) await refreshMilesSurface(); };
     pills.append(b);
   });
-  const gsel=el('select','md-range');
+  const gsel=el('select','md-range'); gsel.setAttribute('aria-label','Date range');
   for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===MKT_RANGE) o.selected=true; gsel.append(o); }
   gsel.title='Changes live leads, booked revenue, and agent runs. Sample figures and ad spend stay on the last 30 days.';
   gsel.onchange=async()=>{ MKT_RANGE=gsel.value; await openOverview(); };
   const ask=el('button','md-ask','Ask Miles');
   ask.onclick=()=>{ if(typeof enterChat==='function') enterChat(); };
   const theme=el('button','md-theme','◑'); theme.title='Theme'; theme.onclick=()=>{ const t=$('#theme'); if(t) t.click(); };
-  ctrl.append(pills, gsel, ask, theme);
+  const refresh=el('button','md-theme','↻'); refresh.title='Refresh'; refresh.setAttribute('aria-label','Refresh'); refresh.onclick=()=>openOverview();
+  ctrl.append(pills, gsel, ask, refresh, theme);
   top.append(left, ctrl);
   box.append(top, modeNote);
   markSetupBadge(miles);
 
-  if(!(miles.placement&&miles.placement.dashboard==='compact')){
-    const flow=el('div'); flow.id='miles-flow';
-    box.append(flow);
-    renderMilesHome(flow, miles, 'dashboard', {hideModes:true});
+  if(setup && setup.ready===false){
+    const gate=el('div','dv2-gate');
+    const p=el('p');
+    p.append(el('strong',null, (setup.headline||'0 of 3 connected')+'. '));
+    p.append(document.createTextNode(setup.creditMessage||setup.detail||'Connect 3 tools to unlock $100 in credits.'));
+    const go=el('button','md-ask','Open Integrations'); go.type='button';
+    go.onclick=()=>{ if(typeof setPage==='function') setPage('integrations'); };
+    gate.append(p, go);
+    box.append(gate);
   }
 
   const track=op&&op.onTrack;
-  box.append(el('div','md-label','1 · Am I on track?'));
+  box.append(dv2Head('1 · Am I on track?', (track&&(track.bookedSample||track.costSample))?mdSample():null));
   const grid=el('div','md-split');
   const card=el('div','md-card');
   card.append(el('h2','md-h', track?track.headline:'No goal saved yet'));
@@ -4124,90 +4168,242 @@ function renderOverview(d, miles, op){
     const head=el('div','md-row');
     const lab=el('span',null,label); lab.style.textTransform='uppercase';
     const right=el('span');
-    right.append(el('span','md-num', value||'n/a'));
+    right.append(el('span','md-num', value||'Not tracked yet'));
     if(goal) right.append(document.createTextNode(' / '+goal));
-    if(value!=='Not tracked yet'){ right.append(document.createTextNode(' ')); const badge=mdBadge(sample); if(badge) right.append(badge); }
+    if(sample){ right.append(document.createTextNode(' ')); right.append(mdSample()); }
     head.append(lab, right); wrap.append(head);
-    if(bar!=null){ const b=el('div','md-bar'); const i=el('i'); i.style.width=Math.round(bar)+'%'; b.append(i); wrap.append(b); }
+    if(bar!=null){ const b=el('div','md-bar'); const i=el('i'); i.style.width=Math.max(0,Math.min(100,Math.round(bar)))+'%'; b.append(i); wrap.append(b); }
     return wrap;
   };
   if(track){
-    if(track.leadPace){
-      card.append(el('p','md-explain', track.leadPace.headline));
-      card.append(row('Leads', track.leadPace.actual, track.leadPace.goal, false, track.leadPace.bar));
-    }
-    const expectRead=op&&op.expectation;
-    const exampleTrack=track && /example/i.test(track.headline||'');
-    if(expectRead && expectRead.state && expectRead.state!=='empty' && !(exampleTrack && expectRead.state==='sample')){
-      card.append(el('p','md-explain', expectRead.headline));
-      if(expectRead.detail) card.append(el('p','md-explain', expectRead.detail));
-      (expectRead.lines||[]).forEach(line=>card.append(row(line.label, line.value, null, false, null)));
-    }
+    if(track.leadPace) card.append(row('Leads', track.leadPace.actual, track.leadPace.goal, false, track.leadPace.bar));
     card.append(row(track.bookedLabel, track.bookedValue, track.bookedGoal, track.bookedSample, track.bookedBar));
     card.append(row(track.costLabel, track.costValue, track.costGoal, track.costSample, track.costBar));
     if(track.costNote) card.append(el('p','md-explain', track.costNote));
-    card.append(el('p','md-explain', track.explain||''));
-  } else {
-    card.append(el('p','md-explain','The goal card loads with your saved setup. Nothing here is a live result until a source connects.'));
-  }
+    if(track.explain) card.append(el('p','md-explain', track.explain));
+    const expectRead=op&&op.expectation;
+    if(expectRead && expectRead.state && expectRead.state!=='empty'){
+      card.append(el('p','md-explain', expectRead.headline||''));
+      (expectRead.lines||[]).slice(0,3).forEach(line=>card.append(row(line.label, line.value, null, expectRead.state==='sample', null)));
+    }
+  } else card.append(el('p','md-explain','The goal card loads with your saved setup. Nothing here is a live result until a source connects.'));
   const action=el('div','md-action');
   action.append(el('div','kicker','To hit your goal'));
+  const decs=(op&&op.decisions)||[];
+  const topDec=(track&&track.action)?decs.find(x=>x.id===track.action.decisionId)||decs[0]:decs[0];
   if(track&&track.action){
     action.append(el('h3',null, track.action.title));
     action.append(el('p',null, track.action.body||''));
-    if(track.action.canApprove!==false){
+    const foot=el('div','dv2-foot');
+    if(track.action.canApprove!==false && topDec){
       const go=el('button',null,'Approve');
-      go.onclick=async()=>{
-        const dec=(op.decisions||[]).find(x=>x.id===track.action.decisionId);
-        if(!dec) return;
-        go.disabled=true; go.textContent='Applying...';
-        try{ await actDecision(dec,'approve'); }catch(e){}
-        await refreshMilesSurface();
-      };
-      action.append(go);
+      go.onclick=async()=>{ go.disabled=true; go.textContent='Applying...'; try{ await actDecision(topDec,'approve'); }catch(e){} await refreshMilesSurface(); };
+      foot.append(go);
+      if(topDec.canSkip){
+        const sk=el('button','md-ghost','Skip'); sk.style.color='#fff'; sk.style.borderColor='#5a5a60'; sk.style.background='transparent';
+        sk.onclick=async()=>{ sk.disabled=true; try{ await actDecision(topDec,'skip'); }catch(e){} await refreshMilesSurface(); };
+        foot.append(sk);
+      }
     }
+    action.append(foot);
   } else {
     action.append(el('h3',null,'No move is waiting'));
-    action.append(el('p',null,'Miles will put a real decision here when one is waiting. This build does not invent a budget move.'));
+    action.append(el('p',null,'Miles will put a real decision here when one is waiting. This card does not invent a budget move.'));
   }
   grid.append(card, action);
   box.append(grid);
-  renderSkillFindings(box, miles.skillFindings, miles.skillReadAt);
+  if(track&&track.explain) box.append(dv2Note(track.explain));
+
+  const actHead=dv2Head('2 · What Miles did for you');
+  box.append(actHead);
+  const act=el('div','md-card'); act.id='dash-activity';
+  act.append(el('p','appsub','Loading activity...'));
+  box.append(act);
+  (async()=>{
+    const res=await fetchJson('/api/automation/log', null, 8000);
+    const log=(res.data&&res.data.log)||[];
+    const runs=d.recentRuns||[];
+    act.innerHTML='';
+    const shown=log.slice(0,6);
+    if(!shown.length && !runs.length){
+      act.append(el('p','md-explain','Nothing yet. Skill runs and approvals show up here.'));
+    }
+    shown.forEach(entry=>{
+      const row=el('div','md-crow');
+      if(entry.effect==='reverted') row.style.opacity='.55';
+      row.append(el('span',null, noDash(entry.title||'Change')), el('span','md-legend', fmtWhen(entry.ts)));
+      if(entry.effect==='applied'){
+        const undo=el('button','md-link','Undo');
+        undo.onclick=async()=>{ undo.disabled=true; const r=await fetch('/api/automation/revert',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:entry.id})}); if(r.ok) openOverview(); else { undo.disabled=false; toast('That change could not be undone.'); } };
+        row.append(undo);
+      } else row.append(el('span','md-legend', entry.effect||''));
+      act.append(row);
+    });
+    if(!shown.length){
+      runs.slice(0,4).forEach(run=>{
+        const row=el('div','md-crow');
+        row.append(el('span',null, noDash(run.title||'').slice(0,80)), el('span','md-legend', fmtWhen(run.ts)));
+        act.append(row);
+      });
+    }
+    const more=el('button','md-link','See all activity');
+    more.onclick=()=>setPage('approvals');
+    act.append(more);
+    const count=shown.length||runs.length;
+    if(count) actHead.append(el('span','md-legend', count+' on this list'));
+  })();
+
+  const waiting=decs.filter(dec=>dec.canApprove!==false);
+  const findings=(miles.skillFindings||[]).slice(0,4);
+  box.append(dv2Head('3 · Miles recommends'+(waiting.length?' · '+waiting.length+' decision'+(waiting.length===1?'':'s')+' waiting':'')));
+  const hint=el('p','md-note', miles.mode==='automate'?'Miles will do this tomorrow unless you skip.':(miles.mode==='manual'?'Miles will wait for your approval before doing any of these.':'Miles will do the low-risk ones and ask you before the rest.'));
+  box.append(hint);
+  const recs=el('div','dv2-recs');
+  if(!waiting.length && !findings.length){
+    const card=el('article','dv2-rec'); card.id='dash-findings';
+    card.append(el('h3',null,'Nothing is waiting'));
+    card.append(el('p',null,'No daily read is saved yet. Open Skills and Playbooks and run today\'s read. Miles does not invent findings.'));
+    const go=el('button','md-ghost','Open Skills & Playbooks'); go.type='button'; go.onclick=()=>setPage('library');
+    card.append(go);
+    recs.append(card);
+  }
+  waiting.slice(0,4).forEach(dec=>{
+    const c=el('article','dv2-rec');
+    c.append(el('h3',null, dec.title));
+    c.append(el('p',null, dec.detail||''));
+    const foot=el('div','dv2-foot');
+    if(dec.impact) foot.append(el('span',null, dec.impact));
+    const ap=el('button','md-ask','Approve');
+    ap.onclick=async()=>{ ap.disabled=true; ap.textContent='Applying...'; try{ await actDecision(dec,'approve'); }catch(e){ toast('Could not apply that.'); } await refreshMilesSurface(); };
+    foot.append(ap);
+    if(dec.canSkip){
+      const sk=el('button','md-ghost','Skip');
+      sk.onclick=async()=>{ sk.disabled=true; try{ await actDecision(dec,'skip'); }catch(e){} await refreshMilesSurface(); };
+      foot.append(sk);
+    }
+    c.append(foot);
+    recs.append(c);
+  });
+  findings.forEach(row=>{
+    const c=el('article','dv2-rec');
+    c.append(el('h3',null, row.title||row.skill||'Finding'));
+    c.append(el('p',null, row.detail||'No detail was saved for this finding.'));
+    const foot=el('div','dv2-foot');
+    const go=el('button','md-ghost','Open Skills'); go.type='button'; go.onclick=()=>setPage('library');
+    foot.append(go);
+    c.append(foot);
+    recs.append(c);
+  });
+  box.append(recs);
+
+  box.append(dv2Head('4 · Leads'));
+  const leads=el('div','md-card');
+  leads.append(el('p','appsub','Loading leads...'));
+  box.append(leads);
+  renderLeadsCard(leads);
 
   const money=op&&op.money;
-  box.append(el('div','md-label','2 · Am I making money?'));
-  const mc=el('div','md-money '+(money?money.tone:'unknown'));
-  const mh=el('div','md-money-h');
-  const badge=el('span','md-badge', !money?'Sample':(money.tone==='positive'?'Positive':money.tone==='negative'?'Negative':'Sample'));
-  mh.append(badge, el('h2','md-h', money?money.headline:'SAMPLE. Example numbers until a source connects.'));
-  const vs=el('span','md-legend', money&&money.vs?money.vs:'vs. prior period'); vs.style.marginLeft='auto';
-  mh.append(vs);
-  mc.append(mh);
-  const tiles=el('div','md-tiles');
-  (money&&money.tiles||[]).forEach(t=>{
-    const c=el('div','md-tilebox');
-    const k=el('div','k'); k.append(document.createTextNode(t.label+' ')); k.append(mdBadge(!!t.sample));
-    c.append(k);
-    c.append(el('div','v', t.value));
-    if(t.delta) c.append(el('div','d', t.delta));
-    c.append(el('div','s', t.sub||''));
-    tiles.append(c);
+  const anySample=!!(money&&(money.tone==='sample'||money.tone==='unknown'||(money.tiles||[]).some(t=>t.sample)));
+  const numExtra=el('span');
+  numExtra.append(document.createTextNode('Last 30 days'));
+  if(anySample){ numExtra.append(document.createTextNode(' ')); numExtra.append(mdSample()); }
+  box.append(dv2Head('5 · Your numbers', numExtra));
+  const hero=el('div','dv2-hero');
+  const gauge=el('div','md-card');
+  const gh=el('div','md-money-h'); gh.append(el('h3',null,'Booked revenue'));
+  const revTile=(money&&money.tiles||[]).find(t=>/revenue from marketing/i.test(t.label));
+  if(revTile&&revTile.sample) gh.append(mdSample());
+  else if(revTile) gh.append(mdLive());
+  gauge.append(gh);
+  const canvas=document.createElement('canvas'); canvas.height=160;
+  const wrap=el('div','dv2-chart'); wrap.append(canvas); gauge.append(wrap);
+  const bookedN=revTile?revTile.value:'Not tracked yet';
+  gauge.append(el('p','md-explain', 'Booked '+bookedN+'. '+(revTile&&revTile.sample?'Example revenue until a CRM connects.':'No separate revenue goal is saved on this account.')));
+  hero.append(gauge);
+  const trend=el('div','md-card');
+  const th=el('div','md-money-h'); th.append(el('h3',null,'Recent trend'));
+  const seg=el('div','md-pills'); seg.setAttribute('role','group'); seg.setAttribute('aria-label','Trend metric');
+  [['leads','Leads'],['spend','Spend'],['booked','Booked jobs']].forEach(([id,lab],i)=>{
+    const b=el('button', i===0?'on':'', lab); b.dataset.metric=id; b.setAttribute('aria-pressed', i===0?'true':'false'); seg.append(b);
   });
-  mc.append(tiles);
-  box.append(mc);
+  th.append(seg); trend.append(th);
+  const tcanvas=document.createElement('canvas');
+  const tbox=el('div','dv2-chart'); tbox.append(tcanvas); trend.append(tbox);
+  const tnote=el('p','md-legend',''); trend.append(tnote);
+  hero.append(trend);
+  box.append(hero);
+  box.append(dv2Note(money&&money.headline?money.headline:'Not enough live revenue and spend to say if you are making money.'));
+
+  box.append(dv2Head('Am I making money?', anySample?mdSample():mdLive()));
+  const kpis=el('div','dv2-kpis');
+  const tiles=(money&&money.tiles)||[];
+  const tileOf=(re)=>tiles.find(t=>re.test(t.label));
+  const showTile=(label, tile, hint)=>{
+    const c=el('div','dv2-kpi');
+    const k=el('div','k'); k.append(document.createTextNode(label+' ')); if(tile) k.append(mdBadge(!!tile.sample));
+    c.append(k, el('div','v', tile?tile.value:'Not tracked yet'));
+    if(tile&&tile.delta) c.append(el('div','s', tile.delta));
+    else if(hint) c.append(el('div','s', hint));
+    kpis.append(c);
+  };
+  showTile('Revenue from marketing', tileOf(/revenue from marketing/i), '');
+  showTile('Marketing cost', tileOf(/marketing cost/i), 'Ad spend only');
+  showTile('Revenue minus cost', tileOf(/revenue minus cost/i), 'Before job costs');
+  const roas=el('div','dv2-kpi');
+  roas.append(el('div','k','ROAS'));
+  roas.append(el('div','v', money&&money.tone!=='unknown'?money.headline.replace(/^SAMPLE\. Example math: /,'').split(' back')[0]:'Not tracked yet'));
+  roas.append(el('div','s','Booked revenue / ad spend, when both are known'));
+  kpis.append(roas);
+  showTile('Leads', tileOf(/^Leads$/), '');
+  const costPer=track?{value:track.costValue, sample:track.costSample, delta:null}:null;
+  showTile('Booked jobs', track?{label:'Booked jobs', value:track.bookedValue, sample:track.bookedSample, delta:null, sub:''}:null, track&&track.bookedGoal?('Goal '+track.bookedGoal):'No booked-job goal saved');
+  showTile('Cost per booked', costPer, track&&track.costNote?track.costNote:'');
+  const cpl=el('div','dv2-kpi');
+  cpl.append(el('div','k','Cost per lead'));
+  cpl.append(el('div','v', 'See channels'));
+  cpl.append(el('div','s', 'Shown per channel below when that source has spend and leads.'));
+  kpis.append(cpl);
+  box.append(kpis);
+  box.append(dv2Note(anySample?'These money figures are examples until the source for each one connects.':'These money figures are from the sources that are connected.'));
+
+  const leadAnswer=(d.leads&&d.leads.hasData&&d.leads.count)?Math.round(((d.leads.count-(d.leads.uncontacted||0))/d.leads.count)*100):null;
+  box.append(dv2Head('Rates', (d.reviews&&d.reviews.hasData)||leadAnswer!=null?mdLive():null));
+  const rates=el('div','dv2-rates');
+  const rateCard=el('div','md-card');
+  const rateRow=(label, value)=>{
+    const block=el('div'); block.style.marginTop='10px';
+    const head=el('div','md-row'); head.append(el('span',null,label), el('span','md-num', value));
+    block.append(head);
+    if(typeof value==='string' && /%$/.test(value)){ const b=el('div','md-bar'); const i=el('i'); i.style.width=value; b.append(i); block.append(b); }
+    return block;
+  };
+  rateCard.append(rateRow('Lead answer rate', leadAnswer==null?'Not tracked yet':leadAnswer+'%'));
+  rateCard.append(rateRow('Booking rate', 'Not tracked yet'));
+  rateCard.append(rateRow('Close rate', 'Not tracked yet'));
+  rates.append(rateCard);
+  const mini=el('div','dv2-kpis'); mini.style.gridTemplateColumns='1fr 1fr 1fr';
+  const miniTile=(label, value, live)=>{
+    const c=el('div','dv2-kpi');
+    const k=el('div','k'); k.append(document.createTextNode(label+' ')); if(live) k.append(mdLive()); else if(value!=='Not tracked yet') k.append(mdSample());
+    c.append(k, el('div','v', value));
+    mini.append(c);
+  };
+  miniTile('Response time', (d.speedToLead&&d.speedToLead.avgResponse)||'Not tracked yet', !!(d.speedToLead&&d.speedToLead.avgResponse));
+  miniTile('Reviews', (d.reviews&&d.reviews.hasData)?String(d.reviews.count):'Not tracked yet', !!(d.reviews&&d.reviews.hasData));
+  miniTile('Avg rating', (d.reviews&&d.reviews.avg!=null)?String(d.reviews.avg):'Not tracked yet', !!(d.reviews&&d.reviews.hasData));
+  rates.append(mini);
+  box.append(rates);
+  const unanswered=(d.leads&&d.leads.hasData)?(d.leads.uncontacted||0)+' of '+d.leads.count+' leads in this window were not marked contacted.':'Answer rate, booking rate, and close rate appear when those counts are live.';
+  box.append(dv2Note(unanswered));
 
   const cmp=op&&op.compare;
-  box.append(el('div','md-label','3 · How do I compare?'));
+  box.append(dv2Head('6 · How do I compare?', el('span','md-badge', cmp?cmp.badge:'Not connected')));
   const cc=el('div','md-card');
-  const ch=el('div','md-money-h');
-  ch.append(el('span','md-badge', cmp?cmp.badge:'Not connected'));
-  ch.append(el('h2','md-h', cmp?cmp.headline:'Not graded yet'));
-  cc.append(ch);
   cc.append(el('p','md-explain', cmp?cmp.sub:'Local Services Ads are not connected, so there is nothing to compare.'));
   if(cmp&&cmp.sourceLine) cc.append(el('p','md-legend', cmp.sourceLine));
-  const table=el('table','md-table');
+  const table=el('table','dv2-table');
   const thead=el('thead'); const hr2=el('tr');
-  ['Measure','You','Benchmark','Verdict'].forEach((name,i)=>{ const th=el('th', i?'num':'', name); hr2.append(th); });
+  ['Measure','You','Similar trade','Verdict'].forEach((name,i)=>{ hr2.append(el('th', i?'num':'', name)); });
   thead.append(hr2); table.append(thead);
   const tb=el('tbody');
   ((cmp&&cmp.rows)||[]).forEach(r=>{
@@ -4215,123 +4411,83 @@ function renderOverview(d, miles, op){
     const measure=el('td');
     measure.append(el('b',null,r.measure));
     measure.append(el('div','md-legend', r.hint||''));
-    tr.append(measure);
-    tr.append(el('td','num', r.you));
-    tr.append(el('td','num', r.benchmark));
-    const vd=el('td','num'); const chip=el('span','md-verdict', r.verdict); vd.append(chip); tr.append(vd);
+    tr.append(measure, el('td','num', r.you), el('td','num', r.benchmark));
+    const vd=el('td'); vd.append(el('span','md-verdict', r.verdict)); tr.append(vd);
     tb.append(tr);
   });
   table.append(tb); cc.append(table);
-  cc.append(el('p','md-legend','Published benchmark, not your account. Your column stays empty until Local Services Ads are connected.'));
+  cc.append(el('p','md-legend','Published benchmark, not your account. Your column stays empty until that source connects.'));
   box.append(cc);
+  box.append(dv2Note(cmp&&cmp.sub?cmp.sub:'Nothing to compare until a paid channel is connected.'));
 
-  const decs=(op&&op.decisions)||[];
-  const waiting=decs.filter(dec=>dec.canApprove!==false);
-  box.append(el('div','md-label','4 · What do I need to do?'+(waiting.length?' · '+waiting.length+' decision'+(waiting.length===1?'':'s')+' waiting':'')));
-  const dq=el('div','md-card');
-  if(!waiting.length){
-    dq.append(el('p','md-explain','Nothing needs you today. Miles keeps watching and will surface a real decision here.'));
-  } else {
-    waiting.forEach((dec,i)=>{
-      const row=el('div','md-dec');
-      row.append(el('div','md-qn', String(i+1)));
-      const mid=el('div'); mid.style.flex='1';
-      mid.append(el('b',null, dec.title));
-      mid.append(el('div','md-legend', dec.detail||''));
-      row.append(mid);
-      if(dec.impact) row.append(el('span','md-impact', dec.impact));
-      const ap=el('button','md-approve','Approve');
-      ap.onclick=async()=>{ ap.disabled=true; ap.textContent='Applying...'; try{ await actDecision(dec,'approve'); }catch(e){ toast('Could not apply that.'); } await refreshMilesSurface(); };
-      row.append(ap);
-      if(dec.canSkip){
-        const sk=el('button','md-skip','Skip');
-        sk.onclick=async()=>{ sk.disabled=true; try{ await actDecision(dec,'skip'); }catch(e){} await refreshMilesSurface(); };
-        row.append(sk);
-      }
-      dq.append(row);
+  const channels=(op&&op.channels)||[];
+  const chSample=channels.some(ch=>ch.state==='sample');
+  box.append(dv2Head('7 · What is working?', chSample?mdSample():null));
+  const work=el('div','md-card');
+  const tabs=el('div','dv2-tabs');
+  const tabScore=el('button','on','Scorecards'); const tabBreak=el('button',null,'Breakdown');
+  const viewTable=el('button','on','Table'); const viewChart=el('button',null,'Chart');
+  tabs.append(tabScore, tabBreak, viewTable, viewChart);
+  work.append(tabs);
+  const scoreWrap=el('div'); const breakWrap=el('div'); breakWrap.hidden=true;
+  const scoreTable=el('table','dv2-table');
+  const sh=el('tr'); ['Channel','Spend or cost','Leads','Status'].forEach((name,i)=>sh.append(el('th', i?'num':'', name)));
+  const shead=el('thead'); shead.append(sh); scoreTable.append(shead);
+  const sb=el('tbody');
+  channels.forEach(ch=>{
+    const tr=el('tr');
+    const name=el('td'); name.append(document.createTextNode(ch.name+' ')); if(ch.state==='sample') name.append(mdSample()); else if(ch.state==='live') name.append(mdLive());
+    tr.append(name, el('td','num', ch.cost||'n/a'), el('td','num', ch.jobs||'n/a'), el('td',null, ch.foot||ch.verdict||''));
+    sb.append(tr);
+  });
+  scoreTable.append(sb); scoreWrap.append(scoreTable);
+  const chartBox=el('div','dv2-chart'); chartBox.hidden=true;
+  const ccanvas=document.createElement('canvas'); chartBox.append(ccanvas); scoreWrap.append(chartBox);
+  const br=op&&op.breakdown;
+  if(br&&br.sample){ const lab=el('div'); lab.append(mdSample(), document.createTextNode(' Example campaign rows. Not a live ad account.')); breakWrap.append(lab); }
+  if(!br||br.empty) breakWrap.append(el('p','md-explain', (br&&br.empty)||'No campaign rows. Connect Google Ads to see spend, leads, and status.'));
+  else {
+    const t=el('table','dv2-table');
+    const thr=el('tr'); ['Campaign','Spend','Leads','Jobs','Cost / lead','Status'].forEach((name,i)=>thr.append(el('th', i?'num':'', name)));
+    const thd=el('thead'); thd.append(thr); t.append(thd);
+    const body=el('tbody');
+    br.rows.forEach(r=>{
+      const tr=el('tr');
+      tr.append(el('td',null, r.name), el('td','num', r.spend), el('td','num', r.leads), el('td','num', r.jobs), el('td','num', r.cost));
+      tr.append(el('td',null, r.status||'n/a'));
+      body.append(tr);
     });
-    const foot=el('div','md-foot');
-    foot.append(el('span','md-legend', waiting.length? waiting.length+' waiting.':'Nothing else needs you today.'));
-    if(waiting.length>1){
-      const all=el('button','md-all','Approve all '+waiting.length);
-      all.onclick=async()=>{ all.disabled=true; all.textContent='Applying...'; for(const dec of waiting){ try{ await actDecision(dec,'approve'); }catch(e){} } await refreshMilesSurface(); };
-      foot.append(all);
-    }
-    dq.append(foot);
+    t.append(body); breakWrap.append(t);
+    if(br.note) breakWrap.append(el('p','md-legend', br.note));
   }
-  box.append(dq);
-  const reviewWrap=el('div'); reviewWrap.style.marginTop='12px'; box.append(reviewWrap); fillDashReview(reviewWrap);
+  work.append(scoreWrap, breakWrap);
+  const liveChan=channels.find(ch=>ch.state==='live'&&ch.verdict)||channels[0];
+  box.append(work);
+  box.append(dv2Note(liveChan&&liveChan.verdict?liveChan.verdict:'Channel grades appear when a connected account has spend or leads.'));
+  tabScore.onclick=()=>{ tabScore.className='on'; tabBreak.className=''; scoreWrap.hidden=false; breakWrap.hidden=true; };
+  tabBreak.onclick=()=>{ tabBreak.className='on'; tabScore.className=''; scoreWrap.hidden=true; breakWrap.hidden=false; };
+  viewTable.onclick=()=>{ viewTable.className='on'; viewChart.className=''; scoreTable.hidden=false; chartBox.hidden=true; };
+  viewChart.onclick=()=>{
+    viewChart.className='on'; viewTable.className=''; scoreTable.hidden=true; chartBox.hidden=false;
+    if(!chartBox.dataset.ready && typeof Chart==='function'){
+      const labels=channels.map(ch=>ch.name);
+      const data=channels.map(ch=>{ const n=parseFloat(String(ch.cost||'').replace(/[^0-9.]/g,'')); return Number.isFinite(n)?n:0; });
+      mountDashChart(ccanvas, {type:'bar', data:{labels, datasets:[{label:'Cost per lead', data, backgroundColor:'#4b8bf5'}]}, options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}}});
+      chartBox.dataset.ready='1';
+    }
+  };
 
+  box.append(dv2Head('8 · Running for you', (()=>{ const b=el('button','md-link','Browse all playbooks'); b.onclick=()=>setPage('skills'); return b; })()));
   const plays=(op&&op.playbooks)||[];
-  const phead=el('div','md-label','5 · Suggested playbooks');
-  box.append(phead);
-  const browse=el('button','md-link','Browse all playbooks');
-  browse.style.float='right'; browse.style.marginTop='-36px';
-  browse.onclick=()=>setPage('skills');
-  box.append(browse);
   const pg=el('div','md-plays');
   plays.forEach(card=>{
     const c=el('div','md-play');
     const eye=el('div','eye'); eye.append(document.createTextNode(card.eyebrow+' · '), el('b',null, card.outcome));
-    c.append(eye);
-    c.append(el('h3',null, card.title));
-    c.append(el('p',null, card.body));
-    c.append(el('div','bud', card.budget));
-    c.append(runPlaybook(card, miles));
+    c.append(eye, el('h3',null, card.title), el('p',null, card.body), el('div','bud', card.budget), runPlaybook(card, miles));
     pg.append(c);
   });
   box.append(pg);
   if(op&&op.playbookNote) box.append(el('p','md-legend', op.playbookNote));
-
-  box.append(el('div','md-label','6 · What is working?'));
-  const chans=el('div','md-chans');
-  ((op&&op.channels)||[]).forEach(ch=>{
-    const c=el('div','md-chan');
-    if(ch.grade){ const grade=el('span','md-grade', ch.grade); c.append(grade); }
-    c.append(el('h3',null, ch.name));
-    if(ch.state==='sample') c.append(mdSample());
-    else if(ch.state==='live') c.append(mdLive());
-    const nums=el('div','md-row');
-    nums.append(el('span',null,'Cost / lead'), el('span','md-num', ch.cost||'n/a'));
-    c.append(nums);
-    c.append(el('div','md-legend', 'Jobs: '+(ch.jobs||'n/a')));
-    c.append(el('p','md-explain', ch.foot||''));
-    c.append(el('p','md-explain', ch.verdict||''));
-    chans.append(c);
-  });
-  box.append(chans);
-
-  const br=op&&op.breakdown;
-  box.append(el('div','md-label','7 · Breakdown'));
-  const bc=el('div','md-card');
-  if(br&&br.sample){ const lab=el('div'); lab.style.marginBottom='8px'; lab.append(mdSample(), document.createTextNode(' Example campaign rows. Not a live ad account.')); bc.append(lab); }
-  else if(br&&br.rows&&br.rows.length){ const lab=el('div'); lab.style.marginBottom='8px'; lab.append(mdLive(), document.createTextNode(' These campaign rows are from your account.')); bc.append(lab); }
-  if(!br||br.empty){
-    bc.append(el('p','md-explain', (br&&br.empty)||'No campaign rows. Connect Google Ads to see spend, leads, and status.'));
-  } else {
-    const t=el('table','md-table');
-    const th=el('tr');
-    ['Campaign','Spend','Impressions','Clicks','Conversions','Jobs','Cost / lead','Status'].forEach((name,i)=>{ th.append(el('th', i?'num':'', name)); });
-    const head=el('thead'); head.append(th); t.append(head);
-    const body=el('tbody');
-    br.rows.forEach(r=>{
-      const tr=el('tr');
-      tr.append(el('td',null, r.name));
-      [r.spend, r.impressions||'0', r.clicks||'0', r.leads, r.jobs, r.cost].forEach(v=>tr.append(el('td','num', v)));
-      const st=el('td','num');
-      if(r.status){
-        const cls=r.status==='Winning'?'win':r.status==='Losing'?'lose':'ok';
-        st.append(el('span','md-status '+cls, r.status));
-      } else st.textContent='n/a';
-      tr.append(st);
-      body.append(tr);
-    });
-    t.append(body); bc.append(t);
-  }
-  if(br&&br.note) bc.append(el('p','md-legend', br.note));
-  box.append(bc);
-
-  box.append(el('div','md-subhead','Everything else'));
   const rest=el('div','md-else');
   rest.append(compactAutosCard(), compactFunnelCard(), compactSkillsCard());
   const up=el('div','mcard');
@@ -4348,25 +4504,42 @@ function renderOverview(d, miles, op){
     cal.onclick=()=>setPage('calendar');
     up.append(cal);
   }
-  const ra=el('div','mcard');
-  ra.append(el('div','md-subhead','Recent activity'));
-  if((d.recentRuns||[]).length){
-    for(const run of d.recentRuns){
-      const r=el('div','md-crow');
-      r.append(el('span',null, noDash(run.title||'').slice(0,64)), el('span','md-legend', fmtWhen(run.ts)));
-      ra.append(r);
-    }
-  } else ra.append(el('p','md-explain','Nothing yet. Skill runs and approvals show up here.'));
-  const more=el('button','md-link','See all activity');
-  more.onclick=()=>setPage('approvals');
-  ra.append(more);
-  const modeCard=el('div','mcard');
-  modeCard.append(el('div','md-subhead','Miles mode'));
-  modeCard.append(el('p','md-explain', modeBlurb(miles.mode, miles.caps)));
-  modeCard.append(el('p','md-legend','Change it any time with the switch at the top.'));
-  rest.append(up, ra, modeCard);
+  const reviewWrap=el('div','mcard'); reviewWrap.append(el('div','md-subhead','Review requests')); fillDashReview(reviewWrap);
+  const flow=el('div'); flow.id='miles-flow';
+  if(!(miles.placement&&miles.placement.dashboard==='compact')) rest.append(flow);
+  rest.append(up, reviewWrap);
   box.append(rest);
+  if(!(miles.placement&&miles.placement.dashboard==='compact')) renderMilesHome(flow, miles, 'dashboard', {hideModes:true});
   const metrics=el('div'); metrics.id='md-metrics'; metrics.style.marginTop='14px'; box.append(metrics);
+
+  (async()=>{
+    const r=await fetchJson('/api/metrics/resolve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({keys:['calc.blended_leads','calc.blended_spend','crm.booked_jobs','crm.job_revenue'], days:30})}, 8000);
+    const rows=(r.data&&r.data.results)||[];
+    const by={}; rows.forEach(m=>{ by[m.key]=m; });
+    const sample=rows.some(m=>m.source!=='live');
+    if(sample){ th.append(document.createTextNode(' ')); th.append(mdSample()); }
+    const pack={
+      leads:(by['calc.blended_leads']&&by['calc.blended_leads'].series)||[],
+      spend:(by['calc.blended_spend']&&by['calc.blended_spend'].series)||[],
+      booked:(by['crm.booked_jobs']&&by['crm.booked_jobs'].series)||[]
+    };
+    let metric='leads';
+    const draw=()=>{
+      const series=pack[metric]||[];
+      if(!series.length || typeof Chart!=='function'){ tnote.textContent=series.length?'Chart.js did not load.':'No day-by-day history is saved yet.'; return; }
+      if(tbox._chart){ try{ tbox._chart.destroy(); }catch(e){} }
+      const labels=series.map((_,i)=>String(i+1));
+      tbox._chart=mountDashChart(tcanvas, {type:'line', data:{labels, datasets:[{data:series, borderColor:'#4b8bf5', backgroundColor:'rgba(75,139,245,.15)', fill:true, tension:.3, pointRadius:0}]}, options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{maxTicksLimit:8}}}}});
+      tnote.textContent=sample?'Example daily series from the preview numbers. Not 12 months of your account.':'Daily series from the connected source. A 12 month history is not stored yet.';
+    };
+    seg.querySelectorAll('button').forEach(b=>b.onclick=()=>{ metric=b.dataset.metric; seg.querySelectorAll('button').forEach(x=>{ x.className=x===b?'on':''; x.setAttribute('aria-pressed', x===b?'true':'false'); }); draw(); });
+    const rev=by['crm.job_revenue'];
+    if(rev&&typeof Chart==='function'){
+      const pace=rev.value>0?Math.min(1, rev.value/Math.max(rev.value, rev.prior_value||rev.value)):0;
+      mountDashChart(canvas, {type:'doughnut', data:{datasets:[{data:[Math.round(pace*100), Math.max(0, 100-Math.round(pace*100))], backgroundColor:['#4b8bf5','#e8edf4'], borderWidth:0}]}, options:{rotation:270, circumference:180, cutout:'68%', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}}});
+    }
+    draw();
+  })();
 }
 function markSetupBadge(miles){
   const badge=$('#setup-badge'); if(!badge) return;
