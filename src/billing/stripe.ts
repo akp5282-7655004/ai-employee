@@ -63,6 +63,7 @@ export async function createCheckoutSession(args: {
       subscription_data: { metadata: { milesUserId: args.userId } },
       success_url: args.successUrl,
       cancel_url: args.cancelUrl,
+      allow_promotion_codes: true,
     });
     if (!session.url) return { error: 'Stripe did not return a checkout link — try again.' };
     return { url: session.url };

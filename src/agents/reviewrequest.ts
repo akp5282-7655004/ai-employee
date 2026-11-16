@@ -12,6 +12,7 @@
 export interface ReviewCtx {
   business?: string;
   trade?: string;
+  googleReviewUrl?: string;
 }
 
 export interface ReviewPending {
@@ -37,10 +38,11 @@ export function emptyReviewState(): ReviewRequestState {
   return { enabled: false, pending: [], log: [] };
 }
 
-/** Step 1 — the 1–10 ask, sent when a job is marked complete. */
+/** Sent to every completed job. The review link is included for everyone. No coupon and no score gate. */
 export function reviewAskText(c: ReviewCtx): string {
   const biz = c.business || 'our team';
-  return `Thanks for choosing ${biz}! Quick one — how did we do on a scale of 1-10? (Just reply with a number.)`;
+  const link = c.googleReviewUrl ? ` If you have a minute, a Google review helps: ${c.googleReviewUrl}` : '';
+  return `Thanks for choosing ${biz}! How did the job go?${link}`;
 }
 
 /** Pull a 1–10 rating out of a free-text SMS reply. Returns null if none found. */

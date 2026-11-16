@@ -3965,6 +3965,7 @@ async function openOverview(){
     card.append(go);
     box.append(card);
     renderSkillFindings(box, miles.skillFindings, miles.skillReadAt);
+    renderLeadsCard(box);
     return;
   }
   renderOverview(d, miles, op);
@@ -4036,6 +4037,37 @@ function renderSkillFindings(parent, findings, readAt){
   });
   parent.append(card);
 }
+async function renderLeadsCard(box){
+  if(!REMOTE) return;
+  const res=await fetchJson('/api/leads', null, 8000);
+  const card=el('div','mcard');
+  card.innerHTML='<h3>Leads</h3>';
+  const counts=(res.data&&res.data.counts)||{new:0,booked:0,lost:0};
+  card.append(el('p','mdesc', counts.new+' new, '+counts.booked+' booked, '+counts.lost+' lost.'));
+  const form=el('div'); form.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin:8px 0';
+  form.innerHTML='<input id="lead-name" placeholder="Name" style="flex:1;min-width:120px"><input id="lead-phone" placeholder="Phone" style="flex:1;min-width:120px"><button class="go" id="lead-add" type="button">Add</button>';
+  card.append(form);
+  const note=el('div','appsub'); card.append(note);
+  const list=el('div');
+  for(const lead of ((res.data&&res.data.leads)||[]).slice(0,8)){
+    const row=el('div','appsub', lead.name+' · '+lead.phone+' · '+lead.status);
+    const booked=el('button','ghost','Booked'); booked.type='button';
+    const lost=el('button','ghost','Lost'); lost.type='button';
+    booked.onclick=async()=>{ await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:lead.id,status:'booked'})}); renderLeadsCard(box); };
+    lost.onclick=async()=>{ const reason=prompt('Why was this lead lost?')||''; if(!reason.trim()){ note.textContent='A lost lead needs a reason.'; return; } await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:lead.id,status:'lost',lostReason:reason})}); renderLeadsCard(box); };
+    row.append(booked, lost); list.append(row);
+  }
+  card.append(list);
+  const old=box.querySelector('[data-leads]'); if(old) old.remove(); card.dataset.leads='1'; box.append(card);
+  const add=card.querySelector('#lead-add');
+  if(add) add.onclick=async()=>{
+    const r=await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:card.querySelector('#lead-name').value,phone:card.querySelector('#lead-phone').value})});
+    const body=await r.json().catch(()=>({}));
+    if(r.status===409 && body.needsConfirm){ if(confirm(body.error||'Same phone, different name. Add anyway?')){ await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:card.querySelector('#lead-name').value,phone:card.querySelector('#lead-phone').value,confirm:true})}); renderLeadsCard(box); } return; }
+    if(!r.ok){ note.textContent=body.error||'Could not add the lead.'; return; }
+    renderLeadsCard(box);
+  };
+}
 function renderOverview(d, miles, op){
   const box=$('#overview-body'); if(!box) return; box.innerHTML='';
   miles=miles||{}; op=op||null; d=d||{};
@@ -4051,6 +4083,7 @@ function renderOverview(d, miles, op){
   const h=el('h1','md-greet', greet+', '+first);
   const meta=el('div','md-date', today+(account?' · '+account:''));
   left.append(h, meta);
+  renderLeadsCard(box);
   const ctrl=el('div','md-controls');
   ctrl.append(el('span','md-modelab','Miles mode'));
   const pills=el('div','md-pills'); pills.setAttribute('role','group'); pills.setAttribute('aria-label','Miles mode');
@@ -5528,6 +5561,7 @@ async function openBilling(){
   if(d.launchOffer){
     const h=el('div'); h.innerHTML='<b style="font-size:16px">Launch offer: $0 a month</b>'; pc.append(h);
     pc.append(el('p','appsub','First 100 accounts. $'+(d.launchGrant||100)+' in media credits, $'+Number((d.credits&&d.credits.remaining)||0).toFixed(2)+' left. Images $0.10, voiceover $0.50, video $1.50. Monitoring, campaigns, and skill runs do not use these credits. This is not a performance guarantee.'));
+    if(d.launchMessage) pc.append(el('p','appsub', d.launchMessage));
   }
   const spendLine=el('p','appsub',(d.spendKnown?('Trailing-30-day ad spend under management: $'+Math.round(d.spend30).toLocaleString()):'Ad spend not readable yet, connect Google Ads for band assignment.')+(d.impliedBand?' → implied band: '+d.impliedBand.name+' ($'+d.impliedBand.monthlyPrice+'/mo)':''));
   pc.append(spendLine);
@@ -5539,9 +5573,12 @@ async function openBilling(){
     const bandName=s.band==='launch'?'Launch offer':(((d.bands||[]).find(b=>b.key===s.band)||{}).name||s.band);
     row.append(el('b',null,bandName+' plan'),chip);
     if(s.currentPeriodEnd) row.append(el('span','appsub','renews '+new Date(s.currentPeriodEnd).toLocaleDateString()));
-    const portal=el('button','ghost','Manage Billing →');
-    portal.onclick=async()=>{ portal.disabled=true; try{ const r=await(await fetch('/api/billing/portal',{method:'POST'})).json(); if(r.url) location.href=r.url; else toast(r.error||'Could not open billing portal.'); }catch(e){ toast('Could not open billing portal.'); } portal.disabled=false; };
-    row.append(portal);
+    const portal=el('button','ghost','Manage billing');
+    const cancel=el('button','ghost','Cancel plan');
+    const openPortal=async(btn)=>{ btn.disabled=true; try{ const r=await(await fetch('/api/billing/portal',{method:'POST'})).json(); if(r.url) location.href=r.url; else toast(r.error||'Billing portal is not available until payments are connected.'); }catch(e){ toast('Billing portal is not available until payments are connected.'); } btn.disabled=false; };
+    portal.onclick=()=>openPortal(portal);
+    cancel.onclick=()=>openPortal(cancel);
+    row.append(portal, cancel);
     pc.append(row);
   } else if(d.paymentsConnected){
     pc.append(el('p','appsub','No paid plan yet, pick a band below to subscribe.'));
@@ -7028,7 +7065,7 @@ $('#logo-box').onclick=()=>$('#logo-input').click();
 $('#logo-input').onchange=async(e)=>{ const f=e.target.files[0]; if(!f)return; const note=$('#assets-note'); if(note) note.textContent='Saving...'; try{ ASSETS.logo=await downscaleImage(f,320,'image/png'); const ok=await saveAssets(); renderAssets(); if(note) note.textContent=ok?'Saved ✓':'Could not save, Retry'; }catch(err){ if(note) note.textContent='Could not save, Retry'; } e.target.value=''; };
 $('#logo-remove').onclick=async()=>{ delete ASSETS.logo; await saveAssets(); renderAssets(); };
 $('#photo-add').onclick=()=>$('#photo-input').click();
-$('#photo-input').onchange=async(e)=>{ const files=[...e.target.files]; for(const f of files){ try{ const url=await downscaleImage(f,1024,'image/jpeg'); (ASSETS.photos=ASSETS.photos||[]).push({id:newId(),url,caption:''}); }catch(err){} } await saveAssets(); renderAssets(); e.target.value=''; };
+$('#photo-input').onchange=async(e)=>{ const files=[...e.target.files]; let failed=0; for(const f of files){ try{ const url=await downscaleImage(f,1024,'image/jpeg'); (ASSETS.photos=ASSETS.photos||[]).push({id:newId(),url,caption:''}); }catch(err){ failed++; } } const ok=await saveAssets(); renderAssets(); if(failed||!ok) toast(failed?(failed+' photo'+(failed===1?'':'s')+' could not be saved.'):'Could not save photos.'); e.target.value=''; };
 $('#assets-save').onclick=async()=>{ ASSETS.tagline=$('#as-tagline').value.trim(); ASSETS.services=$('#as-services').value.trim(); ASSETS.brandColor=$('#as-color').value.trim(); ASSETS.phone=$('#as-phone').value.trim(); ASSETS.website=$('#as-website').value.trim(); ASSETS.differentiators=$('#as-diff').value.trim(); const btn=$('#assets-save'); const note=$('#assets-note'); btn.disabled=true; if(note) note.textContent='Saving...'; const ok=await saveAssets(); if(ok && typeof queueChange==='function') queueChange('assets','Brand assets updated'); if(note) note.textContent=ok?'Saved ✓':'Could not save, Retry'; btn.disabled=false; if(ok) setTimeout(()=>{ if(note && note.textContent==='Saved ✓') note.textContent=''; },2200); };
 $('#as-import').onclick=async()=>{ const url=$('#as-import-url').value.trim(); if(!url) return; if(!REMOTE){ $('#assets-note').textContent='Website import runs on the deployed app.'; return; }
   // capture whatever they've already typed so we don't overwrite it
@@ -7821,7 +7858,20 @@ function setAccount(box){
   box.append(card);
   $('#set-name').value=savedAccountName(SETTINGS.account); $('#set-email').value=SETTINGS.account.email||'';
   save.onclick=async()=>{ if(!REMOTE) return; save.disabled=true; note.textContent='Saving...'; const name=$('#set-name').value.trim(); let ok=false; try{ const r=await fetch('/api/account',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({name})}); ok=r.ok; }catch(e){ ok=false; } if(ok){ SETTINGS.account.name=name; ME.name=name; applyIdentity(); note.textContent='Saved ✓'; } else note.textContent='Could not save, Retry'; save.disabled=false; if(ok) setTimeout(()=>{ if(note.textContent==='Saved ✓') note.textContent=''; },2000); };
-  pwbtn.onclick=async()=>{ if(!REMOTE) return; pwbtn.disabled=true; const r=await fetch('/auth/change-password',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({current:$('#set-pw-cur').value,next:$('#set-pw-new').value})}); const d=await r.json().catch(()=>({})); pwnote.textContent=r.ok?'Password updated ✓':(d.error||'Failed'); if(r.ok){ $('#set-pw-cur').value=''; $('#set-pw-new').value=''; } pwbtn.disabled=false; setTimeout(()=>pwnote.textContent='',3500); };
+  pwbtn.onclick=async()=>{ if(!REMOTE) return; pwbtn.disabled=true; const r=await fetch('/auth/change-password',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({current:$('#set-pw-cur').value,next:$('#set-pw-new').value})}); const d=await r.json().catch(()=>({})); pwnote.textContent=r.ok?'Password updated. Other sessions were signed out.':(d.error||'Failed'); if(r.ok){ $('#set-pw-cur').value=''; $('#set-pw-new').value=''; } pwbtn.disabled=false; };
+  const alerts=el('div','ui-section');
+  alerts.innerHTML='<h3>Alerts</h3><p class="mdesc">Choose what Miles emails you. In-app notes still show on the dashboard.</p>';
+  const toggles=[['leads','New lead'],['decisions','Decisions waiting 48 hours'],['weekly','Weekly report'],['billing','Receipts and failed payments']];
+  const savedNotes=(SETTINGS&&SETTINGS.notify)||{};
+  toggles.forEach(([id,label])=>{ const lab=el('label'); lab.style.cssText='display:flex;gap:8px;align-items:center;justify-content:flex-start;margin:8px 0;font-size:13px;font-weight:500'; const on=savedNotes[id]!==false; lab.innerHTML='<input type="checkbox" data-note="'+id+'" style="width:auto;margin:0"'+(on?' checked':'')+'> <span>'+label+'</span>'; alerts.append(lab); });
+  const alertSave=el('button','pf-save','Save alerts'); alertSave.type='button'; const alertNote=el('span','appsub'); const arow=el('div','ui-actions'); arow.append(alertSave, alertNote); alerts.append(arow);
+  const legal=el('p','appsub'); legal.innerHTML='<a href="/privacy">Privacy</a> · <a href="/terms">Terms</a>';
+  const danger=el('div','ui-section');
+  danger.innerHTML='<h3>Delete account</h3><p class="mdesc">This disconnects integrations, cancels a paid plan, and deletes this workspace.</p><label>Type DELETE</label><input id="set-delete" autocomplete="off">';
+  const del=el('button','ghost','Delete account'); del.type='button'; const dnote=el('span','appsub'); const drow=el('div','ui-actions'); drow.append(del, dnote); danger.append(drow);
+  card.append(alerts, legal, danger);
+  alertSave.onclick=async()=>{ const body={}; alerts.querySelectorAll('[data-note]').forEach(i=>{ body[i.dataset.note]=i.checked; }); const r=await fetch('/api/notifications',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); alertNote.textContent=r.ok?'Saved ✓':'Could not save'; };
+  del.onclick=async()=>{ if($('#set-delete').value!=='DELETE'){ dnote.textContent='Type DELETE to confirm.'; return; } const r=await fetch('/api/account/delete',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:'DELETE'})}); if(r.ok) location.href='/login'; else { const d=await r.json().catch(()=>({})); dnote.textContent=d.error||'Could not delete.'; } };
 }
 function setTeam(box){
   const card=el('div','mcard'); card.style.maxWidth='700px';
@@ -7881,12 +7931,28 @@ async function setUsage(box){
   }
   box.append(card3);
 }
-function setBilling(box){
+async function setBilling(box){
   const card=el('div','mcard'); card.style.maxWidth='680px';
   card.innerHTML='<h3>Billing</h3><p class="mdesc">Your plan and payment.</p>';
-  const plan=el('div','acard'); plan.style.marginTop='8px'; plan.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div><b>Free plan</b><div class="mdesc" style="margin:2px 0 0">Full access while Miles is in early access.</div></div><span class="apill active">CURRENT</span></div>';
-  card.append(plan); card.append(el('div','verdict tight','💳 Paid plans & Stripe billing are coming soon, you’ll manage your subscription here.'));
   box.append(card);
+  const res=await fetchJson('/api/billing', null, 8000);
+  const b=res.data||{};
+  const sub=b.subscription||{};
+  const names={starter:'Starter',growth:'Growth',scale:'Scale',launch:'Launch credits'};
+  const planName=names[sub.band]||(b.launchCredit==='granted'?'Launch credits':names.launch);
+  const when=sub.cancelAt?('Cancels '+String(sub.cancelAt).slice(0,10)):(sub.currentPeriodEnd?('Renews '+String(sub.currentPeriodEnd).slice(0,10)):'');
+  const plan=el('div','acard'); plan.style.marginTop='8px';
+  plan.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div><b>'+esc(planName)+'</b><div class="mdesc" style="margin:2px 0 0">'+esc(sub.status||b.launchMessage||'No paid plan yet')+(when?' · '+esc(when):'')+'</div></div><span class="apill active">CURRENT</span></div>';
+  card.append(plan);
+  if(b.launchMessage) card.append(el('div','verdict tight', b.launchMessage));
+  if(!b.paymentsConnected){ card.append(el('div','verdict tight','Payments are not connected on this server yet. Nothing is charged.')); return; }
+  const row=el('div','ui-actions');
+  const manage=el('button','go','Manage billing');
+  const cancel=el('button','ghost','Cancel plan');
+  row.append(manage, cancel); card.append(row);
+  const openPortal=async(btn)=>{ btn.disabled=true; const r=await fetch('/api/billing/portal',{method:'POST'}); const d=await r.json().catch(()=>({})); if(d.url) location.href=d.url; else toast(d.error||'Billing portal is not available.'); btn.disabled=false; };
+  manage.onclick=()=>openPortal(manage);
+  cancel.onclick=()=>openPortal(cancel);
 }
 async function renderOwnerAdmin(){
   const box=$('#owneradmin-body'); if(!box) return;
@@ -8181,6 +8247,7 @@ async function renderOwnerAdmin(){
     addMeta('STATUS', row.status||'');
     addMeta('MRR', money(row.monthlyPaid)||'Not connected', money(row.monthlyPaid)? '':'gold');
     addMeta('CREDITS LEFT', row.freeCreditsRemaining+' of '+row.freeCreditsGrant);
+    if(row.creditFlag==='duplicate' || (row.creditFlag&&String(row.creditFlag).indexOf('Duplicate')===0)) addMeta('CREDIT', row.creditFlag);
     addMeta('SERVE COST', money(row.serveCost)||'Not connected', money(row.serveCost)?'':'gold');
     addMeta('PROFIT', money(row.profit)||'Not connected', money(row.profit)?'':'gold');
     addMeta('TOOLS', toolsText(row));
@@ -9482,7 +9549,7 @@ async function flushBiz(gen){
     if(kind.profile||kind.brand||kind.plan){
       const r=await fetch('/api/profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(bizProfilePayload(d))});
       const body=await r.json().catch(()=>({}));
-      if(!r.ok) throw new Error(body.error||'save');
+      if(!r.ok) throw new Error((body.field?body.field+': ':'')+(body.error||'save'));
       if(body.profile){ PROFILE=body.profile; try{ applyIdentity(); }catch(e){} }
       if(typeof queueChange==='function') queueChange('profile','Business profile updated');
     }
@@ -9513,7 +9580,7 @@ async function flushBiz(gen){
     if(gen===bizGen){
       pending.forEach(id=>{ if(BIZ_STATUS[id]&&BIZ_STATUS[id].state==='saving') BIZ_STATUS[id].state='error'; });
       paintBizStatus();
-      if(note) note.textContent='Could not save. Use Retry on the card.';
+      if(note) note.textContent=e&&e.message&&e.message!=='save'?e.message:'Could not save. Use Retry on the card.';
     }
     return;
   }

@@ -142,7 +142,7 @@ You will defend and indemnify Miles against third-party claims arising from (a) 
 ---
 
 ## Companion documents needed (not drafted here)
-1. **Privacy Policy** (required by Google/Meta API terms; must name AI sub-processors)
+1. **Privacy Policy** is published at /privacy.
 2. **Data Processing Addendum** (only if selling into CA/EU-touching customers)
 3. **Acceptable Use Policy** (short; ban prohibited verticals, deceptive ads, scraping Platforms via Miles)
 4. **In-app consent screens** — the OAuth scope screen and the Autonomy Settings screen should each restate 3.1–3.4 in one sentence; that in-product acknowledgement is worth as much as the ToS in a dispute.

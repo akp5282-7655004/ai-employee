@@ -14,7 +14,8 @@ describe('signup credits', () => {
     expect(second.statusCode).toBe(200);
     const cookie = String(second.headers['set-cookie']).split(';')[0];
     const billing = await app.inject({ method: 'GET', url: '/api/billing', headers: { cookie } });
-    expect(billing.json().credits).toMatchObject({ granted: 100, remaining: 100 });
+    expect(billing.json().credits).toMatchObject({ granted: 0, remaining: 0 });
+    expect(billing.json().launchMessage).toMatch(/Connect 3 tools to unlock \$100/);
     expect(billing.json().launchOffer).toBe(true);
     await app.close();
   });
@@ -35,7 +36,7 @@ describe('setup tools', () => {
     const early = setupProgress({ apps: ['google_ads', 'gohighlevel'], website: '' });
     expect(early.headline).toBe('2 of 3 connected');
     expect(early.ready).toBe(false);
-    expect(early.detail).toMatch(/pull real data/);
+    expect(early.detail).toMatch(/Connect 3 tools to unlock \$100/);
     expect(early.detail).not.toMatch(/\u2014|searchlight/i);
     const done = setupProgress({ apps: ['google_ads', 'facebook_pages'], website: 'https://painters.example' });
     expect(done.ready).toBe(true);

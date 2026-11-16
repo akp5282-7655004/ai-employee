@@ -44,6 +44,6 @@ export function setupProgress(args: { apps?: string[]; website?: string }): Setu
     ready: connected >= REQUIRED_TOOLS,
     items,
     headline: `${shown} of ${REQUIRED_TOOLS} connected`,
-    detail: 'Connect at least 3 tools so Miles can pull real data and show you something useful. Google Ads, your Google Business Profile, Facebook, GoHighLevel, or your website all count.',
+    detail: 'Connect 3 tools to unlock $100 in credits. Google Ads, your Google Business Profile, Facebook, GoHighLevel, or your website all count.',
   };
 }
