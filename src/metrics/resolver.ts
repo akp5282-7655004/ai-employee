@@ -35,7 +35,7 @@ function seeded(seed: string): () => number {
 
 function sampleResult(entry: MetricEntry, days: number): Omit<MetricResult, 'key' | 'label' | 'format' | 'direction' | 'source'> {
   const rnd = seeded(`${entry.key}:${days}`);
-  const n = Math.min(days, 30);
+  const n = Math.min(Math.max(1, days), 366);
   const base = entry.sample_value;
   // Rates/averages hover around the sample value; volumes split it across days.
   const perDay = entry.aggregation === 'sum' ? base / n : base;

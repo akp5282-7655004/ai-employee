@@ -3391,6 +3391,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     };
   };
 
+  app.get('/api/automation/log', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const state = automationState(data);
+    return { log: state.log.slice(0, 20), findings: state.findings.slice(0, 12), lastRunAt: state.lastRunAt };
+  });
+
   app.post('/api/automation/read', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
@@ -3833,7 +3841,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const keys = Array.isArray(req.body?.keys) ? req.body.keys.filter((k) => typeof k === 'string').slice(0, 60) : [];
-    const days = Math.min(Math.max(Number(req.body?.days) || 30, 1), 90);
+    const days = Math.min(Math.max(Number(req.body?.days) || 30, 1), 366);
     // Live data: real ad spend from the connector + real CRM numbers from the
     // webhook event ledger, blended into the calc.* money metrics only when
     // every input is real.
