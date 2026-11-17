@@ -4,6 +4,55 @@ Akhil’s operator playbook for scaling businesses is **pending**. It is not in 
 
 Miles does not hold a contractor’s ad login. App credentials (`PIPEDREAM_PROJECT_ID`, `PIPEDREAM_CLIENT_ID`, `PIPEDREAM_CLIENT_SECRET`) identify the Miles Pipedream project. Each contractor still has to Connect their own `google_ads`, `tiktok_ads_manager`, `facebook_pages`, or `highlevel_oauth` account. Whether any of those connections exist in the project is **unknown from this code**.
 
+## Launch day checklist
+
+Added 2026-11-17. Work down this list in order. Each box is ticked by a person looking at the live site, not by a passing test. The sections further down this page are the detail behind steps 3 and 4.
+
+### 1. Settings
+
+- [ ] Open `/admin` on the live site as the owner and press **Run launch check**. Every line marked FIX is cleared. The lines marked NOTE are read and accepted.
+- [ ] `ADMIN_RESET_SECRET` is not set on the host.
+
+### 2. Payments
+
+Stripe has only ever been used in test mode. Until this section is done, real cards are declined.
+
+- [ ] In Stripe live mode, the three products exist as monthly prices: Starter $149, Growth $397, Scale $797.
+- [ ] On the host, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_GROWTH`, and `STRIPE_PRICE_SCALE` are the live-mode values. A test value beside a live one fails at checkout.
+- [ ] In Stripe live mode, a webhook destination points at `{APP_URL}/api/stripe/webhook` and sends `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`, and `customer.subscription.deleted`. Adding `customer.subscription.created`, `payment_intent.succeeded`, and `payment_intent.payment_failed` is optional. Test mode and live mode each need their own destination and their own signing secret.
+- [ ] Run the launch check again. Stripe live mode, the three prices, and the webhook line all read OK.
+- [ ] One real subscription, on a new account, with a real card, on Starter. Plan & Credits shows Starter, Active, and $50 of credits. Never seen on the live site before this.
+- [ ] On that account, press **Add $25.00 of credits** once. The balance goes up by $25. Stripe shows exactly one $25 payment. Never run against a real card before this.
+- [ ] In Stripe, the `invoice.paid` delivery for that subscription shows 200.
+- [ ] Refund both payments in Stripe and cancel the subscription.
+
+### 3. A customer can connect and create a campaign
+
+- [ ] The Pipedream workspace is on a plan that includes "Run in production". Without it a customer can connect Google Ads and still cannot create a campaign. See "What Akhil still has to do" below.
+- [ ] The eight steps under "Steps" below pass on a test Google Ads account. The campaign is left paused.
+
+### 4. Running out of credits
+
+- [ ] On a test account with an empty balance, a skill run or a campaign build is refused, and the message names the right next step: pick a plan for a free account, add credits for a paying one, update the card after a failed payment.
+- [ ] The same account still loads its dashboard and its reports.
+
+### 5. What is sold matches what exists
+
+- [ ] The sales site does not promise anything in the list below.
+- [ ] The sales site carries no customer count, managed-spend figure, or testimonial that is not real.
+
+Not built or not working on 2026-11-17. Do not sell these:
+
+- Meta (Facebook and Instagram) ads. The launch route refuses and creates nothing.
+- TikTok ads, Local Services Ads, and Performance Max. Not part of any plan Miles runs.
+- Ad schedule. Hours are shown on the plan and are not sent to Google.
+- GoHighLevel pipeline stages. Contacts are created. Opportunities are not moved.
+- Automatic top-up. The server supports it and the app has no switch for it. The manual button is the only way to add credits.
+- Learning across accounts. Each account only sees its own results.
+- CallRail, Yelp, Nextdoor, and Yext. CallRail can be connected on the Integrations page and Miles reads nothing from it. The other three have no connection.
+
+Unused credits do carry into the next month and do not expire. Checked 2026-11-17 by running two renewals in a row. The site may say so.
+
 ## Catalog versus wiring
 
 Public catalog read 2026-11-07. See `GET /api/integrations/pipedream` and `src/connectors/pipedreamCatalog.ts`.
