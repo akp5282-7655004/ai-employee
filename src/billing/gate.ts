@@ -1,4 +1,5 @@
-import { billingEnforced, creditState } from './credits.js';
+import { workAccess } from './access.js';
+import { billingEnforced, creditState, pausedReason } from './credits.js';
 import { billingState } from './subscription.js';
 
 /**
@@ -8,6 +9,10 @@ import { billingState } from './subscription.js';
  */
 export function adSpendAllowed(data: Record<string, unknown>): { ok: boolean; reason?: string } {
   if (!billingEnforced()) return { ok: true };
+  // Past the failed-payment grace period, or after the plan ended: no new ads.
+  // Existing campaigns are not touched. Reads stay available.
+  const access = workAccess(data);
+  if (access.paused) return { ok: false, reason: pausedReason(access) };
   const credits = creditState(data);
   const billing = billingState(data);
   const launch = billing.band === 'launch' && billing.status === 'active' && credits.launchOffer !== false;

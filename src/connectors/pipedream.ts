@@ -8,6 +8,7 @@ import { plainStepErrors } from '../agents/googlelaunch.js';
 import { classifyGadsAccounts, extractCustomerNodes, type GadsAccess } from './gadsAccess.js';
 import { explainPipedreamError, type PipedreamFailure } from './pipedreamErrors.js';
 import { withTimeout } from './readcache.js';
+import { healthyAccount, reconnectNote } from './health.js';
 import { summarizeTask } from './mock.js';
 import type {
   AppInfo,
@@ -302,7 +303,7 @@ export class PipedreamConnector implements Connector {
     try {
       pd = await this.backend();
       const accts = await this.listAccounts(externalUserId, 'gmail');
-      const account = accts.find((a) => a.healthy) ?? accts[0];
+      const account = healthyAccount(accts);
       if (!account) return [];
       const list = await pd.actions.list({ app: 'gmail', q: 'list emails', limit: 8 });
       const rows: any[] = list?.data ?? (Array.isArray(list) ? list : list?.items ?? []);
@@ -348,9 +349,11 @@ export class PipedreamConnector implements Connector {
 
     // 1) Must have a connected account for this app.
     let account: any;
+    let revoked = false;
     try {
       const accts = await this.listAccounts(req.externalUserId, req.app);
-      account = accts.find((a) => a.healthy) ?? accts[0];
+      account = healthyAccount(accts);
+      revoked = !account && accts.length > 0;
     } catch {
       /* fall through to the not-connected message */
     }
@@ -359,7 +362,7 @@ export class PipedreamConnector implements Connector {
         ok: false,
         actionId: `${req.app}-task`,
         ...base,
-        note: `No connected ${req.app} account yet — connect it in Integrations, then I can ${lower(summary)}.`,
+        note: revoked ? reconnectNote(req.app) : `No connected ${req.app} account yet — connect it in Integrations, then I can ${lower(summary)}.`,
       };
     }
 
@@ -438,7 +441,7 @@ export class PipedreamConnector implements Connector {
   private async runRead(app: string, query: string, externalUserId: string, params: Record<string, string> = {}): Promise<unknown> {
     const pd = await this.backend();
     const accts = await this.listAccounts(externalUserId, app);
-    const account = accts.find((a) => a.healthy) ?? accts[0];
+    const account = healthyAccount(accts);
     if (!account) return null;
     const rows = await this.listComponents(app);
     const comp = pickComponent(rows, query);
@@ -626,7 +629,7 @@ export class PipedreamConnector implements Connector {
    */
   async listAdTargets(externalUserId: string): Promise<{ id: string; login: string; name?: string; label: string }[]> {
     const accts = await this.listAccounts(externalUserId, 'google_ads');
-    const account = accts.find((a) => a.healthy) ?? accts[0];
+    const account = healthyAccount(accts);
     if (!account) return [];
     if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return [];
     const cached = this.gadsCache.get(externalUserId);
@@ -668,7 +671,7 @@ export class PipedreamConnector implements Connector {
       const pd = await this.backend();
       for (const slug of PipedreamConnector.GHL_SLUGS) {
         const accts = await this.listAccounts(externalUserId, slug).catch(() => [] as import('./types.js').ConnectedAccount[]);
-        const account = accts.find((a) => a.healthy) ?? accts[0];
+        const account = healthyAccount(accts);
         if (!account) continue;
         const rows = await this.listComponents(slug);
         const isOpp = (c: any) => /opportunit/i.test(String(c.key ?? c.id ?? c.componentKey ?? ''));
@@ -714,7 +717,7 @@ export class PipedreamConnector implements Connector {
     try {
       const pd = await this.backend();
       const accts = await this.listAccounts(externalUserId, 'google_ads');
-      const account = accts.find((a) => a.healthy) ?? accts[0];
+      const account = healthyAccount(accts);
       if (!account) return out;
       const rows = await this.listComponents('google_ads');
       const comp = rows.find((c) => /search.?term/i.test(String(c.key ?? c.id ?? c.componentKey ?? '')));
@@ -761,7 +764,7 @@ export class PipedreamConnector implements Connector {
     const out: import('../revenue/attribution.js').CampaignSpend[] = [];
     const pd = await this.backend();
     const accts = await this.listAccounts(externalUserId, 'google_ads');
-    const account = accts.find((a) => a.healthy) ?? accts[0];
+    const account = healthyAccount(accts);
     if (!account) return out;
     if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') return out;
 
@@ -935,7 +938,7 @@ export class PipedreamConnector implements Connector {
     try {
       const pd = await this.backend();
       const accts = await this.listAccounts(externalUserId, 'google_ads');
-      const account = accts.find((row) => row.healthy) ?? accts[0];
+      const account = healthyAccount(accts);
       if (!account) return empty;
       if (this.gadsBlock.get(externalUserId)?.kind === 'connect_production_unavailable') {
         return { connected: false, note: 'Google Ads is signed in, but this workspace cannot run a report yet. Nothing here is a sample.', rows: [] };
@@ -1138,7 +1141,7 @@ export class PipedreamConnector implements Connector {
   async launchCampaign(externalUserId: string, spec: import('../agents/campaign.js').CampaignSpec, targetCustomerId?: string): Promise<import('./types.js').CampaignLaunchResult> {
     const steps: import('./types.js').CampaignLaunchStep[] = [];
     const accts = await this.listAccounts(externalUserId, 'google_ads');
-    const account = accts.find((a) => a.healthy) ?? accts[0];
+    const account = healthyAccount(accts);
     if (!account) return { ok: false, live: true, steps: [{ step: 'Google Ads account', ok: false, error: 'No connected Google Ads account.' }], note: 'Connect Google Ads first.' };
     const rows = await this.listComponents('google_ads');
     // MCC-aware: write "as" the login/manager (accountId) but INTO the client
@@ -1534,7 +1537,7 @@ export class PipedreamConnector implements Connector {
     const campaignId = (args.campaignResource.match(/campaigns\/(\d+)/) || [])[1];
     if (!campaignId) return { ok: false, live: false, called: false, note: 'That is not a Google campaign resource. Nothing was changed.' };
     const accts = await this.listAccounts(externalUserId, 'google_ads');
-    const account = accts.find((a) => a.healthy) ?? accts[0];
+    const account = healthyAccount(accts);
     if (!account) return { ok: false, live: false, called: false, note: 'Google Ads is not connected for this account. Nothing was changed.' };
     const rows = await this.listComponents('google_ads');
     const targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
@@ -1651,7 +1654,7 @@ export class PipedreamConnector implements Connector {
     }
     try {
       const accts = await this.listAccounts(externalUserId, 'google_ads');
-      const account = accts.find((a) => a.healthy) ?? accts[0];
+      const account = healthyAccount(accts);
       if (!account) return { live: false, called: false, sample: false, note: 'Google Ads is not connected for this account.', campaigns: [] };
       const rows = await this.listComponents('google_ads');
       const targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
@@ -1702,7 +1705,7 @@ export class PipedreamConnector implements Connector {
     const blank = { customerId: null, loginCustomerId: null, httpStatus: null, rowCount: 0, error: '' };
     try {
       const accts = await this.listAccounts(externalUserId, 'google_ads');
-      const account = accts.find((row) => row.healthy) ?? accts[0];
+      const account = healthyAccount(accts);
       if (!account) return { ...blank, error: 'Google Ads is not connected for this account.' };
       const rows = await this.listComponents('google_ads');
       let targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
@@ -1916,7 +1919,12 @@ export class PipedreamConnector implements Connector {
     for (const a of accts) byApp.set(a.app, [...(byApp.get(a.app) ?? []), a]);
 
     for (const [app, list] of byApp) {
-      const primary = list.find((a) => a.healthy) ?? list[0]!;
+      const primary = healthyAccount(list);
+      if (!primary) {
+        // Every account for this app was revoked or expired. Not connected.
+        details.push({ app, label: LABEL[app] ?? app, connected: false, ready: false, needsReconnect: true, accountName: list[0]?.name, accountId: list[0]?.id, rows: [], note: reconnectNote(app) });
+        continue;
+      }
       const detail: import('./types.js').ConnectionDetail = { app, label: LABEL[app] ?? app, connected: true, accountName: primary.name, accountId: primary.id, rows: [] };
       if (app === 'google_ads') {
         const fmt = (i: string) => i.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
@@ -1988,7 +1996,7 @@ export class PipedreamConnector implements Connector {
 
   async uploadOfflineConversions(externalUserId: string, items: import('./types.js').ConversionItem[]): Promise<import('./types.js').ConversionUploadResult> {
     const accts = await this.listAccounts(externalUserId, 'google_ads');
-    const account = accts.find((a) => a.healthy) ?? accts[0];
+    const account = healthyAccount(accts);
     if (!account) return { ok: false, live: true, uploaded: 0, failed: items.length, steps: items.map((i) => ({ dealId: i.dealId, ok: false, error: 'No connected Google Ads account.' })), note: 'Connect Google Ads first.' };
     const rows = await this.listComponents('google_ads');
     const targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
@@ -2021,7 +2029,7 @@ export class PipedreamConnector implements Connector {
 
   async adjustCampaignBudgets(externalUserId: string, changes: import('./types.js').BudgetChange[]): Promise<import('./types.js').BudgetChangeResult> {
     const accts = await this.listAccounts(externalUserId, 'google_ads');
-    const account = accts.find((a) => a.healthy) ?? accts[0];
+    const account = healthyAccount(accts);
     const acted = changes.filter((c) => c.action !== 'hold');
     if (!account) return { ok: false, live: true, applied: 0, steps: acted.map((c) => ({ campaign: c.campaign, ok: false, error: 'No connected Google Ads account.' })), note: 'Connect Google Ads first.' };
     // Money-safety: never fire a budget write without first resolving each
@@ -2077,7 +2085,8 @@ export class PipedreamConnector implements Connector {
       const accts = await this.listAccounts(externalUserId, app);
       trace.accounts = accts.map((a) => ({ id: a.id, app: a.app, name: a.name, healthy: a.healthy }));
       if (!accts.length) return { connected: false, count: 0, sample: null, trace };
-      const account = accts.find((a) => a.healthy) ?? accts[0];
+      const account = healthyAccount(accts);
+      if (!account) return { connected: false, count: 0, sample: null, trace: { ...trace, note: reconnectNote(app) } };
 
       const gaql = app === 'google_ads' ? 'SELECT campaign.name, metrics.cost_micros, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date DURING LAST_30_DAYS' : undefined;
       const q = query || (app === 'google_ads' ? 'search report query campaign' : app.includes('facebook') || app.includes('instagram') || app.includes('linkedin') ? 'insights metrics' : app === 'google_my_business' ? 'list reviews' : 'list contacts');

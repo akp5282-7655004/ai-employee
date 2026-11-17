@@ -179,6 +179,8 @@ export interface ConnectionDetail {
   note?: string; // honest status / how-to-connect message
   /** Customer ids the owner can choose when more than one is accessible. */
   choices?: { id: string; label: string }[];
+  /** True when every account for this app was revoked or expired. */
+  needsReconnect?: boolean;
 }
 
 export interface Connector {

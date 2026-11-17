@@ -2459,7 +2459,7 @@ function buildRecCard(r,onResolved){
   const bar=el('div'); bar.style.cssText='display:flex;gap:8px';
   const ap=el('button','go','✓ Approve'); ap.style.flex='none';
   const dm=el('button','adsave','Dismiss');
-  ap.onclick=async()=>{ ap.disabled=true; dm.disabled=true; ap.textContent='Applying…'; try{ const res=await(await fetch('/api/recommendations/apply',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rec:r})})).json(); bar.remove(); card.style.opacity='.7'; const done=el('div','verdict ok'); done.textContent=(res&&res.status==='live')?'✓ Approved & applied, see the Change Log.':'✓ Approved, queued in Deploy for you to push live.'; card.append(done); onResolved&&onResolved('approved'); }catch(e){ ap.disabled=false; dm.disabled=false; ap.textContent='✓ Approve'; toast('Couldn’t apply that, try again.'); } };
+  ap.onclick=async()=>{ ap.disabled=true; dm.disabled=true; ap.textContent='Applying…'; try{ const res=await(await fetch('/api/recommendations/apply',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rec:r})})).json(); bar.remove(); card.style.opacity='.7'; const done=el('div','verdict ok'); done.textContent=(res&&res.note)||'✓ Approved and recorded. Google Ads and Meta were not changed.'; card.append(done); onResolved&&onResolved('approved'); }catch(e){ ap.disabled=false; dm.disabled=false; ap.textContent='✓ Approve'; toast('Couldn’t apply that, try again.'); } };
   dm.onclick=async()=>{ try{ await fetch('/api/recommendations/dismiss',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id})}); }catch(e){} card.style.transition='opacity .2s'; card.style.opacity='0'; setTimeout(()=>{ card.remove(); onResolved&&onResolved('dismissed'); },200); };
   bar.append(ap,dm); card.append(bar);
   return card;
@@ -3828,7 +3828,8 @@ function renderMilesHome(box, d, place, opts){
       const note=/budget shifter/i.test(i.title||'') && /no campaign spend|no budget move|no budget changes|until your campaigns are spending/i.test(i.reason||'');
       const reason=note?'No budget changes to suggest until your campaigns are spending.':i.reason;
       const row=el('div'); row.style.cssText='padding:8px 0;border-top:1px solid var(--line)'; row.append(el('b',null,i.title), el('div','appsub', reason));
-      if(!note){ const yes=el('button','go','Approve'); yes.style.marginTop='6px'; yes.onclick=async()=>{ await fetch('/api/miles/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:i.id, confirm:true})}); openOverview(); }; row.append(yes); }
+      if(!note){ const yes=el('button','go','Approve'); yes.style.marginTop='6px'; yes.onclick=async()=>{ const r=await fetch('/api/miles/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:i.id, confirm:true})}); const out=await r.json().catch(()=>({})); if(out&&out.note) toast(out.note); openOverview(); }; row.append(yes); }
+      const no=el('button','ghost','Skip'); no.style.cssText='margin-top:6px;margin-left:6px'; no.onclick=async()=>{ await fetch('/api/miles/reject',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:i.id})}); toast('Skipped. Nothing was changed.'); openOverview(); }; row.append(no);
       ib.append(row);
     });
     box.append(ib);
@@ -4002,7 +4003,7 @@ async function dashQueue(wrap, label){
     const state={done:false};
     state.approve=async()=>{ if(state.done) return; ap.disabled=true; sk.disabled=true; ap.textContent='Applying…';
       try{ await fetch('/api/recommendations/apply',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rec:r})});
-        state.done=true; acts.innerHTML=''; const ok=el('span','appsub','Approved'); ok.style.color='var(--good)'; acts.append(ok); row.style.opacity='.65';
+        state.done=true; acts.innerHTML=''; const ok=el('span','appsub','Approved and recorded. Google and Meta not changed.'); ok.style.color='var(--good)'; acts.append(ok); row.style.opacity='.65';
       }catch(e){ ap.disabled=false; sk.disabled=false; ap.textContent='Approve'; toast('Couldn’t apply that, try again.'); } };
     ap.onclick=async()=>{ await state.approve(); refreshFoot(); };
     sk.onclick=async()=>{ try{ await fetch('/api/recommendations/dismiss',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id})}); }catch(e){}
@@ -4050,16 +4051,19 @@ function runPlaybook(card, miles){
   return btn;
 }
 async function actDecision(dec, kind){
+  const post=async(url, body)=>{ const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); return r.json().catch(()=>({})); };
   if(kind==='skip'){
     if(!dec.canSkip) return;
-    await fetch('/api/recommendations/dismiss',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:dec.id})});
+    if(dec.kind==='inbox') await post('/api/miles/reject',{id:dec.id});
+    else await post('/api/recommendations/dismiss',{id:dec.id});
+    toast('Skipped. Nothing was changed.');
     return;
   }
-  if(dec.kind==='inbox'){
-    await fetch('/api/miles/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:dec.id, confirm:true})});
-  } else if(dec.rec){
-    await fetch('/api/recommendations/apply',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rec:dec.rec})});
-  }
+  let res=null;
+  if(dec.kind==='inbox') res=await post('/api/miles/approve',{id:dec.id, confirm:true});
+  else if(dec.rec) res=await post('/api/recommendations/apply',{rec:dec.rec});
+  // Say what actually happened. Most approvals are recorded, not pushed.
+  if(res && res.note) toast(res.note);
 }
 function renderSkillFindings(parent, findings, readAt){
   const card=el('section','mcard'); card.id='dash-findings';
@@ -4140,6 +4144,21 @@ async function openOverview(){
   if(gen!==overviewGen) return;
   renderOverview(d, miles, op, setup);
   openCmdCenter();
+  if(REMOTE) renderDashNotices(box, gen);
+}
+// Reconnect, payment, cancellation, and low-credit notices at the top of the
+// dashboard. Reads only; a failed read shows nothing rather than a guess.
+async function renderDashNotices(box, gen){
+  const [conn, bill]=await Promise.all([
+    fetchJson('/api/connections', null, 8000),
+    fetchJson('/api/billing/status', null, 8000),
+  ]);
+  if(gen!==overviewGen || !box) return;
+  const old=box.querySelector('#dash-notices'); if(old) old.remove();
+  const wrap=el('div'); wrap.id='dash-notices';
+  if(conn.ok && conn.data){ CONN=Object.assign({}, CONN, conn.data); const r=reconnectNotice(conn.data.needsReconnect); if(r) wrap.append(r); }
+  if(bill.ok && bill.data){ const n=billingNotice(bill.data); if(n){ const go=el('button','ghost','Open Plan & Credits'); go.type='button'; go.style.marginTop='6px'; go.onclick=()=>setPage('billing'); n.append(go); wrap.append(n); } }
+  if(wrap.childNodes.length) box.insertBefore(wrap, box.firstChild);
 }
 function dv2Head(title, extra){
   const head=el('div','dv2-sec');
@@ -5657,7 +5676,7 @@ async function ccSkillsPanel(){
       const act=el('div'); act.style.cssText='display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap';
       const ap=el('button',null,'Approve'); ap.style.cssText='font-size:11.5px;padding:4px 12px;border-radius:7px;border:none;background:var(--primary);color:var(--primary-ink);font-weight:600;cursor:pointer';
       if(r.approve_disabled_reason){ ap.disabled=true; ap.style.opacity='.45'; ap.style.cursor='not-allowed'; ap.title=r.approve_disabled_reason; }
-      else ap.onclick=async()=>{ await fetch('/api/skills7/act',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id,action:'approve'})}); openCmdCenter(); };
+      else ap.onclick=async()=>{ const res=await fetch('/api/skills7/act',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id,action:'approve'})}); const out=await res.json().catch(()=>({})); if(out&&out.note) toast(out.note); openCmdCenter(); };
       const di=el('button',null,'Dismiss'); di.style.cssText='font-size:11.5px;padding:4px 12px;border-radius:7px;border:1px solid var(--line);background:var(--panel-2,var(--panel-2));cursor:pointer';
       di.onclick=async()=>{ await fetch('/api/skills7/act',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id,action:'dismiss'})}); openCmdCenter(); };
       act.append(ap,di); if(r.approve_disabled_reason){ const why=el('span','appsub',r.approve_disabled_reason); why.style.fontSize='10.5px'; act.append(why); } row.append(act);
@@ -5871,6 +5890,22 @@ function renderBillingFallback(box, why){
   });
   box.append(bc);
 }
+// One plain card for billing states that change what Miles may do.
+function billingNotice(d){
+  const a=(d&&d.access)||{}; const low=(d&&d.lowCredit)||{};
+  const lines=[]; let title='';
+  if(a.state==='grace'){ title='Payment failed, grace period until '+new Date(a.graceEndsAt).toLocaleDateString(); }
+  else if(a.state==='paused_payment'){ title='Paid work is paused until your payment goes through'; }
+  else if(a.state==='canceling'){ title='Your plan ends '+new Date(a.accessEndsAt).toLocaleDateString(); }
+  else if(a.state==='ended'){ title='Your plan has ended. Monitoring only.'; }
+  if(a.message) lines.push(a.message);
+  if(low.low && low.message && !a.paused){ if(!title) title=low.out?'Out of credits':'Credits are running low'; lines.push(low.message); }
+  if(!title) return null;
+  const card=el('div','mcard'); card.classList.add('billing-notice'); card.style.cssText='border-left:3px solid var(--warn);margin-bottom:12px';
+  card.append(el('b',null,title));
+  lines.forEach(t=>card.append(el('p','appsub',t)));
+  return card;
+}
 async function openBilling(){
   const box=$('#bill-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading...</p>';
   const res=await fetchJson('/api/billing', null, 8000);
@@ -5882,6 +5917,9 @@ async function openBilling(){
     return;
   }
   box.innerHTML='';
+  // Payment grace, paused work, cancellation, and low credits, said plainly first.
+  const bn=billingNotice(d);
+  if(bn) box.append(bn);
   // Current plan card
   const pc=el('div','mcard'); pc.append(el('div','sect-label','YOUR PLAN'));
   if(d.launchOffer){
@@ -5898,7 +5936,9 @@ async function openBilling(){
     const chip=el('span',null,statusLabel[0]); chip.style.cssText='font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;background:'+statusLabel[1];
     const bandName=s.band==='launch'?'Launch offer':(((d.bands||[]).find(b=>b.key===s.band)||{}).name||s.band);
     row.append(el('b',null,bandName+' plan'),chip);
-    if(s.currentPeriodEnd) row.append(el('span','appsub','renews '+new Date(s.currentPeriodEnd).toLocaleDateString()));
+    const endsAt=(d.access&&d.access.accessEndsAt)||null;
+    if(s.status==='canceled' || s.cancelAtPeriodEnd){ if(endsAt||s.currentPeriodEnd) row.append(el('span','appsub',((d.access&&d.access.state==='ended')?'ended ':'ends ')+new Date(endsAt||s.currentPeriodEnd).toLocaleDateString())); }
+    else if(s.currentPeriodEnd) row.append(el('span','appsub','renews '+new Date(s.currentPeriodEnd).toLocaleDateString()));
     const portal=el('button','ghost','Manage billing');
     const cancel=el('button','ghost','Cancel plan');
     const openPortal=async(btn)=>{ btn.disabled=true; try{ const r=await(await fetch('/api/billing/portal',{method:'POST'})).json(); if(r.url) location.href=r.url; else toast(r.error||'Billing portal is not available until payments are connected.'); }catch(e){ toast('Billing portal is not available until payments are connected.'); } btn.disabled=false; };
@@ -6041,12 +6081,13 @@ async function openApprovals(){
   // ── Autonomy Settings ──
   const au=d.autonomy;
   const ac=el('div','mcard'); ac.append(el('div','sect-label','AUTONOMY SETTINGS, WHAT MILES MAY DO WITHOUT ASKING'));
-  ac.append(el('p','appsub','Default is Proposal mode: Miles proposes, you approve, nothing changes in an ad account without a logged yes. Setting a skill to Auto is a standing approval within the caps below, it takes effect once that platform has write access, and every automatic action still lands in the log.'));
+  ac.append(el('p','appsub','Default is Proposal mode: Miles proposes, you approve, nothing changes in an ad account without a logged yes.'));
+  const autoNote=el('p','appsub','Auto is not active yet. Miles saves your choice, but these skills still wait for your approval every time: Miles has no live way to pause campaigns or move budgets in Google Ads or Meta yet.'); autoNote.style.cssText='padding:8px 10px;border-left:3px solid var(--warn);background:var(--panel-2);border-radius:6px'; ac.append(autoNote);
   const skillRows=el('div');
   (sk.skills||[]).filter(s=>['loser-pauser','budget-shifter'].includes(s.key)).forEach(s=>{
     const row=el('div'); row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line,var(--panel-2))';
     const t=el('div'); t.style.flex='1'; t.append(el('b',null,s.name)); t.append(el('div','appsub',s.what));
-    const sel=el('select','f'); [['proposal','Propose, ask me every time'],['auto','Auto, within my caps']].forEach(([v,lab])=>{const o=el('option',null,lab);o.value=v;if((au.perSkill[s.key]||'proposal')===v)o.selected=true;sel.append(o);});
+    const sel=el('select','f'); [['proposal','Propose, ask me every time'],['auto','Auto, within my caps (not active yet)']].forEach(([v,lab])=>{const o=el('option',null,lab);o.value=v;if((au.perSkill[s.key]||'proposal')===v)o.selected=true;sel.append(o);});
     sel.onchange=()=>{ au.perSkill[s.key]=sel.value; };
     row.append(t,sel); skillRows.append(row);
   });
@@ -6586,7 +6627,7 @@ async function openGrowth(){
 }
 function confirmGrowth(moves,autonomy){
   const scale=moves.filter(m=>m.action==='scale').length, cut=moves.filter(m=>m.action==='cut'||m.action==='pause').length;
-  showModal('<h3 style="margin:0 0 8px">Apply '+moves.length+' budget move'+(moves.length===1?'':'s')+'?</h3><p class="mdesc" style="margin:0 0 12px">Scale '+scale+' winner'+(scale===1?'':'s')+', cut/pause '+cut+'. '+(autonomy>=100?'At 100% autonomy these apply immediately.':'These go to your Deploy queue for final approval, nothing changes your live budgets until you deploy.')+' Money-safe: the live push is held until the budget-write path is verified against your account.</p><div style="display:flex;gap:8px"><button class="go" id="gr-go" style="flex:1">Yes, apply</button><button id="gr-no" style="flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;cursor:pointer">Cancel</button></div>');
+  showModal('<h3 style="margin:0 0 8px">Apply '+moves.length+' budget move'+(moves.length===1?'':'s')+'?</h3><p class="mdesc" style="margin:0 0 12px">Scale '+scale+' winner'+(scale===1?'':'s')+', cut/pause '+cut+'. Miles records these moves in your Change Log. It does not change your live Google Ads budgets yet: the budget push is not built, so you make these changes in Google Ads yourself.</p><div style="display:flex;gap:8px"><button class="go" id="gr-go" style="flex:1">Yes, apply</button><button id="gr-no" style="flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;cursor:pointer">Cancel</button></div>');
   $('#gr-go').onclick=()=>{ closeModal(); doGrowthApply(moves); };
   $('#gr-no').onclick=closeModal;
 }
@@ -6596,7 +6637,7 @@ async function doGrowthApply(moves){
   let r; try{ r=await(await fetch('/api/growth/apply',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:true,changes})})).json(); }catch(e){ toast('Apply failed, try again.'); return; }
   if(r.error){ toast('⚠️ '+r.error); return; }
   if(r.live && r.applied) toast('✓ Applied '+r.applied+' moves');
-  else toast('✓ '+moves.length+' moves queued to Deploy ('+(r.queuedStatus||'pending')+'), see Change Log');
+  else toast(r.recordedNote||('Recorded '+moves.length+' moves in your Change Log. Google Ads budgets were not changed.'));
   openGrowth();
 }
 
@@ -7742,8 +7783,8 @@ function queueChange(type,label,mode,detail){ if(!REMOTE) return; DEPLOY.queue=D
 const DEP_ICON={campaign:'📁',creative:'🖼️',trigger:'⛅',profile:'🏢',assets:'🎨',asset:'📎',action:'⚡',audit:'🔍',change:'•'};
 function fmtWhen(iso){ try{ return new Date(iso).toLocaleString(); }catch(e){ return ''; } }
 function openDeploy(){ if(!DEPLOY_LOADED){ loadDeploy().then(renderDeploy); } else renderDeploy(); }
-function deployAll(){ const n=pendingCount(); if(!n) return; const now=new Date().toISOString(); DEPLOY.queue.forEach(c=>{ if(c.status==='pending'){ c.status='live'; c.deployedAt=now; } }); DEPLOY.lastDeployedAt=now; saveDeploy(); updateDeployBadge(); renderDeploy(); if($('#page-logs')&&$('#page-logs').classList.contains('on')) renderLogs(); toast(n+' change'+(n===1?'':'s')+' deployed live'); }
-function approveChange(id){ const c=(DEPLOY.queue||[]).find(x=>x.id===id); if(!c||c.status==='live') return; const now=new Date().toISOString(); c.status='live'; c.deployedAt=now; c.approvedAt=now; DEPLOY.lastDeployedAt=now; saveDeploy(); updateDeployBadge(); renderDeploy(); if($('#page-logs')&&$('#page-logs').classList.contains('on')) renderLogs(); toast('Approved & deployed live'); }
+function deployAll(){ const n=pendingCount(); if(!n) return; const now=new Date().toISOString(); DEPLOY.queue.forEach(c=>{ if(c.status==='pending'){ c.status='live'; c.deployedAt=now; } }); DEPLOY.lastDeployedAt=now; saveDeploy(); updateDeployBadge(); renderDeploy(); if($('#page-logs')&&$('#page-logs').classList.contains('on')) renderLogs(); toast(n+' change'+(n===1?'':'s')+' marked approved in your log. This button does not change Google Ads or Meta.'); }
+function approveChange(id){ const c=(DEPLOY.queue||[]).find(x=>x.id===id); if(!c||c.status==='live') return; const now=new Date().toISOString(); c.status='live'; c.deployedAt=now; c.approvedAt=now; DEPLOY.lastDeployedAt=now; saveDeploy(); updateDeployBadge(); renderDeploy(); if($('#page-logs')&&$('#page-logs').classList.contains('on')) renderLogs(); toast('Marked approved in your log. This button does not change Google Ads or Meta.'); }
 // A small "where's the proof" link: a real URL if we have one, else point to the
 // scheduler/calendar for post-like changes.
 function proofLink(c){
@@ -8294,6 +8335,7 @@ async function setBilling(box){
   const plan=el('div','acard'); plan.style.marginTop='8px';
   plan.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div><b>'+esc(planName)+'</b><div class="mdesc" style="margin:2px 0 0">'+esc(sub.status||b.launchMessage||'No paid plan yet')+(when?' · '+esc(when):'')+'</div></div><span class="apill active">CURRENT</span></div>';
   card.append(plan);
+  const bn=billingNotice(b); if(bn){ bn.style.marginTop='10px'; card.append(bn); }
   if(b.launchMessage) card.append(el('div','verdict tight', b.launchMessage));
   if(!b.paymentsConnected){ card.append(el('div','verdict tight','Payments are not connected on this server yet. Nothing is charged.')); return; }
   const row=el('div','ui-actions');
@@ -9498,8 +9540,11 @@ function renderInts(){
     return {slug,name:slug};
   };
   const cwrap=$('#int-connected'); cwrap.innerHTML='';
+  // Revoked or expired connections. Not counted as connected; say so plainly.
+  const recon=reconnectNotice(CONN.needsReconnect);
+  if(recon) cwrap.append(recon);
   // Rich identity panel, the ACTUAL account names & IDs that are wired up.
-  const details=(CONN_DETAIL.details)||[];
+  const details=((CONN_DETAIL.details)||[]).filter(d=>!d.needsReconnect);
   if(details.length){
     cwrap.append(el('div','sect-label','YOUR CONNECTED ACCOUNTS'));
     const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:18px';
@@ -9518,6 +9563,21 @@ function renderInts(){
   const cat=$('#int-catalog'); cat.innerHTML='';
   for(const a of APPS){ if(connected.has(a.slug)) continue; cat.append(appCard(a,false)); }
   if(!APPS.length) cat.append(el('div','appsub','No apps found.'));
+}
+// One plain "Reconnect Google Ads" card per revoked or expired connection.
+function reconnectName(slug){ return ({google_ads:'Google Ads',google_my_business:'Google Business Profile',facebook:'Meta',facebook_pages:'Facebook Pages',facebook_graph_api:'Meta',gohighlevel:'GoHighLevel',highlevel_oauth:'GoHighLevel',gmail:'Gmail',tiktok_ads_manager:'TikTok Ads'})[slug] || (APP_LABEL[slug]) || connectLabel(slug); }
+function reconnectNotice(slugs){
+  const list=(slugs||[]).filter(Boolean); if(!list.length) return null;
+  const wrap=el('div'); wrap.className='reconnect-notice'; wrap.style.cssText='display:grid;gap:10px;margin-bottom:16px';
+  list.forEach(slug=>{
+    const name=reconnectName(slug);
+    const card=el('div','mcard'); card.style.cssText='border-left:3px solid var(--warn);padding:14px';
+    card.append(el('b',null,'Reconnect '+name));
+    card.append(el('p','appsub','Your '+name+' connection stopped working. Access was revoked or expired. Miles is not reading from it or changing anything in it until you reconnect.'));
+    const b=el('button','go','Reconnect '+name); b.type='button'; b.style.marginTop='6px'; b.onclick=()=>beginConnect(slug);
+    card.append(b); wrap.append(card);
+  });
+  return wrap;
 }
 let CONN_DETAIL={details:[]};
 async function fetchConnDetail(){ if(REMOTE){ try{ CONN_DETAIL = await fetch('/api/connections/detail').then(r=>r.json()); }catch(e){ CONN_DETAIL={details:[]}; } } }
