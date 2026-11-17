@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>miles.ai, workspace</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='1.5' y='1.5' width='97' height='97' rx='27' fill='%23111112'/><g fill='none' stroke='%23fff' stroke-width='8'><path d='M31.6 31.6A26 26 0 0 0 68.4 68.4' stroke-opacity='.22'/><path d='M31.6 31.6A26 26 0 0 1 68.4 68.4'/></g><circle cx='42' cy='50' r='4' fill='%23fff'/><circle cx='58' cy='50' r='4' fill='%23fff'/></svg>">
+<title>Miles, Workspace</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <!-- Wordmark per brand spec: Archivo Bold. Loads on Render; falls back to the
      system sans everywhere else, so the mark never disappears. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3778,7 +3778,10 @@ function renderMilesHome(box, d, place, opts){
     const q=el('div','mcard'); q.id=pre+'questions'; q.style.marginTop='12px';
     if(d.phase==='questions'||d.found) q.style.outline='2px solid var(--ink)';
     q.append(el('div','sect-label','2. THREE QUESTIONS'));
-    q.append(field('Goal',pre+'goal',(d.bundle&&d.bundle.setup&&d.bundle.setup.goal)||'get me painting leads'), field('Daily budget',pre+'budget',(d.bundle&&d.bundle.setup&&d.bundle.setup.dailyBudget)||'20'), field('Leads wanted per day',pre+'leads',(d.bundle&&d.bundle.setup&&d.bundle.setup.leadsPerDay)||'1'));
+    // The default goal names the saved trade, never a fixed one.
+    const goalTrade=String(p.industry||(typeof PROFILE!=='undefined'&&PROFILE&&PROFILE.industry)||'').trim().toLowerCase();
+    const defaultGoal=goalTrade?'get me '+goalTrade+' leads':'get me more leads';
+    q.append(field('Goal',pre+'goal',(d.bundle&&d.bundle.setup&&d.bundle.setup.goal)||defaultGoal), field('Daily budget',pre+'budget',(d.bundle&&d.bundle.setup&&d.bundle.setup.dailyBudget)||'20'), field('Leads wanted per day',pre+'leads',(d.bundle&&d.bundle.setup&&d.bundle.setup.leadsPerDay)||'1'));
     const qStatus=el('div','appsub',''); qStatus.id=pre+'q-status';
     const start=el('button','go','Save and show the Google plan'); start.style.marginTop='8px';
     start.onclick=async()=>{ const r=await milesPost(start, qStatus, 'Saving the plan...', '/api/miles/questions', {goal:$('#'+pre+'goal').value, dailyBudget:Number($('#'+pre+'budget').value)||20, leadsPerDay:Number($('#'+pre+'leads').value)||1, googleShare:1, mode:d.mode||undefined}); if(!r) return; await refreshMilesSurface(); };
@@ -10419,14 +10422,24 @@ async function loadProfile(){
   renderBusiness(box, view, miles);
   markSetupBadge(miles);
 }
-$('#ob-import').onclick=async()=>{ const btn=$('#ob-import'); const url=($('#ob-website').value||'').trim(); if(!url){ $('#ob-import-note').textContent='Enter your website first (or skip and fill it in below).'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#onboard-form'),$('#ob-import-note')); btn.disabled=false; btn.textContent=old; };
+$('#ob-import').onclick=async()=>{ const btn=$('#ob-import'); const url=($('#ob-website').value||'').trim(); if(!url){ $('#ob-import-note').textContent='Enter your website first (or skip and fill it in below).'; return; } btn.disabled=true; const old=btn.textContent; btn.textContent='Reading…'; await runSiteImport(url,$('#onboard-form'),$('#ob-import-note')); saveOnboardDraft(); btn.disabled=false; btn.textContent=old; };
 $('#ob-website').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#ob-import').click(); } });
 // Dismiss onboarding without saving. Miles keeps nudging for the profile in the
 // dashboard, but nothing is held hostage behind this form.
 function closeOnboard(){ $('#onboard').classList.remove('on'); }
+// The first-login form keeps a draft in this browser, so quitting halfway does
+// not lose what was typed. Cleared once the profile is saved. Storage can be
+// missing or blocked (private windows), so every call is wrapped.
+function onboardDraftKey(){ return 'miles.onboardDraft.'+((ME&&ME.id)||sessionId||'me'); }
+function saveOnboardDraft(){ try{ localStorage.setItem(onboardDraftKey(), JSON.stringify({ website:($('#ob-website').value||''), vals:readProfileForm($('#onboard-form')), savedAt:Date.now() })); }catch(e){} }
+function readOnboardDraft(){ try{ const raw=localStorage.getItem(onboardDraftKey()); const d=raw?JSON.parse(raw):null; return d&&typeof d==='object'&&d.vals&&typeof d.vals==='object'?d:null; }catch(e){ return null; } }
+function clearOnboardDraft(){ try{ localStorage.removeItem(onboardDraftKey()); }catch(e){} }
+function openOnboardSheet(){ const draft=readOnboardDraft(); buildProfileForm($('#onboard-form'),draft?draft.vals:{}); if(draft&&draft.website) $('#ob-website').value=draft.website; $('#onboard').classList.add('on'); }
+$('#onboard').addEventListener('input',saveOnboardDraft);
+$('#onboard').addEventListener('change',saveOnboardDraft);
 $('#onboard-skip').onclick=closeOnboard;
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&$('#onboard').classList.contains('on')) closeOnboard(); });
-$('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=readProfileForm($('#onboard-form')); if(!vals.businessName){ alert('Please enter your business name (or import it from your website above).'); return; } btn.disabled=true; const p=await saveProfile(vals); if(p){ PROFILE=p; applyIdentity(); } $('#onboard').classList.remove('on'); btn.disabled=false; };
+$('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=readProfileForm($('#onboard-form')); if(!vals.businessName){ alert('Please enter your business name (or import it from your website above).'); return; } btn.disabled=true; const p=await saveProfile(vals); if(p){ PROFILE=p; applyIdentity(); clearOnboardDraft(); } $('#onboard').classList.remove('on'); btn.disabled=false; };
 // ── Mobile navigation drawer ──────────────────────────────────────────────
 // Below 760px the sidebar is off-canvas; the hamburger slides it in. It closes
 // on selection, on backdrop tap, and on Escape, a nav you cannot dismiss is
@@ -10462,7 +10475,7 @@ async function authInit(){
     $('#user-av').textContent = ((u.name||u.email||'?')[0]||'?').toUpperCase();
     applyIdentity();
     const fb=$('#fb-btn'); if(fb){ fb.style.display=''; fb.onclick=openFeedback; }
-    if(!d.profile){ buildProfileForm($('#onboard-form'),{}); $('#onboard').classList.add('on'); }
+    if(!d.profile) openOnboardSheet();
     if(d.impersonating){
       let bar=document.getElementById('imp-banner');
       if(!bar){ bar=el('div'); bar.id='imp-banner'; bar.style.cssText='background:#1b8552;color:#fff;padding:8px 14px;font-size:13px;font-weight:700'; document.body.prepend(bar); }
