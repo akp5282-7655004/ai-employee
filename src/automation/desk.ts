@@ -110,7 +110,7 @@ export function feedTitles(input: DailyInput): Finding[] {
   if (input.city && !blob.includes(input.city.toLowerCase())) missing.push(input.city);
   if (input.offer && !blob.includes(input.offer.toLowerCase().slice(0, 24))) missing.push('the saved offer');
   const trust = ['licensed', 'insured', 'warranty', 'rated'];
-  if (!trust.some((word) => blob.includes(word))) missing.push('a trust line such as licensed, insured, or a real rating');
+  if (!trust.some((word) => blob.includes(word))) missing.push('a trust line you can back up, such as your license number or a real rating');
   const source = input.assetSource === 'live' ? 'These are the stored live ad assets.' : 'These headlines are from the saved campaign plan, not a live Google read.';
   if (!missing.length) {
     return [{ id: 'feed-titles-clear', skill: 'feed-titles', title: 'Feed and titles', detail: plain(`${source} Headlines and descriptions cover the saved services, location, offer, and a trust line.`) }];
@@ -118,7 +118,8 @@ export function feedTitles(input: DailyInput): Finding[] {
   const city = input.city || 'your city';
   const lead = services[0] || doc.keywords[0] || doc.label;
   const headline = clip(`${lead} in ${city}`, 30);
-  const description = clip(`${input.offer || lead}. Licensed and insured. Call for a quote in ${city}.`, 90);
+  // A trust line is a fact about the business, so the proposal leaves it for the owner to fill in.
+  const description = clip(`${input.offer || lead}. Call for a quote in ${city}.`, 90);
   return [{
     id: 'feed-titles-gaps',
     skill: 'feed-titles',

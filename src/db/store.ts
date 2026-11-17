@@ -44,6 +44,13 @@ export interface Store {
   mutateUserData(userId: string, fn: (data: Record<string, unknown>) => void | Promise<void>): Promise<Record<string, unknown>>;
   /** First 100 accounts get the $0 launch offer. Returns false once the cap is full. */
   claimLaunchSlot(userId: string): Promise<boolean>;
+  /**
+   * The $100 launch credit is granted once per email address, for good. Records
+   * the claim for this normalized email and returns true when it is new or
+   * already belongs to this account; false when another account (even a
+   * deleted one) claimed it. Survives deleteUser on purpose.
+   */
+  claimLaunchCredit(email: string, userId: string): Promise<boolean>;
   /** All user ids that have stored data — used by the scheduler to find due agents. */
   listUserIds(): Promise<string[]>;
   /** All accounts (for the owner's admin screen), oldest first. */

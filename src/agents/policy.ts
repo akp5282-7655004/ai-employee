@@ -40,7 +40,8 @@ export interface PolicyInput {
   areaModes?: Partial<Record<MilesArea, MilesMode>>;
   caps: Caps;
   spentToday: number;
-  spentMonth: number;
+  /** Ad spend so far this month. Null when Miles could not read it. */
+  spentMonth: number | null;
   action: PolicyAction;
 }
 
@@ -73,6 +74,19 @@ export function modeFor(input: Pick<PolicyInput, 'mode' | 'areaModes' | 'action'
   return input.areaModes?.[input.action.area] ?? input.mode;
 }
 
+/**
+ * The refusal when a plan's daily budget is above the account's daily cap.
+ * The cap is the owner's safety floor: no create, enable, or approval goes
+ * over it. Raising the cap is the owner's own step. Null when inside the cap
+ * or when no cap is set.
+ */
+export function overDailyCap(planDaily: number, capDaily: number): string | null {
+  const plan = Number(planDaily);
+  const cap = Number(capDaily);
+  if (!(cap > 0) || !(plan > 0) || plan <= cap + 0.001) return null;
+  return `That plan is $${plan}/day, above your $${cap}/day daily cap. Raise the cap yourself first if you want to spend more. Nothing was created or changed.`;
+}
+
 export function decidePolicy(input: PolicyInput): PolicyDecision {
   const mode = modeFor(input);
   if (input.caps.paused) {
@@ -93,7 +107,10 @@ export function decidePolicy(input: PolicyInput): PolicyDecision {
     return { effect: 'queue', mode, reason: 'Hybrid mode. This waits for your approval before anything is pushed or published.' };
   }
   const spend = Math.max(0, input.action.spend ?? 0);
-  if (input.spentMonth + spend > input.caps.monthlyCeiling) {
+  if (input.spentMonth == null && spend > 0) {
+    return { effect: 'queue', mode, reason: 'Miles could not read this month\'s ad spend, so it cannot check your monthly ceiling. This needs your approval.' };
+  }
+  if ((input.spentMonth ?? 0) + spend > input.caps.monthlyCeiling) {
     return { effect: 'queue', mode, reason: 'This would pass the monthly ceiling you set. It needs your approval.' };
   }
   if (input.spentToday + spend > input.caps.dailyBudget) {

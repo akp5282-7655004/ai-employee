@@ -85,6 +85,37 @@ export interface CampaignCtx {
   city?: string;
   services?: string;
   offers?: string;
+  /** Claims the business profile or the site crawl backs up. Unset means none. */
+  claims?: VerifiedClaims;
+}
+
+/**
+ * Credential claims an ad may make only when the business shows them.
+ * "Licensed And Insured", "Experienced Crew", and "Locally Owned" are
+ * statements of fact about the business, so Miles does not print them on a
+ * guess. Every field defaults to false.
+ */
+export interface VerifiedClaims {
+  licensed?: boolean;
+  insured?: boolean;
+  experienced?: boolean;
+  locallyOwned?: boolean;
+}
+
+/** Read the claims a site's own text makes. Nothing found means nothing claimed. */
+export function claimsFromText(text: string | undefined): VerifiedClaims {
+  const t = (text || '').replace(/\s+/g, ' ');
+  return {
+    licensed: /(?<!\bnot\s)\blicen[sc]ed\b|\blicen[sc]e\s*(#|no\.?|number)\s*\w/i.test(t),
+    insured: /(?<!\bnot\s)\b(fully\s+)?insured\b/i.test(t),
+    experienced: /\b\d{1,3}\+?\s*(years?|yrs)\b(\s+of)?\s+(experience|in business)/i.test(t) || /\bsince\s+(19|20)\d{2}\b/i.test(t),
+    locallyOwned: /\b(locally|family)[\s-]+owned\b/i.test(t),
+  };
+}
+
+/** True when both licensing and insurance are backed up. */
+export function licensedAndInsured(claims?: VerifiedClaims): boolean {
+  return !!(claims?.licensed && claims?.insured);
 }
 
 const clampBudget = (n: unknown): number => {
@@ -331,7 +362,7 @@ function rsaFor(theme: string, ctx: CampaignCtx, brand: string): RsaSpec {
     fitCopy([cityTitle ? `Serving ${cityTitle}` : 'Serving your area'], 30),
     fitCopy([brand, themeTitle], 30),
     fitCopy([`${themeTitle} help`, themeTitle], 30),
-    'Licensed And Insured',
+    licensedAndInsured(ctx.claims) ? 'Licensed And Insured' : '',
     'Book A Visit',
     'Local Crew',
     'Call For A Visit',
@@ -393,7 +424,7 @@ function sitelinksOf(themes: string[], ctx: CampaignCtx, finalUrl: string): Site
   const base: { text: string; desc1: string; desc2: string; seg: string }[] = [
     { text: fitCopy([themes[0] || 'Our Services', 'Services'], 25), desc1: fitCopy([`Local ${(themes[0] || 'service').toLowerCase()}`, 'Local service'], 35), desc2: 'Clear timing', seg: 'services' },
     { text: 'Request A Visit', desc1: 'Talk through the work', desc2: 'No pressure', seg: 'visit' },
-    { text: 'About Us', desc1: fitCopy([ctx.city ? `Team in ${normalizeAdCase(ctx.city.split(',')[0] || '')}` : 'Local team', 'Local team'], 35), desc2: 'Licensed and insured', seg: 'about' },
+    { text: 'About Us', desc1: fitCopy([ctx.city ? `Team in ${normalizeAdCase(ctx.city.split(',')[0] || '')}` : 'Local team', 'Local team'], 35), desc2: licensedAndInsured(ctx.claims) ? 'Licensed and insured' : 'Local service team', seg: 'about' },
     { text: 'Contact Us', desc1: 'Call or message', desc2: 'We reply', seg: 'contact' },
   ];
   if (themes[1]) base.splice(1, 0, { text: fitCopy([themes[1], 'Services'], 25), desc1: fitCopy([`${themes[1]}`, 'More services'], 35), desc2: 'Ask about options', seg: 'services-2' });
@@ -402,8 +433,22 @@ function sitelinksOf(themes: string[], ctx: CampaignCtx, finalUrl: string): Site
 
 /** 4–6 callout assets (≤25 each), no punctuation-heavy text. */
 function calloutsOf(ctx: CampaignCtx): string[] {
-  const outs = ['Licensed And Insured', 'Locally Owned', 'Clear Pricing', 'Fast Response', 'Experienced Crew', 'Schedule A Visit'];
+  const outs = defaultCallouts(ctx.claims);
   return [...new Set(outs.map((line) => fitCopy([line], 25)).filter(Boolean))].slice(0, 6);
+}
+
+/** The default callout set. Credential callouts appear only when backed up. */
+export function defaultCallouts(claims?: VerifiedClaims): string[] {
+  return [
+    licensedAndInsured(claims) ? 'Licensed And Insured' : '',
+    claims?.locallyOwned ? 'Locally Owned' : '',
+    'Clear Pricing',
+    'Fast Response',
+    claims?.experienced ? 'Experienced Crew' : '',
+    'Schedule A Visit',
+    'Request A Visit',
+    'Call Or Message Us',
+  ].filter(Boolean).slice(0, 6);
 }
 
 /** Structured snippet — header "Service catalog" + the service themes as values (≥3). */

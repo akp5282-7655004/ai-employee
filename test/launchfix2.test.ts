@@ -116,7 +116,7 @@ describe('success messages are honest', () => {
     const app = buildServer({ authStore: store });
     const { cookie, id } = await signedUp(app, 'review@example.com');
     const data = await store.getUserData(id);
-    data.reviewQueue = [{ id: 'rq1', kind: 'email', title: 'Fall promo', body: 'Subject: Fall promo\nHello', status: 'pending' }];
+    data.reviewQueue = [{ id: 'rq1', kind: 'email', title: 'Fall promo', body: 'Subject: Fall promo\nHello', status: 'review' }];
     data.deploy = { auto: true, queue: [] };
     await store.setUserData(id, data);
     const res = await app.inject({ method: 'POST', url: '/api/review/approve', headers: { cookie }, payload: { id: 'rq1' } });

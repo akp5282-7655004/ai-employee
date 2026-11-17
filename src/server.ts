@@ -12,7 +12,7 @@ import { getConnector, type Connector } from './connectors/index.js';
 import type { ConnectedAccount } from './connectors/types.js';
 import { createReadThrough, withTimeout } from './connectors/readcache.js';
 import { withUserDataCache } from './db/cache.js';
-import { buildSnapshot, readSnapshot, snapshotAgeMs, spendRowsOf, STALE_MS, type PlatformSnapshot } from './metrics/snapshot.js';
+import { buildSnapshot, monthSpendOf, readSnapshot, snapshotAgeMs, spendRowsOf, STALE_MS, type PlatformSnapshot } from './metrics/snapshot.js';
 import { loadConfig, pipedreamReady } from './config.js';
 import { financingWarnings, getPack, listPacks, validateIntake } from './packs/index.js';
 import { LSA_TRADES, LSA_BLENDED, LSA_VS_GOOGLE, BENCHMARK_META, BENCHMARK_HUB, hubCoverage } from './packs/benchmarks.js';
@@ -30,7 +30,7 @@ import { briefFromSelection, buildLibrary, filterLibrary, libraryFacets, readSel
 import { buildMetaAssets, buildSearchAssets, checkMetaPack, checkSearchPack } from './creative/tospec.js';
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
-import { buildCampaignSpec, validateCampaignSpec, campaignSummary, normalizeSiteUrl, repairCampaignUrls, type CampaignSpec } from './agents/campaign.js';
+import { buildCampaignSpec, claimsFromText, validateCampaignSpec, campaignSummary, normalizeSiteUrl, repairCampaignUrls, type CampaignSpec } from './agents/campaign.js';
 import { googleResourceMissing, judgeEnableReadback } from './agents/enablecheck.js';
 import { housekeepingProposals } from './agents/rulebook.js';
 import { acceptApprovedPlan, applyPlanAnswer, areaGuess, buildSearchPlan, type PlanProfile } from './agents/campaignplan.js';
@@ -83,7 +83,7 @@ import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, re
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
 import { buildBundle, competitorAudit, crawlFacts, performanceAudit, readPublicPage, setupPlacement, websiteAudit } from './agents/journey.js';
 import { planGo } from './agents/milesrun.js';
-import { decidePolicy } from './agents/policy.js';
+import { decidePolicy, overDailyCap } from './agents/policy.js';
 import { dueSkills, periodKey } from './agents/skillclock.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { facebookDaily, META_NOT_CONNECTED, publicImage } from './agents/metalaunch.js';
@@ -161,7 +161,7 @@ import { aggregateNetwork, type WorkspaceSignal } from './usage/network.js';
 import { deliveryStatus, sendEmail, sendSms, smsExcerpt } from './delivery/send.js';
 import { parseBudget, toE164, trimText } from './identity/fields.js';
 import { addOptOut, e164, effectiveQuietHours, inQuietHours, isOptedOut, isStopMessage, payloadOptsOut, smsResult, smsRunHead, type SmsResult } from './agents/smsguard.js';
-import { grantedIdentity, launchCreditStatus, maybeGrantLaunchCredit, LAUNCH_WAIT } from './billing/launchcredit.js';
+import { grantedIdentity, grantLaunchCreditOnce, launchCreditStatus, needsEmailRecord, launchEmailKey, LAUNCH_WAIT } from './billing/launchcredit.js';
 import { addLead, leadCounts, readLeads, setLeadStatus } from './crm/leads.js';
 import { searchCompetitors } from './research/places.js';
 import { attributeRevenue } from './revenue/attribution.js';
@@ -522,7 +522,14 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const id = grantedIdentity(await authStore.getUserData(user.id));
       if (id) others.push(id);
     }
-    const credit = maybeGrantLaunchCredit(data, progress.ready, others);
+    // Once per email, kept outside the account so deleting it and signing up again earns nothing.
+    const email = launchEmailKey(users.find((user) => user.id === userId)?.email || '');
+    const claimEmail = async () => !!email && authStore.claimLaunchCredit(email, userId);
+    if (needsEmailRecord(data) && email) {
+      await authStore.claimLaunchCredit(email, userId);
+      data.launchCredit = { ...(data.launchCredit as Record<string, unknown>), emailClaimed: true };
+    }
+    const credit = await grantLaunchCreditOnce(data, progress.ready, others, claimEmail);
     await authStore.setUserData(userId, data);
     return { data, progress, credit };
   };
@@ -1863,6 +1870,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       planApproved: raw.planApproved === true,
     };
   };
+  /** The account's daily cap: the saved Miles cap, else the profile's daily budget. 0 when none is set. */
+  const accountDailyCap = (data: Record<string, unknown>): number => {
+    const caps = milesOf(data).bundle?.setup.caps;
+    if (caps && caps.dailyBudget > 0) return caps.dailyBudget;
+    const profileDaily = Number((data.profile as Record<string, string> | undefined)?.dailyBudget);
+    return Number.isFinite(profileDaily) && profileDaily > 0 ? profileDaily : 0;
+  };
   const rememberMiles = (data: Record<string, unknown>, miles: MilesFile, text: string, go = false) => {
     miles.events = [{ ts: new Date().toISOString(), text }, ...miles.events].slice(0, 40);
     if (go) miles.goNote = text;
@@ -2118,9 +2132,19 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       keywordFocus: profile.keywordFocus,
       gbpUrl: setup?.gbpUrl || profile.gbpUrl,
       links: miles.crawl?.links,
+      claims: claimsFromText(miles.crawl?.text),
     };
   };
+  /** This month's ad spend for the monthly ceiling. Null when it cannot be read. */
+  const monthSpendFor = async (uid: string): Promise<number | null> => {
+    const stored = readSnapshot(await authStore.getUserData(uid));
+    if (stored && snapshotAgeMs(stored) <= STALE_MS) return monthSpendOf(stored);
+    return monthSpendOf(await refreshSnapshot(uid));
+  };
   const runMilesGoBody = async (uid: string, email: string, explicitCreate: boolean, submitted?: CampaignSpec): Promise<GoResult> => {
+    // Spend is read before the account blob, because a snapshot refresh writes that blob too.
+    const peek = milesOf(await authStore.getUserData(uid)).bundle?.setup;
+    const spentMonth = peek && (peek.areaModes?.ppc ?? peek.mode) === 'automate' ? await monthSpendFor(uid) : null;
     const data = await authStore.getUserData(uid);
     const miles = milesOf(data);
     if (!miles.bundle) return { error: 'Save the three questions first.', code: 400 as const };
@@ -2135,6 +2159,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const chosen = submitted?.name ? acceptApprovedPlan(submitted) : standing;
     if (!miles.campaignResource && mode !== 'manual' && !miles.bundle.setup.caps.paused && savedSiteEarly && !chosen) {
       return { error: 'Review the campaign plan and approve it before Miles launches. Nothing was created.', code: 400 as const, needsPlan: true, created: false };
+    }
+    // The daily cap is the safety floor. A plan above it is refused, never created or enabled.
+    const planDaily = Number((chosen ?? miles.bundle.spec)?.dailyBudget) || 0;
+    const overCap = overDailyCap(planDaily, miles.bundle.setup.caps.dailyBudget);
+    if (overCap) {
+      rememberMiles(data, miles, overCap, true);
+      await authStore.setUserData(uid, data);
+      return { error: overCap, code: 400 as const, created: false, enabled: false };
     }
     if (chosen && !miles.campaignResource) {
       const profile = (data.profile ?? {}) as Record<string, string>;
@@ -2156,8 +2188,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       areaModes: miles.bundle.setup.areaModes,
       caps: miles.bundle.setup.caps,
       spentToday: 0,
-      spentMonth: 0,
-      dailySpend: daily,
+      spentMonth,
+      dailySpend: Math.max(daily, planDaily),
       explicitCreate: explicitCreate || !!submitted?.name,
       campaignOnFile: !!miles.campaignResource,
     });
@@ -2614,6 +2646,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const miles = milesOf(data);
     const item = miles.inbox.find((row) => row.id === req.body?.id && row.status === 'queued');
     if (!item) return reply.code(404).send({ error: 'That item is not waiting.' });
+    if (item.kind === 'enable' || item.kind === 'create') {
+      const overCap = overDailyCap(Number(miles.bundle?.spec?.dailyBudget) || 0, miles.bundle?.setup.caps.dailyBudget || 0);
+      if (overCap) return reply.code(400).send({ ok: false, enabled: false, error: overCap, note: overCap });
+    }
     item.status = 'applied';
     data.miles = miles;
     await authStore.setUserData(u.id, data);
@@ -2885,9 +2921,24 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (req.body?.confirm !== 'DELETE') return reply.code(400).send({ error: 'Type DELETE to confirm. Nothing was removed.' });
     const data = await authStore.getUserData(u.id);
     const sub = billingState(data);
-    if (sub.stripeSubscriptionId && stripeReady()) {
-      try { await cancelStripeSubscription(sub.stripeSubscriptionId, false); } catch { /* recorded below */ }
+    // A subscription that is not cancelled keeps billing, so the account stays until it is.
+    if (sub.stripeSubscriptionId && sub.status !== 'canceled') {
+      let failed = '';
+      try {
+        const cancelled = await cancelStripeSubscription(sub.stripeSubscriptionId, false);
+        if ('error' in cancelled) failed = cancelled.error;
+      } catch (err) {
+        failed = String((err as Error)?.message || err);
+      }
+      if (failed) {
+        return reply.code(502).send({
+          ok: false,
+          deleted: false,
+          error: 'Miles could not cancel your subscription with Stripe, so your account was not deleted and nothing was removed. Try again in a few minutes, or cancel the plan from Billing first.',
+        });
+      }
     }
+    if (launchCreditStatus(data) === 'granted') await authStore.claimLaunchCredit(launchEmailKey(u.email), u.id);
     try {
       const accounts = await accountsList(u.id);
       for (const account of accounts) {
@@ -3898,11 +3949,29 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    const d = (req.body as { deploy?: any })?.deploy ?? { auto: false, queue: [] };
-    if (Array.isArray(d.queue)) d.queue = d.queue.slice(0, 300);
-    data.deploy = d;
+    // The change log is written by the server. The browser may switch auto-deploy and
+    // move an entry the server already logged (approve pending to live, or revert it).
+    // It cannot add, rewrite, backdate, or remove an entry; anything else it sends is ignored.
+    const incoming = ((req.body as { deploy?: { auto?: unknown; queue?: unknown } } | undefined)?.deploy ?? {});
+    const current = (data.deploy as { auto?: boolean; queue?: any[]; lastDeployedAt?: string } | undefined) ?? { auto: false, queue: [] };
+    const queue: any[] = Array.isArray(current.queue) ? current.queue : [];
+    const rows = (Array.isArray(incoming.queue) ? incoming.queue : []).filter((row: any) => row && typeof row.id === 'string') as { id: string; status?: unknown }[];
+    const wanted = new Map(rows.map((row) => [row.id, row.status]));
+    const known = new Set(queue.map((row) => row?.id));
+    const now = new Date().toISOString();
+    for (const row of queue) {
+      const next = wanted.get(row?.id);
+      if (next === 'live' && row.status === 'pending') {
+        Object.assign(row, { status: 'live', deployedAt: now, approvedAt: now, approvedBy: u.email });
+        current.lastDeployedAt = now;
+      } else if (next === 'reverted' && (row.status === 'pending' || row.status === 'live')) {
+        Object.assign(row, { status: 'reverted', revertedAt: now, revertedBy: u.email });
+      }
+    }
+    if (typeof incoming.auto === 'boolean') current.auto = incoming.auto;
+    data.deploy = { ...current, queue };
     await authStore.setUserData(u.id, data);
-    return { ok: true };
+    return { ok: true, ignored: rows.filter((row) => !known.has(row.id)).length };
   });
 
   // ── "Miles, do this" — a plain-language request becomes a finished draft ───
@@ -3969,6 +4038,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(u.id);
     const item = ((data.reviewQueue as any[]) ?? []).find((i) => i.id === id);
     if (!item) return reply.code(404).send({ error: 'not found' });
+    // Approve once. A second press must not log a second change or send the email again.
+    if (item.status !== 'review') {
+      if (item.status !== 'approved') return reply.code(409).send({ ok: false, error: 'That draft is no longer waiting for review. Nothing was changed.' });
+      const logged = (((data.deploy as { queue?: any[] } | undefined)?.queue) ?? []).find((row) => row?.id === item.id);
+      return { ok: true, already: true, status: logged?.status ?? 'pending', emailed: false, emailReady: deliveryStatus().email };
+    }
     item.status = 'approved';
     const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
     deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
@@ -4184,7 +4259,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       access: workAccess(data),
       lowCredit: lowCredit(credits),
       launchCredit: launchCreditStatus(data),
-      launchMessage: launchCreditStatus(data) === 'granted' ? '$100 in credits is unlocked.' : launchCreditStatus(data) === 'duplicate' ? 'This business already received the $100 credit.' : LAUNCH_WAIT,
+      launchMessage: launchCreditStatus(data) === 'granted' ? '$100 in credits is unlocked.' : launchCreditStatus(data) === 'duplicate' ? 'This business or email address already received the $100 credit.' : LAUNCH_WAIT,
       note: (credits.launchOffer && sub.band !== 'starter' && sub.band !== 'growth' && sub.band !== 'scale'
         ? `Launch offer: $0 a month and $${LAUNCH_GRANT} in credits. $${credits.remaining.toFixed(2)} remaining. Images are $0.10, voiceover is $0.50, video is $1.50. Text, chat, campaign builds, audits, skills, and agent runs also draw from this balance at OpenRouter cost plus a 75% margin. Monitoring stays free. `
         : '') + (paymentsConnected
@@ -4828,6 +4903,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const spec = forcePausedSearchSpec(incoming);
     const problems = validateCampaignSpec(spec);
     if (problems.length) return reply.code(400).send({ error: 'Campaign not ready to launch', problems });
+    const overCap = overDailyCap(spec.dailyBudget, accountDailyCap(await authStore.getUserData(u.id)));
+    if (overCap) return reply.code(400).send({ ok: false, live: false, status: 'PAUSED', activation: 'disabled', error: overCap });
     if (!connector.launchCampaign) return reply.code(400).send({ error: 'This connector cannot launch campaigns.' });
     if (isDemoAccount(u.email) && connector.name !== 'mock') {
       return reply.code(403).send({ ok: false, live: false, status: 'PAUSED', activation: 'disabled', error: 'The public demo cannot create a campaign in a live ad account.' });
@@ -4973,7 +5050,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         primaryText: pack.primaryTexts[0] || (studio ? strip(studio.body) : undefined),
         description: pack.descriptions[0],
       },
-      { business: p.businessName, industry: p.industry, city, serviceAreas: p.serviceAreas, services: p.services },
+      { business: p.businessName, industry: p.industry, city, serviceAreas: p.serviceAreas, services: p.services, claims: claimsFromText(miles.crawl?.text) },
     );
     const issues = validateMetaCampaignSpec(spec);
     if (cap > 0 && spec.dailyBudget > cap) issues.push(`Daily budget $${spec.dailyBudget} is above your $${cap} daily cap.`);
@@ -5226,6 +5303,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       await authStore.setUserData(u.id, data);
       return reply.code(409).send({ ok: false, live: false, plan, error: search?.reason || 'Search is not executable.', created: false });
     }
+    const searchDaily = plan.searchCampaigns.reduce((sum, row) => sum + (Number(row.spec.dailyBudget) || 0), 0);
+    const overCap = overDailyCap(searchDaily, accountDailyCap(data));
+    if (overCap) return reply.code(400).send({ ok: false, live: false, plan, error: overCap, created: false });
     const digits = (id: string) => id.replace(/[^\d]/g, '');
     let targets: { id: string; label: string }[] = [];
     const savedGoogle = await authStore.getUserData(u.id);
@@ -5309,6 +5389,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       productionBlocked: connector.googleAdsBlock?.(u.id)?.kind === 'connect_production_unavailable',
     });
     if (!decision.allowed) return reply.code(403).send({ ...decision, executed: false });
+    const overCap = overDailyCap(Math.max(requested || 0, Number(owned?.daily) || 0), accountDailyCap(data));
+    if (overCap) return reply.code(403).send({ allowed: false, providerCalled: false, executed: false, reason: overCap });
     if (connector.name === 'mock' || isDemoAccount(u.email)) {
       return reply.code(403).send({ allowed: false, providerCalled: false, executed: false, reason: 'Demo mode does not enable a live campaign.' });
     }
@@ -5796,6 +5878,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(u.id);
     const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
     deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
+    // Apply once. A second press must not log a second change.
+    if (recState(data).applied?.[rec.id]) {
+      const logged = deploy.queue.find((row) => row?.id === rec.id);
+      return { ok: true, already: true, status: logged?.status ?? 'pending' };
+    }
     const status = deploy.auto ? 'live' : 'pending';
     if (rec.apply?.kind === 'enable_speed_to_lead') {
       const s = (data.speedToLead as Record<string, unknown>) ?? {};
@@ -7535,7 +7622,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
               areaModes: milesTick.bundle.setup.areaModes,
               caps: milesTick.bundle.setup.caps,
               spentToday: 0,
-              spentMonth: 0,
+              spentMonth: monthSpendOf(readSnapshot(data)),
               action: {
                 area: 'ppc',
                 kind: 'optimize',

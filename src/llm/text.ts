@@ -11,6 +11,9 @@ export function textLlmReady(): boolean {
   return !!(process.env.OPENROUTER_API_KEY || process.env.ANTHROPIC_API_KEY);
 }
 
+/** A model call that has not answered by now falls back like a failed one. */
+export const TEXT_TIMEOUT_MS = 20_000;
+
 export interface TextRequest {
   system: string;
   user: string;
@@ -34,6 +37,7 @@ async function viaOpenRouter(req: TextRequest, maxTokens: number): Promise<strin
         'HTTP-Referer': 'https://miles.ai',
         'X-Title': 'Miles',
       },
+      signal: AbortSignal.timeout(TEXT_TIMEOUT_MS),
       body: JSON.stringify({
         model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
         max_tokens: maxTokens,
@@ -69,13 +73,13 @@ async function viaAnthropic(req: TextRequest, maxTokens: number): Promise<string
     const importDynamic = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
     const mod = await importDynamic('@anthropic-ai/sdk');
     const Anthropic = mod.default ?? mod.Anthropic ?? mod;
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: TEXT_TIMEOUT_MS });
     const res = await client.messages.create({
       model: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
       max_tokens: maxTokens,
       system: req.system,
       messages: [{ role: 'user', content: req.user }],
-    });
+    }, { timeout: TEXT_TIMEOUT_MS, signal: AbortSignal.timeout(TEXT_TIMEOUT_MS) });
     const model = String(res.model ?? process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5-20251001');
     const inTok = Number(res.usage?.input_tokens) || 0;
     const outTok = Number(res.usage?.output_tokens) || 0;
