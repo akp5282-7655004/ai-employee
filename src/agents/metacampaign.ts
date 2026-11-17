@@ -117,13 +117,13 @@ export function buildMetaCampaignSpec(input: MetaCampaignInput, ctx: MetaCampaig
     pb.offer.reasonWhy,
     pb.offer.stack.join(' '),
     input.financing ? pb.offer.financing : '',
-    'Licensed and insured, real local crew. Tap below for a fast, no-pressure quote.',
+    'A real local crew. Tap below for a fast, no-pressure quote.',
   ].filter(Boolean).join('\n\n')).slice(0, 600);
   const checked = guardCopy(drafted);
-  const primaryText = checked.ok ? checked.text : ownerText('Licensed and insured, real local crew. Tap below for a fast, no-pressure quote.');
+  const primaryText = checked.ok ? checked.text : ownerText('A real local crew. Tap below for a fast, no-pressure quote.');
 
   const headline = ownerText(input.headline || offerLine.split(',')[0] || '').slice(0, 40) || `${ctx.business || trade} in ${ctx.city || 'your area'}`;
-  const description = ownerText(input.description || pb.offer.riskReversal[0] || 'Licensed and insured. Free estimate').slice(0, 60);
+  const description = ownerText(input.description || pb.offer.riskReversal[0] || 'Request an estimate').slice(0, 60);
   const imageUrl = /^https:\/\//i.test(input.imageUrl || '') ? input.imageUrl : undefined;
 
   return {

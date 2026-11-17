@@ -187,14 +187,26 @@ describe('what an empty balance is told to do next', () => {
     try { return canAfford(data, 'video').reason ?? ''; } finally { delete process.env.BILLING_ENFORCE; }
   };
 
-  it('sends a free account to pick a plan, not to a top-up it cannot buy', () => {
+  it('sends a free account that used its credits to pick a plan, not to a top-up it cannot buy', () => {
     // A top-up charges the card saved at checkout. A free account has none.
-    for (const data of [empty(), empty({ band: 'launch', status: 'active' }), empty({ band: 'starter', status: 'canceled' })]) {
+    const spent = (billing?: Record<string, unknown>): Record<string, unknown> => ({
+      ...(billing ? { billing } : {}), launchCredit: { status: 'granted' }, credits: { granted: 100, spent: 100, ledger: [] },
+    });
+    for (const data of [spent(), spent({ band: 'launch', status: 'active' }), spent({ band: 'starter', status: 'canceled' })]) {
       const r = reason(data);
+      expect(r).toMatch(/Out of credits/);
       expect(r).toMatch(/Pick a plan on Plan & Credits/);
       expect(r).toMatch(/\$149 a month/);
       expect(r).not.toMatch(/Add \$/);
     }
+  });
+
+  it('tells an account that never had credits how to get the free ones', () => {
+    // New accounts start at zero until three tools are connected.
+    const r = reason(empty());
+    expect(r).toMatch(/Connect 3 tools on Integrations to unlock \$100/);
+    expect(r).toMatch(/or pick a plan on Plan & Credits/);
+    expect(r).not.toMatch(/Add \$/);
   });
 
   it('offers the top-up for the plan the account is on', () => {

@@ -489,6 +489,13 @@ export function outOfCreditsReason(data: Record<string, unknown>): string {
     const upgrade = nextBandName(band);
     return `${head} Add $${band.topUp.toFixed(2)} on Plan & Credits${upgrade ? `, or upgrade to ${upgrade}` : ''}.`;
   }
+  // A new account has no credits until three tools are connected. Telling it
+  // only to buy a plan hides the free way forward.
+  const launch = (data.launchCredit as { status?: string } | undefined)?.status;
+  const everFunded = creditState(data).granted > 0;
+  if (!everFunded && launch !== 'granted' && launch !== 'duplicate') {
+    return `Miles has no credits to work with yet. Connect 3 tools on Integrations to unlock $${LAUNCH_GRANT} in credits, or pick a plan on Plan & Credits. Plans start at $${BANDS[0]!.monthlyPrice} a month. You can still view your reports and data.`;
+  }
   return `${head} Pick a plan on Plan & Credits to keep going. Plans start at $${BANDS[0]!.monthlyPrice} a month.`;
 }
 

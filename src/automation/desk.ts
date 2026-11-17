@@ -118,7 +118,7 @@ export function feedTitles(input: DailyInput): Finding[] {
   const city = input.city || 'your city';
   const lead = services[0] || doc.keywords[0] || doc.label;
   const headline = clip(`${lead} in ${city}`, 30);
-  const description = clip(`${input.offer || lead}. Licensed and insured. Call for a quote in ${city}.`, 90);
+  const description = clip(`${input.offer || lead}. Call for a quote in ${city}.`, 90);
   return [{
     id: 'feed-titles-gaps',
     skill: 'feed-titles',

@@ -5,6 +5,7 @@
  * null so the UI falls back to a templated preview. Flux Schnell is the default
  * image model — cheap and fast, the right pick for high-volume local-service work.
  */
+import { paidWorkRefusal } from '../billing/costsink.js';
 export function falReady(): boolean {
   return !!process.env.FAL_KEY;
 }
@@ -37,6 +38,7 @@ async function falClient(key: string): Promise<any> {
 export async function falGenerateImage(prompt: string, opts: ImageOpts = {}): Promise<string | null> {
   const key = process.env.FAL_KEY;
   if (!key) return null;
+  if (paidWorkRefusal()) return null;
   try {
     const fal = await falClient(key);
     const model =
@@ -70,6 +72,7 @@ export interface VideoOpts {
 export async function falGenerateVideo(prompt: string, opts: VideoOpts = {}): Promise<string | null> {
   const key = process.env.FAL_KEY;
   if (!key) return null;
+  if (paidWorkRefusal()) return null;
   try {
     const fal = await falClient(key);
     const model = opts.model || process.env.FAL_VIDEO_MODEL || 'fal-ai/kling-video/v1/standard/text-to-video';
@@ -97,6 +100,7 @@ export interface AudioOpts {
 export async function falGenerateAudio(text: string, opts: AudioOpts = {}): Promise<string | null> {
   const key = process.env.FAL_KEY;
   if (!key || !text.trim()) return null;
+  if (paidWorkRefusal()) return null;
   try {
     const fal = await falClient(key);
     const model = opts.model || process.env.FAL_TTS_MODEL || 'fal-ai/playai/tts/v3';

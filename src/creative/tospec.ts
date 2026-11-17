@@ -106,16 +106,16 @@ export function buildSearchAssets(input: SpecAssetInput): SearchAssetPack {
     `${Trade} Near You`,
     `Trusted ${Trade} Pros`,
     offer && offer.length <= HL_CHARS ? offer : '',
-    `Free ${Trade} Quote`,
+    `${Trade} Quote`,
     `Book ${Trade} Today`,
     city ? `${Trade} in ${city}` : `Expert ${Trade}`,
-    'Licensed & Insured',
-    'Same-Week Booking',
-    'Upfront, Honest Pricing',
-    'Free Estimates',
-    '5-Star Rated Locally',
-    'Workmanship Guaranteed',
-    'No-Obligation Quote',
+    'Request A Quote',
+    'Ask About Scheduling',
+    'Pricing Before We Start',
+    'Get An Estimate',
+    'Local Crew',
+    'See Recent Work',
+    'No-Pressure Quote',
     'Talk To A Real Person',
     'Get A Quote Today',
     'Fast, Tidy, On Time',
@@ -132,24 +132,24 @@ export function buildSearchAssets(input: SpecAssetInput): SearchAssetPack {
   // the quota rather than leaving the owner short.
   const descriptionCandidates = [
     `${Trade}${where} done right first time.${offer ? ` ${offer}.` : ''} Fast, tidy, on schedule.`,
-    `Licensed, insured and locally reviewed. Clear pricing before we start.`,
-    offer ? `${offer}. Get a no-obligation quote and pick a slot that suits you.` : `Free quotes, and a slot that suits you. Real people answer the phone.`,
-    `Tidy crews, on-time arrivals and a written guarantee on every job.`,
+    `A local crew for your ${trade} job. Clear pricing before we start.`,
+    offer ? `${offer}. Get a no-obligation quote and pick a slot that suits you.` : `Get a quote and pick a slot that suits you. Real people answer the phone.`,
+    `Tell us about the job and we will walk you through timing and price.`,
     `Talk to a real person about your ${trade} job. No call centres, no pressure.`,
     `Upfront pricing, no surprises on the day. Book online in under a minute.`,
-    `Locally owned and 5-star rated. See recent work before you decide.`,
+    `See recent work before you decide. Ask us anything about the job.`,
   ];
   const descriptions = fit(descriptionCandidates, DE_CHARS, DE_MAX);
 
   const displayPaths = fit(
-    [trade.replace(/\s+/g, '-'), city ? city.split(',')[0]!.replace(/\s+/g, '-') : 'free-quote', 'quote'],
+    [trade.replace(/\s+/g, '-'), city ? city.split(',')[0]!.replace(/\s+/g, '-') : 'get-quote', 'quote'],
     PATH_CHARS, PATH_MAX,
   );
 
   const sitelinkCandidates: Sitelink[] = [
-    { text: 'Get A Free Quote', desc1: 'No obligation, no pressure', desc2: 'Usually back within a day' },
+    { text: 'Get A Quote', desc1: 'No obligation, no pressure', desc2: 'Tell us about the job' },
     { text: 'See Our Work', desc1: 'Recent jobs and before/afters' },
-    { text: 'Reviews', desc1: 'What local customers say' },
+    { text: 'About Us', desc1: 'Meet the crew' },
     { text: 'Our Services', desc1: services.slice(0, 2).join(', ') || `Everything ${trade}` },
     { text: 'Book Online', desc1: 'Pick a slot that suits you' },
     { text: 'Contact Us', desc1: 'Real people, real answers' },
@@ -168,14 +168,14 @@ export function buildSearchAssets(input: SpecAssetInput): SearchAssetPack {
   }
 
   const callouts = fit(
-    ['Licensed & Insured', 'Free Estimates', 'Locally Owned', 'Written Guarantee',
-     'Same-Week Booking', 'Upfront Pricing', 'Tidy Crews', 'On-Time Arrival'],
+    ['Request A Quote', 'Get An Estimate', 'Local Crew', 'See Recent Work',
+     'Ask About Scheduling', 'Pricing Before We Start', 'Talk To A Real Person', 'Book Online'],
     CO_CHARS, CO_WANT,
   );
 
   const header = SS_HEADERS.includes('Service catalog') ? 'Service catalog' : SS_HEADERS[0]!;
   const snippetValues = fit(
-    services.length ? services.map(title) : [Trade, 'Repairs', 'Installation', 'Maintenance', 'Free Quotes'],
+    services.length ? services.map(title) : [Trade, 'Repairs', 'Installation', 'Maintenance', 'Quotes'],
     SS_CHARS, ss?.fields?.values?.max_count ?? 10,
   );
 
@@ -208,28 +208,28 @@ export function buildMetaAssets(input: SpecAssetInput): MetaAssetPack {
   const where = city ? ` in ${city}` : ' near you';
 
   const primaryTexts = fit([
-    `Looking for ${trade}${where}?${offer ? ` ${offer}.` : ''} Get a free quote today — no obligation.`,
-    `${offer || 'Free estimates'} on ${trade}${where}. Licensed, insured, and locally reviewed.`,
-    `Tired of chasing contractors? We answer, we turn up, and we finish. ${offer || 'Free quote'}.`,
-    `Clear pricing before we start. ${offer || 'Book a free estimate'} and pick a slot that suits you.`,
-    `Your neighbours already booked us for ${trade}. ${offer || 'See what a job costs'} — free quote.`,
+    `Looking for ${trade}${where}?${offer ? ` ${offer}.` : ''} Get a quote today, no obligation.`,
+    `${offer || 'Estimates'} on ${trade}${where}. A local crew, and clear pricing before we start.`,
+    `Tired of chasing contractors? We answer the phone and tell you what to expect. ${offer || 'Request a quote'}.`,
+    `Clear pricing before we start. ${offer || 'Book an estimate'} and pick a slot that suits you.`,
+    `Thinking about ${trade}${where}? ${offer || 'See what a job costs'}. Request a quote.`,
   ], PT_CHARS, PT_MAX);
 
   const headlines = fit([
     offer && offer.length <= HL_CHARS ? offer : '',
     city ? `${Trade} in ${city}` : `${Trade} Near You`,
-    'Get Your Free Quote',
+    'Get Your Quote',
     'Book In Under A Minute',
-    'Licensed & Insured',
-    'Free Estimates',
+    'Local Crew',
+    'Get An Estimate',
   ], HL_CHARS, HL_MAX);
 
   const descriptions = fit([
-    'Free, no-obligation quote',
-    'Locally owned & reviewed',
-    'Upfront, honest pricing',
-    'Written guarantee',
-    'Same-week booking',
+    'No-obligation quote',
+    'A local crew',
+    'Pricing before we start',
+    'See recent work',
+    'Ask about scheduling',
   ], DE_CHARS, DE_MAX);
 
   const shortfalls: string[] = [];

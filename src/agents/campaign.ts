@@ -333,7 +333,7 @@ function rsaFor(theme: string, ctx: CampaignCtx, brand: string): RsaSpec {
     fitCopy([cityTitle ? `Serving ${cityTitle}` : 'Serving your area'], 30),
     fitCopy([brand, themeTitle], 30),
     fitCopy([`${themeTitle} help`, themeTitle], 30),
-    'Licensed And Insured',
+    'Get A Quote',
     'Book A Visit',
     'Local Crew',
     'Call For A Visit',
@@ -395,7 +395,7 @@ function sitelinksOf(themes: string[], ctx: CampaignCtx, finalUrl: string): Site
   const base: { text: string; desc1: string; desc2: string; seg: string }[] = [
     { text: fitCopy([themes[0] || 'Our Services', 'Services'], 25), desc1: fitCopy([`Local ${(themes[0] || 'service').toLowerCase()}`, 'Local service'], 35), desc2: 'Clear timing', seg: 'services' },
     { text: 'Request A Visit', desc1: 'Talk through the work', desc2: 'No pressure', seg: 'visit' },
-    { text: 'About Us', desc1: fitCopy([ctx.city ? `Team in ${normalizeAdCase(ctx.city.split(',')[0] || '')}` : 'Local team', 'Local team'], 35), desc2: 'Licensed and insured', seg: 'about' },
+    { text: 'About Us', desc1: fitCopy([ctx.city ? `Team in ${normalizeAdCase(ctx.city.split(',')[0] || '')}` : 'Local team', 'Local team'], 35), desc2: 'Meet the crew', seg: 'about' },
     { text: 'Contact Us', desc1: 'Call or message', desc2: 'We reply', seg: 'contact' },
   ];
   if (themes[1]) base.splice(1, 0, { text: fitCopy([themes[1], 'Services'], 25), desc1: fitCopy([`${themes[1]}`, 'More services'], 35), desc2: 'Ask about options', seg: 'services-2' });
@@ -404,7 +404,7 @@ function sitelinksOf(themes: string[], ctx: CampaignCtx, finalUrl: string): Site
 
 /** 4–6 callout assets (≤25 each), no punctuation-heavy text. */
 function calloutsOf(ctx: CampaignCtx): string[] {
-  const outs = ['Licensed And Insured', 'Locally Owned', 'Clear Pricing', 'Fast Response', 'Experienced Crew', 'Schedule A Visit'];
+  const outs = ['Request A Quote', 'Local Crew', 'Clear Pricing', 'Call Or Message', 'Ask About Timing', 'Schedule A Visit'];
   return [...new Set(outs.map((line) => fitCopy([line], 25)).filter(Boolean))].slice(0, 6);
 }
 

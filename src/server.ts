@@ -61,10 +61,10 @@ import {
 } from './skills/deploy.js';
 import {
   applyCosts, closeCostContext, costLedger, drainCosts, openCostContext,
-  pendingAccounts, setCostAccount, UNCLAIMED, withCostAccount,
+  pendingAccounts, setCostAccount, UNCLAIMED, withCostAccount, blockPaidWork, refusedPaidWork,
 } from './billing/costsink.js';
 import { itemEconomics, PRICES_STAMPED, rollup, TARGET_MARGIN, THIN_MARGIN, unpricedWork } from './billing/cogs.js';
-import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS, canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS, writeCredits, LAUNCH_GRANT, settleTopUp, nextBandName } from './billing/credits.js';
+import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS, canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS, writeCredits, LAUNCH_GRANT, settleTopUp, nextBandName, outOfCreditsReason } from './billing/credits.js';
 import { setupProgress } from './onboarding/tools.js';
 import { approveChange, CREDIT_PAUSE, dailyDue, planActions, revertChange, runDailyRead } from './automation/engine.js';
 import { buildOrgChart } from './automation/org.js';
@@ -297,6 +297,35 @@ async function renderAdImage(prompt: string, modelId?: string): Promise<string |
   return url;
 }
 
+/**
+ * Just enough Markdown for the legal pages: headings, bold, lists, rules and
+ * paragraphs. Everything is escaped first, so the source can never inject markup.
+ */
+function renderLegal(md: string): string {
+  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const inline = (t: string) => esc(t).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  const out: string[] = [];
+  let list: 'ul' | 'ol' | null = null;
+  const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const raw of md.split('\n')) {
+    const line = raw.trimEnd();
+    const h = /^(#{1,3})\s+(.*)$/.exec(line);
+    const li = /^\s*-\s+(.*)$/.exec(line);
+    const ol = /^\s*\d+\.\s+(.*)$/.exec(line);
+    if (h) { close(); const n = h[1]!.length; out.push(`<h${n}>${inline(h[2]!)}</h${n}>`); }
+    else if (/^---+$/.test(line)) { close(); out.push('<hr>'); }
+    else if (li || ol) {
+      const want = li ? 'ul' : 'ol';
+      if (list !== want) { close(); out.push(`<${want}>`); list = want; }
+      out.push(`<li>${inline((li ?? ol)![1]!)}</li>`);
+    }
+    else if (!line.trim()) close();
+    else { close(); out.push(`<p>${inline(line)}</p>`); }
+  }
+  close();
+  return out.join('\n');
+}
+
 export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   const app = Fastify({ logger: false });
 
@@ -307,7 +336,12 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
     (req as unknown as { rawBody: Buffer }).rawBody = body as Buffer;
     if (!body.length) { done(null, {}); return; }
-    try { done(null, JSON.parse(body.toString('utf8'))); } catch (err) { done(err as Error); }
+    try { done(null, JSON.parse(body.toString('utf8'))); } catch {
+      // The sender's mistake, not ours: 400, and nothing in the error log.
+      const bad = new Error('That request was not valid JSON. Nothing was changed.') as Error & { statusCode: number };
+      bad.statusCode = 400;
+      done(bad);
+    }
   });
 
   /**
@@ -349,6 +383,23 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     );
     // Only meaningful over TLS, and harmful to send from a plain-HTTP dev server.
     if (isHostedDeploy()) reply.header('strict-transport-security', 'max-age=15552000; includeSubDomains');
+  });
+
+  /**
+   * Out of credits is an answer, not a quiet downgrade. When a paid call was
+   * refused during a write request, the handler has usually carried on with a
+   * canned fallback and would report success. Replace that with a 402 and the
+   * reason, so the owner is told to add credits instead of being handed filler.
+   * Reads are left alone: a dashboard that wanted an AI summary still loads.
+   */
+  app.addHook('onSend', async (req, reply, payload) => {
+    if (req.method === 'GET' || req.method === 'HEAD') return payload;
+    const reason = refusedPaidWork();
+    if (!reason || reply.statusCode >= 400) return payload;
+    reply.code(402);
+    reply.header('content-type', 'application/json; charset=utf-8');
+    reply.removeHeader('content-length');
+    return JSON.stringify({ ok: false, error: reason, outOfCredits: true, upgrade: true });
   });
 
   // Compress every text/JSON response above ~1KB. Node's zlib only — no extra
@@ -684,6 +735,15 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const s = await authStore.getSession(token);
     return s ? authStore.getUserById(s.userId) : null;
   };
+  /**
+   * An account with an empty balance may not start paid work: a model call or a
+   * media render. Decided once, where the account is known, and enforced inside
+   * the provider modules, so a route added later is covered without anyone
+   * remembering to gate it. Monitoring reads no model and is untouched.
+   */
+  const gatePaidWork = (data: Record<string, unknown>) => {
+    blockPaidWork(billingEnforced() && creditState(data).remaining <= 0 ? outOfCreditsReason(data) : undefined);
+  };
   const requireUser = async (req: FastifyRequest, reply: FastifyReply): Promise<User | null> => {
     const u = await getUser(req);
     if (!u) { reply.code(401).send({ error: 'not signed in' }); return null; }
@@ -703,6 +763,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           return null;
         }
         setCostAccount(target.id);
+        gatePaidWork(await authStore.getUserData(target.id));
         return target;
       }
     }
@@ -712,6 +773,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       await authStore.setUserData(u.id, data);
     }
     setCostAccount(u.id);
+    gatePaidWork(data);
     return u;
   };
 
@@ -1070,14 +1132,19 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   /** Whether the sign-in page should offer the Google button. */
   app.get('/auth/providers', async () => ({ google: googleReady() && !!emailBaseUrl() }));
 
-  // The Terms of Service, served from the repo's legal draft so the signup
-  // checkbox links to a real document. Sub-processors listed per ToS §5.4.
+  // The Terms of Service. The customer-facing copy lives beside the working
+  // draft: the draft keeps the notes to the lawyer, this page never shows them.
+  // Three facts are the operator's to state and come from the host settings.
+  // Until they are set, the page says something true instead of a blank.
   app.get('/terms', async (_req, reply) => {
     let tos = '';
-    try { tos = readFileSync(join(process.cwd(), 'docs', 'legal', 'terms-of-service-mvp.md'), 'utf8'); } catch { tos = 'Terms of Service draft unavailable.'; }
-    const subs = '\n\n---\n\n## Sub-processors (ToS §5.4)\nThe Service currently uses: Render (hosting), Pipedream (connected-account API access), OpenRouter and Anthropic-compatible model providers (AI text), fal.ai (AI images), and a managed Postgres database. This list will move to a dedicated page before general availability.';
-    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Miles — Terms of Service (${TOS_VERSION})</title><style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:820px;margin:0 auto;padding:32px 20px;color:#1e293b;background:#fff}pre{white-space:pre-wrap;word-wrap:break-word;font-family:inherit;font-size:14px;line-height:1.55}a{color:#4f46e5}</style></head><body><p><a href="/">← Back to Miles</a></p><pre>${esc(tos + subs)}</pre></body></html>`;
+    try { tos = readFileSync(join(process.cwd(), 'docs', 'legal', 'terms-of-service.md'), 'utf8'); } catch { tos = '# Miles AI Terms of Service\n\nThe terms could not be loaded. Email us and we will send them.'; }
+    const entity = (process.env.LEGAL_ENTITY || '').trim() || 'the company that operates Miles AI';
+    const law = (process.env.LEGAL_GOVERNING_LAW || '').trim()
+      || 'the laws of the United States state in which the operator of Miles AI is organized, and the state and federal courts located there.';
+    const subs = '\n\n---\n\n## Sub-processors\nThe Service currently uses: Render (hosting), Pipedream (connected-account access), OpenRouter and the model providers it routes to (AI text), fal.ai (AI images), Stripe (payments), and a managed Postgres database.';
+    const body = renderLegal((tos + subs).replace('{{VERSION}}', TOS_VERSION).replace('{{ENTITY}}', entity).replace('{{GOVERNING_LAW}}', law));
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Miles AI terms of service</title><style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:820px;margin:0 auto;padding:32px 20px;color:#1e293b;background:#fff;line-height:1.6;font-size:15px}a{color:#4f46e5}h1{font-size:28px;line-height:1.2}h2{font-size:18px;margin-top:30px}hr{border:0;border-top:1px solid #e2e8f0;margin:26px 0}li{margin:4px 0}</style></head><body><p><a href="/login">Back to sign in</a></p>${body}<p><a href="/privacy">Privacy policy</a></p></body></html>`;
     return reply.type('text/html').send(html);
   });
 
@@ -1093,10 +1160,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
 <p>When you connect Google Ads, Miles reads campaign names, status, spend, clicks, conversions, search terms, and ad text so it can show your results and suggest changes. Miles does not sell this data. Changes to the ad account wait for your approval unless you chose a mode that allows a change inside the budget caps you set.</p>
 <h2>Meta</h2>
 <p>When a Meta connection is available and you connect it, Miles reads ad account names, campaign status, and spend for the same reason. A Facebook Page connection is not an ads connection. Miles does not sell Meta data.</p>
+<h2>Google user data and Limited Use</h2>
+<p>Miles AI's use and transfer of information received from Google APIs to any other app adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements. Miles uses Google data only to show you your results and to make the ad changes you approve. Miles does not sell it, does not use it for advertising of its own, and does not use it to train general AI models. People at Miles do not read it unless you ask for help, it is needed for security, or the law requires it.</p>
 <h2>Storage</h2>
 <p>Account data is stored in the Miles database for your workspace. Connected-account access is handled by the connector you authorize. AI text may be sent to the model provider configured on the server so Miles can draft copy. We do not sell personal information.</p>
 <h2>Delete your account and data</h2>
 <p>Sign in, open Settings, and choose Delete account. That disconnects integrations, cancels a Stripe subscription when one exists, deletes the workspace data, and signs you out. You can also email ${contact} and ask us to delete it.</p>
+<h2>Who else handles your data</h2>
+<p>Miles runs on Render (hosting and database), Pipedream (the connection to your accounts), OpenRouter and the model providers it routes to (AI text), fal.ai (AI images), and Stripe (payments). Your card is held by Stripe. Miles never sees or stores it.</p>
+<h2>Terms</h2>
+<p>The <a href="/terms">terms of service</a> cover how Miles AI is provided.</p>
 <h2>Contact</h2>
 <p>Questions: <a href="mailto:${contact}">${contact}</a></p>
 </body></html>`;
@@ -1378,6 +1451,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       'APP_URL', 'RENDER_EXTERNAL_URL', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET',
       'STRIPE_PRICE_STARTER', 'STRIPE_PRICE_GROWTH', 'STRIPE_PRICE_SCALE',
       'PIPEDREAM_ENVIRONMENT', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'ADMIN_EMAIL',
+      'LEGAL_ENTITY', 'LEGAL_GOVERNING_LAW',
     ];
     const env: Record<string, string | undefined> = {};
     for (const n of names) env[n] = process.env[n] || undefined;
@@ -2720,7 +2794,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   app.put<{ Body: { name?: string } }>('/api/account', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    await authStore.updateUser(u.id, { name: (req.body?.name ?? '').slice(0, 120) });
+    // Only the name can be changed here. A request without one used to save
+    // an empty name over the real one.
+    if (typeof req.body?.name !== 'string') return reply.code(400).send({ error: 'Send a name to save. Nothing was changed.' });
+    await authStore.updateUser(u.id, { name: req.body.name.trim().slice(0, 120) });
     return { ok: true };
   });
   app.post<{ Body: { current?: string; next?: string } }>('/auth/change-password', async (req, reply) => {
@@ -5225,6 +5302,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const spec = req.body?.spec;
     if (!spec || typeof spec !== 'object') return reply.code(400).send({ error: 'spec is required' });
+    if (typeof spec.name !== 'string' || !Array.isArray(spec.adGroups) || !spec.adGroups.every((g) => g && Array.isArray(g.keywords))) {
+      return reply.code(400).send({ error: 'That campaign is incomplete, so it was not saved. Build it again from Launch a Campaign.' });
+    }
     const data = await authStore.getUserData(u.id);
     const drafts = ((data.campaignDrafts as any[]) ?? []).filter((d) => d && d.id);
     const draft = { id: newToken().slice(0, 10), spec, summary: campaignSummary(spec), savedAt: new Date().toISOString() };
@@ -6688,6 +6768,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry || 'local-service', city: (p.serviceAreas || '').split(',')[0]?.trim() || p.city, services: p.services, offers: p.currentOffers };
     let sms: string;
+    // The lead is a real person waiting. With no credits the reply still goes
+    // out, written from the template instead of by a model.
+    setCostAccount(uid);
+    blockPaidWork(billingEnforced() && creditState(data).remaining <= 0 ? outOfCreditsReason(data) : undefined, { quiet: true });
     if (event === 'missed_call') sms = missedCallText(ctx, name);
     else { const { system, user } = instantReplyAgent(lead, ctx); sms = smsFromReply((await generateText({ system, user, maxTokens: 400 })) ?? fallbackInstantReply(lead, ctx)); }
     const sendKey = `lead:${lead.id}`;
@@ -7273,9 +7357,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         const agents = (data.schedules as ScheduledAgent[]) ?? [];
         const delivered: Array<{ agent: ScheduledAgent; run: { title: string; body: string } }> = [];
         let changed = false;
+        // A scheduled agent writes with a model, unattended, every day. With
+        // no credits it waits: still due, so it runs on the first tick after
+        // the account is funded again.
+        const noCredits = billingEnforced() && creditState(data).remaining <= 0;
         for (const agent of agents) {
           if (!isDue(agent, now)) continue;
-          const result = await runScheduledTask(uid, agent.task, agent.spec);
+          if (noCredits) continue;
+          const result = await withCostAccount(uid, UNCLAIMED, () => runScheduledTask(uid, agent.task, agent.spec));
           if (result.patch) Object.assign(data, result.patch);
           const run = appendRun(data, agent, { title: result.title, body: result.body });
           agent.lastRunAt = new Date().toISOString();
