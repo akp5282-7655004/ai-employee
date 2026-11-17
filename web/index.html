@@ -1272,6 +1272,28 @@
     .ln-grid,.ln-goals,.ln-buds,.ln-chans,.ln-profile,.ln-ads,.ln-fields{grid-template-columns:1fr;}
     .ln-shortcut{flex-wrap:wrap;align-items:flex-start;}
   }
+
+  /* The owner's Admin link is marked hidden for everyone else. `.nav a` sets
+     display:flex, which beat the attribute, so every account saw the link. */
+  .nav a[hidden]{display:none;}
+
+  /* Phone header.
+     The menu button and Log out live in the page header. Dashboard, Launch,
+     Skills, Reports and Your Business hide that header because each draws its
+     own title. On a phone the sidebar is a drawer, so hiding the header hid the
+     only way to open it: a new account landed on the Dashboard with no menu and
+     no way to log out. Here the header comes back on those screens, without the
+     duplicate title, and its other controls are cut down to what fits 390px. */
+  @media (max-width:760px){
+    body.on-dash .pagehead,body.on-biz .pagehead{display:flex;margin-bottom:12px;}
+    body.on-dash .pagehead #ptitle,body.on-biz .pagehead #ptitle{display:none;}
+    .pagehead{gap:6px;}
+    .pagehead .askbtn{display:none;}
+    .pagehead .help-addr{display:none;}
+    .pagehead #header-logout{white-space:nowrap;flex:none;}
+    .pagehead #help-mail,.pagehead #help-site{flex:none;margin-left:4px;}
+    .pagehead .tbtn{flex:none;}
+  }
 </style>
 
 <div class="app">
@@ -5965,7 +5987,12 @@ async function openBilling(){
     const openPortal=async(btn)=>{ btn.disabled=true; try{ const r=await(await fetch('/api/billing/portal',{method:'POST'})).json(); if(r.url) location.href=r.url; else toast(r.error||'Billing portal is not available until payments are connected.'); }catch(e){ toast('Billing portal is not available until payments are connected.'); } btn.disabled=false; };
     portal.onclick=()=>openPortal(portal);
     cancel.onclick=()=>openPortal(cancel);
-    row.append(portal, cancel);
+    // The free offer has no Stripe subscription, so there is nothing to manage
+    // or cancel. Showing both buttons there led to "No subscription on this
+    // account yet" and made a free account look like it was being billed.
+    const onPaidPlan=(d.bands||[]).some(b=>b.key===s.band);
+    if(onPaidPlan) row.append(portal, cancel);
+    else row.append(el('span','appsub','Free. No card on file. Pick a plan below when you are ready.'));
     // Buying more credits. Running out told the owner to "add $25" and gave
     // them nothing to press; this is that button. It charges the card saved
     // at checkout, so it only appears on an active paid plan, and it says the
@@ -6044,7 +6071,8 @@ async function openBilling(){
     const onThisBand=d.subscription&&d.subscription.band===b.key&&d.subscription.status==='active';
     if(onThisBand){ actTd.append(el('span','appsub','Current plan')); }
     else {
-      const btn=el('button',null,d.subscription?'Switch':'Subscribe'); btn.style.cssText='font-size:11.5px;padding:5px 12px;border-radius:7px;border:none;background:var(--primary);color:var(--primary-ink);font-weight:600;cursor:pointer';
+      const paidNow=d.subscription&&(d.bands||[]).some(x=>x.key===d.subscription.band)&&d.subscription.status==='active';
+      const btn=el('button',null,paidNow?'Switch':'Subscribe'); btn.style.cssText='font-size:11.5px;padding:5px 12px;border-radius:7px;border:none;background:var(--primary);color:var(--primary-ink);font-weight:600;cursor:pointer';
       if(!d.paymentsConnected){ btn.disabled=true; btn.style.opacity='.45'; btn.style.cursor='not-allowed'; btn.title='Payments aren’t connected yet.'; }
       else if(!b.checkoutReady){ btn.disabled=true; btn.style.opacity='.45'; btn.style.cursor='not-allowed'; btn.title='This plan isn’t finished being set up in Stripe yet.'; }
       else btn.onclick=async()=>{
@@ -6060,7 +6088,7 @@ async function openBilling(){
     t.append(tr);
   });
   wrap.append(t); bc.append(wrap);
-  bc.append(el('p','appsub','Every band includes all skills and connectors. Text, chat, campaign builds, audits, skills, and agent runs draw from your credit balance at OpenRouter cost. Videos and images draw from the same balance. Monitoring stays free. When the balance hits zero, automation pauses and you can still view your data.'));
+  bc.append(el('p','appsub','Every band includes all skills and connectors. Text, chat, campaign builds, audits, skills, and agent runs draw from your credit balance, priced per run. Videos and images draw from the same balance. Monitoring stays free. When the balance hits zero, automation pauses and you can still view your data.'));
   box.append(bc);
   await renderEconomics(box);
   // What draws credits
@@ -10587,7 +10615,7 @@ document.addEventListener('submit',(e)=>{ const btn=e.target&&e.target.querySele
 let formDirty=false;
 document.addEventListener('input',(e)=>{ if(e.target&&e.target.closest&&e.target.closest('input,textarea,select')&&!(e.target.closest('#page-chat'))) formDirty=true; });
 window.addEventListener('beforeunload',(e)=>{ if(!formDirty) return; e.preventDefault(); e.returnValue=''; });
-fetch('/api/support').then(r=>r.json()).then(d=>{ if(d.email){ const a=$('#help-mail'); if(a){ a.href='mailto:'+d.email; a.textContent='Help '+d.email; } } }).catch(()=>{});
+fetch('/api/support').then(r=>r.json()).then(d=>{ if(d.email){ const a=$('#help-mail'); if(a){ a.href='mailto:'+d.email; a.textContent='Help'; const addr=el('span','help-addr',' '+d.email); a.append(addr); } } }).catch(()=>{});
 async function authInit(){
   if(!REMOTE) return;
   try{
