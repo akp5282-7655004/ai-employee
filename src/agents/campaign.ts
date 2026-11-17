@@ -85,6 +85,8 @@ export interface CampaignCtx {
   city?: string;
   services?: string;
   offers?: string;
+  radiusMiles?: number;
+  hours?: { startHour?: number; endHour?: number; days?: number[] };
   /** Claims the business profile or the site crawl backs up. Unset means none. */
   claims?: VerifiedClaims;
 }
@@ -505,6 +507,17 @@ export function buildCampaignSpec(input: CampaignInput, ctx: CampaignCtx, role: 
     sitelinks: sitelinksOf(themes, { ...ctx, city }, finalUrl),
     callouts: calloutsOf(ctx),
     structuredSnippet: snippetOf(themes),
+    targeting: {
+      presence: 'PRESENCE',
+      radiusMiles: Number(ctx.radiusMiles) > 0 ? Number(ctx.radiusMiles) : 15,
+      searchPartners: false,
+      display: false,
+      schedule: {
+        days: ctx.hours?.days?.length ? ctx.hours.days : [1, 2, 3, 4, 5],
+        startHour: Number.isFinite(Number(ctx.hours?.startHour)) ? Number(ctx.hours?.startHour) : 8,
+        endHour: Number.isFinite(Number(ctx.hours?.endHour)) ? Number(ctx.hours?.endHour) : 18,
+      },
+    },
   };
   return repairAdCopy(spec);
 }

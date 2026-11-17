@@ -6,15 +6,16 @@
  */
 import { toE164 } from '../identity/fields.js';
 import type { SpeedToLeadState } from './speed_to_lead.js';
+import { isOptOutMessage, isQuietHour, offsetMinutes, zoneForLead } from '../qa/ownerrows.js';
 
 /** Whole-message opt-out keywords (carrier standard), case-insensitive. */
-const STOP_WORDS = new Set(['stop', 'unsubscribe', 'cancel', 'end', 'quit']);
+const STOP_WORDS = new Set(['stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit']);
 
 /** True when the whole reply is an opt-out keyword ("STOP", "stop.", " Quit "). */
 export function isStopMessage(text: unknown): boolean {
   if (typeof text !== 'string') return false;
   const word = text.trim().replace(/[.!\s]+$/g, '').toLowerCase();
-  return STOP_WORDS.has(word);
+  return STOP_WORDS.has(word) || isOptOutMessage(text);
 }
 
 /** A phone in E.164, or '' when it is missing or does not parse. */
@@ -29,8 +30,12 @@ export function payloadOptsOut(b: Record<string, unknown>): boolean {
   return yes(b.optOut) || yes(b.opt_out) || yes(b.dnd) || b.consent === false || b.consent === 'false';
 }
 
+/** The account's opted-out phones in E.164. Also reads the older `optOutPhones`
+ *  list (raw phones), so a number on either list is never texted. */
 export function readOptOuts(data: Record<string, unknown>): string[] {
-  return Array.isArray(data.smsOptOuts) ? (data.smsOptOuts as unknown[]).filter((p): p is string => typeof p === 'string') : [];
+  const list = Array.isArray(data.smsOptOuts) ? (data.smsOptOuts as unknown[]).filter((p): p is string => typeof p === 'string') : [];
+  const older = Array.isArray(data.optOutPhones) ? (data.optOutPhones as unknown[]).map((p) => e164(p)).filter((p) => p && !list.includes(p)) : [];
+  return older.length ? [...list, ...older] : list;
 }
 
 /** Remember an opted-out phone on the account. Returns false when the phone does not parse. */
@@ -72,6 +77,20 @@ export function inQuietHours(q: QuietHours, nowMs: number): boolean {
   if (!q.enabled) return false;
   const h = new Date(nowMs + (q.tzOffsetMinutes || 0) * 60_000).getUTCHours();
   return h < 8 || h >= 20;
+}
+
+/**
+ * The one quiet-hours rule for a text to one person. Quiet when it is outside
+ * 8 AM to 8 PM for the owner (the enforced setting above), or, when the lead's
+ * area code or ZIP shows a time zone, outside 8 AM to 8 PM where the lead is.
+ * Either one holds the text. Turning quiet hours off turns both off.
+ */
+export function quietForLead(data: Record<string, unknown>, nowMs: number, phone?: string, zip?: string): boolean {
+  const q = effectiveQuietHours(data);
+  if (!q.enabled) return false;
+  if (inQuietHours(q, nowMs)) return true;
+  const zone = zoneForLead(phone, zip);
+  return !!zone && isQuietHour(new Date(nowMs), offsetMinutes(zone, new Date(nowMs)));
 }
 
 /** Why a text did or did not go out. Only 'sent' means it reached the CRM. */

@@ -56,10 +56,19 @@ export function stableRecId(id: string): string {
   return String(id || '').replace(/:\d{4}-\d{2}-\d{2}$/, '');
 }
 
-/** Still open: not applied today and not dismissed (on any day). */
-export function recIsOpen(st: { applied?: Record<string, string>; dismissed?: Record<string, string> } | undefined, id: string): boolean {
+/**
+ * Still open: not applied today and not dismissed (on any day). A dismissal
+ * saved with the reason it was shown (`why`) hides it only while that reason
+ * is the same; a new reason shows it again. A dismissal saved as a time (no
+ * reason sent) hides it for good.
+ */
+export function recIsOpen(st: { applied?: Record<string, string>; dismissed?: Record<string, string> } | undefined, id: string, currentWhy?: string): boolean {
   if (st?.applied?.[id]) return false;
-  return !st?.dismissed?.[id] && !st?.dismissed?.[stableRecId(id)];
+  const saved = st?.dismissed?.[id] || st?.dismissed?.[stableRecId(id)];
+  if (!saved) return true;
+  const savedIsTime = /^\d{4}-\d{2}-\d{2}T/.test(saved) && Number.isFinite(Date.parse(saved));
+  if (savedIsTime || !currentWhy) return false;
+  return saved !== currentWhy;
 }
 
 function dayKey(d: Date): string {

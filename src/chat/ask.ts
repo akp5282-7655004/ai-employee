@@ -9,6 +9,7 @@ import type { ChatModel, ChatTurnResult, ChatUsage, ChatWireMessage } from './mo
 import { intentReply, parseActionIntent, type AgentIntent } from './intent.js';
 import { CHAT_TOOLS, runChatTool, toolStepLabel, type ChatReaders } from './tools.js';
 import { logUngrounded, redactNumbers, unsupportedNumberTokens } from './ground.js';
+import { contradictoryAsk } from '../qa/ownerrows.js';
 
 const TOKENS: Record<string, number> = {
   easy: 320,
@@ -93,6 +94,8 @@ export async function answerChat(args: {
     }
     return redactNumbers(text, bad);
   };
+  const contradiction = contradictoryAsk(question);
+  if (contradiction) return { text: contradiction, live: false, mode, steps: [], plan: null, intent: null, next: null, usage: emptyUsage };
   const intent = parseActionIntent(question);
   if (intent) {
     const said = intentReply(intent, args.snapshot.business.name);

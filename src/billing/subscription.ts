@@ -12,6 +12,7 @@
  * correct without touching how spending is tracked.
  */
 import { BANDS, creditState, writeCredits, type Band } from './credits.js';
+import { workAccess } from './access.js';
 
 export type SubStatus = 'none' | 'trialing' | 'active' | 'past_due' | 'canceled';
 
@@ -257,6 +258,18 @@ function stampCancel(b: BillingState, now: Date): void {
   b.canceledAt = now.toISOString();
   const periodEnd = b.currentPeriodEnd && Date.parse(b.currentPeriodEnd) > now.getTime() ? b.currentPeriodEnd : undefined;
   b.accessEndsAt = !wasUnpaid && periodEnd ? periodEnd : now.toISOString();
+}
+
+/** Whether a plan is open for paid work. One rule with workAccess (access.ts):
+ *  a paid-up canceled plan runs to the end of its period, a plan ended over an
+ *  unpaid invoice stops now, and a failed payment keeps its 7-day grace.
+ *  No plan on file is not open. A new subscription turns it back on. */
+export function accessOpen(
+  billing: { status?: string; currentPeriodEnd?: string; accessEndsAt?: string; canceledAt?: string; pastDueSince?: string; cancelAtPeriodEnd?: boolean; updatedAt?: string },
+  now = Date.now(),
+): boolean {
+  if (!['active', 'trialing', 'canceled', 'past_due'].includes(String(billing.status))) return false;
+  return !workAccess({ billing }, new Date(now)).paused;
 }
 
 /** The subscription ended — cancellation, or Stripe gave up retrying a failed card.

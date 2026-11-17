@@ -16,6 +16,26 @@ export function parseBudget(value: unknown, opts?: { allowZero?: boolean; max?: 
   return { ok: true, value: Math.round(n * 100) / 100 };
 }
 
+const EMAIL_RE = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
+
+/**
+ * An address the server will store or look up.
+ * Empty is allowed only when the field itself is optional.
+ */
+export function parseEmail(value: unknown, opts?: { required?: boolean }): { ok: true; value: string } | { ok: false; error: string } {
+  const raw = trimText(value).toLowerCase();
+  if (!raw) {
+    if (opts?.required) return { ok: false, error: 'Enter an email like you@business.com.' };
+    return { ok: true, value: '' };
+  }
+  const at = raw.indexOf('@');
+  const local = at >= 0 ? raw.slice(0, at) : raw;
+  if (raw.length > 254 || local.length > 64 || local.length === 0 || !EMAIL_RE.test(raw)) {
+    return { ok: false, error: 'Enter an email like you@business.com.' };
+  }
+  return { ok: true, value: raw };
+}
+
 /** US-leaning E.164. 10 digits become +1. Already-international numbers keep their country code. */
 export function toE164(value: unknown): { ok: true; value: string } | { ok: false; error: string } {
   const raw = trimText(value);

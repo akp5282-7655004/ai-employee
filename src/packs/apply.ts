@@ -143,6 +143,11 @@ const FINANCING_PATTERNS: RegExp[] = [
 ];
 const FINANCING_TERMS = /\b(with|on|upon|subject to)\s+(approved\s+credit|credit\s+approval)\b|\bsee\s+(full\s+)?terms\b|\bterms\s+(and\s+conditions\s+)?apply\b|\bOAC\b/i;
 
+/** True when the copy carries a lender terms line ("With approved credit. See terms."). */
+export function hasFinancingTerms(text: string): boolean {
+  return FINANCING_TERMS.test(String(text || ''));
+}
+
 /** Warnings for financing claims that have no terms line in the same copy. */
 export function financingWarnings(text: string): string[] {
   const body = String(text || '');
