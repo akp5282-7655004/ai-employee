@@ -1,5 +1,6 @@
 import type { CampaignSpec } from './campaign.js';
 import { assessProfile, buildSearchCampaigns, seasonFocus, type PlannedSearch, type ProfileGap } from './contractorloop.js';
+import { parseEmail } from '../identity/fields.js';
 
 /**
  * One contractor loop: research what we can actually see, size a plan inside
@@ -325,7 +326,13 @@ export function normalizeLead(body: Record<string, unknown>): { lead?: InboundLe
   const fromCol = (id: string) => columns.find((c) => String(c.column_id || '').toUpperCase() === id)?.string_value;
   const name = String(body.name || fromCol('FULL_NAME') || '').trim().slice(0, 120) || undefined;
   const phone = String(body.phone || fromCol('PHONE_NUMBER') || '').trim().slice(0, 40) || undefined;
-  const email = String(body.email || fromCol('EMAIL') || '').trim().slice(0, 120) || undefined;
+  const emailRaw = String(body.email || fromCol('EMAIL') || '').trim();
+  let email: string | undefined;
+  if (emailRaw) {
+    const parsedEmail = parseEmail(emailRaw);
+    if (!parsedEmail.ok) return { error: parsedEmail.error };
+    email = parsedEmail.value;
+  }
   if (!name && !phone && !email) return { error: 'A name, phone, or email is required.' };
   const consent = typeof body.consent === 'boolean' ? body.consent : undefined;
   return {

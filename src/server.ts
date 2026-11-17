@@ -157,7 +157,7 @@ import {
 } from './agents/speed_to_lead.js';
 import { aggregateNetwork, type WorkspaceSignal } from './usage/network.js';
 import { deliveryStatus, sendEmail, sendSms, smsExcerpt } from './delivery/send.js';
-import { parseBudget, toE164 } from './identity/fields.js';
+import { parseBudget, parseEmail, toE164 } from './identity/fields.js';
 import { grantedIdentity, launchCreditStatus, maybeGrantLaunchCredit, LAUNCH_WAIT } from './billing/launchcredit.js';
 import { addLead, leadCounts, readLeads, setLeadStatus } from './crm/leads.js';
 import { searchCompetitors } from './research/places.js';
@@ -922,14 +922,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // ── auth ──
   app.post('/auth/signup', async (req, reply) => {
     const b = (req.body ?? {}) as { email?: string; password?: string; name?: string; invite?: string; tos?: boolean; utmSource?: string; utm_source?: string; utmCampaign?: string; utm_campaign?: string; referrer?: string };
-    if (!b.email || !b.password || b.password.length < 6)
+    if (!b.password || b.password.length < 6)
       return reply.code(400).send({ error: 'Enter an email and a password of at least 6 characters.' });
+    const signupEmail = parseEmail(b.email, { required: true });
+    if (!signupEmail.ok) return reply.code(400).send({ error: signupEmail.error, field: 'email' });
     // ToS acceptance is required and version-stamped to the account — the
     // in-product acknowledgment matters as much as the document (ToS notes).
     if (b.tos !== true) return reply.code(400).send({ error: 'Please accept the Terms of Service to create an account.' });
-    if (await authStore.getUserByEmail(b.email))
+    if (await authStore.getUserByEmail(signupEmail.value))
       return reply.code(409).send({ error: 'An account with that email already exists — try logging in.' });
-    const email = b.email.toLowerCase();
+    const email = signupEmail.value;
     const invite = (b.invite ?? '').trim();
     // A valid invite link admits the holder even under the invite-only gate.
     const inviteCheck = invite ? await checkInvite(invite, email) : { ok: false as boolean, reason: undefined as string | undefined };
@@ -1013,8 +1015,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     // An unverified address is not proof of ownership, and accepting one would
     // let somebody claim an existing Miles account by asserting its email.
     if (!who.emailVerified) return reply.redirect('/login?error=google_unverified');
-
-    const email = who.email;
+    const googleEmail = parseEmail(who.email, { required: true });
+    if (!googleEmail.ok) return reply.redirect('/login?error=google_email');
+    const email = googleEmail.value;
     let user = await authStore.getUserByEmail(email);
 
     if (!user) {
@@ -1113,7 +1116,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   });
 
   app.post<{ Body: { email?: string } }>('/auth/confirm/resend', async (req, reply) => {
-    const email = (req.body?.email || '').trim().toLowerCase();
+    const posted = parseEmail(req.body?.email);
+    if (!posted.ok) return reply.code(400).type('text/html').send(`<!doctype html><html><body style="font-family:sans-serif;max-width:480px;margin:48px auto"><p>${posted.error}</p><p><a href="/login">Back to sign in</a></p></body></html>`);
+    const email = posted.value;
     const user = email ? await authStore.getUserByEmail(email) : null;
     if (user && deliveryStatus().email) {
       const data = await authStore.getUserData(user.id);
@@ -1128,7 +1133,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
 
   app.post('/auth/login', async (req, reply) => {
     const b = (req.body ?? {}) as { email?: string; password?: string };
-    const who = (b.email || '').trim().toLowerCase();
+    const posted = parseEmail(b.email, { required: true });
+    if (!posted.ok) return reply.code(400).send({ error: posted.error, field: 'email' });
+    const who = posted.value;
     // Throttle guessing. Per account, because that is what an attacker targets;
     // and per caller, more loosely, because offices and households share one IP
     // and a tight cap there would lock out innocent people.
@@ -1154,7 +1161,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // Forgot password — email a one-hour reset link (when email delivery is configured).
   // Always returns ok so it never reveals whether an email is registered.
   app.post('/auth/forgot', async (req, reply) => {
-    const email = ((req.body as { email?: string })?.email || '').trim().toLowerCase();
+    const posted = parseEmail((req.body as { email?: string })?.email, { required: true });
+    if (!posted.ok) return reply.code(400).send({ error: posted.error, field: 'email' });
+    const email = posted.value;
     // Anyone can call this and it sends mail, so cap it two ways: per address (so
     // one inbox cannot be buried) and per caller (so one script cannot drain the
     // sending quota every other account depends on). The reply is identical
@@ -1206,9 +1215,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   app.get<{ Querystring: { secret?: string; email?: string; password?: string } }>('/admin/emergency-reset', async (req, reply) => {
     const secret = process.env.ADMIN_RESET_SECRET;
     if (!secret || !req.query.secret || !sameToken(req.query.secret, secret)) return reply.code(404).send({ error: 'not found' });
-    const email = (req.query.email || '').trim().toLowerCase();
+    const posted = parseEmail(req.query.email, { required: true });
     const password = req.query.password || '';
-    if (!email || password.length < 6) return reply.code(400).send({ error: 'Provide ?email=&password= (password at least 6 characters).' });
+    if (!posted.ok || password.length < 6) return reply.code(400).send({ error: posted.ok ? 'Provide ?email=&password= (password at least 6 characters).' : posted.error, field: 'email' });
+    const email = posted.value;
     const u = await authStore.getUserByEmail(email);
     if (!u) return reply.code(404).send({ error: 'No account with that email.' });
     await authStore.updateUser(u.id, { passwordHash: hashPassword(password) });
@@ -1475,9 +1485,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const list = await getInvites();
     const days = Number(req.body?.days);
     const maxUses = Math.max(0, Math.floor(Number(req.body?.maxUses) || 0)); // 0 = unlimited
+    const inviteEmail = parseEmail(req.body?.email);
+    if (!inviteEmail.ok) return reply.code(400).send({ error: inviteEmail.error, field: 'email' });
     const invite: Invite = {
       token: newToken(),
-      email: req.body?.email ? String(req.body.email).trim().toLowerCase() : undefined,
+      email: inviteEmail.value || undefined,
       note: req.body?.note ? String(req.body.note).slice(0, 120) : undefined,
       maxUses,
       uses: 0,
@@ -1537,11 +1549,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const otherMonthlyUsd = typeof postedOther === 'number' && postedOther >= 0 && postedOther <= 100000
       ? postedOther
       : (typeof current.otherMonthlyUsd === 'number' ? current.otherMonthlyUsd : 0);
+    let allowed = Array.isArray(current.allowed) ? current.allowed : [];
+    if (Array.isArray(req.body?.allowed)) {
+      const checked = req.body.allowed.slice(0, 500).map((entry) => parseEmail(entry, { required: true }));
+      const bad = checked.find((entry) => !entry.ok);
+      if (bad && !bad.ok) return reply.code(400).send({ error: bad.error, field: 'email' });
+      allowed = checked.flatMap((entry) => entry.ok && entry.value ? [entry.value] : []);
+    }
     data.adminSettings = {
       inviteOnly: typeof req.body?.inviteOnly === 'boolean' ? req.body.inviteOnly : !!current.inviteOnly,
-      allowed: Array.isArray(req.body?.allowed)
-        ? req.body.allowed.map((e) => String(e).trim().toLowerCase()).filter((e) => e.includes('@')).slice(0, 500)
-        : (Array.isArray(current.allowed) ? current.allowed : []),
+      allowed,
       otherMonthlyUsd,
     };
     await authStore.setUserData(id, data);
@@ -1619,6 +1636,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const phone = toE164(body.phone);
       if (!phone.ok) return reply.code(400).send({ error: phone.error, field: 'phone' });
       next.phone = phone.value;
+    }
+    if ('email' in body) {
+      const profileEmail = parseEmail(body.email);
+      if (!profileEmail.ok) return reply.code(400).send({ error: profileEmail.error, field: 'email' });
+      next.email = profileEmail.value;
     }
     for (const key of Object.keys(next)) if (typeof next[key] === 'string') next[key] = (next[key] as string).trim();
     data.profile = next;
@@ -1709,7 +1731,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const website = String(body.website || saved.website || '').trim();
     const businessName = String(body.businessName || saved.businessName || '').trim();
     const location = String(body.location || saved.serviceAreas || '').trim();
-    const email = String(body.email || saved.email || '').trim();
+    const postedCrawlEmail = 'email' in body ? parseEmail(body.email) : parseEmail(saved.email);
+    if (!postedCrawlEmail.ok) return reply.code(400).send({ error: postedCrawlEmail.error, field: 'email' });
+    const email = postedCrawlEmail.value;
     const gbpUrl = String(body.gbpUrl || saved.gbpUrl || '').trim();
     const competitors = Array.isArray(body.competitors) && body.competitors.length
       ? body.competitors.map((s) => String(s || '').trim()).filter(Boolean)
@@ -2744,7 +2768,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    data.team = Array.isArray(req.body?.team) ? req.body!.team!.slice(0, 50) : [];
+    const team = Array.isArray(req.body?.team) ? req.body!.team!.slice(0, 50) : [];
+    for (const member of team) {
+      if (!member || typeof member !== 'object') continue;
+      const raw = (member as { email?: unknown }).email;
+      if (raw == null || raw === '') continue;
+      const memberEmail = parseEmail(raw, { required: true });
+      if (!memberEmail.ok) return reply.code(400).send({ error: memberEmail.error, field: 'email' });
+      (member as { email: string }).email = memberEmail.value;
+    }
+    data.team = team;
     await authStore.setUserData(u.id, data);
     return { ok: true };
   });
@@ -6541,6 +6574,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!st.webhookSecret || st.webhookSecret !== secret) return reply.code(401).send({ error: 'bad token' });
     // Normalize the payload — accept GHL's field names and common aliases.
     const b = (req.body ?? {}) as Record<string, any>;
+    if (b.email != null && b.email !== '') {
+      const leadEmail = parseEmail(b.email, { required: true });
+      if (!leadEmail.ok) return reply.code(400).send({ error: leadEmail.error, field: 'email' });
+      b.email = leadEmail.value;
+    }
     const event = (req.query?.event || b.event || 'new_lead') === 'missed_call' ? 'missed_call' : 'new_lead';
     // A lead is a lead whether or not an SMS fires — record it for the
     // dashboard's real CRM metrics before any feature toggle can bail out.
@@ -6894,6 +6932,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const { uid, data } = auth;
     const au = (data.automations as AutomationsState) ?? emptyAutomationsState();
     const b = (req.body ?? {}) as Record<string, any>;
+    for (const key of ['email', 'contact_email', 'email_address']) {
+      if (b[key] == null || b[key] === '') continue;
+      const dealEmail = parseEmail(b[key], { required: true });
+      if (!dealEmail.ok) return reply.code(400).send({ error: dealEmail.error, field: 'email' });
+      b[key] = dealEmail.value;
+    }
     // A won deal is revenue whether or not the welcome text fires — record
     // it (with the deal amount when the CRM sends one) for the dashboard.
     appendCrmEvent(data, { type: 'closed_won', ts: new Date().toISOString(), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b) });
@@ -7595,7 +7639,6 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     e = e.replace(/\s+at\s+/g, '@').replace(/\s+dot\s+/g, '.').replace(/\s+/g, '');
     return e;
   };
-  const isEmail = (s: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s);
 
   // Draft subject + body from a plain-English request (LLM). Never sends.
   app.post<{ Body: { request?: string; to?: string } }>('/api/email/compose', async (req, reply) => {
@@ -7603,7 +7646,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const p = (data.profile ?? {}) as Record<string, string>;
-    const to = normalizeEmail(req.body?.to ?? '');
+    const toRaw = normalizeEmail(req.body?.to ?? '');
+    if (toRaw) {
+      const toEmail = parseEmail(toRaw, { required: true });
+      if (!toEmail.ok) return reply.code(400).send({ error: toEmail.error, field: 'email' });
+    }
+    const to = toRaw;
     const request = (req.body?.request ?? '').trim();
     const sys = 'You write professional emails. Return ONLY strict JSON: {"subject":"...","body":"..."} — no prose, no code fences. Keep the body concise and friendly; sign off as the business. Do not invent facts.';
     const usr = `Business: ${p.businessName || 'a local business'}${p.industry ? ` (${p.industry})` : ''}. Write an email${to ? ` to ${to}` : ''} for this request: "${request || 'a short friendly hello'}".`;
@@ -7625,10 +7673,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   app.post<{ Body: { to?: string; subject?: string; body?: string; confirm?: boolean } }>('/api/email/send', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    const to = normalizeEmail(req.body?.to ?? '');
+    const toEmail = parseEmail(normalizeEmail(req.body?.to ?? ''), { required: true });
+    if (!toEmail.ok) return reply.code(400).send({ error: toEmail.error, field: 'email' });
+    const to = toEmail.value;
     const subject = (req.body?.subject ?? '').trim();
     const body = (req.body?.body ?? '').trim();
-    if (!isEmail(to)) return reply.code(400).send({ error: `That doesn't look like a valid email address: "${to}"` });
     if (!subject || !body) return reply.code(400).send({ error: 'Add a subject and a message.' });
     if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Explicit confirm required before sending.' });
     if (billingEnforced() && creditState(await authStore.getUserData(u.id)).remaining <= 0)
