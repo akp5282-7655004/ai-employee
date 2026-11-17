@@ -232,6 +232,11 @@ export function launchChecks(f: LaunchFacts): Check[] {
     'Sign in with Google is offered.',
     'Not configured. Email and password sign-up still works.');
 
+  const taxOn = f.env.STRIPE_TAX_ENABLED === '1';
+  add('Sales tax', true, 'warn',
+    taxOn ? 'STRIPE_TAX_ENABLED is on. Checkout asks Stripe to calculate tax.' : 'STRIPE_TAX_ENABLED is off. Checkout does not collect sales tax.',
+    'Sales tax flag could not be read.');
+
   return out;
 }
 

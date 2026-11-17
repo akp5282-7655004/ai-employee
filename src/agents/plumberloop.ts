@@ -1,5 +1,7 @@
 import type { CampaignSpec } from './campaign.js';
 import { assessProfile, buildSearchCampaigns, seasonFocus, type PlannedSearch, type ProfileGap } from './contractorloop.js';
+import { parseEmail } from '../identity/fields.js';
+import { isOptOutMessage } from '../qa/ownerrows.js';
 
 /**
  * One contractor loop: research what we can actually see, size a plan inside
@@ -325,7 +327,13 @@ export function normalizeLead(body: Record<string, unknown>): { lead?: InboundLe
   const fromCol = (id: string) => columns.find((c) => String(c.column_id || '').toUpperCase() === id)?.string_value;
   const name = String(body.name || fromCol('FULL_NAME') || '').trim().slice(0, 120) || undefined;
   const phone = String(body.phone || fromCol('PHONE_NUMBER') || '').trim().slice(0, 40) || undefined;
-  const email = String(body.email || fromCol('EMAIL') || '').trim().slice(0, 120) || undefined;
+  const emailRaw = String(body.email || fromCol('EMAIL') || '').trim();
+  let email: string | undefined;
+  if (emailRaw) {
+    const parsedEmail = parseEmail(emailRaw);
+    if (!parsedEmail.ok) return { error: parsedEmail.error };
+    email = parsedEmail.value;
+  }
   if (!name && !phone && !email) return { error: 'A name, phone, or email is required.' };
   const consent = typeof body.consent === 'boolean' ? body.consent : undefined;
   return {
@@ -336,7 +344,7 @@ export function normalizeLead(body: Record<string, unknown>): { lead?: InboundLe
       phone,
       email,
       consent,
-      optOut: body.optOut === true || body.opt_out === true,
+      optOut: body.optOut === true || body.opt_out === true || isOptOutMessage(String(body.message || body.text || '')),
       campaign: typeof body.campaign === 'string' ? body.campaign.slice(0, 120) : (typeof body.campaign_id === 'string' ? body.campaign_id.slice(0, 120) : undefined),
       gclid: typeof body.gclid === 'string' ? body.gclid.slice(0, 200) : (typeof body.gcl_id === 'string' ? body.gcl_id.slice(0, 200) : undefined),
     },

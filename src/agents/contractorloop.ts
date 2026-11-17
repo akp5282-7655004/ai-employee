@@ -292,7 +292,7 @@ export function planFollowUp(args: {
 
 export interface JobMark {
   eventId: string;
-  stage: 'new' | 'qualified' | 'booked' | 'won';
+  stage: 'new' | 'qualified' | 'booked' | 'won' | 'canceled';
   jobValue?: number;
   serviceLine?: string;
   channel?: string;
@@ -328,6 +328,7 @@ export function rollupJobs(args: {
     const ensure = (key: string) => map.get(key) ?? map.set(key, { key, spend: 0, leads: 0, qualified: 0, booked: 0, won: 0, jobValue: 0, cpl: null, costPerQualified: null, costPerBookedJob: null, cac: null, roi: null }).get(key)!;
     for (const s of args.spend) ensure(keyOf(s.channel || 'unknown', s.serviceLine || 'general')).spend += s.amount || 0;
     for (const job of args.jobs) {
+      if (job.stage === 'canceled') continue;
       const row = ensure(keyOf(job.channel || 'unknown', job.serviceLine || 'general'));
       row.leads += 1;
       if (job.stage === 'qualified' || job.stage === 'booked' || job.stage === 'won') row.qualified += 1;

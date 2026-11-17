@@ -8,6 +8,8 @@ export interface Lead {
   phone: string;
   status: LeadStatus;
   lostReason?: string;
+  source?: string;
+  optOut?: boolean;
   createdAt: string;
 }
 
@@ -35,6 +37,12 @@ export function setLeadStatus(leads: Lead[], id: string, status: LeadStatus, los
   const hit = leads.find((row) => row.id === id);
   if (!hit) return { error: 'That lead was not found.' };
   return leads.map((row) => row.id === id ? { ...row, status, lostReason: status === 'lost' ? (lostReason || '').trim() : undefined } : row);
+}
+
+export function setLeadOptOut(leads: Lead[], id: string, optOut: boolean): Lead[] | { error: string } {
+  const hit = leads.find((row) => row.id === id);
+  if (!hit) return { error: 'That lead was not found.' };
+  return leads.map((row) => row.id === id ? { ...row, optOut } : row);
 }
 
 export function leadCounts(leads: Lead[]): { leads: number; new: number; booked: number; lost: number } {

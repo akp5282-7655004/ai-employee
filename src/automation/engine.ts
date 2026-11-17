@@ -39,6 +39,8 @@ export interface ChangeEntry {
   before: string;
   after: string;
   reason: string;
+  /** Who suggested the row. Miles when the daily read wrote it. */
+  suggestedBy?: string;
 }
 
 export interface GuardInput {
@@ -106,6 +108,7 @@ export function planActions(findings: Finding[], guard: GuardInput, now: string)
         before: '',
         after: finding.detail,
         reason: guard.creditsLeft <= 0 ? CREDIT_PAUSE : finding.detail,
+        suggestedBy: 'Miles',
       });
       continue;
     }
@@ -119,6 +122,7 @@ export function planActions(findings: Finding[], guard: GuardInput, now: string)
       before: finding.action.before,
       after: finding.action.after,
       reason: decided.reason,
+      suggestedBy: 'Miles',
     });
   }
   return entries;
