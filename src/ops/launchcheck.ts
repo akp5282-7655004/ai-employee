@@ -224,6 +224,14 @@ export function launchChecks(f: LaunchFacts): Check[] {
     'Miles writes its own ad copy and readouts.',
     'No AI key is set. Skills and plays return canned demo text instead of real work. Set OPENROUTER_API_KEY.');
 
+  add('Legal name on the terms page', set('LEGAL_ENTITY'), 'warn',
+    'The terms of service name the company behind Miles.',
+    'LEGAL_ENTITY is not set, so the terms say "the company that operates Miles AI". Set it to your registered business name.');
+
+  add('Governing law on the terms page', set('LEGAL_GOVERNING_LAW'), 'warn',
+    'The terms of service name the state whose law applies.',
+    'LEGAL_GOVERNING_LAW is not set, so the terms use a general clause. Set it to a sentence such as "the laws of the State of Arkansas, and the courts of Pulaski County." Ask your lawyer which state.');
+
   add('Owner tools', set('ADMIN_EMAIL'), 'warn',
     'ADMIN_EMAIL is set, so this page is reachable.',
     'ADMIN_EMAIL is not set. Nobody can open the owner page.');

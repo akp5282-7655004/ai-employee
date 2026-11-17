@@ -11,7 +11,7 @@ import { listPacks } from '../packs/index.js';
 import { cplBandForGoal, type CplBand } from '../agents/goalcheck.js';
 import { playbookCplBand, playbookTrades } from '../agents/playbook.js';
 import { tradeKey } from '../agents/feasibility.js';
-import { audiencesFor, tradePlaybook } from '../playbooks/load.js';
+import { audiencesFor, tradePlaybook, tradeKeyOf } from '../playbooks/load.js';
 import { SEVEN_SKILLS } from '../skills/seven.js';
 import { SKILL_CATALOG } from '../skills/catalog.js';
 
@@ -116,7 +116,10 @@ function searchStatus(input: SkillsBoardInput): { active: boolean; status: strin
 }
 
 export function buildSkillsBoard(input: SkillsBoardInput = {}): SkillsBoard {
-  const yours = tradeKey(input.trade || '');
+  // The playbook files know all seven trades. The home-services pack does not
+  // list solar, so asking only the pack left a solar account with no card
+  // marked as its own.
+  const yours = tradeKeyOf(input.trade) ?? tradeKey(input.trade || '');
   const installed = new Set(input.installed ?? []);
   const deployed = new Set(input.deployed ?? []);
   const cards: DraftCard[] = [];

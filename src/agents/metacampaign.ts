@@ -118,7 +118,7 @@ export function buildMetaCampaignSpec(input: MetaCampaignInput, ctx: MetaCampaig
   // "Licensed and insured" is a fact about the business. Print it only when shown.
   const trustLine = licensedAndInsured(ctx.claims)
     ? 'Licensed and insured, real local crew. Tap below for a fast, no-pressure quote.'
-    : 'Tap below for a fast, no-pressure quote.';
+    : 'A real local crew. Tap below for a fast, no-pressure quote.';
   const drafted = ownerText(input.primaryText || [
     offerLine + '.',
     pb.offer.reasonWhy,
@@ -131,7 +131,7 @@ export function buildMetaCampaignSpec(input: MetaCampaignInput, ctx: MetaCampaig
   const primaryText = checked.ok ? checked.text : ownerText(trustLine);
 
   const headline = ownerText(input.headline || offerLine.split(',')[0] || '').slice(0, 40) || `${ctx.business || trade} in ${ctx.city || 'your area'}`;
-  const description = ownerText(input.description || (licensedAndInsured(ctx.claims) ? 'Licensed and insured. Ask for a quote' : 'Ask for a no-pressure quote')).slice(0, 60);
+  const description = ownerText(input.description || (licensedAndInsured(ctx.claims) ? 'Licensed and insured. Ask for a quote' : 'Request an estimate')).slice(0, 60);
   const imageUrl = /^https:\/\//i.test(input.imageUrl || '') ? input.imageUrl : undefined;
 
   return {

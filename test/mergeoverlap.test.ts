@@ -34,3 +34,31 @@ describe('one rule where both launch fixes overlapped', () => {
     expect(recIsOpen({ dismissed: { 'x': '2026-11-20T10:00:00.000Z' } }, 'x:2026-11-21', 'anything')).toBe(false);
   });
 });
+
+import { paidWorkBlock } from '../src/billing/credits.js';
+import { unvouchedClaim, vouchedLines } from '../src/agents/claims.js';
+
+describe('one rule after #42: paid-work gate and ad claims', () => {
+  const gate = (billing: Record<string, unknown>, remaining = 50) => {
+    process.env.BILLING_ENFORCE = '1';
+    try {
+      return paidWorkBlock({ billing, launchCredit: { status: 'granted' }, credits: { granted: 100, spent: 100 - remaining, ledger: [] } });
+    } finally { delete process.env.BILLING_ENFORCE; }
+  };
+
+  it('agrees with the grace and cancel rule in access.ts', () => {
+    const now = Date.now();
+    const iso = (ms: number) => new Date(ms).toISOString();
+    expect(gate({ status: 'past_due', band: 'starter', pastDueSince: iso(now - 2 * 86_400_000) })).toBeUndefined();
+    expect(gate({ status: 'past_due', band: 'starter', pastDueSince: iso(now - 9 * 86_400_000) })).toMatch(/grace period ended/);
+    expect(gate({ status: 'canceled', band: 'starter', accessEndsAt: iso(now + 5 * 86_400_000) })).toBeUndefined();
+    expect(gate({ status: 'canceled', band: 'starter', accessEndsAt: iso(now - 1000) })).toMatch(/plan ended/);
+    expect(gate({ status: 'active', band: 'starter' }, 0)).toMatch(/Out of credits/);
+  });
+
+  it('backs a credential line with the verified site claims, and never with a denial', () => {
+    expect(unvouchedClaim('Licensed & Insured Roofers', '', { licensed: true, insured: true })).toBeNull();
+    expect(unvouchedClaim('Licensed & Insured Roofers', 'We are not licensed and not insured.')).toBe('licensed');
+    expect(vouchedLines(['5-Star Rated', 'Call Today'], '', { licensed: true, insured: true })).toEqual(['Call Today']);
+  });
+});

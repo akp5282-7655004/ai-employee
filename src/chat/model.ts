@@ -3,7 +3,7 @@
  * can return tool calls. No key, or a failed call, returns null so the
  * caller can answer from the account snapshot directly.
  */
-import { recordCost } from '../billing/costsink.js';
+import { recordCost, paidWorkRefusal } from '../billing/costsink.js';
 import { tokenCostUsd } from '../billing/cogs.js';
 import type { ChatToolSpec } from './tools.js';
 
@@ -52,6 +52,7 @@ export function agentStrongModelName(): string {
 export type ChatModel = (req: ChatTurnRequest) => Promise<ChatTurnResult | null>;
 
 export async function defaultChatModel(req: ChatTurnRequest): Promise<ChatTurnResult | null> {
+  if (paidWorkRefusal()) return null;
   if (process.env.OPENROUTER_API_KEY) return openRouterChat(req);
   if (process.env.ANTHROPIC_API_KEY) return anthropicChat(req);
   return null;

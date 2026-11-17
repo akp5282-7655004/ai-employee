@@ -8,6 +8,7 @@
  */
 
 import { tradePlaybook } from '../playbooks/load.js';
+import { licensedAndInsured, type VerifiedClaims } from './claims.js';
 
 export type MatchType = 'broad' | 'phrase' | 'exact';
 export interface KeywordSpec {
@@ -91,34 +92,8 @@ export interface CampaignCtx {
   claims?: VerifiedClaims;
 }
 
-/**
- * Credential claims an ad may make only when the business shows them.
- * "Licensed And Insured", "Experienced Crew", and "Locally Owned" are
- * statements of fact about the business, so Miles does not print them on a
- * guess. Every field defaults to false.
- */
-export interface VerifiedClaims {
-  licensed?: boolean;
-  insured?: boolean;
-  experienced?: boolean;
-  locallyOwned?: boolean;
-}
-
-/** Read the claims a site's own text makes. Nothing found means nothing claimed. */
-export function claimsFromText(text: string | undefined): VerifiedClaims {
-  const t = (text || '').replace(/\s+/g, ' ');
-  return {
-    licensed: /(?<!\bnot\s)\blicen[sc]ed\b|\blicen[sc]e\s*(#|no\.?|number)\s*\w/i.test(t),
-    insured: /(?<!\bnot\s)\b(fully\s+)?insured\b/i.test(t),
-    experienced: /\b\d{1,3}\+?\s*(years?|yrs)\b(\s+of)?\s+(experience|in business)/i.test(t) || /\bsince\s+(19|20)\d{2}\b/i.test(t),
-    locallyOwned: /\b(locally|family)[\s-]+owned\b/i.test(t),
-  };
-}
-
-/** True when both licensing and insurance are backed up. */
-export function licensedAndInsured(claims?: VerifiedClaims): boolean {
-  return !!(claims?.licensed && claims?.insured);
-}
+// The claim rules live in one module (claims.ts). Re-exported for existing callers.
+export { claimsFromText, licensedAndInsured, type VerifiedClaims } from './claims.js';
 
 const clampBudget = (n: unknown): number => {
   const v = Number(n);
@@ -364,7 +339,7 @@ function rsaFor(theme: string, ctx: CampaignCtx, brand: string): RsaSpec {
     fitCopy([cityTitle ? `Serving ${cityTitle}` : 'Serving your area'], 30),
     fitCopy([brand, themeTitle], 30),
     fitCopy([`${themeTitle} help`, themeTitle], 30),
-    licensedAndInsured(ctx.claims) ? 'Licensed And Insured' : '',
+    licensedAndInsured(ctx.claims) ? 'Licensed And Insured' : 'Get A Quote',
     'Book A Visit',
     'Local Crew',
     'Call For A Visit',
@@ -426,7 +401,7 @@ function sitelinksOf(themes: string[], ctx: CampaignCtx, finalUrl: string): Site
   const base: { text: string; desc1: string; desc2: string; seg: string }[] = [
     { text: fitCopy([themes[0] || 'Our Services', 'Services'], 25), desc1: fitCopy([`Local ${(themes[0] || 'service').toLowerCase()}`, 'Local service'], 35), desc2: 'Clear timing', seg: 'services' },
     { text: 'Request A Visit', desc1: 'Talk through the work', desc2: 'No pressure', seg: 'visit' },
-    { text: 'About Us', desc1: fitCopy([ctx.city ? `Team in ${normalizeAdCase(ctx.city.split(',')[0] || '')}` : 'Local team', 'Local team'], 35), desc2: licensedAndInsured(ctx.claims) ? 'Licensed and insured' : 'Local service team', seg: 'about' },
+    { text: 'About Us', desc1: fitCopy([ctx.city ? `Team in ${normalizeAdCase(ctx.city.split(',')[0] || '')}` : 'Local team', 'Local team'], 35), desc2: licensedAndInsured(ctx.claims) ? 'Licensed and insured' : 'Meet the crew', seg: 'about' },
     { text: 'Contact Us', desc1: 'Call or message', desc2: 'We reply', seg: 'contact' },
   ];
   if (themes[1]) base.splice(1, 0, { text: fitCopy([themes[1], 'Services'], 25), desc1: fitCopy([`${themes[1]}`, 'More services'], 35), desc2: 'Ask about options', seg: 'services-2' });
@@ -444,12 +419,13 @@ export function defaultCallouts(claims?: VerifiedClaims): string[] {
   return [
     licensedAndInsured(claims) ? 'Licensed And Insured' : '',
     claims?.locallyOwned ? 'Locally Owned' : '',
-    'Clear Pricing',
-    'Fast Response',
     claims?.experienced ? 'Experienced Crew' : '',
+    'Request A Quote',
+    'Local Crew',
+    'Clear Pricing',
+    'Call Or Message',
+    'Ask About Timing',
     'Schedule A Visit',
-    'Request A Visit',
-    'Call Or Message Us',
   ].filter(Boolean).slice(0, 6);
 }
 

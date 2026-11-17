@@ -1,3 +1,5 @@
+import { paidWorkRefusal, recordCost } from '../billing/costsink.js';
+import { tokenCostUsd } from '../billing/cogs.js';
 import { MockInterpreter, appSlugFrom, type ActionOp, type AppAction, type Interpretation, type Interpreter } from './intent.js';
 import type { Session } from './types.js';
 
@@ -75,6 +77,8 @@ export class LlmInterpreter implements Interpreter {
 
   async interpretAsync(message: string, session: Session): Promise<Interpretation> {
     if (!this.openrouterKey && !this.apiKey) return this.fallback.interpret(message, session);
+    // No credits, no model call. The rule-based reader still answers.
+    if (paidWorkRefusal()) return this.fallback.interpret(message, session);
     try {
       const text = this.openrouterKey ? await this.viaOpenRouter(message) : await this.viaAnthropic(message);
       const json = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
@@ -121,6 +125,7 @@ export class LlmInterpreter implements Interpreter {
       body: JSON.stringify({
         model: this.openrouterModel,
         max_tokens: 400,
+        usage: { include: true },
         messages: [
           { role: 'system', content: SYSTEM },
           { role: 'user', content: message },
@@ -129,6 +134,16 @@ export class LlmInterpreter implements Interpreter {
     });
     if (!res.ok) throw new Error(`openrouter ${res.status}`);
     const data: any = await res.json();
+    // This call was never metered, so every chat turn was served at no cost
+    // to the account. Report it like every other generation.
+    const model = String(data?.model ?? this.openrouterModel);
+    const inTok = Number(data?.usage?.prompt_tokens) || 0;
+    const outTok = Number(data?.usage?.completion_tokens) || 0;
+    const reported = Number(data?.usage?.cost);
+    const providerReported = Number.isFinite(reported) && reported > 0;
+    if (inTok || outTok || providerReported) {
+      recordCost({ model, inputTokens: inTok, outputTokens: outTok, providerReported, costUsd: providerReported ? reported : tokenCostUsd(model, inTok, outTok) });
+    }
     return data?.choices?.[0]?.message?.content ?? '';
   }
 
