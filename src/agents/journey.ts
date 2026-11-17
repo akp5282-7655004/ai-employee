@@ -20,6 +20,10 @@ export interface CrawlInput {
   competitors?: string[];
   html?: string;
   links?: PageLinkRef[];
+  /** The saved trade from the profile. Wins over what the page HTML suggests. */
+  industry?: string;
+  /** The saved services list from the profile. Wins over what the page HTML suggests. */
+  services?: string;
 }
 
 export interface SetupAnswers {
@@ -109,8 +113,10 @@ export function crawlFacts(input: CrawlInput): { site: Partial<SiteImport>; text
   const location = input.location || site.serviceAreas || site.city || '';
   const profile: Record<string, string> = {};
   if (name) profile.businessName = name;
-  if (site.industry) profile.industry = site.industry;
-  if (site.services) profile.services = site.services;
+  const industry = (input.industry || '').trim() || site.industry;
+  const services = (input.services || '').trim() || site.services;
+  if (industry) profile.industry = industry;
+  if (services) profile.services = services;
   if (location) profile.serviceAreas = location;
   const siteUrl = normalizeSiteUrl(input.website || site.website);
   if (siteUrl) profile.website = siteUrl;

@@ -164,6 +164,7 @@ import { searchCompetitors } from './research/places.js';
 import { attributeRevenue } from './revenue/attribution.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
 import { hashPassword, verifyPassword, newToken, newUserId, parseCookies } from './auth.js';
+import { signupInputProblem } from './auth/signupRules.js';
 import { isHostedDeploy, MemoryStore, storageStatus, type Store, type User } from './db/index.js';
 
 /**
@@ -187,6 +188,8 @@ export interface ServerDeps {
 }
 
 const SESSION_DAYS = 30;
+/** The Miles logo mark, served as the tab icon. Same drawing as the app's brand row. */
+const FAVICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="1.5" y="1.5" width="97" height="97" rx="27" fill="#111112"/><g fill="none" stroke="#fff" stroke-width="8"><path d="M31.6 31.6A26 26 0 0 0 68.4 68.4" stroke-opacity=".22"/><path d="M31.6 31.6A26 26 0 0 1 68.4 68.4"/></g><circle cx="42" cy="50" r="4" fill="#fff"/><circle cx="58" cy="50" r="4" fill="#fff"/></svg>';
 
 // Served from the repo root (npm start / npm run dev both run from there).
 const WEB_DIR = join(process.cwd(), 'web');
@@ -306,6 +309,22 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     (req as unknown as { rawBody: Buffer }).rawBody = body as Buffer;
     if (!body.length) { done(null, {}); return; }
     try { done(null, JSON.parse(body.toString('utf8'))); } catch (err) { done(err as Error); }
+  });
+  // Plain HTML forms (the "Resend confirmation" button on the expired-link
+  // page). Only the routes listed here take form posts; every other route stays
+  // JSON-only, so a cross-site form cannot reach the API.
+  const FORM_ROUTES = new Set(['/auth/confirm/resend']);
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (req, body, done) => {
+    const path = (req.url || '').split('?')[0] ?? '';
+    if (!FORM_ROUTES.has(path)) {
+      const err = new Error('This address takes JSON, not a form post.') as Error & { statusCode: number };
+      err.statusCode = 415;
+      done(err);
+      return;
+    }
+    const out: Record<string, string> = {};
+    for (const [key, value] of new URLSearchParams(String(body))) out[key] = value;
+    done(null, out);
   });
 
   /**
@@ -661,7 +680,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   });
 
   const dashboardPage = readWeb('index.html', '<!doctype html><title>Miles</title><p>Build the web/ dir.</p>');
-  const loginPage = readWeb('login.html', '<!doctype html><title>Miles — Sign in</title><p>Login page missing.</p>');
+  const loginPage = readWeb('login.html', '<!doctype html><title>Miles, Sign in</title><p>Login page missing.</p>');
 
   // ── auth helpers ──
   // Secure is set wherever the app is actually served over TLS. It is left off
@@ -820,6 +839,15 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return reply.type('text/html').send(u ? dashboardPage : loginPage);
   });
   app.get('/login', async (_req, reply) => reply.type('text/html').send(loginPage));
+  // "Start free" links point here. Opens the login page on the Sign up tab and
+  // keeps any invite or utm parameters the link carried.
+  app.get('/signup', async (req, reply) => {
+    const raw = (req.url || '').split('?')[1] || '';
+    const params = new URLSearchParams(raw);
+    params.delete('signup');
+    const rest = params.toString();
+    return reply.redirect(`/login?signup=1${rest ? '&' + rest : ''}`);
+  });
 
   // Whether accounts actually survive a restart. Public and unauthenticated on
   // purpose: the symptom it explains ("my account is gone", "it doesn't
@@ -866,7 +894,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     await startSession(reply, demo.id);
     return reply.type('text/html').send(dashboardPage);
   });
-  app.get('/favicon.ico', async (_req, reply) => reply.code(204).send());
+  // The Miles mark, the same one the app shows in its tab. Browsers that ask
+  // for /favicon.ico (status pages, the privacy page) get the SVG too.
+  const sendFavicon = async (_req: unknown, reply: FastifyReply) => {
+    reply.header('cache-control', 'public, max-age=86400');
+    return reply.type('image/svg+xml').send(FAVICON_SVG);
+  };
+  app.get('/favicon.ico', sendFavicon);
+  app.get('/favicon.svg', sendFavicon);
   // Self-hosted third-party assets (the TOAST UI image editor + fabric.js). Served
   // from web/vendor so the editor has no runtime CDN dependency. Read-only, no auth.
   app.get<{ Params: Record<string, string> }>('/vendor/*', async (req, reply) => {
@@ -922,8 +957,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // ── auth ──
   app.post('/auth/signup', async (req, reply) => {
     const b = (req.body ?? {}) as { email?: string; password?: string; name?: string; invite?: string; tos?: boolean; utmSource?: string; utm_source?: string; utmCampaign?: string; utm_campaign?: string; referrer?: string };
-    if (!b.email || !b.password || b.password.length < 6)
-      return reply.code(400).send({ error: 'Enter an email and a password of at least 6 characters.' });
+    const signupProblem = signupInputProblem(b.email, b.password);
+    if (signupProblem) return reply.code(400).send(signupProblem);
+    b.email = String(b.email).trim();
+    b.password = String(b.password);
     // ToS acceptance is required and version-stamped to the account — the
     // in-product acknowledgment matters as much as the document (ToS notes).
     if (b.tos !== true) return reply.code(400).send({ error: 'Please accept the Terms of Service to create an account.' });
@@ -1071,7 +1108,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     try { tos = readFileSync(join(process.cwd(), 'docs', 'legal', 'terms-of-service-mvp.md'), 'utf8'); } catch { tos = 'Terms of Service draft unavailable.'; }
     const subs = '\n\n---\n\n## Sub-processors (ToS §5.4)\nThe Service currently uses: Render (hosting), Pipedream (connected-account API access), OpenRouter and Anthropic-compatible model providers (AI text), fal.ai (AI images), and a managed Postgres database. This list will move to a dedicated page before general availability.';
     const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Miles — Terms of Service (${TOS_VERSION})</title><style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:820px;margin:0 auto;padding:32px 20px;color:#1e293b;background:#fff}pre{white-space:pre-wrap;word-wrap:break-word;font-family:inherit;font-size:14px;line-height:1.55}a{color:#4f46e5}</style></head><body><p><a href="/">← Back to Miles</a></p><pre>${esc(tos + subs)}</pre></body></html>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Miles, Terms of Service (${TOS_VERSION})</title><style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:820px;margin:0 auto;padding:32px 20px;color:#1e293b;background:#fff}pre{white-space:pre-wrap;word-wrap:break-word;font-family:inherit;font-size:14px;line-height:1.55}a{color:#4f46e5}</style></head><body><p><a href="/">← Back to Miles</a></p><pre>${esc(tos + subs)}</pre></body></html>`;
     return reply.type('text/html').send(html);
   });
 
@@ -1079,7 +1116,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
 
   app.get('/privacy', async (_req, reply) => {
     const contact = supportEmail();
-    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Miles AI privacy policy</title><style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:820px;margin:0 auto;padding:32px 20px;color:#1e293b;background:#fff;line-height:1.55}a{color:#4f46e5}h1{font-size:28px}h2{font-size:18px;margin-top:28px}</style></head><body>
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Miles, Privacy policy</title><style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:820px;margin:0 auto;padding:32px 20px;color:#1e293b;background:#fff;line-height:1.55}a{color:#4f46e5}h1{font-size:28px}h2{font-size:18px;margin-top:28px}</style></head><body>
 <p><a href="/login">Back to sign in</a></p>
 <h1>Miles AI privacy policy</h1>
 <p>Miles AI is a marketing employee for local service businesses. This page says what we read, why, and how you delete it.</p>
@@ -1097,6 +1134,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return reply.type('text/html').send(html);
   });
 
+  const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   app.get<{ Querystring: { uid?: string; token?: string } }>('/auth/confirm', async (req, reply) => {
     const uid = req.query.uid || '';
     const token = req.query.token || '';
@@ -1104,7 +1142,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = user ? await authStore.getUserData(user.id) : {};
     const pending = (data.emailConfirm ?? {}) as { token?: string; exp?: number };
     const expired = !pending.token || !pending.exp || pending.exp < Date.now() || pending.token !== token;
-    const page = (title: string, body: string, resend: boolean) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head><body style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:480px;margin:48px auto;padding:0 20px"><h1>${title}</h1><p>${body}</p>${resend ? `<form method="post" action="/auth/confirm/resend"><input type="hidden" name="email" value="${user?.email || ''}"><button type="submit">Resend confirmation</button></form>` : '<p><a href="/login">Sign in</a></p>'}<p><a href="/login">Back to sign in</a></p></body></html>`;
+    const page = (title: string, body: string, resend: boolean) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Miles, ${title}</title></head><body style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:480px;margin:48px auto;padding:0 20px"><h1>${title}</h1><p>${body}</p>${resend ? `<form method="post" action="/auth/confirm/resend"><input type="hidden" name="email" value="${escapeHtml(user?.email || '')}"><button type="submit">Resend confirmation</button></form>` : '<p><a href="/login">Sign in</a></p>'}<p><a href="/login">Back to sign in</a></p></body></html>`;
     if (!user || expired) return reply.code(400).type('text/html').send(page('This link expired', 'That confirmation link is no longer valid. Request a new one.', true));
     delete data.emailConfirm;
     data.emailConfirmedAt = new Date().toISOString();
@@ -1621,11 +1659,101 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       next.phone = phone.value;
     }
     for (const key of Object.keys(next)) if (typeof next[key] === 'string') next[key] = (next[key] as string).trim();
+    const before = (data.profile ?? {}) as Record<string, unknown>;
+    const said = (v: unknown) => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v));
+    // A trade switch: the old trade's offer and services do not carry over
+    // unless this same save sets them.
+    const tradeChanged = 'industry' in body && said(before.industry).toLowerCase() !== said(next.industry).toLowerCase();
+    if (tradeChanged && said(before.industry)) {
+      if (!('currentOffers' in body)) delete next.currentOffers;
+      if (!('services' in body)) delete next.services;
+    }
     data.profile = next;
+    refreshMilesAfterProfile(data, before, next, tradeChanged);
     await authStore.setUserData(u.id, data);
     await refreshLaunchCredit(u.id);
     return { ok: true, profile: data.profile };
   });
+  /**
+   * Keep the saved Miles setup in step with the profile. A new trade rebuilds
+   * the bundle on that trade's playbook (mode, caps and answers kept). A new
+   * business name, website or phone is copied into the bundle. Either way the
+   * saved and approved Google plans are rebuilt, so the next plan uses the new
+   * facts, and the owner approves it again before anything launches.
+   */
+  const refreshMilesAfterProfile = (data: Record<string, unknown>, before: Record<string, unknown>, next: Record<string, unknown>, tradeChanged: boolean) => {
+    const miles = milesOf(data);
+    const old = miles.bundle;
+    if (!old) return;
+    const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v));
+    const p: Record<string, string> = {};
+    for (const [k, v] of Object.entries(next)) if (typeof v === 'string') p[k] = v;
+    const nameChanged = 'businessName' in next && str(next.businessName) !== str(before.businessName);
+    const siteChanged = 'website' in next && normalizeSiteUrl(str(next.website)) !== normalizeSiteUrl(str(before.website));
+    const phoneChanged = 'phone' in next && str(next.phone) !== str(before.phone);
+    if (!tradeChanged && !nameChanged && !siteChanged && !phoneChanged) return;
+    const notes: string[] = [];
+    if (tradeChanged) {
+      const rebuilt = buildBundle({
+        businessName: p.businessName || old.setup.businessName,
+        location: old.setup.location || p.serviceAreas,
+        email: old.setup.email || p.email,
+        website: normalizeSiteUrl(p.website) || old.setup.website,
+        gbpUrl: old.setup.gbpUrl,
+        competitors: old.setup.competitors,
+        html: '',
+        links: miles.crawl?.links,
+        industry: p.industry,
+        services: p.services,
+        goal: old.setup.goal,
+        dailyBudget: old.setup.caps.dailyBudget,
+        leadsPerDay: old.setup.leadsPerDay,
+        googleShare: old.setup.googleShare,
+        mode: old.setup.mode,
+        areaModes: old.setup.areaModes,
+        caps: old.setup.caps,
+      });
+      rebuilt.profile = { ...rebuilt.profile, ...p, hours: old.hours, license: old.license };
+      rebuilt.hours = old.hours;
+      rebuilt.license = old.license;
+      rebuilt.setup.gbpNote = old.setup.gbpNote;
+      rebuilt.channels = old.channels;
+      rebuilt.audits = [
+        ...old.audits.filter((a) => a.id === 'website' || a.id === 'competitor'),
+        performanceAudit({ trade: p.industry || rebuilt.playbook.trade, hasSpend: false, demo: connector.name === 'mock' }),
+      ] as typeof rebuilt.audits;
+      miles.bundle = rebuilt;
+      notes.push(`Trade changed to ${p.industry || 'a new trade'}. Setup rebuilt. ${rebuilt.playbook.title}.`);
+    }
+    const bundle = miles.bundle!;
+    if (nameChanged) {
+      bundle.setup.businessName = p.businessName || '';
+      bundle.profile.businessName = p.businessName || '';
+      if (miles.found) miles.found.businessName = p.businessName || '';
+      notes.push('Business name updated in the setup.');
+    }
+    if (siteChanged) {
+      const site = normalizeSiteUrl(p.website) || '';
+      bundle.setup.website = site;
+      bundle.profile.website = site;
+      if (miles.found) miles.found.website = site;
+      notes.push(site ? `Website updated to ${site} in the setup.` : 'Website removed from the setup.');
+    }
+    if (phoneChanged) {
+      bundle.profile.phone = p.phone || '';
+      if (miles.found) miles.found.phone = p.phone || '';
+      notes.push('Phone updated in the setup.');
+    }
+    // The saved plan was drafted for the old facts. Draft it again from the new
+    // ones, and drop the old approval so nothing launches on the old plan.
+    const hadApproval = miles.planApproved === true || !!miles.approvedPlan;
+    miles.approvedPlan = undefined;
+    miles.planApproved = false;
+    data.miles = miles;
+    bundle.spec = buildSearchPlan(planProfileOf(data, miles)).spec;
+    notes.push(hadApproval ? 'The Google plan was redrafted. Approve it again before Miles launches.' : 'The Google plan was redrafted.');
+    rememberMiles(data, miles, notes.join(' '));
+  };
 
   // Your Business. The page renders this payload. Counts and connection pills
   // come from saved data, not from the operator mock.
@@ -1723,7 +1851,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     } else if (!html) {
       fetchNote = 'No website is on the form or the saved profile, so no page was fetched.';
     }
-    const facts = crawlFacts({ businessName, location, email, website, gbpUrl, competitors, html });
+    // The trade the owner saved wins over what the page suggests.
+    const facts = crawlFacts({ businessName, location, email, website, gbpUrl, competitors, html, industry: saved.industry });
     if (gbpUrl) facts.profile.gbpUrl = gbpUrl;
     const savedWebsite = normalizeSiteUrl(website);
     if (savedWebsite) facts.profile.website = savedWebsite;
@@ -1777,6 +1906,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       competitors: String(p.competitors || '').split(',').map((s) => s.trim()).filter(Boolean),
       html: '',
       links: crawl?.links,
+      industry: p.industry || crawl?.profile.industry,
+      services: p.services || crawl?.profile.services,
       goal: body.goal || 'get me leads',
       dailyBudget: Number(body.dailyBudget) || 20,
       leadsPerDay: Number(body.leadsPerDay) || 1,
@@ -2361,6 +2492,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         gbpUrl: profile.gbpUrl,
         html: '',
         links: miles.crawl?.links,
+        industry: profile.industry || miles.crawl?.profile.industry,
+        services: profile.services || miles.crawl?.profile.services,
         goal: profile.goal,
         dailyBudget: picked.daily,
         leadsPerDay,
@@ -5633,8 +5766,41 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     } catch {
       /* leave empty on any error */
     }
+    // The connect window polls this route. When the set of connected apps
+    // changes (a connect finished), rebuild the dashboard numbers behind it.
+    const appsKey = [...connectedApps].sort().join(',');
+    const seenKey = seenConnectedApps.get(u.id);
+    seenConnectedApps.set(u.id, appsKey);
+    if (seenKey !== undefined && seenKey !== appsKey) void rebuildSnapshotNow(u.id);
     return { connector: connector.name, hub: { ready: pdReady, env: cfg.pipedream.environment }, connectedApps, demo: isDemoAccount(u.email) };
   });
+  const seenConnectedApps = new Map<string, string>();
+  /**
+   * Rebuild the dashboard snapshot after a connection changes, so it does not
+   * keep showing a disconnected account's numbers until the snapshot ages out.
+   * Waits up to waitMs for the new read. If the read is slower than that, the
+   * old snapshot is dropped so no stale numbers are shown, and the read
+   * finishes behind the response.
+   */
+  const rebuildSnapshotNow = async (uid: string, waitMs = 5_000): Promise<boolean> => {
+    const running = snapshotRefreshing.get(uid);
+    if (running) await running.catch(() => undefined);
+    const build = refreshSnapshot(uid);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const done = await Promise.race([
+      build.then((snap) => !!snap),
+      new Promise<false>((resolve) => { timer = setTimeout(() => resolve(false), waitMs); }),
+    ]);
+    clearTimeout(timer);
+    if (!done) {
+      const data = await authStore.getUserData(uid);
+      if (data.snapshot) {
+        delete data.snapshot;
+        await authStore.setUserData(uid, data);
+      }
+    }
+    return done;
+  };
 
   // The concrete identity of every connected platform — account names, Google
   // customer IDs, Meta ad-account + Page name/logo — so the owner can see exactly
@@ -5680,6 +5846,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const r = await connector.disconnectAccount(u.id, accountId);
     if (!r.ok) return reply.code(400).send({ error: r.note || 'Could not disconnect.' });
     forgetConnectionReads(u.id);
+    seenConnectedApps.delete(u.id);
+    await rebuildSnapshotNow(u.id);
     return { ok: true };
   });
 
