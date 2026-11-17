@@ -18,6 +18,9 @@ describe('buildMetaCampaignSpec', () => {
     expect(spec.geo.zips).toEqual(['19116', '19115']); // parsed from service areas
     expect(spec.website).toBe('https://phillyroofingco.com'); // normalized
     expect(spec.ad.primaryText).toContain('$500 off a new roof');
+    // Financing shows customers a plain terms line, never the owner's playbook advice.
+    expect(spec.ad.primaryText).toContain('Financing available with approved credit. See terms.');
+    expect(spec.ad.primaryText).not.toMatch(/lender actually quotes|Miles does not/);
     expect(spec.ad.cta).toBe('GET_QUOTE'); // roofing → quote
     expect(validateMetaCampaignSpec(spec)).toEqual([]); // ready to launch
   });

@@ -123,7 +123,8 @@ export function buildMetaCampaignSpec(input: MetaCampaignInput, ctx: MetaCampaig
     offerLine + '.',
     pb.offer.reasonWhy,
     pb.offer.stack.join(' '),
-    input.financing ? pb.offer.financing : '',
+    // pb.offer.financing is advice to the owner, not ad copy. Customers see a plain line.
+    input.financing ? 'Financing available with approved credit. See terms.' : '',
     trustLine,
   ].filter(Boolean).join('\n\n')).slice(0, 600);
   const checked = guardCopy(drafted);
