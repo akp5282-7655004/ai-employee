@@ -610,6 +610,13 @@
   .side .newproj{color:#d5d5dc;border-color:#3a3a42;}
   .side .acct{background:#121214;box-shadow:none;border-color:#2a2a30;}
   .side #logout{color:#c8c8ce;}
+  #header-logout{display:none;min-height:24px;min-width:24px;border:1px solid var(--line);border-radius:8px;background:#fff;font:700 12px inherit;padding:6px 10px;cursor:pointer}
+  #help-mail,#help-site{min-height:24px;display:inline-flex;align-items:center;font-size:12px;font-weight:700;margin-left:8px}
+  button,.go,.md-ask,.md-ghost,a{min-height:24px}
+  :focus-visible{outline:2px solid #111;outline-offset:2px}
+  html,body{overflow-x:hidden}
+  img,table,pre,.mcard{max-width:100%}
+  @media (max-width:760px){#header-logout{display:inline-flex;align-items:center}}
   body.on-dash .pagehead{display:none;}
   body.on-chat .askbtn{display:none;}
   body.on-chat .main{display:flex;flex-direction:column;overflow:hidden;height:100dvh;padding-bottom:18px;}
@@ -1319,6 +1326,9 @@
       <button class="navtoggle" id="navtoggle" type="button" aria-label="Menu" aria-expanded="false"><svg class="ico" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
       <h2 id="ptitle">Dashboard</h2><span id="admin-sub" hidden>Owner only. Every account, what it pays, and who needs a nudge.</span><div class="sp"></div>
       <button class="askbtn" data-ask><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 1.9 4.8L19 9l-4 3.5L16 18l-4-2.4L8 18l1-5.5L5 9l5.1-1.2Z"/></svg> Ask Miles</button>
+      <button id="header-logout" type="button" aria-label="Log out">Log out</button>
+      <a id="help-mail" href="mailto:support@miles.ai">Help</a>
+      <a id="help-site" href="https://sites.pathhackers.com/home/site/de09bf3e">FAQ</a>
       <button class="tbtn" id="theme" title="Theme">◑</button>
     </div>
     <!-- Pages belonging to the current destination. Hidden when it owns one. -->
@@ -2460,7 +2470,7 @@ function buildRecCard(r,onResolved){
   const ap=el('button','go','✓ Approve'); ap.style.flex='none';
   const dm=el('button','adsave','Dismiss');
   ap.onclick=async()=>{ ap.disabled=true; dm.disabled=true; ap.textContent='Applying…'; try{ const res=await(await fetch('/api/recommendations/apply',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rec:r})})).json(); bar.remove(); card.style.opacity='.7'; const done=el('div','verdict ok'); done.textContent=(res&&res.status==='live')?'✓ Approved & applied, see the Change Log.':'✓ Approved, queued in Deploy for you to push live.'; card.append(done); onResolved&&onResolved('approved'); }catch(e){ ap.disabled=false; dm.disabled=false; ap.textContent='✓ Approve'; toast('Couldn’t apply that, try again.'); } };
-  dm.onclick=async()=>{ try{ await fetch('/api/recommendations/dismiss',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id})}); }catch(e){} card.style.transition='opacity .2s'; card.style.opacity='0'; setTimeout(()=>{ card.remove(); onResolved&&onResolved('dismissed'); },200); };
+  dm.onclick=async()=>{ try{ await fetch('/api/recommendations/dismiss',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id,why:r.why||r.title||''})}); }catch(e){} card.style.transition='opacity .2s'; card.style.opacity='0'; setTimeout(()=>{ card.remove(); onResolved&&onResolved('dismissed'); },200); };
   bar.append(ap,dm); card.append(bar);
   return card;
 }
@@ -4002,7 +4012,7 @@ async function dashQueue(wrap, label){
         state.done=true; acts.innerHTML=''; const ok=el('span','appsub','Approved'); ok.style.color='var(--good)'; acts.append(ok); row.style.opacity='.65';
       }catch(e){ ap.disabled=false; sk.disabled=false; ap.textContent='Approve'; toast('Couldn’t apply that, try again.'); } };
     ap.onclick=async()=>{ await state.approve(); refreshFoot(); };
-    sk.onclick=async()=>{ try{ await fetch('/api/recommendations/dismiss',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id})}); }catch(e){}
+    sk.onclick=async()=>{ try{ await fetch('/api/recommendations/dismiss',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id,why:r.why||r.title||''})}); }catch(e){}
       state.done=true; row.style.transition='opacity .2s'; row.style.opacity='0'; setTimeout(()=>row.remove(),200); refreshFoot(); };
     acts.append(ap,sk); row.append(acts); rows.push(state); list.append(row);
   });
@@ -4085,7 +4095,11 @@ async function renderLeadsCard(host){
   if(!REMOTE){ card.append(el('p','md-explain','Leads load after you sign in.')); return card; }
   const res=await fetchJson('/api/leads', null, 8000);
   const counts=(res.data&&res.data.counts)||{new:0,booked:0,lost:0};
-  card.append(el('p','md-legend', counts.new+' new, '+counts.booked+' booked, '+counts.lost+' lost.'));
+  card.append(el('p','md-legend', counts.new+' new, '+counts.booked+' booked, '+counts.lost+' lost. Last updated '+new Date().toLocaleString()));
+  const tools=el('div'); tools.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin:8px 0';
+  const search=el('input'); search.placeholder='Search leads'; search.setAttribute('aria-label','Search leads'); search.id='lead-search';
+  const csv=el('a','md-ghost','Export CSV'); csv.href='/api/leads.csv'; csv.style.cssText='min-height:24px;display:inline-flex;align-items:center';
+  tools.append(search, csv); card.append(tools);
   const form=el('div'); form.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin:8px 0';
   form.innerHTML='<input id="lead-name" placeholder="Name" aria-label="Lead name" style="flex:1;min-width:120px"><input id="lead-phone" placeholder="Phone" aria-label="Lead phone" style="flex:1;min-width:120px"><button class="md-ask" id="lead-add" type="button">Add</button>';
   card.append(form);
@@ -4094,7 +4108,11 @@ async function renderLeadsCard(host){
   if(!leads.length) card.append(el('p','md-explain','No leads yet. Add one here, or connect a CRM and they will show up.'));
   for(const lead of leads){
     const row=el('div','md-crow');
-    row.append(el('b',null, lead.name), el('span','md-legend', lead.phone), el('span','md-legend', lead.status));
+    row.dataset.q=((lead.name||'')+' '+(lead.source||'Unknown')+' '+(lead.status||'')).toLowerCase();
+    row.append(el('b',null, lead.name), el('span','md-legend', lead.phone), el('span','md-legend', lead.status+(lead.optOut?' · Opted out':'')), el('span','md-legend', lead.source||'Unknown'));
+    const opt=el('button','md-ghost', lead.optOut?'Opt back in':'Opt out'); opt.type='button'; opt.title='Opt-out stops messages to this lead';
+    opt.onclick=async()=>{ opt.disabled=true; await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:lead.id,optOut:!lead.optOut})}); renderLeadsCard(card); };
+    row.append(opt);
     if(lead.status!=='booked' && lead.status!=='lost'){
       const booked=el('button','md-ghost','Booked'); booked.type='button';
       const lost=el('button','md-ghost','Lost'); lost.type='button';
@@ -4104,6 +4122,7 @@ async function renderLeadsCard(host){
     }
     card.append(row);
   }
+  search.oninput=()=>{ const q=search.value.toLowerCase(); card.querySelectorAll('[data-q]').forEach(row=>{ row.style.display=row.dataset.q.includes(q)?'':'none'; }); };
   const add=card.querySelector('#lead-add');
   if(add) add.onclick=async()=>{
     const r=await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:card.querySelector('#lead-name').value,phone:card.querySelector('#lead-phone').value})});
@@ -4249,7 +4268,7 @@ function renderOverview(d, miles, op, setup){
   const gsel=el('select','md-range'); gsel.setAttribute('aria-label','Date range');
   for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===MKT_RANGE) o.selected=true; gsel.append(o); }
   gsel.title='Changes live leads, booked revenue, and agent runs. Sample figures and ad spend stay on the last 30 days.';
-  gsel.onchange=async()=>{ MKT_RANGE=gsel.value; await openOverview(); };
+  gsel.onchange=async()=>{ MKT_RANGE=gsel.value; if(typeof ADS_RANGE!=='undefined') ADS_RANGE=gsel.value; if(typeof GROWTH_RANGE!=='undefined') GROWTH_RANGE=gsel.value; await openOverview(); if(typeof openAdsManager==='function' && document.getElementById('page-adsmgr')&&document.getElementById('page-adsmgr').classList.contains('on')) openAdsManager(); };
   const ask=el('button','md-ask','Ask Miles');
   ask.onclick=()=>{ if(typeof enterChat==='function') enterChat(); };
   const theme=el('button','md-theme','◑'); theme.title='Theme'; theme.onclick=()=>{ const t=$('#theme'); if(t) t.click(); };
@@ -7330,6 +7349,7 @@ function showModal(html){ $('#modal-body').innerHTML=html; $('#modal').classList
 function noDash(s){ return String(s||'').replace(/[ \t]*\u2014[ \t]*/g, ', ').replace(/\u2013/g, '-'); }
 function closeModal(){ $('#modal').classList.remove('on'); const box=document.querySelector('#modal .modalbox'); if(box) box.classList.remove('lib-wide'); }
 $('#modal-x').onclick=closeModal; $('#modal').onclick=(e)=>{ if(e.target.id==='modal') closeModal(); };
+document.addEventListener('keydown',(e)=>{ if(e.key==='Escape') closeModal(); });
 function toast(msg){ let t=$('#toast'); if(!t){ t=el('div'); t.id='toast'; t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:100;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;transition:opacity .2s'; document.body.append(t);} t.textContent=msg; t.style.opacity='1'; clearTimeout(t._t); t._t=setTimeout(()=>{t.style.opacity='0';},1900); }
 
 let HUB={campaigns:[]}, HUB_LOADED=false, hubView=null;
@@ -9391,12 +9411,16 @@ function awaitConnection(slug, w, slot){
   },3000);
 }
 function appLogo(a){ const l=el('div','applogo'); if(a.img){ const im=el('img'); im.src=a.img; im.alt=''; im.onerror=()=>{l.textContent=(a.name||'?')[0];im.remove();}; l.append(im);} else { l.textContent=(a.name||'?')[0]; } return l; }
+const CONNECTABLE=new Set(['google_ads','gohighlevel','highlevel_oauth','google_my_business','facebook_pages','gmail']);
 function appCard(a, connected){
   const c=el('div','appcard'); const mid=el('div'); mid.append(el('div','appname',a.name));
-  if(connected) mid.append(el('div','appsub','1 account connected'));
+  const wired=CONNECTABLE.has(a.slug);
+  if(connected) mid.append(el('div','appsub','Connected'));
+  else if(!wired) mid.append(el('div','appsub','Coming soon'));
+  else mid.append(el('div','appsub','Not connected. Try again'));
   c.append(appLogo(a), mid);
   if(connected) c.append(el('div','cdot','✓'));
-  c.onclick=()=>beginConnect(a.slug);
+  c.onclick=()=>{ if(!wired && !connected){ toast(a.name+' is coming soon. Nothing was connected.'); return; } beginConnect(a.slug); };
   return c;
 }
 // The home-services revenue stack, the tools this segment actually runs, grouped
@@ -9466,7 +9490,7 @@ function connDetailCard(d){
 function confirmDisconnect(d){
   showModal('<h3 style="margin:0 0 10px">Disconnect '+esc(d.label)+'?</h3><p class="mdesc" style="margin:0 0 14px">Miles will stop reading from and sending through <b>'+esc(d.accountName||d.label)+'</b>. Any automations that use it will hold until you reconnect. You can reconnect anytime from Integrations.</p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="adsave" id="dc-cancel">Cancel</button><button class="go" id="dc-go" style="flex:none">Disconnect</button></div>');
   $('#dc-cancel').onclick=closeModal;
-  $('#dc-go').onclick=async()=>{ const b=$('#dc-go'); b.disabled=true; b.textContent='Disconnecting…'; try{ const r=await(await fetch('/api/connections/disconnect',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({accountId:d.accountId})})).json(); if(r.ok){ toast(d.label+' disconnected'); closeModal(); loadIntegrations(); } else { toast(r.error||'Could not disconnect'); b.disabled=false; b.textContent='Disconnect'; } }catch(e){ toast('Could not disconnect'); b.disabled=false; b.textContent='Disconnect'; } };
+  $('#dc-go').onclick=async()=>{ const b=$('#dc-go'); b.disabled=true; b.textContent='Disconnecting…'; try{ const r=await(await fetch('/api/connections/disconnect',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({accountId:d.accountId})})).json(); if(r.ok){ toast('Sync stopped. '+d.label+' will not read or send until you reconnect.'); closeModal(); loadIntegrations(); } else { toast(r.error||'Could not disconnect'); b.disabled=false; b.textContent='Disconnect'; } }catch(e){ toast('Could not disconnect'); b.disabled=false; b.textContent='Disconnect'; } };
 }
 function renderInts(){
   const configured = !!(CONN.hub && CONN.hub.ready);
@@ -9599,7 +9623,9 @@ async function send(text,silent){
   if(isEmailRequest(msg)) return milesEmailFlow(msg);
   const b=addRow('emp'); const typ=el('div','typing'); typ.innerHTML='<span></span><span></span><span></span>'; b.append(typ);
   try{
-    const r=await fetch('/api/chat/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-16),mode:chatMode})});
+    const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(),30000);
+    const r=await fetch('/api/chat/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-16),mode:chatMode}),signal:ctrl.signal});
+    clearTimeout(timer);
     const d=await r.json();
     b.className='bubble md'; b.innerHTML='';
     (d.steps||[]).forEach(step=>{ const line=el('div','appsub', step); line.style.margin='0 0 4px'; b.append(line); });
@@ -9615,7 +9641,7 @@ async function send(text,silent){
     const body=el('div'); body.innerHTML=mdToHtml(d.text||d.error||'I could not answer that. Nothing was changed.'); b.append(body);
     if(d.next&&d.next.label){ const go=el('button','go', d.next.label); go.type='button'; go.style.marginTop='8px'; go.onclick=()=>setPage(d.next.page||'integrations'); b.append(go); }
     logChat('emp', d.text||''); chat.scrollTop=chat.scrollHeight;
-  }catch(e){ b.textContent='I could not reach the server just now. Try again.'; }
+  }catch(e){ b.textContent=e&&e.name==='AbortError'?'That took too long. Try again in a moment. Nothing was changed.':'I could not reach the server just now. Try again.'; }
 }
 // Miles takes the request, picks the workflow, builds it on-brand, and leaves it
 // in the dashboard review queue.
@@ -10447,7 +10473,13 @@ $('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=r
   // Returning to desktop width must never leave the drawer state stuck on.
   window.addEventListener('resize',()=>{ if(window.innerWidth>760) setOpen(false); });
 })();
-$('#logout').onclick=async()=>{ try{ await fetch('/auth/logout',{method:'POST'}); }catch(e){} window.location='/login'; };
+async function doLogout(){ try{ await fetch('/auth/logout',{method:'POST'}); }catch(e){} window.location='/login'; }
+$('#logout').onclick=doLogout; const headerOut=$('#header-logout'); if(headerOut) headerOut.onclick=doLogout;
+document.addEventListener('submit',(e)=>{ const btn=e.target&&e.target.querySelector&&e.target.querySelector('button'); if(btn) btn.disabled=true; });
+let formDirty=false;
+document.addEventListener('input',(e)=>{ if(e.target&&e.target.closest&&e.target.closest('input,textarea,select')&&!(e.target.closest('#page-chat'))) formDirty=true; });
+window.addEventListener('beforeunload',(e)=>{ if(!formDirty) return; e.preventDefault(); e.returnValue=''; });
+fetch('/api/support').then(r=>r.json()).then(d=>{ if(d.email){ const a=$('#help-mail'); if(a){ a.href='mailto:'+d.email; a.textContent='Help '+d.email; } } }).catch(()=>{});
 async function authInit(){
   if(!REMOTE) return;
   try{

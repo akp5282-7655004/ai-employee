@@ -158,8 +158,9 @@ import {
 import { aggregateNetwork, type WorkspaceSignal } from './usage/network.js';
 import { deliveryStatus, sendEmail, sendSms, smsExcerpt } from './delivery/send.js';
 import { parseBudget, parseEmail, toE164 } from './identity/fields.js';
+import { HELP_SITE, cancelQueued, claimOnce, contradictoryAsk, hideDismissed, isOptOutMessage, isQuietHour, leadOffset, marketingFooter, scrubSecrets } from './qa/ownerrows.js';
 import { grantedIdentity, launchCreditStatus, maybeGrantLaunchCredit, LAUNCH_WAIT } from './billing/launchcredit.js';
-import { addLead, leadCounts, readLeads, setLeadStatus } from './crm/leads.js';
+import { addLead, leadCounts, readLeads, setLeadOptOut, setLeadStatus } from './crm/leads.js';
 import { searchCompetitors } from './research/places.js';
 import { attributeRevenue } from './revenue/attribution.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
@@ -653,9 +654,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     // Fastify's own logger is off (logger: false) to avoid per-request noise,
     // which means req.log is a silent no-op — console.error is what actually
     // reaches Render's log stream.
-    if (status >= 500) console.error(`unhandled error ${JSON.stringify({ url: req.url, err: (err as Error).message })}`);
+    if (status >= 500) console.error(`unhandled error ${JSON.stringify({ url: req.url, err: scrubSecrets((err as Error).message) })}`);
     if (req.url.startsWith('/api/') || req.url.startsWith('/auth/')) {
-      return reply.code(status).send({ error: status >= 500 ? 'Something went wrong on our end.' : (err as Error).message });
+      const raw = status >= 500 ? 'Something went wrong on our end.' : (err as Error).message;
+      return reply.code(status).send({ error: scrubSecrets(raw) });
     }
     return reply.code(status).type('text/html').send(statusPage(status, 'Something went wrong', 'Miles hit an error loading that. Trying again usually works — if it keeps happening, let us know.'));
   });
@@ -1149,6 +1151,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = who ? await authStore.getUserByEmail(who) : null;
     if (!u || !verifyPassword(b.password ?? '', u.passwordHash))
       return reply.code(401).send({ error: 'Wrong email or password.' });
+    const pausedData = await authStore.getUserData(u.id);
+    if (pausedData.accountPaused === true) {
+      return reply.code(403).send({ error: 'This account is deactivated. Ask the Miles owner to turn it back on.' });
+    }
     await startSession(reply, u.id);
     return { ok: true, user: { id: u.id, email: u.email, name: u.name } };
   });
@@ -1642,11 +1648,23 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       if (!profileEmail.ok) return reply.code(400).send({ error: profileEmail.error, field: 'email' });
       next.email = profileEmail.value;
     }
+    const previousTrade = String(((data.profile as { industry?: string } | undefined)?.industry) || '');
+    const nextTrade = 'industry' in body ? String(body.industry || '') : previousTrade;
+    if (previousTrade && nextTrade && previousTrade.toLowerCase() !== nextTrade.toLowerCase()) {
+      data.followUpDrafts = [];
+      data.recState = { applied: {}, dismissed: {} };
+      const miles = milesOf(data);
+      miles.inbox = miles.inbox.filter((item) => item.status !== 'queued');
+      data.miles = miles;
+    }
     for (const key of Object.keys(next)) if (typeof next[key] === 'string') next[key] = (next[key] as string).trim();
     data.profile = next;
+    const step = milesOf(data);
+    step.setupStep = ['businessName', 'industry', 'phone', 'website'].find((key) => !String((next as Record<string, unknown>)[key] || '').trim()) || 'done';
+    data.miles = step;
     await authStore.setUserData(u.id, data);
     await refreshLaunchCredit(u.id);
-    return { ok: true, profile: data.profile };
+    return { ok: true, profile: data.profile, setupStep: step.setupStep };
   });
 
   // Your Business. The page renders this payload. Counts and connection pills
@@ -1679,6 +1697,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     /** The plan the owner approved. Automate reuses it after the first approval. */
     approvedPlan?: CampaignSpec;
     planApproved?: boolean;
+    lastCreateKey?: string;
+    lastCreateAt?: string;
+    setupStep?: string;
   };
   const milesOf = (data: Record<string, unknown>): MilesFile => {
     const raw = (data.miles as Partial<MilesFile>) ?? {};
@@ -1699,6 +1720,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       pendingMode: raw.pendingMode,
       approvedPlan: raw.approvedPlan,
       planApproved: raw.planApproved === true,
+      lastCreateKey: raw.lastCreateKey,
+      lastCreateAt: raw.lastCreateAt,
+      setupStep: raw.setupStep,
     };
   };
   const rememberMiles = (data: Record<string, unknown>, miles: MilesFile, text: string, go = false) => {
@@ -2431,13 +2455,20 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Confirm required.' });
+    const wanted = String(req.body?.id || '');
+    let missing = false;
+    await authStore.mutateUserData(u.id, (locked) => {
+      const box = milesOf(locked);
+      const row = box.inbox.find((item) => item.id === wanted && item.status === 'queued');
+      if (!row) { missing = true; return; }
+      row.status = 'applied';
+      locked.miles = box;
+    });
+    if (missing) return reply.code(404).send({ error: 'That item is not waiting.' });
     const data = await authStore.getUserData(u.id);
     const miles = milesOf(data);
-    const item = miles.inbox.find((row) => row.id === req.body?.id && row.status === 'queued');
+    const item = miles.inbox.find((row) => row.id === wanted);
     if (!item) return reply.code(404).send({ error: 'That item is not waiting.' });
-    item.status = 'applied';
-    data.miles = miles;
-    await authStore.setUserData(u.id, data);
     if (item.kind === 'enable' && miles.campaignResource && connector.setGoogleCampaignStatus && connector.name !== 'mock') {
       const gate = runSopGate('campaign_enable', { mode: miles.bundle?.setup.mode, spec: miles.bundle?.spec, tracking: data.trackingProof as { leadConversion?: boolean; ga4Linked?: boolean } | undefined });
       appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: 'miles', source: 'sop-gate', title: 'campaign_enable', detail: formatSopLog(gate) });
@@ -2701,15 +2732,23 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    const leads = readLeads(data);
-    return { leads, counts: leadCounts(leads) };
+    const leads = readLeads(data).map((row) => ({ ...row, source: row.source || 'Unknown' }));
+    return { leads, counts: leadCounts(leads), updatedAt: new Date().toISOString() };
   });
 
-  app.post<{ Body: { name?: string; phone?: string; confirm?: boolean; id?: string; status?: string; lostReason?: string } }>('/api/leads', async (req, reply) => {
+  app.post<{ Body: { name?: string; phone?: string; confirm?: boolean; id?: string; status?: string; lostReason?: string; optOut?: boolean } }>('/api/leads', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const body = req.body ?? {};
+    if (body.id && typeof body.optOut === 'boolean') {
+      const next = setLeadOptOut(readLeads(data), body.id, body.optOut);
+      if ('error' in next) return reply.code(400).send({ error: next.error });
+      data.leads = next;
+      if (body.optOut) data.followUpDrafts = cancelQueued((Array.isArray(data.followUpDrafts) ? data.followUpDrafts : []) as { phone?: string }[], next.find((row) => row.id === body.id)?.phone || '');
+      await authStore.setUserData(u.id, data);
+      return { ok: true, leads: next, counts: leadCounts(next) };
+    }
     if (body.id && body.status) {
       const next = setLeadStatus(readLeads(data), body.id, body.status as 'new' | 'booked' | 'lost', body.lostReason);
       if ('error' in next) return reply.code(400).send({ error: next.error });
@@ -3014,7 +3053,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       } else if (Date.now() - lastWeekly >= 7 * 86400_000) {
         d.lastWeekly = new Date().toISOString();
         await authStore.setUserData(u.id, d);
-        await sendEmail(u.email, 'Your Miles week', 'Open Miles for this week\'s report.');
+        const base = emailBaseUrl() || '';
+        await sendEmail(u.email, 'Your Miles week', `Open Miles for this week's report.${base ? marketingFooter(base) : ''}`);
       }
     }
     const p = (d.profile ?? {}) as Record<string, string>;
@@ -3126,7 +3166,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       speedToLeadOn: stlOn,
     }, new Date());
     const st = (d.recState as { applied?: Record<string, string>; dismissed?: Record<string, string> }) ?? {};
-    const openRecs = recs.filter((r) => !st.applied?.[r.id] && !st.dismissed?.[r.id]);
+    const openRecs = recs.filter((r) => !st.applied?.[r.id] && !hideDismissed(r.why || r.title, st.dismissed?.[r.id]));
     const market = (miles.bundle?.setup.location || p.serviceAreas || '').split(',')[0]?.trim() || '';
     const sampleConnector = connector.name === 'mock';
     const googleRows = (snap?.campaigns ?? []).filter((row) => row.platform === 'google_ads');
@@ -3503,6 +3543,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       entries = [...planActions(result.findings, guard, now.toISOString()), ...entries];
     }
     data.automation = { lastRunAt: now.toISOString(), findings: result.findings, log: entries.slice(0, 200), kill: state.kill };
+    if (guard.mode === 'automate') {
+      const notes = Array.isArray(data.notifications) ? data.notifications as { text: string }[] : [];
+      const taken = entries.filter((entry) => entry.effect === 'applied').map((entry) => ({ text: `Miles did this: ${entry.title}. Suggested by ${entry.suggestedBy || 'Miles'}.`, at: now.toISOString() }));
+      if (taken.length) data.notifications = [...taken, ...notes].slice(0, 40);
+    }
     await authStore.setUserData(u.id, data);
     return publicSafe({ ran: true, findings: result.findings, log: entries.slice(0, 40), rules: result.rules, upgrade, paused: state.kill || caps.paused });
   });
@@ -3522,12 +3567,19 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   app.post<{ Body: { id?: string } }>('/api/automation/approve', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    const data = await authStore.getUserData(u.id);
-    const state = automationState(data);
-    const result = approveChange(state.log, String(req.body?.id || ''));
+    const id = String(req.body?.id || '');
+    let result = { ok: false, reason: 'That change is not waiting for approval.' };
+    await authStore.mutateUserData(u.id, (data) => {
+      const state = automationState(data);
+      const next = approveChange(state.log, id);
+      result = { ok: next.ok, reason: next.reason };
+      if (!next.ok) return;
+      data.automation = { ...state, log: next.log };
+      const notes = Array.isArray(data.notifications) ? data.notifications as { text: string }[] : [];
+      const row = next.log.find((entry) => entry.id === id);
+      data.notifications = [{ text: `Approved: ${row?.title || 'a change'}. Suggested by ${row?.suggestedBy || 'Miles'}.`, at: new Date().toISOString() }, ...notes].slice(0, 40);
+    });
     if (!result.ok) return reply.code(400).send({ ok: false, error: result.reason });
-    data.automation = { ...state, log: result.log };
-    await authStore.setUserData(u.id, data);
     return { ok: true, reason: result.reason };
   });
 
@@ -5593,7 +5645,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!id) return reply.code(400).send({ error: 'id is required' });
     const data = await authStore.getUserData(u.id);
     const st = recState(data);
-    st.dismissed = { ...(st.dismissed ?? {}), [id]: new Date().toISOString() };
+    const why = String((req.body as { why?: string })?.why || '').trim();
+    st.dismissed = { ...(st.dismissed ?? {}), [id]: why || new Date().toISOString() };
     data.recState = st;
     await authStore.setUserData(u.id, data);
     return { ok: true };
@@ -6555,11 +6608,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // GHL (or Zapier/Make) posts here the moment a lead comes in or a call is missed;
   // Miles sends the text-back in seconds. Token-authed per user; respects the on/off
   // switch, quiet hours, and the dedup ledger. This is what makes it truly instant.
-  const inQuietHours = (st: SpeedToLeadState, nowMs: number): boolean => {
+  const inQuietHours = (st: SpeedToLeadState, nowMs: number, phone?: string, zip?: string): boolean => {
     const q = st.quietHours; if (!q || !q.enabled) return false;
-    const local = new Date(nowMs + (q.tzOffsetMinutes || 0) * 60_000);
-    const h = local.getUTCHours();
-    return h < 8 || h >= 20;
+    return isQuietHour(new Date(nowMs), leadOffset(new Date(nowMs), phone, zip, q.tzOffsetMinutes || 0));
   };
   app.post<{ Params: { token?: string }; Querystring: { event?: string }; Body: Record<string, unknown> }>('/api/hooks/lead/:token', async (req, reply) => {
     const raw = req.params?.token ?? '';
@@ -6586,11 +6637,19 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!st.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Speed-to-Lead is off — turn it on to send.' }; }
     const name = String(b.name || b.full_name || b.first_name || b.contact_name || '').trim();
     const phone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
-    const lead = { id: b.id ? String(b.id) : `${event}:${phone || name}`, name, phone, service: String(b.service || b.message_type || '').trim() || undefined, source: String(b.source || 'crm-webhook').trim(), message: b.message ? String(b.message) : undefined, createdAt: new Date().toISOString(), contacted: false } as import('./connectors/types.js').Lead;
+    const message = b.message ? String(b.message) : '';
+    if (isOptOutMessage(message)) {
+      data.followUpDrafts = cancelQueued((Array.isArray(data.followUpDrafts) ? data.followUpDrafts : []) as { phone?: string }[], phone);
+      data.optOutPhones = [...new Set([...(Array.isArray(data.optOutPhones) ? data.optOutPhones as string[] : []), phone].filter(Boolean))].slice(0, 500);
+      await authStore.setUserData(uid, data);
+      return { ok: true, sent: false, optedOut: true, reason: 'Opt-out received. Queued messages for this number were cancelled.' };
+    }
+    const lead = { id: b.id ? String(b.id) : `${event}:${phone || name}`, name, phone, service: String(b.service || b.message_type || '').trim() || undefined, source: String(b.source || 'crm-webhook').trim(), message: message || undefined, createdAt: new Date().toISOString(), contacted: false } as import('./connectors/types.js').Lead;
     const key = leadKey(lead);
     if (st.contacted.includes(key)) return { ok: true, sent: false, reason: 'Already handled this lead.' };
     const nowMs = Date.now();
-    if (inQuietHours(st, nowMs)) {
+    const zip = String(b.zip || b.postal_code || (data.profile as { serviceAreas?: string } | undefined)?.serviceAreas || '').slice(0, 10);
+    if (inQuietHours(st, nowMs, phone, zip)) {
       data.speedToLead = recordContact(st, lead, new Date(nowMs).toISOString(), [], true);
       await authStore.setUserData(uid, data);
       return { ok: true, sent: false, reason: 'Held for quiet hours (8 AM–8 PM local).' };
@@ -6600,6 +6659,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     let sms: string;
     if (event === 'missed_call') sms = missedCallText(ctx, name);
     else { const { system, user } = instantReplyAgent(lead, ctx); sms = smsFromReply((await generateText({ system, user, maxTokens: 400 })) ?? fallbackInstantReply(lead, ctx)); }
+    const sendKey = `lead:${lead.id}`;
+    const claimed = claimOnce(Array.isArray(data.sentKeys) ? data.sentKeys as string[] : [], sendKey);
+    if (!claimed.first) return { ok: true, sent: false, duplicate: true, reason: 'Already sent. A retry did not send again.' };
+    data.sentKeys = claimed.seen;
     const sent = await sendGhl(uid, phone, name, sms, event === 'missed_call' ? 'Send missed-call text-back SMS' : 'Send SMS to new lead');
     const nowISO = new Date(nowMs).toISOString();
     data.speedToLead = recordContact(st, lead, nowISO, sent ? ['sms'] : [], !sent, responseSeconds(lead, nowISO));
@@ -6907,11 +6970,18 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!auth) return reply.code(401).send({ error: 'bad token' });
     const { uid, data } = auth;
     const au = (data.automations as AutomationsState) ?? emptyAutomationsState();
+    const b = (req.body ?? {}) as Record<string, any>;
+    const eventName = String(b.event || b.status || '').toLowerCase();
+    if (eventName === 'cancelled' || eventName === 'canceled' || eventName === 'completed') {
+      const phone = hookField(b, 'phone', 'phone_number', 'contact_phone');
+      data.followUpDrafts = cancelQueued((Array.isArray(data.followUpDrafts) ? data.followUpDrafts : []) as { phone?: string }[], phone);
+      await authStore.setUserData(uid, data);
+      return { ok: true, sent: false, stopped: true, reason: 'Appointment is no longer active. Reminders for this number were cancelled.' };
+    }
     appendCrmEvent(data, { type: 'no_show', ts: new Date().toISOString() });
     if (!au.noShow.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'No-show recovery is off.' }; }
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry };
-    const b = (req.body ?? {}) as Record<string, any>;
     const name = hookField(b, 'name', 'full_name', 'contact_name', 'first_name');
     const phone = hookField(b, 'phone', 'phone_number', 'contact_phone');
     const msg = noShowText(ctx, name, au.noShow.calendarUrl);
@@ -7593,6 +7663,42 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   }
 
   // Empty-state prompts for Chat with Miles. Same snapshot as a chat turn, no model call.
+  app.get('/api/leads.csv', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const leads = readLeads(await authStore.getUserData(u.id));
+    const lines = ['name,phone,status,source,optOut', ...leads.map((row) => [row.name, row.phone, row.status, row.source || 'Unknown', row.optOut ? 'yes' : 'no'].map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))];
+    reply.header('content-type', 'text/csv; charset=utf-8');
+    return lines.join('\n');
+  });
+
+  app.get('/api/support', async () => ({
+    email: (process.env.SUPPORT_EMAIL || process.env.ADMIN_EMAIL || '').trim(),
+    site: HELP_SITE,
+  }));
+
+  app.post<{ Body: { id?: string; action?: string; text?: string } }>('/api/drafts', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const id = String(req.body?.id || '');
+    const action = req.body?.action;
+    if (!id || (action !== 'edit' && action !== 'regenerate')) return reply.code(400).send({ error: 'id and action (edit or regenerate) are required.' });
+    const data = await authStore.getUserData(u.id);
+    const drafts = Array.isArray(data.followUpDrafts) ? data.followUpDrafts as { id?: string; eventId?: string; body?: string }[] : [];
+    const hit = drafts.find((row) => row.id === id || row.eventId === id);
+    if (!hit) return reply.code(404).send({ error: 'That draft was not found.' });
+    if (action === 'edit') {
+      const text = String(req.body?.text || '').trim();
+      if (!text) return reply.code(400).send({ error: 'Add the edited text.' });
+      hit.body = text.slice(0, 2000);
+    } else {
+      hit.body = 'Regenerated draft. Nothing was sent. Review it before it goes out.';
+    }
+    data.followUpDrafts = drafts;
+    await authStore.setUserData(u.id, data);
+    return { ok: true, draft: hit };
+  });
+
   app.get('/api/chat/starters', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;

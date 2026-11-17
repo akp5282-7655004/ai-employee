@@ -5,6 +5,7 @@
 import { tradePlaybook, type AudienceSegment } from './load.js';
 
 const PROTECTED = /\b(race|racial|ethnicity|ethnic|religion|religious|national origin|sexual orientation|disability|disabled people|gender identity)\b/i;
+const FAKE_CLAIM = /fake review|guaranteed results?|#\s*1|\bnumber[- ]one\b/i;
 
 export function usesProtectedTrait(text: string): boolean {
   return PROTECTED.test(text || '');
@@ -13,6 +14,10 @@ export function usesProtectedTrait(text: string): boolean {
 export function guardCopy(text: string): { ok: boolean; text: string; reason?: string } {
   if (usesProtectedTrait(text)) {
     return { ok: false, text: '', reason: 'Miles does not target or exclude by protected traits or by proxies for them.' };
+  }
+  const claim = text.match(FAKE_CLAIM);
+  if (claim) {
+    return { ok: false, text: '', reason: `Miles will not write "${claim[0]}". That claim was not on the profile.` };
   }
   return { ok: true, text };
 }

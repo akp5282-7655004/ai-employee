@@ -1,6 +1,7 @@
 import type { CampaignSpec } from './campaign.js';
 import { assessProfile, buildSearchCampaigns, seasonFocus, type PlannedSearch, type ProfileGap } from './contractorloop.js';
 import { parseEmail } from '../identity/fields.js';
+import { isOptOutMessage } from '../qa/ownerrows.js';
 
 /**
  * One contractor loop: research what we can actually see, size a plan inside
@@ -343,7 +344,7 @@ export function normalizeLead(body: Record<string, unknown>): { lead?: InboundLe
       phone,
       email,
       consent,
-      optOut: body.optOut === true || body.opt_out === true,
+      optOut: body.optOut === true || body.opt_out === true || isOptOutMessage(String(body.message || body.text || '')),
       campaign: typeof body.campaign === 'string' ? body.campaign.slice(0, 120) : (typeof body.campaign_id === 'string' ? body.campaign_id.slice(0, 120) : undefined),
       gclid: typeof body.gclid === 'string' ? body.gclid.slice(0, 200) : (typeof body.gcl_id === 'string' ? body.gcl_id.slice(0, 200) : undefined),
     },

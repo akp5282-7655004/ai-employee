@@ -34,7 +34,8 @@ export function searchlightGoogleCpl(trade: string): { value: number; note: stri
   const rows = (channel?.entries ?? []).filter((e) => e.metric === 'CPL' && e.value != null);
   const row = rows.find((e) => e.trade.toLowerCase() === key);
   if (!row || row.value == null) return null;
-  return { value: row.value, note: row.note || 'Searchlight Google Ads benchmark' };
+  const note = (row.note || 'Industry benchmark, aggregated from public sources').replace(/searchlight/ig, 'the published study');
+  return { value: row.value, note };
 }
 
 export function playbookCard(trade: string, now = new Date()): PlaybookCard {
@@ -52,8 +53,8 @@ export function playbookCard(trade: string, now = new Date()): PlaybookCard {
     splitNote: 'The home services playbook would put most of a small budget on Local Services Ads, then Search. Miles cannot create Local Services Ads or Meta campaigns yet, so the budget you can actually run is Google Search. Any share you assign to other channels stays a plan until a create action exists.',
     benchmarkCpl: bench?.value ?? null,
     benchmarkNote: bench
-      ? `Searchlight Google Ads cost per lead for ${label}: $${bench.value}. ${bench.note}`
-      : `Searchlight has no Google Ads cost-per-lead row for ${label}. Miles will not invent one. The home services pack median ($${homeServicesPack.economics.cpaBenchmark.median}) is a planning range for the vertical, not a measured result for this trade.`,
+      ? `Industry benchmarks, aggregated from public sources, put the Google Ads cost per lead for ${label} at $${bench.value}. ${bench.note}`
+      : `There is no published Google Ads cost-per-lead row for ${label}. Miles will not invent one. The home services pack median ($${homeServicesPack.economics.cpaBenchmark.median}) is a planning range for the vertical, not a measured result for this trade.`,
   };
 }
 
@@ -88,7 +89,7 @@ export function feasibility(args: { dailyBudget: number; leadsPerDay: number; tr
     realistic: unlikely ? 'unlikely' : 'in_range',
     playbook,
     message: unlikely
-      ? `At $${args.dailyBudget} a day and ${leads} lead${leads === 1 ? '' : 's'} a day, the math needs about $${required} per lead. Searchlight's Google Ads figure for this trade is $${playbook.benchmarkCpl}. That target is well below the benchmark, so those leads are not a reasonable expectation. You can still run a paused, or in-cap, Search campaign. This is not a guarantee.`
-      : `At $${args.dailyBudget} a day and ${leads} lead${leads === 1 ? '' : 's'} a day, the math needs about $${required} per lead. Searchlight's Google Ads figure for this trade is $${playbook.benchmarkCpl}. Being near the benchmark is not a promise of leads.`,
+      ? `At $${args.dailyBudget} a day and ${leads} lead${leads === 1 ? '' : 's'} a day, the math needs about $${required} per lead. The published Google Ads figure for this trade is $${playbook.benchmarkCpl}. That target is well below the benchmark, so those leads are not a reasonable expectation. You can still run a paused, or in-cap, Search campaign. This is not a guarantee.`
+      : `At $${args.dailyBudget} a day and ${leads} lead${leads === 1 ? '' : 's'} a day, the math needs about $${required} per lead. The published Google Ads figure for this trade is $${playbook.benchmarkCpl}. Being near the benchmark is not a promise of leads.`,
   };
 }
