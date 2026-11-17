@@ -148,18 +148,34 @@ describe('every nav tab loads', () => {
       const text = await page.locator('#campaign-plan').innerText();
       if (text.includes('Ready to launch')) break;
       const input = page.locator('#campaign-plan input[type="text"]');
-      if (await input.count()) {
-        if (/website/i.test(text)) await input.fill('https://painters.example');
-        else if (/city/i.test(text)) await input.fill('Philadelphia, PA');
-        else if (!(await input.inputValue()).trim()) await input.fill('Philadelphia, PA');
+      try {
+        if (await input.count()) {
+          if (/website/i.test(text)) await input.fill('https://painters.example', { timeout: 4000 });
+          else if (/city/i.test(text)) await input.fill('Philadelphia, PA', { timeout: 4000 });
+          else if (!(await input.inputValue({ timeout: 4000 })).trim()) await input.fill('Philadelphia, PA', { timeout: 4000 });
+        }
+      } catch {
+        continue; // the panel was redrawn under us; read it again
       }
       const before = text;
-      await page.getByRole('button', { name: 'Use this answer' }).click();
+      // The plan can finish between the read above and this click (the last
+      // answer is saved asynchronously), and then there is no button left to
+      // press. Waiting the full default 30s for it failed the whole walk on a
+      // loaded machine. A short wait, then re-read: the loop's own exit check
+      // and the assertion below still catch a plan that never completes.
+      try {
+        await page.getByRole('button', { name: 'Use this answer' }).click({ timeout: 4000 });
+      } catch {
+        continue;
+      }
       await page.waitForFunction((prev) => {
         const root = (globalThis as unknown as { document: { getElementById(id: string): { innerText: string } | null } }).document;
         const el = root.getElementById('campaign-plan');
-        return !!el && el.innerText !== prev;
-      }, before);
+        // The button reads "Saving..." while the answer is in flight. That is
+        // a change too, and settling on it meant answering the old question
+        // a second time just as it was replaced.
+        return !!el && el.innerText !== prev && !el.innerText.includes('Saving...');
+      }, before, { timeout: 10000 }).catch(() => { /* re-read on the next pass */ });
     }
     const planText = await page.locator('#campaign-plan').innerText();
     expect(planText).toMatch(/Confirm and launch/);

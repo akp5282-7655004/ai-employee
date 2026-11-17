@@ -1,0 +1,35 @@
+name: CI
+
+# main deploys to production on every merge, so nothing reaches it unchecked.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+      # Three test files drive the real page in a browser.
+      - name: Install the test browser
+        run: npx playwright install --with-deps chromium
+      - name: Tests
+        run: npm test

@@ -63,7 +63,7 @@ import {
   pendingAccounts, setCostAccount, UNCLAIMED, withCostAccount,
 } from './billing/costsink.js';
 import { itemEconomics, PRICES_STAMPED, rollup, TARGET_MARGIN, THIN_MARGIN, unpricedWork } from './billing/cogs.js';
-import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS, canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS, writeCredits, LAUNCH_GRANT, settleTopUp } from './billing/credits.js';
+import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS, canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS, writeCredits, LAUNCH_GRANT, settleTopUp, nextBandName } from './billing/credits.js';
 import { setupProgress } from './onboarding/tools.js';
 import { approveChange, CREDIT_PAUSE, dailyDue, planActions, revertChange, runDailyRead } from './automation/engine.js';
 import { buildOrgChart } from './automation/org.js';
@@ -73,9 +73,10 @@ import { buildAdminBusiness } from './admin/business.js';
 import { adSpendAllowed } from './billing/gate.js';
 import { isMediaKind, MEDIA_LABEL, MEDIA_KINDS, mediaCost } from './billing/media.js';
 import {
-  applySubscriptionCoupon, bandForPriceId, cancelStripeSubscription, createCheckoutSession, createPortalSession, createTopUpPaymentIntent, priceIdForBand,
+  applySubscriptionCoupon, bandForPriceId, cancelStripeSubscription, createCheckoutSession, createPortalSession, createTopUpPaymentIntent, priceIdForBand, probeStripe,
   refundLatestCharge, setSubscriptionPrice, stampCustomer, stripeReady, userIdForCustomer, userIdForSubscription, verifyWebhook, type PaidBand,
 } from './billing/stripe.js';
+import { launchChecks, summarize as summarizeLaunch } from './ops/launchcheck.js';
 import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, recordRefund, syncSubscription, updateBand } from './billing/subscription.js';
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
 import { buildBundle, competitorAudit, crawlFacts, performanceAudit, readPublicPage, setupPlacement, websiteAudit } from './agents/journey.js';
@@ -1346,6 +1347,39 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(actor.id);
     const log = Array.isArray(data.adminAudit) ? data.adminAudit : [];
     return { entries: log };
+  });
+
+  /**
+   * Launch check — whether this deploy can take a real customer, read from the
+   * server's own configuration and from Stripe. Owner only. Names and states,
+   * never a key or an id. See ops/launchcheck.ts for why each line exists.
+   */
+  app.get('/api/admin/launch-check', async (req, reply) => {
+    const actor = await adminActor(req, reply);
+    if (!actor) return;
+    const names = [
+      'APP_URL', 'RENDER_EXTERNAL_URL', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET',
+      'STRIPE_PRICE_STARTER', 'STRIPE_PRICE_GROWTH', 'STRIPE_PRICE_SCALE',
+      'PIPEDREAM_ENVIRONMENT', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'ADMIN_EMAIL',
+    ];
+    const env: Record<string, string | undefined> = {};
+    for (const n of names) env[n] = process.env[n] || undefined;
+    let stripe: Awaited<ReturnType<typeof probeStripe>> | undefined;
+    if (stripeReady()) {
+      try { stripe = await probeStripe(); } catch { stripe = undefined; }
+    }
+    const price = (k: string) => BANDS.find((b) => b.key === k)?.monthlyPrice ?? 0;
+    const checks = launchChecks({
+      env,
+      durableStore: storageStatus(authStore).durable,
+      connectorLive: pipedreamReady(loadConfig()),
+      textAiReady: textLlmReady(),
+      emailReady: deliveryStatus().email,
+      billingEnforced: billingEnforced(),
+      bandPrices: { starter: price('starter'), growth: price('growth'), scale: price('scale') },
+      stripe,
+    });
+    return { build: BUILD, checkedAt: new Date().toISOString(), ...summarizeLaunch(checks), checks };
   });
 
   app.post<{ Body: { id?: string; action?: string; band?: string; confirm?: string; coupon?: string } }>('/api/admin/billing', async (req, reply) => {
@@ -3946,18 +3980,86 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return { ok: true, autoTopUp: state.autoTopUp, topUp: band.topUp };
   });
 
-  /** Ask Stripe to charge a pending top-up. The grant waits for the webhook. */
-  app.post('/api/billing/topup', async (req, reply) => {
+  /**
+   * Buy one top-up: charge the band's increment to the card on file and add
+   * the credits once the payment clears.
+   *
+   * This used to work only for a top-up that auto top-up had already queued,
+   * and auto top-up has no switch on the page — so an owner who ran out was
+   * told to "add $25" with nothing to press. It is now the owner's own
+   * action: an explicit confirm, one charge, credits on success.
+   *
+   * Three things are settled before any money moves, because each is worse to
+   * discover after the card is charged: there is a paid plan with a card
+   * behind it, this month's ceiling has room (a charge that clears but is then
+   * refused credits is a customer paying for nothing), and no other top-up is
+   * in flight (a double click must not be a double charge — the claim below
+   * is taken under the row lock, and the same key goes to Stripe).
+   */
+  app.post<{ Body: { confirm?: boolean } }>('/api/billing/topup', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    const data = await authStore.getUserData(u.id);
-    const pending = creditState(data).pendingTopUp;
-    if (!pending || pending.status !== 'awaiting_payment') return reply.code(400).send({ error: 'No top-up is waiting on a card charge.' });
-    if (!stripeReady()) return reply.code(503).send({ error: 'Payments are not connected yet. No credits were added.', status: pending.status });
-    const sub = billingState(data);
-    const res = await createTopUpPaymentIntent({ userId: u.id, customerId: sub.stripeCustomerId, amountDollars: pending.amount });
-    if ('error' in res) return reply.code(502).send({ error: res.error, status: 'awaiting_payment' });
-    return { ok: true, status: 'awaiting_payment', paymentId: res.paymentId, detail: 'Credits are added only after Stripe confirms this payment.' };
+    if (!stripeReady()) return reply.code(503).send({ error: 'Payments are not connected yet. No charge was made.' });
+    const first = await authStore.getUserData(u.id);
+    const sub = billingState(first);
+    const paidPlan = sub.status === 'active' && (sub.band === 'starter' || sub.band === 'growth' || sub.band === 'scale');
+    if (!paidPlan || !sub.stripeCustomerId) {
+      return reply.code(409).send({ error: 'Top-ups need an active paid plan, because that is where the card is saved. Pick a plan first. No charge was made.' });
+    }
+    const band = bandOf(first);
+    const amount = band.topUp;
+    if (req.body?.confirm !== true) {
+      return reply.code(400).send({ error: `Confirm the $${amount.toFixed(2)} charge to add $${amount.toFixed(2)} of credits. No charge was made.`, amount });
+    }
+    if (creditState(first).toppedUpThisMonth + amount > band.autoTopUpCeiling + 0.001) {
+      const upgrade = nextBandName(band);
+      return reply.code(409).send({
+        error: `You have reached this month's $${band.autoTopUpCeiling.toFixed(2)} top-up limit. ` +
+          (upgrade ? `Upgrading to ${upgrade} costs less than topping up further.` : 'Get in touch to raise it.') + ' No charge was made.',
+      });
+    }
+
+    // Claim the charge under the row lock before calling Stripe.
+    const startedAt = new Date().toISOString();
+    let inFlight = false;
+    await authStore.mutateUserData(u.id, (data) => {
+      const p = creditState(data).pendingTopUp;
+      if (p?.status === 'awaiting_payment' && p.startedAt && Date.now() - Date.parse(p.startedAt) < 120_000) { inFlight = true; return; }
+      writeCredits(data, { pendingTopUp: { status: 'awaiting_payment', amount, startedAt, detail: `Charging $${amount.toFixed(2)} to the card on file.` } });
+    });
+    if (inFlight) return reply.code(409).send({ error: 'A top-up is already being charged. Give it a minute, then refresh. No second charge was made.' });
+
+    const res = await createTopUpPaymentIntent({
+      userId: u.id, customerId: sub.stripeCustomerId, subscriptionId: sub.stripeSubscriptionId,
+      amountDollars: amount, idempotencyKey: `topup:${u.id}:${startedAt}`,
+    });
+
+    if ('error' in res) {
+      await authStore.mutateUserData(u.id, (data) => {
+        writeCredits(data, { pendingTopUp: { status: 'failed', amount, paymentId: res.paymentId, detail: res.error } });
+      });
+      return reply.code(402).send({ error: res.error, status: 'failed' });
+    }
+    if (res.status === 'processing') {
+      await authStore.mutateUserData(u.id, (data) => {
+        writeCredits(data, { pendingTopUp: { status: 'awaiting_payment', amount, paymentId: res.paymentId, startedAt, detail: 'The bank is still processing this payment. Credits are added when it clears.' } });
+      });
+      return { ok: true, status: 'awaiting_payment', paymentId: res.paymentId, detail: 'The bank is still processing this payment. Credits are added when it clears.' };
+    }
+
+    // Cleared. Settle by payment id — the webhook for the same id is a no-op.
+    let settled: ReturnType<typeof settleTopUp> | undefined;
+    const saved = await authStore.mutateUserData(u.id, (data) => {
+      settled = settleTopUp(data, { paymentId: res.paymentId, amount, status: 'succeeded' });
+      if (settled.grantedNow > 0) {
+        appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'billing', title: `Top-up charged. $${amount.toFixed(2)} of credits added.` });
+      }
+    });
+    const after = creditState(saved);
+    return {
+      ok: true, status: settled?.status ?? 'succeeded', paymentId: res.paymentId, added: settled?.grantedNow ?? 0,
+      detail: settled?.detail, credits: { granted: after.granted, spent: after.spent, remaining: after.remaining },
+    };
   });
 
   /** A Stripe-hosted checkout page for one paid band. The customer enters their

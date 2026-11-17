@@ -5901,6 +5901,28 @@ async function openBilling(){
     portal.onclick=()=>openPortal(portal);
     cancel.onclick=()=>openPortal(cancel);
     row.append(portal, cancel);
+    // Buying more credits. Running out told the owner to "add $25" and gave
+    // them nothing to press; this is that button. It charges the card saved
+    // at checkout, so it only appears on an active paid plan, and it says the
+    // amount twice (label and confirm) because it moves money.
+    const paidBand=(d.bands||[]).find(b=>b.key===s.band);
+    if(s.status==='active' && paidBand && paidBand.topUp){
+      const amt=Number(paidBand.topUp).toFixed(2);
+      const add=el('button','ghost','Add $'+amt+' of credits');
+      add.onclick=async()=>{
+        if(!window.confirm('Charge $'+amt+' to the card on file and add $'+amt+' of credits?')) return;
+        add.disabled=true; add.textContent='Charging...';
+        try{
+          const r=await fetch('/api/billing/topup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:true})});
+          const out=await r.json().catch(()=>({}));
+          if(r.ok && out.added>0) toast('$'+amt+' of credits added.');
+          else if(r.ok) toast(out.detail||'Payment is processing. Credits are added when it clears.');
+          else toast(out.error||'The top-up did not go through. No charge was made.');
+        }catch(e){ toast('The top-up did not go through. Check your connection and look at the balance before trying again.'); }
+        openBilling();
+      };
+      row.append(add);
+    }
     pc.append(row);
   } else if(d.paymentsConnected){
     pc.append(el('p','appsub','No paid plan yet, pick a band below to subscribe.'));
@@ -8282,6 +8304,40 @@ async function renderOwnerAdmin(){
   if(!IS_ADMIN){ box.append(el('p','mdesc','This page is for the Miles owner.')); return; }
   const page=el('div','own-page');
   if(!REMOTE){ box.append(page); return; }
+  // Launch check: whether this deploy can take a real customer. It sits above
+  // the business numbers and does not depend on them loading, because the day
+  // it matters most is the day nothing else on this page has data yet.
+  (()=>{
+    const lc=el('div','mcard'); lc.style.cssText='margin-bottom:14px;max-width:820px';
+    lc.append(el('div','sect-label','LAUNCH CHECK'));
+    const lead=el('p','appsub','Reads this server\'s settings and asks Stripe what it has. Nothing is changed and no key is shown.'); lead.style.margin='4px 0 10px';
+    const btn=el('button','ghost','Run launch check'); const out=el('div');
+    lc.append(lead, btn, out);
+    btn.onclick=async()=>{
+      btn.disabled=true; btn.textContent='Checking...'; out.innerHTML='';
+      const r=await fetchJson('/api/admin/launch-check', null, 30000); const d=r.data;
+      btn.disabled=false; btn.textContent='Run again';
+      if(!r.ok || !d || !d.checks){ out.append(el('p','appsub','The launch check did not load. Nothing was changed.')); return; }
+      const head=el('div',null, d.ready
+        ? 'Ready to take a customer'+(d.warnings?'. '+d.warnings+' note'+(d.warnings===1?'':'s')+' below.':'.')
+        : d.blockers+' thing'+(d.blockers===1?'':'s')+' to fix before a customer can pay.');
+      head.style.cssText='font-weight:800;font-size:14px;margin:12px 0 6px;color:'+(d.ready?'var(--good)':'var(--warn)');
+      out.append(head);
+      d.checks.forEach(c=>{
+        const row=el('div'); row.style.cssText='display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)';
+        const mark=el('span',null,c.ok?'OK':(c.level==='blocker'?'FIX':'NOTE'));
+        mark.style.cssText='flex:none;min-width:46px;text-align:center;font-size:10.5px;font-weight:800;padding:3px 0;border-radius:999px;background:'
+          +(c.ok?'var(--good-tint);color:var(--good)':(c.level==='blocker'?'var(--warn-tint);color:var(--warn)':'var(--panel-2);color:var(--muted)'));
+        const txt=el('div'); txt.style.minWidth='0';
+        const name=el('b',null,c.name); name.style.fontSize='13px';
+        const note=el('div','appsub',c.note); note.style.margin='1px 0 0';
+        txt.append(name, note); row.append(mark, txt); out.append(row);
+      });
+      const foot=el('p','appsub','Build '+d.build+', checked '+new Date(d.checkedAt).toLocaleTimeString()+'.'); foot.style.marginTop='8px';
+      out.append(foot);
+    };
+    page.append(lc);
+  })();
   const res=await fetchJson('/api/admin/business?period='+encodeURIComponent(window.adminPeriod||'month'), null, 12000);
   const view=res.data;
   if(!res.ok || !view || !view.totals){ page.append(el('p','md-explain', (res.data&&res.data.error)||'The business list did not load.')); box.append(page); return; }

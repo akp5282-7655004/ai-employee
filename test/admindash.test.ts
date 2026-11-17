@@ -10,6 +10,7 @@ const ADMIN_ROUTES: { method: 'GET' | 'POST' | 'PUT'; url: string; payload?: unk
   { method: 'GET', url: '/api/admin' },
   { method: 'GET', url: '/api/admin/business' },
   { method: 'GET', url: '/api/admin/audit' },
+  { method: 'GET', url: '/api/admin/launch-check' },
   { method: 'GET', url: '/api/admin/google-ads' },
   { method: 'POST', url: '/api/admin/credits', payload: { id: 'x', amount: 25 } },
   { method: 'POST', url: '/api/admin/trial', payload: { id: 'x', days: 14 } },
