@@ -49,18 +49,22 @@ export function isOptedOut(data: Record<string, unknown>, phone: unknown): boole
 
 export interface QuietHours { enabled: boolean; tzOffsetMinutes: number }
 
+/** US Central standard time, used when the owner has never told us their offset. */
+export const DEFAULT_TZ_OFFSET_MINUTES = -360;
+
 /**
  * The quiet hours that are actually enforced. With nothing saved this is the
  * documented default: on, 8 AM to 8 PM. The offset is the owner's, taken from
  * their saved schedules when there are any (those store getTimezoneOffset()
- * minutes, so the sign flips), else UTC.
+ * minutes, so the sign flips), else US Central. Miles is US-only at launch,
+ * and a UTC default would hold every text from mid-afternoon US time.
  */
 export function effectiveQuietHours(data: Record<string, unknown>): QuietHours {
   const saved = (data.speedToLead as SpeedToLeadState | undefined)?.quietHours;
   if (saved) return { enabled: !!saved.enabled, tzOffsetMinutes: Number(saved.tzOffsetMinutes) || 0 };
   const agents = Array.isArray(data.schedules) ? (data.schedules as { tzOffset?: number }[]) : [];
   const withTz = agents.find((a) => typeof a?.tzOffset === 'number' && a.tzOffset !== 0);
-  return { enabled: true, tzOffsetMinutes: withTz ? -Number(withTz.tzOffset) : 0 };
+  return { enabled: true, tzOffsetMinutes: withTz ? -Number(withTz.tzOffset) : DEFAULT_TZ_OFFSET_MINUTES };
 }
 
 /** True when a text would land outside 8 AM to 8 PM in the given offset. */

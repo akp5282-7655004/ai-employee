@@ -4,9 +4,9 @@ import { MemoryStore } from '../src/db/index.js';
 import type { Connector, Lead } from '../src/connectors/types.js';
 import { addOptOut, effectiveQuietHours, inQuietHours, isOptedOut, isStopMessage, payloadOptsOut } from '../src/agents/smsguard.js';
 
-/** Noon UTC: inside the default 8 AM–8 PM window at offset 0. */
+/** 15:00 UTC (9 AM US Central): inside the default 8 AM–8 PM window. */
 const DAY = new Date('2026-11-17T15:00:00Z');
-/** 3 AM UTC: inside quiet hours at offset 0. */
+/** 03:00 UTC (9 PM US Central): inside quiet hours. */
 const NIGHT = new Date('2026-11-17T03:00:00Z');
 
 function harness() {
@@ -70,7 +70,7 @@ describe('sms guard helpers', () => {
     expect(payloadOptsOut({ consent: true })).toBe(false);
   });
   it('enforces 8 AM to 8 PM by default, in the owner offset when known', () => {
-    expect(effectiveQuietHours({})).toEqual({ enabled: true, tzOffsetMinutes: 0 });
+    expect(effectiveQuietHours({})).toEqual({ enabled: true, tzOffsetMinutes: -360 });
     // Saved schedules store getTimezoneOffset() minutes (Central is +360), so the sign flips.
     expect(effectiveQuietHours({ schedules: [{ tzOffset: 360 }] })).toEqual({ enabled: true, tzOffsetMinutes: -360 });
     expect(inQuietHours({ enabled: true, tzOffsetMinutes: 0 }, NIGHT.getTime())).toBe(true);
@@ -157,7 +157,7 @@ describe('quiet hours are on by default and enforced everywhere', () => {
     vi.setSystemTime(NIGHT);
     const s = await setup({ review: true, automations: true });
     const cfg = await s.app.inject({ method: 'GET', url: '/api/speed-to-lead', headers: { cookie: s.cookie } });
-    expect(cfg.json().quietHours).toEqual({ enabled: true, tzOffsetMinutes: 0 });
+    expect(cfg.json().quietHours).toEqual({ enabled: true, tzOffsetMinutes: -360 });
     const lead = await s.post(`/api/hooks/lead/${s.token}`, { id: 'L1', name: 'Dana', phone: '4795550101' });
     expect(lead.json()).toMatchObject({ sent: false, held: true, status: 'quiet_hours' });
     const job = await s.post(`/api/hooks/job/${s.token}`, { id: 'J1', name: 'Dana', phone: '4795550101' });
