@@ -18,6 +18,11 @@ export interface CrmEvent {
   amount?: number; // closed_won: the deal/job value when the CRM sends one
   /** The CRM's own id for this event, when it sends one. A repeat of type+id is skipped. */
   id?: string;
+  /** Where the customer came from, when the CRM passes it along. */
+  utmSource?: string;
+  utmCampaign?: string;
+  /** Google's click id, the strongest tie back to one ad click. */
+  gclid?: string;
 }
 
 const CAP = 1200; // ~90 days of events for an active account; the dashboard reads 30
@@ -55,6 +60,49 @@ export function crmEventTsFrom(b: Record<string, unknown>, nowMs: number = Date.
     if (Number.isFinite(ms) && ms > 0) return new Date(Math.min(ms, nowMs)).toISOString();
   }
   return new Date(nowMs).toISOString();
+}
+
+/**
+ * Where a lead or a deal came from, as the CRM reports it.
+ *
+ * The webhook used to keep the amount and drop this. A won deal then counted
+ * as revenue with nothing to say which ad produced it, even when the CRM had
+ * sent the campaign along in the same request. Nothing is guessed: a field
+ * the payload does not carry stays absent.
+ */
+export function sourceFrom(b: Record<string, unknown>): Pick<CrmEvent, 'utmSource' | 'utmCampaign' | 'gclid'> {
+  const pick = (keys: string[]): string | undefined => {
+    for (const k of keys) {
+      const v = b[k];
+      if (typeof v === 'string' && v.trim()) return v.trim().slice(0, 160);
+    }
+    return undefined;
+  };
+  const out: Pick<CrmEvent, 'utmSource' | 'utmCampaign' | 'gclid'> = {};
+  const utmSource = pick(['utm_source', 'utmSource', 'lead_source', 'leadSource', 'source']);
+  const utmCampaign = pick(['utm_campaign', 'utmCampaign', 'campaign', 'campaign_name', 'campaignName']);
+  const gclid = pick(['gclid', 'GCLID', 'google_click_id']);
+  if (utmSource) out.utmSource = utmSource;
+  if (utmCampaign) out.utmCampaign = utmCampaign;
+  if (gclid) out.gclid = gclid;
+  return out;
+}
+
+/** Won deals from the webhook ledger, in the shape the attribution report reads. */
+export function wonDealsFromLedger(data: Record<string, unknown>): { id: string; value: number; won: true; utmSource?: string; utmCampaign?: string; gclid?: string; wonAt: string; createdAt: string }[] {
+  const list = Array.isArray(data.crmEvents) ? (data.crmEvents as CrmEvent[]) : [];
+  return list
+    .filter((ev) => ev && ev.type === 'closed_won')
+    .map((ev) => ({
+      id: ev.id ? `crm:${ev.id}` : `crm:${ev.ts}:${ev.name ?? ''}`,
+      value: ev.amount ?? 0,
+      won: true as const,
+      ...(ev.utmSource ? { utmSource: ev.utmSource } : {}),
+      ...(ev.utmCampaign ? { utmCampaign: ev.utmCampaign } : {}),
+      ...(ev.gclid ? { gclid: ev.gclid } : {}),
+      wonAt: ev.ts,
+      createdAt: ev.ts,
+    }));
 }
 
 /** Pull a dollar amount out of a CRM webhook body — GHL and common aliases. */

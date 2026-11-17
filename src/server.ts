@@ -52,7 +52,7 @@ import { getMetrics } from './metrics/resolver.js';
 import { buildOperatorView } from './dashboard/operator.js';
 import { buildLaunchView, previewSpec } from './dashboard/launch.js';
 import { buildBusinessProfile } from './profile/business.js';
-import { appendCrmEvent, amountFrom, crmEventIdFrom, crmEventTsFrom, crmLiveValues, calcLiveValues, dealsLiveValues } from './metrics/crmledger.js';
+import { appendCrmEvent, amountFrom, crmEventIdFrom, crmEventTsFrom, crmLiveValues, calcLiveValues, dealsLiveValues, sourceFrom, wonDealsFromLedger } from './metrics/crmledger.js';
 import { buildLocalPresenceAudit, gbpCompletenessScore, type AuditAnswer } from './agents/localpresence.js';
 import { appendApproval, approvalLog, defaultAutonomy, normalizeAutonomy, TOS_VERSION, type ApprovalEntry } from './agents/approvallog.js';
 import { listSkills as listLibrarySkills, readSkill as readLibrarySkill } from './skills/library.js';
@@ -4476,7 +4476,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       zeroBalance: credits.remaining <= 0,
       zeroMessage: credits.remaining <= 0 ? 'Your credit balance is $0. Reports stay available. Add credits or pick a plan to keep working.' : null,
       note: (credits.launchOffer && sub.band !== 'starter' && sub.band !== 'growth' && sub.band !== 'scale'
-        ? `Launch offer: $0 a month and $${LAUNCH_GRANT} in credits. $${credits.remaining.toFixed(2)} remaining. Images are $0.10, voiceover is $0.50, video is $1.50. Text, chat, campaign builds, audits, skills, and agent runs also draw from this balance at OpenRouter cost plus a 75% margin. Monitoring stays free. `
+        ? `Launch offer: $0 a month and $${LAUNCH_GRANT} in credits. $${credits.remaining.toFixed(2)} remaining. Images are $0.10, voiceover is $0.50, video is $1.50. Text, chat, campaign builds, audits, skills, and agent runs also draw from this balance, priced per run. Monitoring stays free. `
         : '') + (paymentsConnected
         ? 'Your card is held by Stripe. Miles never sees or stores it.'
         : 'Payments are not connected yet, so nothing is charged.'),
@@ -6365,7 +6365,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }
     try {
       const spend = await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id) : undefined, []);
-      const deals = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, []);
+      const fromCrm = await safeConn(connector.getDeals ? () => connector.getDeals!(u.id) : undefined, [] as import('./revenue/attribution.js').Deal[]);
+      // Deals the CRM pushed to the won-deal webhook count here too, with the
+      // source and campaign the CRM sent. Without them a won job showed up as
+      // revenue on the report and nowhere on this page, tied to nothing.
+      const seen = new Set(fromCrm.map((d) => d.id));
+      const pushed = wonDealsFromLedger(await authStore.getUserData(u.id)).filter((d) => !seen.has(d.id));
+      const deals = [...fromCrm, ...pushed];
       return { report: attributeRevenue(spend, deals), deals, connected: spend.length > 0 || deals.length > 0, demo: connector.name === 'mock' };
     } catch (err) {
       return { report: null, deals: [], connected: false, error: String((err as Error).message) };
@@ -7185,7 +7191,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     // A lead is a lead whether or not an SMS fires — record it for the
     // dashboard's real CRM metrics before any feature toggle can bail out.
     // A lead already handled (or a retried webhook with the same id) is not counted again.
-    if (!replay) appendCrmEvent(data, { type: event === 'missed_call' ? 'missed_call' : 'lead', ts: crmEventTsFrom(b), name: String(b.name || b.full_name || '').trim() || undefined, id: crmEventIdFrom(b) });
+    if (!replay) appendCrmEvent(data, { type: event === 'missed_call' ? 'missed_call' : 'lead', ts: crmEventTsFrom(b), name: String(b.name || b.full_name || '').trim() || undefined, id: crmEventIdFrom(b), ...sourceFrom(b) });
     if (replay) {
       // A replay is not a new lead, but an opt-out it carries still counts.
       if (optsOut && phone) await authStore.setUserData(uid, data);
@@ -7468,7 +7474,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (eventId && rs.log.some((e) => e.eventId === eventId && e.status !== 'failed')) return { ok: true, sent: false, duplicate: true, reason: 'Already handled this job.' };
     // A completed job is real regardless of the review toggle — record it
     // (with the job value when the CRM sends one) for the dashboard.
-    appendCrmEvent(data, { type: 'job_complete', ts: crmEventTsFrom(b), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b), id: crmEventIdFrom(b, ['job_id', 'jobId', 'appointment_id', 'opportunity_id']) });
+    appendCrmEvent(data, { type: 'job_complete', ts: crmEventTsFrom(b), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b), id: crmEventIdFrom(b, ['job_id', 'jobId', 'appointment_id', 'opportunity_id']), ...sourceFrom(b) });
     if (!rs.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Review requests are off — turn them on to send.' }; }
     const msg = reviewAskText({ ...ctx, googleReviewUrl: rs.googleReviewUrl });
     const result = await sendGhl(uid, data, rawPhone, name, msg, 'Send review request SMS');
@@ -7588,7 +7594,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }
     // A won deal is revenue whether or not the welcome text fires — record
     // it (with the deal amount when the CRM sends one) for the dashboard.
-    appendCrmEvent(data, { type: 'closed_won', ts: crmEventTsFrom(b), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b), id: crmEventIdFrom(b, ['opportunity_id', 'opportunityId', 'deal_id', 'dealId']) });
+    appendCrmEvent(data, { type: 'closed_won', ts: crmEventTsFrom(b), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b), id: crmEventIdFrom(b, ['opportunity_id', 'opportunityId', 'deal_id', 'dealId']), ...sourceFrom(b) });
     if (!au.onboarding.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Onboarding is off.' }; }
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry };
