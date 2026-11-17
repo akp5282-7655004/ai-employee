@@ -32,6 +32,11 @@ export class PostgresStore implements Store {
         user_id TEXT PRIMARY KEY,
         claimed_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
+      CREATE TABLE IF NOT EXISTS launch_credit_claims (
+        email TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        claimed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
     `);
   }
 
@@ -141,6 +146,12 @@ export class PostgresStore implements Store {
     } finally {
       client.release();
     }
+  }
+  async claimLaunchCredit(email: string, userId: string): Promise<boolean> {
+    // No foreign key to users: the claim must outlive a deleted account.
+    await this.pool.query('INSERT INTO launch_credit_claims(email, user_id) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING', [email, userId]);
+    const r = await this.pool.query('SELECT user_id FROM launch_credit_claims WHERE email=$1', [email]);
+    return r.rows[0]?.user_id === userId;
   }
   async listUserIds(): Promise<string[]> {
     const r = await this.pool.query('SELECT user_id FROM user_data');

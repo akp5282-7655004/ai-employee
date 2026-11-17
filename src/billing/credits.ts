@@ -14,6 +14,7 @@
  * settleTopUp sees a succeeded payment id.
  */
 
+import { workAccess, type WorkAccess } from './access.js';
 import { claimCostItem } from './costsink.js';
 import { isMediaKind, mediaCost } from './media.js';
 import { textQuote } from './textprice.js';
@@ -364,6 +365,13 @@ export function chargeCredits(
     return { state: before, blocked: false, toppedUp: 0 };
   }
 
+  // A failed payment past its grace period, or a plan that has ended, pauses
+  // paid work no matter the balance (Terms 4.5-4.7). Monitoring never reaches here.
+  const access = workAccess(data, now);
+  if (billingEnforced() && access.paused) {
+    return { state: before, blocked: true, toppedUp: 0, reason: pausedReason(access) };
+  }
+
   const used = (before.usedThisMonth[item] ?? 0) + 1;
   const persist = (patch: Partial<Omit<CreditState, 'remaining'>>) => {
     writeCredits(data, { ...patch, usedThisMonth: { ...before.usedThisMonth, [item]: used } }, now);
@@ -464,11 +472,28 @@ export function chargeCredits(
  */
 export function canAfford(data: Record<string, unknown>, item: string): { ok: boolean; reason?: string } {
   if (!isOutputWork(item)) return { ok: true }; // monitoring — never gated
-  if (!billingEnforced()) return { ok: true }; // meter runs, wall is off
-  const state = creditState(data);
-  if (state.remaining > 0) return { ok: true }; // a positive balance always passes
+  const reason = paidWorkBlock(data);
+  return reason ? { ok: false, reason } : { ok: true };
+}
+
+/**
+ * The one rule for whether an account may start paid work (a model call, a
+ * media render), whatever the call site: per-item checks (canAfford), the
+ * request-wide gate in the provider modules, and scheduled agents all ask this.
+ * Unset means it may. Past the failed-payment grace period, or after a plan has
+ * ended, work pauses whatever the balance (Terms 4.5-4.7, access.ts). Inside the
+ * grace period, or before a paid-up cancel reaches its period end, a positive
+ * balance still works. An empty balance never does.
+ */
+export function paidWorkBlock(data: Record<string, unknown>): string | undefined {
+  if (!billingEnforced()) return undefined; // meter runs, wall is off
+  const access = workAccess(data);
+  const empty = creditState(data).remaining <= 0;
+  // Both facts are said when both are true: the balance is empty and the plan is paused or ended.
+  if (access.paused) return empty ? `Out of credits. ${pausedReason(access)}` : pausedReason(access);
   // A pending card charge is not credits. Work waits until the payment succeeds.
-  return { ok: false, reason: outOfCreditsReason(data) };
+  if (empty) return outOfCreditsReason(data);
+  return undefined;
 }
 
 /**
@@ -497,6 +522,12 @@ export function outOfCreditsReason(data: Record<string, unknown>): string {
     return `Miles has no credits to work with yet. Connect 3 tools on Integrations to unlock $${LAUNCH_GRANT} in credits, or pick a plan on Plan & Credits. Plans start at $${BANDS[0]!.monthlyPrice} a month. You can still view your reports and data.`;
   }
   return `${head} Pick a plan on Plan & Credits to keep going. Plans start at $${BANDS[0]!.monthlyPrice} a month.`;
+}
+
+/** Why billing state pauses paid work, with the plan price when a new plan is the way back. */
+export function pausedReason(access: WorkAccess): string {
+  const base = access.message ?? 'Paid work is paused. Monitoring keeps running.';
+  return access.state === 'ended' ? `${base} Plans start at $${BANDS[0]!.monthlyPrice} a month.` : base;
 }
 
 /** The band above this one, for the upgrade prompt. Undefined at the top. */

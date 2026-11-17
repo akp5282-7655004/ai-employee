@@ -1,12 +1,12 @@
 /**
  * Post-Job Review Request (GHL recipe #14) — the reputation flywheel, event-driven.
- * When a job is marked complete, Miles texts a 1–10 ask. The reply is gated: 9–10
- * ("promoters") get the direct Google review link; 1–8 ("detractors") are routed to
- * a private service-recovery task and NEVER handed the public link. This keeps
- * unhappy customers off Google and turns happy ones into 5-star reviews.
+ * When a job is marked complete, Miles texts every customer the same ask with the
+ * Google review link when one is saved. There is no score gate: a customer's reply
+ * is only logged with its rating, and no second text is sent. A STOP reply puts
+ * the number on the account's opt-out list.
  *
- * Pure, testable core: templates, rating parse, routing, and state. The webhook
- * runner + connector live in server.ts.
+ * Pure, testable core: templates, rating parse, and state. The webhook runner +
+ * connector live in server.ts.
  */
 
 export interface ReviewCtx {
@@ -24,8 +24,12 @@ export interface ReviewLog {
   name: string;
   phone?: string;
   rating?: number;
-  outcome: 'asked' | 'promoter' | 'detractor';
+  outcome: 'asked' | 'promoter' | 'detractor' | 'rated' | 'opted_out';
   at: string;
+  /** The CRM's event id, when it sent one, so a replayed webhook does not text twice. */
+  eventId?: string;
+  /** What happened to the text: sent, failed, opted_out, quiet_hours, not_connected, … */
+  status?: string;
 }
 export interface ReviewRequestState {
   enabled: boolean;

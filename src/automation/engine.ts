@@ -8,6 +8,13 @@ import { runSkills, type DailyInput, type Finding, type SummaryWriter, type Term
 
 export const CREDIT_PAUSE = 'Your free credits are used up. Automation is paused. You can still view your reports and data. Starter is $149, Growth is $397, and Scale is $797.';
 
+/**
+ * An "applied" change is logged only. There is no verified write to Google Ads
+ * for these daily-read changes yet, so the log must say so (honesty clause).
+ */
+export const LOGGED_ONLY = 'Logged. Google Ads was not changed.';
+export const LOGGED_ONLY_APPLIED = `Inside your budget and caps. ${LOGGED_ONLY} There is no verified write to the ad account for this change yet, so make it in Google Ads yourself if you want it.`;
+
 const DAY_MS = 20 * 60 * 60 * 1000;
 
 export function dailyDue(lastRunAt: string | null | undefined, now: Date): boolean {
@@ -92,7 +99,7 @@ export function guardAction(input: GuardInput, action: NonNullable<Finding['acti
   if (raises) {
     return { effect: 'queued', reason: 'This is new spend or a budget increase. It waits for your tap.' };
   }
-  return { effect: 'applied', reason: 'Inside your budget and caps. Logged so you can revert it. The ad account is updated only when a verified write is connected.' };
+  return { effect: 'applied', reason: LOGGED_ONLY_APPLIED };
 }
 
 export function planActions(findings: Finding[], guard: GuardInput, now: string): ChangeEntry[] {
@@ -132,14 +139,16 @@ export function revertChange(log: ChangeEntry[], id: string): { ok: boolean; log
   const hit = log.find((row) => row.id === id);
   if (!hit) return { ok: false, log, restored: null, reason: 'That change is not on the log.' };
   if (hit.effect !== 'applied') return { ok: false, log, restored: null, reason: 'Only an applied change can be reverted.' };
-  const next = log.map((row) => row.id === id ? { ...row, effect: 'reverted' as const, reason: 'Reverted. The previous value is restored on this log.' } : row);
-  return { ok: true, log: next, restored: hit.before, reason: 'Reverted. The previous value is restored on this log.' };
+  const reason = 'Marked as reverted on this log. Google Ads was not changed.';
+  const next = log.map((row) => row.id === id ? { ...row, effect: 'reverted' as const, reason } : row);
+  return { ok: true, log: next, restored: hit.before, reason };
 }
 
 export function approveChange(log: ChangeEntry[], id: string): { ok: boolean; log: ChangeEntry[]; reason: string } {
   const hit = log.find((row) => row.id === id);
   if (!hit) return { ok: false, log, reason: 'That change is not on the log.' };
   if (hit.effect !== 'queued') return { ok: false, log, reason: 'That change is not waiting for approval.' };
-  const next = log.map((row) => row.id === id ? { ...row, effect: 'applied' as const, reason: 'You approved this. Logged so you can revert it.' } : row);
-  return { ok: true, log: next, reason: 'You approved this. Logged so you can revert it.' };
+  const reason = `You approved this. ${LOGGED_ONLY}`;
+  const next = log.map((row) => row.id === id ? { ...row, effect: 'applied' as const, reason } : row);
+  return { ok: true, log: next, reason };
 }

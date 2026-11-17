@@ -15,7 +15,7 @@
  * - mine a search term into a negative proposal at $20 spend and zero conversions
  * - flag a Quality Score below 5 only when Google actually returned a score
  */
-import type { CampaignSpec, KeywordSpec } from './campaign.js';
+import { defaultCallouts, licensedAndInsured, type CampaignSpec, type KeywordSpec, type VerifiedClaims } from './campaign.js';
 
 export const RULEBOOK_DEFAULTS = {
   maxKeywordsPerAdGroup: 8,
@@ -93,6 +93,8 @@ export interface RulebookContext {
   gbpUrl?: string;
   /** Saved business hours, such as "Monday 8am to 5pm". */
   hours?: string;
+  /** Claims the profile or crawl backs up. Unset means none are printed. */
+  claims?: VerifiedClaims;
 }
 
 export interface RulebookResult {
@@ -207,7 +209,7 @@ export function enforceRulebook(spec: CampaignSpec, ctx: RulebookContext = {}): 
       cityOk ? `${cityOk} ${name}` : name,
       cityOk ? `${cityOk} Crew` : 'Local Crew',
       cityOk ? `Call ${cityOk}` : 'Call Today',
-      'Get A Quote', 'Book A Visit', 'Local Crew', 'Call For A Visit', 'Clear Pricing',
+      licensedAndInsured(ctx.claims) ? 'Licensed And Insured' : 'Get A Quote', 'Book A Visit', 'Local Crew', 'Call For A Visit', 'Clear Pricing',
       'Schedule A Visit', 'Ask About Timing', 'Request A Visit', 'Talk To The Crew', `${name} Help`, 'Local Team',
     ], d.headlineChars, d.headlines);
     if (cityOk) {
@@ -226,7 +228,7 @@ export function enforceRulebook(spec: CampaignSpec, ctx: RulebookContext = {}): 
     }
     const descriptions = pad(group.rsa?.descriptions ?? [], [
       cityOk ? `${name} in ${cityOk}. Call to schedule a visit.` : `${name}. Call to schedule a visit.`,
-      'Request a quote and a local crew will follow up.',
+      licensedAndInsured(ctx.claims) ? 'Licensed and insured. Call to schedule a visit.' : 'Request a quote and a local crew will follow up.',
       'Clear pricing. Ask about timing.',
       cityOk ? `Serving ${cityOk}. Schedule a visit with a local crew.` : 'Schedule a visit with a local crew.',
     ], d.descriptionChars, d.descriptions);
@@ -240,7 +242,7 @@ export function enforceRulebook(spec: CampaignSpec, ctx: RulebookContext = {}): 
   });
 
   if ((next.callouts?.length ?? 0) < 4) {
-    next.callouts = ['Request A Quote', 'Local Crew', 'Clear Pricing', 'Call Or Message', 'Ask About Timing', 'Schedule A Visit'];
+    next.callouts = defaultCallouts(ctx.claims);
     fixes.push('Callouts filled to the default set.');
   }
   if ((next.sitelinks?.length ?? 0) > 0 && next.sitelinks!.some((link) => !/^https:\/\/.+\..+/.test(link.url))) {

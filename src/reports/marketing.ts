@@ -427,8 +427,8 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
   const avgSec = timed.length ? Math.round(timed.reduce((total, reply) => total + (reply.responseSec || 0), 0) / timed.length) : null;
   const sources = new Map<string, number>();
   for (const reply of replies) {
-    const source = (reply.source || '').trim();
-    if (!source) continue;
+    // A lead with no source is still a lead. Show it as Unknown, never drop it.
+    const source = (reply.source || '').trim() || 'Unknown';
     sources.set(source, (sources.get(source) || 0) + 1);
   }
   const bySource = [...sources.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);

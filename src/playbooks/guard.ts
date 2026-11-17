@@ -3,6 +3,7 @@
  * people by protected traits, or by stand-ins for those traits.
  */
 import { tradePlaybook, type AudienceSegment } from './load.js';
+import { financingWarnings, hasFinancingTerms } from '../packs/apply.js';
 
 const PROTECTED = /\b(race|racial|ethnicity|ethnic|religion|religious|national origin|sexual orientation|disability|disabled people|gender identity)\b/i;
 const FAKE_CLAIM = /fake review|guaranteed results?|#\s*1|\bnumber[- ]one\b/i;
@@ -19,7 +20,11 @@ export function guardCopy(text: string): { ok: boolean; text: string; reason?: s
   if (claim) {
     return { ok: false, text: '', reason: `Miles will not write "${claim[0]}". That claim was not on the profile.` };
   }
-  if (/\b(financing|0%\s*apr|monthly payments?)\b/i.test(text) && !/\b(subject to credit|terms apply|apr)\b/i.test(text)) {
+  // One financing rule: a credit offer (either check's wording) needs a terms line
+  // (either check's wording: "subject to credit", "APR and terms apply", "With approved credit. See terms.").
+  const creditOffer = /\b(financing|0%\s*apr|monthly payments?)\b/i.test(text) || financingWarnings(text).length > 0;
+  const termsLine = /\b(subject to credit|terms apply|apr)\b/i.test(text) || hasFinancingTerms(text);
+  if (creditOffer && !termsLine) {
     return { ok: false, text: '', reason: 'Financing copy needs the terms disclaimer, including APR and that it is subject to credit.' };
   }
   return { ok: true, text };

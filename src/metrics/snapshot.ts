@@ -49,6 +49,23 @@ export function spendRowsOf(s: PlatformSnapshot | undefined): { campaign: string
   return (s?.campaigns ?? []).map((r) => ({ campaign: r.campaign, cost: r.spend || 0, conversions: r.conversions }));
 }
 
+/** Older than this, a snapshot is too old to vouch for this month's spend. */
+export const SPEND_TRUST_MS = 24 * 60 * 60_000;
+
+/**
+ * Ad spend to count against the monthly ceiling, from the stored snapshot.
+ * The snapshot holds trailing-30-day spend, which is at least this month's
+ * spend on every day but the 31st, so it errs toward holding. Null when no
+ * campaign spend was read or the read is more than a day old: unknown spend
+ * is not treated as zero.
+ */
+export function monthSpendOf(s: PlatformSnapshot | undefined, now = Date.now()): number | null {
+  if (!s || s.adSpend === undefined || !Number.isFinite(s.adSpend)) return null;
+  const t = Date.parse(s.ts);
+  if (!Number.isFinite(t) || now - t > SPEND_TRUST_MS) return null;
+  return Math.max(0, s.adSpend);
+}
+
 export function snapshotAgeMs(s: PlatformSnapshot | undefined): number {
   if (!s) return Number.POSITIVE_INFINITY;
   const t = Date.parse(s.ts);

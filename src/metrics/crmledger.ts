@@ -16,15 +16,45 @@ export interface CrmEvent {
   ts: string; // ISO timestamp
   name?: string;
   amount?: number; // closed_won: the deal/job value when the CRM sends one
+  /** The CRM's own id for this event, when it sends one. A repeat of type+id is skipped. */
+  id?: string;
 }
 
 const CAP = 1200; // ~90 days of events for an active account; the dashboard reads 30
 
 /** Append an event to the ledger inside a user-data object (mutates `data`). */
-export function appendCrmEvent(data: Record<string, unknown>, ev: CrmEvent): void {
+export function appendCrmEvent(data: Record<string, unknown>, ev: CrmEvent): boolean {
   const list = Array.isArray(data.crmEvents) ? (data.crmEvents as CrmEvent[]) : [];
+  // A CRM retries webhooks. The same event (type + the CRM's id) counts once.
+  if (ev.id && list.some((row) => row && row.type === ev.type && row.id === ev.id)) return false;
+  if (!ev.id) delete ev.id;
   list.unshift(ev);
   data.crmEvents = list.slice(0, CAP);
+  return true;
+}
+
+/** The CRM's id for a webhook event. Event-specific ids win over a generic id. */
+export function crmEventIdFrom(b: Record<string, unknown>, keys: string[] = []): string | undefined {
+  for (const k of [...keys, 'event_id', 'eventId', 'id']) {
+    const v = b[k];
+    if ((typeof v === 'string' && v.trim()) || (typeof v === 'number' && Number.isFinite(v))) return String(v).trim().slice(0, 200);
+  }
+  return undefined;
+}
+
+/**
+ * When the event happened, from the payload's own timestamp when it sends one,
+ * so a late or retried webhook lands on the right day. Falls back to now; a
+ * time in the future is treated as now.
+ */
+export function crmEventTsFrom(b: Record<string, unknown>, nowMs: number = Date.now()): string {
+  for (const k of ['timestamp', 'event_time', 'eventTime', 'date_created', 'dateAdded', 'date_added', 'created_at', 'createdAt']) {
+    const v = b[k];
+    if (v == null || v === '') continue;
+    const ms = typeof v === 'number' ? (v < 1e12 ? v * 1000 : v) : Date.parse(String(v));
+    if (Number.isFinite(ms) && ms > 0) return new Date(Math.min(ms, nowMs)).toISOString();
+  }
+  return new Date(nowMs).toISOString();
 }
 
 /** Pull a dollar amount out of a CRM webhook body — GHL and common aliases. */
@@ -63,8 +93,9 @@ export function crmLiveValues(data: Record<string, unknown>, days: number): Reco
     'crm.booked_jobs': won,
     'crm.job_revenue': revenue,
   };
-  if (won > 0 && revenue > 0) out['crm.avg_ticket'] = Math.round((revenue / won) * 100) / 100;
-  if (leads + missed > 0) out['crm.lead_to_book_rate'] = Math.round((won / (leads + missed)) * 1000) / 10;
+  // A real zero denominator is live with no value (NaN), never a sample fallback.
+  out['crm.avg_ticket'] = won > 0 && revenue > 0 ? Math.round((revenue / won) * 100) / 100 : NaN;
+  out['crm.lead_to_book_rate'] = leads + missed > 0 ? Math.round((won / (leads + missed)) * 1000) / 10 : NaN;
   return out;
 }
 
@@ -109,11 +140,13 @@ export function calcLiveValues(crm: Record<string, number>, adSpend: number | un
   const booked = crm['crm.booked_jobs'];
   const revenue = crm['crm.job_revenue'];
   if (leads !== undefined) out['calc.blended_leads'] = leads;
-  if (adSpend !== undefined && leads !== undefined && leads > 0) out['calc.blended_cpl'] = Math.round((adSpend / leads) * 100) / 100;
-  if (adSpend !== undefined && booked !== undefined && booked > 0) out['calc.cost_per_booked'] = Math.round((adSpend / booked) * 100) / 100;
-  if (adSpend !== undefined && adSpend > 0 && revenue !== undefined) {
-    out['calc.blended_roas'] = Math.round((revenue / adSpend) * 100) / 100;
-    if (revenue > 0) out['calc.marketing_pct_revenue'] = Math.round((adSpend / revenue) * 1000) / 10;
+  // When every input is live but the denominator is 0, the value is NaN:
+  // live, with no number to show. The card shows a dash, never a sample.
+  if (adSpend !== undefined && leads !== undefined) out['calc.blended_cpl'] = leads > 0 ? Math.round((adSpend / leads) * 100) / 100 : NaN;
+  if (adSpend !== undefined && booked !== undefined) out['calc.cost_per_booked'] = booked > 0 ? Math.round((adSpend / booked) * 100) / 100 : NaN;
+  if (adSpend !== undefined && revenue !== undefined) {
+    out['calc.blended_roas'] = adSpend > 0 ? Math.round((revenue / adSpend) * 100) / 100 : NaN;
+    out['calc.marketing_pct_revenue'] = revenue > 0 ? Math.round((adSpend / revenue) * 1000) / 10 : NaN;
   }
   return out;
 }

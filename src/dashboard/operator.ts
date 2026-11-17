@@ -25,6 +25,8 @@ export interface OperatorMetric {
   value: number;
   prior_value: number;
   source: 'live' | 'sample';
+  /** Live, but a real denominator is 0, so there is no number. */
+  noValue?: boolean;
 }
 
 export interface OperatorCampaign {
@@ -261,7 +263,7 @@ function decisionsOf(input: OperatorInput): OperatorDecision[] {
         detail: NO_SPEND_SHIFT,
         impact: null,
         kind: 'inbox' as const,
-        canSkip: false,
+        canSkip: true,
         canApprove: false,
       };
     }
@@ -271,7 +273,7 @@ function decisionsOf(input: OperatorInput): OperatorDecision[] {
       detail: plain(item.reason),
       impact: impactOf(`${item.title} ${item.reason}`),
       kind: 'inbox' as const,
-      canSkip: false,
+      canSkip: true,
       canApprove: true,
     };
   });
@@ -299,7 +301,7 @@ function onTrack(input: OperatorInput, decisions: OperatorDecision[]): OperatorV
   const spendLive = !input.sampleConnector && input.campaigns.some((row) => (row.spend || 0) > 0);
   const costUntracked = spendLive && bookedSample;
   const bookedValue = booked ? String(Math.round(booked.value)) : 'n/a';
-  const costValue = costUntracked ? 'Not tracked yet' : (cost ? money(cost.value) : 'n/a');
+  const costValue = costUntracked ? 'Not tracked yet' : (cost && !cost.noValue ? money(cost.value) : 'n/a');
   const pace = leadPaceOf(input);
   const liveJobs = !!(booked && !bookedSample);
 

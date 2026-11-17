@@ -12,6 +12,7 @@
  * correct without touching how spending is tracked.
  */
 import { BANDS, creditState, writeCredits, type Band } from './credits.js';
+import { workAccess } from './access.js';
 
 export type SubStatus = 'none' | 'trialing' | 'active' | 'past_due' | 'canceled';
 
@@ -28,6 +29,12 @@ export interface BillingState {
   payments?: { invoiceId: string; amount: number; at: string }[];
   refunds?: { id: string; amount: number; at: string }[];
   cancelAtPeriodEnd?: boolean;
+  /** When the current run of failed payments started. Starts the 7-day grace (Terms 4.5). */
+  pastDueSince?: string;
+  /** When Stripe reported the subscription deleted. */
+  canceledAt?: string;
+  /** When a canceled plan stops working: the paid period's end (Terms 4.6), or now. */
+  accessEndsAt?: string;
   /** Stripe invoice ids already granted for — a webhook can arrive more than
    *  once for the same invoice, and this is what stops a double grant. */
   grantedInvoices: string[];
@@ -65,11 +72,25 @@ export function billingState(data: Record<string, unknown>): BillingState {
     payments: readPayments(raw.payments),
     refunds: readRefunds(raw.refunds),
     cancelAtPeriodEnd: raw.cancelAtPeriodEnd === true,
+    pastDueSince: isoOrUndefined(raw.pastDueSince),
+    canceledAt: isoOrUndefined(raw.canceledAt),
+    accessEndsAt: isoOrUndefined(raw.accessEndsAt),
     grantedInvoices: Array.isArray(raw.grantedInvoices) ? raw.grantedInvoices.filter((x) => typeof x === 'string').slice(-MAX_GRANTED_INVOICES) : [],
     grantKeys: Array.isArray(raw.grantKeys) ? raw.grantKeys.filter((x) => typeof x === 'string').slice(-5000) : undefined,
     grantAmounts: raw.grantAmounts && typeof raw.grantAmounts === 'object' ? raw.grantAmounts : undefined,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
   };
+}
+
+function isoOrUndefined(value: unknown): string | undefined {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : undefined;
+}
+
+/** A paid, live subscription again: clear the failed-payment and cancel markers. */
+function clearLapse(b: BillingState): void {
+  b.pastDueSince = undefined;
+  b.canceledAt = undefined;
+  b.accessEndsAt = undefined;
 }
 
 function readPayments(value: unknown): { invoiceId: string; amount: number; at: string }[] | undefined {
@@ -108,6 +129,8 @@ export function linkCheckout(data: Record<string, unknown>, customerId: string, 
   b.stripeCustomerId = customerId;
   b.stripeSubscriptionId = subscriptionId;
   b.status = 'active';
+  b.cancelAtPeriodEnd = false;
+  clearLapse(b);
   saveBilling(data, b);
 }
 
@@ -142,6 +165,12 @@ export function syncSubscription(
   if (args.customerId) b.stripeCustomerId = args.customerId;
   b.stripeSubscriptionId = args.subscriptionId;
   const mapped = mapStripeStatus(args.status);
+  if (mapped === 'past_due' && b.status !== 'past_due') b.pastDueSince = b.pastDueSince ?? new Date().toISOString();
+  if (mapped === 'active' || mapped === 'trialing') clearLapse(b);
+  if (mapped === 'canceled' && b.status !== 'canceled') {
+    b.status = 'canceled';
+    stampCancel(b, new Date());
+  }
   if (mapped !== 'none') b.status = mapped;
   if (args.bandKey && (args.bandKey === 'launch' || BANDS.some((row) => row.key === args.bandKey))) b.band = args.bandKey;
   if (args.periodEnd) b.currentPeriodEnd = args.periodEnd;
@@ -180,6 +209,7 @@ export function applyRenewal(
   b.stripeSubscriptionId = args.subscriptionId;
   b.band = band.key;
   b.status = 'active';
+  clearLapse(b);
   b.currentPeriodEnd = args.periodEnd;
   if (typeof args.amountUsd === 'number' && Number.isFinite(args.amountUsd)) {
     b.mrr = Math.round(args.amountUsd * 100) / 100;
@@ -208,29 +238,47 @@ export function recordRefund(data: Record<string, unknown>, args: { id: string; 
   saveBilling(data, b);
 }
 
-/** A payment failed — the account keeps working (monitoring is never gated
- *  on billing), but the status reflects reality for the Billing page to show. */
-export function markPastDue(data: Record<string, unknown>, subscriptionId: string): void {
+/** A payment failed. Monitoring is never gated on billing. Paid work keeps
+ *  running through a 7-day grace period from the first failure (Terms 4.5),
+ *  then pauses until a payment succeeds (see access.ts). A retry that fails
+ *  again does not restart the grace period. */
+export function markPastDue(data: Record<string, unknown>, subscriptionId: string, now = new Date()): void {
   const b = billingState(data);
   if (b.stripeSubscriptionId && b.stripeSubscriptionId !== subscriptionId) return; // not this account's subscription
+  if (b.status !== 'past_due' || !b.pastDueSince) b.pastDueSince = b.pastDueSince ?? now.toISOString();
   b.status = 'past_due';
   saveBilling(data, b);
 }
 
-/** Access lasts through the paid period after cancel. A new subscription turns it back on. */
-export function accessOpen(billing: { status?: string; currentPeriodEnd?: string }, now = Date.now()): boolean {
-  if (billing.status === 'active' || billing.status === 'trialing') return true;
-  if (billing.status === 'canceled' && billing.currentPeriodEnd) {
-    const end = Date.parse(billing.currentPeriodEnd);
-    return Number.isFinite(end) && end > now;
-  }
-  return false;
+/** When a canceled plan stops working. A paid-up plan runs to the end of its
+ *  period (Terms 4.6). A plan Stripe ended over an unpaid invoice stops now:
+ *  that period was never paid for. */
+function stampCancel(b: BillingState, now: Date): void {
+  const wasUnpaid = !!b.pastDueSince;
+  b.canceledAt = now.toISOString();
+  const periodEnd = b.currentPeriodEnd && Date.parse(b.currentPeriodEnd) > now.getTime() ? b.currentPeriodEnd : undefined;
+  b.accessEndsAt = !wasUnpaid && periodEnd ? periodEnd : now.toISOString();
 }
 
-/** The subscription ended — cancellation, or Stripe gave up retrying a failed card. */
-export function markCanceled(data: Record<string, unknown>, subscriptionId: string): void {
+/** Whether a plan is open for paid work. One rule with workAccess (access.ts):
+ *  a paid-up canceled plan runs to the end of its period, a plan ended over an
+ *  unpaid invoice stops now, and a failed payment keeps its 7-day grace.
+ *  No plan on file is not open. A new subscription turns it back on. */
+export function accessOpen(
+  billing: { status?: string; currentPeriodEnd?: string; accessEndsAt?: string; canceledAt?: string; pastDueSince?: string; cancelAtPeriodEnd?: boolean; updatedAt?: string },
+  now = Date.now(),
+): boolean {
+  if (!['active', 'trialing', 'canceled', 'past_due'].includes(String(billing.status))) return false;
+  return !workAccess({ billing }, new Date(now)).paused;
+}
+
+/** The subscription ended — cancellation, or Stripe gave up retrying a failed card.
+ *  After `accessEndsAt`, included credits and top-ups stop working and the
+ *  account is monitoring only (Terms 4.6, 4.7; see access.ts). */
+export function markCanceled(data: Record<string, unknown>, subscriptionId: string, now = new Date()): void {
   const b = billingState(data);
   if (b.stripeSubscriptionId && b.stripeSubscriptionId !== subscriptionId) return;
+  if (b.status !== 'canceled' || !b.accessEndsAt) stampCancel(b, now);
   b.status = 'canceled';
   saveBilling(data, b);
 }

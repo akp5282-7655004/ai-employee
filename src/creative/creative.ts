@@ -100,7 +100,7 @@ export function generateAdCopy(req: CreativeRequest): AdCreative[] {
     {
       angle: 'Trust',
       headline: `${place}’s go-to for ${cat.label.toLowerCase()}`,
-      body: `Licensed, insured, and rated 5 stars by your neighbors. ${biz} makes ${cat.label.toLowerCase()} easy — ${offer}.`,
+      body: `Clear pricing and on-time crews. ${biz} makes ${cat.label.toLowerCase()} easy — ${offer}.`,
       cta: 'Get your free quote',
       imagePrompt: `${imageBase}, warm trustworthy local business feel, smiling technician`,
     },

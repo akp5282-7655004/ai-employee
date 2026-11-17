@@ -7,6 +7,7 @@
  * reviews before spending a cent.
  */
 import { buildPlaybook } from './playbook.js';
+import { licensedAndInsured, type VerifiedClaims } from './campaign.js';
 import { applyAudienceRules, guardCopy } from '../playbooks/guard.js';
 import { audiencesFor } from '../playbooks/load.js';
 
@@ -59,6 +60,8 @@ export interface MetaCampaignCtx {
   city?: string;
   serviceAreas?: string;
   services?: string;
+  /** Claims the profile or crawl backs up. Unset means the ad makes none. */
+  claims?: VerifiedClaims;
 }
 
 const CTA_BY_TRADE: Record<string, string> = {
@@ -112,18 +115,23 @@ export function buildMetaCampaignSpec(input: MetaCampaignInput, ctx: MetaCampaig
   const audience = applyAudienceRules(ctx.industry, audiencesFor(ctx.industry).segments);
 
   const offerLine = ownerText(pb.offer.engineered);
+  // "Licensed and insured" is a fact about the business. Print it only when shown.
+  const trustLine = licensedAndInsured(ctx.claims)
+    ? 'Licensed and insured, real local crew. Tap below for a fast, no-pressure quote.'
+    : 'A real local crew. Tap below for a fast, no-pressure quote.';
   const drafted = ownerText(input.primaryText || [
     offerLine + '.',
     pb.offer.reasonWhy,
     pb.offer.stack.join(' '),
-    input.financing ? pb.offer.financing : '',
-    'A real local crew. Tap below for a fast, no-pressure quote.',
+    // pb.offer.financing is advice to the owner, not ad copy. Customers see a plain line.
+    input.financing ? 'Financing available with approved credit. See terms.' : '',
+    trustLine,
   ].filter(Boolean).join('\n\n')).slice(0, 600);
   const checked = guardCopy(drafted);
-  const primaryText = checked.ok ? checked.text : ownerText('A real local crew. Tap below for a fast, no-pressure quote.');
+  const primaryText = checked.ok ? checked.text : ownerText(trustLine);
 
   const headline = ownerText(input.headline || offerLine.split(',')[0] || '').slice(0, 40) || `${ctx.business || trade} in ${ctx.city || 'your area'}`;
-  const description = ownerText(input.description || pb.offer.riskReversal[0] || 'Request an estimate').slice(0, 60);
+  const description = ownerText(input.description || (licensedAndInsured(ctx.claims) ? 'Licensed and insured. Ask for a quote' : 'Request an estimate')).slice(0, 60);
   const imageUrl = /^https:\/\//i.test(input.imageUrl || '') ? input.imageUrl : undefined;
 
   return {

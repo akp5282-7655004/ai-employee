@@ -23,6 +23,7 @@ import {
   repairCampaignUrls,
   type CampaignSpec,
   type PageLinkRef,
+  type VerifiedClaims,
 } from './campaign.js';
 import { resolveAreas } from './geotarget.js';
 import { enforceRulebook, fixAdCapitalization, hoursRange, RULEBOOK_DEFAULTS } from './rulebook.js';
@@ -47,6 +48,8 @@ export interface PlanProfile {
   keywordFocus?: string;
   gbpUrl?: string;
   links?: PageLinkRef[];
+  /** Credential claims the crawl backed up. Unset means the ads make none. */
+  claims?: VerifiedClaims;
 }
 
 export interface PlanQuestion {
@@ -247,7 +250,7 @@ export function buildSearchPlan(profile: PlanProfile, opts?: { preapproved?: boo
   const goal = blank(profile.goal) ? 'Get more calls' : profile.goal;
   const drafted = buildCampaignSpec(
     { goal, dailyBudget: daily, finalUrl: profile.website || '', locations: blank(profile.serviceAreas) ? [city] : [profile.serviceAreas || city] },
-    { business: profile.businessName, trade: profile.trade, city, services },
+    { business: profile.businessName, trade: profile.trade, city, services, claims: profile.claims },
   );
   if (profile.jobsToAvoid) drafted.negatives = splitList(profile.jobsToAvoid);
   const hours = hoursRange(profile.hours);
@@ -257,6 +260,7 @@ export function buildSearchPlan(profile: PlanProfile, opts?: { preapproved?: boo
     phone: profile.phone,
     gbpUrl: profile.gbpUrl,
     hours: profile.hours,
+    claims: profile.claims,
   });
   const spec = ruled.spec;
   if (hours && spec.targeting) {

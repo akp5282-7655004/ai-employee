@@ -27,17 +27,62 @@ const CLAIMS: { name: string; re: RegExp }[] = [
   { name: 'price', re: /\$\s?\d|\b\d+\s?% off\b/i },
 ];
 
-/** The claim a line makes that the owner's own text does not back, or null. */
-export function unvouchedClaim(line: string, ownerText = ''): string | null {
+/**
+ * Credential claims an ad may make only when the business shows them.
+ * "Licensed And Insured", "Experienced Crew", and "Locally Owned" are
+ * statements of fact about the business, so Miles does not print them on a
+ * guess. Every field defaults to false.
+ */
+export interface VerifiedClaims {
+  licensed?: boolean;
+  insured?: boolean;
+  experienced?: boolean;
+  locallyOwned?: boolean;
+}
+
+/** Read the claims a site's own text makes. Nothing found means nothing claimed. */
+export function claimsFromText(text: string | undefined): VerifiedClaims {
+  const t = (text || '').replace(/\s+/g, ' ');
+  return {
+    licensed: /(?<!\bnot\s)\blicen[sc]ed\b|\blicen[sc]e\s*(#|no\.?|number)\s*\w/i.test(t),
+    insured: /(?<!\bnot\s)\b(fully\s+)?insured\b/i.test(t),
+    experienced: /\b\d{1,3}\+?\s*(years?|yrs)\b(\s+of)?\s+(experience|in business)/i.test(t) || /\bsince\s+(19|20)\d{2}\b/i.test(t),
+    locallyOwned: /\b(locally|family)[\s-]+owned\b/i.test(t),
+  };
+}
+
+/** True when both licensing and insurance are backed up. */
+export function licensedAndInsured(claims?: VerifiedClaims): boolean {
+  return !!(claims?.licensed && claims?.insured);
+}
+
+/**
+ * Credential claims with a structured check. For these, the owner's text is
+ * read with claimsFromText (which ignores "not licensed" and the like), and
+ * claims already verified from the business's own site count too. That is the
+ * same rule the default templates use to print "Licensed And Insured".
+ */
+const CREDENTIAL: Record<string, keyof VerifiedClaims> = {
+  licensed: 'licensed',
+  insured: 'insured',
+  'locally owned': 'locallyOwned',
+  years: 'experienced',
+};
+
+/** The claim a line makes that the owner's own text (or verified claims) does not back, or null. */
+export function unvouchedClaim(line: string, ownerText = '', verified?: VerifiedClaims): string | null {
+  const fromOwner = claimsFromText(ownerText);
   for (const claim of CLAIMS) {
     if (!claim.re.test(line)) continue;
-    if (claim.re.test(ownerText)) continue;
+    const key = CREDENTIAL[claim.name];
+    if (key ? fromOwner[key] || verified?.[key] : claim.re.test(ownerText)) continue;
     return claim.name;
   }
   return null;
 }
 
-/** Keep only the lines the owner's text supports. */
-export function vouchedLines(lines: string[], ownerText = ''): string[] {
-  return lines.filter((line) => !unvouchedClaim(line, ownerText));
+/** Keep only the lines the owner's text (or verified claims) supports. */
+export function vouchedLines(lines: string[], ownerText = '', verified?: VerifiedClaims): string[] {
+  return lines.filter((line) => !unvouchedClaim(line, ownerText, verified));
 }
+

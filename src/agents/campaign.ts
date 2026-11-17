@@ -8,6 +8,7 @@
  */
 
 import { tradePlaybook } from '../playbooks/load.js';
+import { licensedAndInsured, type VerifiedClaims } from './claims.js';
 
 export type MatchType = 'broad' | 'phrase' | 'exact';
 export interface KeywordSpec {
@@ -87,7 +88,12 @@ export interface CampaignCtx {
   offers?: string;
   radiusMiles?: number;
   hours?: { startHour?: number; endHour?: number; days?: number[] };
+  /** Claims the business profile or the site crawl backs up. Unset means none. */
+  claims?: VerifiedClaims;
 }
+
+// The claim rules live in one module (claims.ts). Re-exported for existing callers.
+export { claimsFromText, licensedAndInsured, type VerifiedClaims } from './claims.js';
 
 const clampBudget = (n: unknown): number => {
   const v = Number(n);
@@ -333,7 +339,7 @@ function rsaFor(theme: string, ctx: CampaignCtx, brand: string): RsaSpec {
     fitCopy([cityTitle ? `Serving ${cityTitle}` : 'Serving your area'], 30),
     fitCopy([brand, themeTitle], 30),
     fitCopy([`${themeTitle} help`, themeTitle], 30),
-    'Get A Quote',
+    licensedAndInsured(ctx.claims) ? 'Licensed And Insured' : 'Get A Quote',
     'Book A Visit',
     'Local Crew',
     'Call For A Visit',
@@ -361,7 +367,7 @@ function rsaFor(theme: string, ctx: CampaignCtx, brand: string): RsaSpec {
       'Ask about timing.',
     ], 90),
     fitCopy([`Schedule ${themeTitle.toLowerCase()} with a local crew.`, 'Schedule a visit with a local crew.'], 90),
-    'Honest pricing. You approve the campaign before it is created paused.',
+    'Honest pricing. Call to schedule.',
   ].filter((line, i, all) => line && line.length <= 90 && all.indexOf(line) === i);
   return { headlines: headlines.slice(0, 15), descriptions: descriptions.slice(0, 4) };
 }
@@ -395,7 +401,7 @@ function sitelinksOf(themes: string[], ctx: CampaignCtx, finalUrl: string): Site
   const base: { text: string; desc1: string; desc2: string; seg: string }[] = [
     { text: fitCopy([themes[0] || 'Our Services', 'Services'], 25), desc1: fitCopy([`Local ${(themes[0] || 'service').toLowerCase()}`, 'Local service'], 35), desc2: 'Clear timing', seg: 'services' },
     { text: 'Request A Visit', desc1: 'Talk through the work', desc2: 'No pressure', seg: 'visit' },
-    { text: 'About Us', desc1: fitCopy([ctx.city ? `Team in ${normalizeAdCase(ctx.city.split(',')[0] || '')}` : 'Local team', 'Local team'], 35), desc2: 'Meet the crew', seg: 'about' },
+    { text: 'About Us', desc1: fitCopy([ctx.city ? `Team in ${normalizeAdCase(ctx.city.split(',')[0] || '')}` : 'Local team', 'Local team'], 35), desc2: licensedAndInsured(ctx.claims) ? 'Licensed and insured' : 'Meet the crew', seg: 'about' },
     { text: 'Contact Us', desc1: 'Call or message', desc2: 'We reply', seg: 'contact' },
   ];
   if (themes[1]) base.splice(1, 0, { text: fitCopy([themes[1], 'Services'], 25), desc1: fitCopy([`${themes[1]}`, 'More services'], 35), desc2: 'Ask about options', seg: 'services-2' });
@@ -404,8 +410,23 @@ function sitelinksOf(themes: string[], ctx: CampaignCtx, finalUrl: string): Site
 
 /** 4–6 callout assets (≤25 each), no punctuation-heavy text. */
 function calloutsOf(ctx: CampaignCtx): string[] {
-  const outs = ['Request A Quote', 'Local Crew', 'Clear Pricing', 'Call Or Message', 'Ask About Timing', 'Schedule A Visit'];
+  const outs = defaultCallouts(ctx.claims);
   return [...new Set(outs.map((line) => fitCopy([line], 25)).filter(Boolean))].slice(0, 6);
+}
+
+/** The default callout set. Credential callouts appear only when backed up. */
+export function defaultCallouts(claims?: VerifiedClaims): string[] {
+  return [
+    licensedAndInsured(claims) ? 'Licensed And Insured' : '',
+    claims?.locallyOwned ? 'Locally Owned' : '',
+    claims?.experienced ? 'Experienced Crew' : '',
+    'Request A Quote',
+    'Local Crew',
+    'Clear Pricing',
+    'Call Or Message',
+    'Ask About Timing',
+    'Schedule A Visit',
+  ].filter(Boolean).slice(0, 6);
 }
 
 /** Structured snippet — header "Service catalog" + the service themes as values (≥3). */

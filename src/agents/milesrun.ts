@@ -17,7 +17,8 @@ export function planGo(args: {
   areaModes?: Partial<Record<MilesArea, MilesMode>>;
   caps: Caps;
   spentToday: number;
-  spentMonth: number;
+  /** Null when this month's spend could not be read. Spend then waits for approval. */
+  spentMonth: number | null;
   dailySpend: number;
   /** A yes on the queued create. Does not also enable. */
   explicitCreate?: boolean;

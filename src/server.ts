@@ -12,16 +12,16 @@ import { getConnector, type Connector } from './connectors/index.js';
 import type { ConnectedAccount } from './connectors/types.js';
 import { createReadThrough, withTimeout } from './connectors/readcache.js';
 import { withUserDataCache } from './db/cache.js';
-import { buildSnapshot, readSnapshot, snapshotAgeMs, spendRowsOf, STALE_MS, type PlatformSnapshot } from './metrics/snapshot.js';
+import { buildSnapshot, monthSpendOf, readSnapshot, snapshotAgeMs, spendRowsOf, STALE_MS, type PlatformSnapshot } from './metrics/snapshot.js';
 import { loadConfig, pipedreamReady } from './config.js';
-import { getPack, listPacks, validateIntake } from './packs/index.js';
+import { financingWarnings, getPack, listPacks, validateIntake } from './packs/index.js';
 import { LSA_TRADES, LSA_BLENDED, LSA_VS_GOOGLE, BENCHMARK_META, BENCHMARK_HUB, hubCoverage } from './packs/benchmarks.js';
 import { generateAdCopy, type CreativeRequest } from './creative/creative.js';
 import { falReady, falGenerateImage, falGenerateVideo, falGenerateAudio, type Aspect } from './creative/fal.js';
 import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText, optimizerSystem, type BrandContext } from './creative/studio.js';
 import { resolveKit, kitHasGuidance, parseColors, type BrandKit } from './brand/kit.js';
 import { templatedReady, templatedListTemplates, templatedRender, type RenderLayer } from './creative/templated.js';
-import { buildRecommendations, type Recommendation } from './agents/recommend.js';
+import { buildRecommendations, recIsOpen, stableRecId, type Recommendation } from './agents/recommend.js';
 import { competitorAdReport, searchCompetitorAds } from './research/adlibrary.js';
 import { offerBrief, offerMix, readWinners, suggestedOfferLines, survivalByOfferKind } from './research/offers.js';
 import { parseCapturedAds, readCaptured, writeCaptured } from './research/capture.js';
@@ -30,7 +30,7 @@ import { briefFromSelection, buildLibrary, filterLibrary, libraryFacets, readSel
 import { buildMetaAssets, buildSearchAssets, checkMetaPack, checkSearchPack } from './creative/tospec.js';
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
-import { buildCampaignSpec, validateCampaignSpec, campaignSummary, normalizeSiteUrl, repairCampaignUrls, type CampaignSpec } from './agents/campaign.js';
+import { buildCampaignSpec, claimsFromText, validateCampaignSpec, campaignSummary, normalizeSiteUrl, repairCampaignUrls, type CampaignSpec } from './agents/campaign.js';
 import { googleResourceMissing, judgeEnableReadback } from './agents/enablecheck.js';
 import { housekeepingProposals } from './agents/rulebook.js';
 import { acceptApprovedPlan, applyPlanAnswer, areaGuess, buildSearchPlan, type PlanProfile } from './agents/campaignplan.js';
@@ -52,7 +52,7 @@ import { getMetrics } from './metrics/resolver.js';
 import { buildOperatorView } from './dashboard/operator.js';
 import { buildLaunchView, previewSpec } from './dashboard/launch.js';
 import { buildBusinessProfile } from './profile/business.js';
-import { appendCrmEvent, amountFrom, crmLiveValues, calcLiveValues, dealsLiveValues } from './metrics/crmledger.js';
+import { appendCrmEvent, amountFrom, crmEventIdFrom, crmEventTsFrom, crmLiveValues, calcLiveValues, dealsLiveValues } from './metrics/crmledger.js';
 import { buildLocalPresenceAudit, gbpCompletenessScore, type AuditAnswer } from './agents/localpresence.js';
 import { appendApproval, approvalLog, defaultAutonomy, normalizeAutonomy, TOS_VERSION, type ApprovalEntry } from './agents/approvallog.js';
 import { listSkills as listLibrarySkills, readSkill as readLibrarySkill } from './skills/library.js';
@@ -65,7 +65,7 @@ import {
   pendingAccounts, setCostAccount, UNCLAIMED, withCostAccount, blockPaidWork, refusedPaidWork,
 } from './billing/costsink.js';
 import { itemEconomics, PRICES_STAMPED, rollup, TARGET_MARGIN, THIN_MARGIN, unpricedWork } from './billing/cogs.js';
-import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS, canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS, writeCredits, LAUNCH_GRANT, settleTopUp, nextBandName, outOfCreditsReason } from './billing/credits.js';
+import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS, canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS, writeCredits, LAUNCH_GRANT, settleTopUp, nextBandName, outOfCreditsReason, paidWorkBlock } from './billing/credits.js';
 import { setupProgress } from './onboarding/tools.js';
 import { approveChange, CREDIT_PAUSE, dailyDue, planActions, revertChange, runDailyRead } from './automation/engine.js';
 import { buildOrgChart } from './automation/org.js';
@@ -73,6 +73,8 @@ import type { DailyInput } from './automation/skills.js';
 import { DEFAULT_CAPS, type MilesMode } from './agents/policy.js';
 import { buildAdminBusiness } from './admin/business.js';
 import { adSpendAllowed } from './billing/gate.js';
+import { splitByHealth } from './connectors/health.js';
+import { lowCredit, workAccess, GRACE_DAYS } from './billing/access.js';
 import { isMediaKind, MEDIA_LABEL, MEDIA_KINDS, mediaCost } from './billing/media.js';
 import {
   applySubscriptionCoupon, bandForPriceId, cancelStripeSubscription, createCheckoutSession, createPortalSession, createTopUpPaymentIntent, priceIdForBand, probeStripe,
@@ -83,7 +85,7 @@ import { applyRenewal, billingState, linkCheckout, markCanceled, markPastDue, re
 import { SEVEN_SKILLS, runSevenSkill } from './skills/seven.js';
 import { buildBundle, competitorAudit, crawlFacts, performanceAudit, readPublicPage, setupPlacement, websiteAudit } from './agents/journey.js';
 import { planGo } from './agents/milesrun.js';
-import { decidePolicy } from './agents/policy.js';
+import { decidePolicy, overDailyCap } from './agents/policy.js';
 import { dueSkills, periodKey } from './agents/skillclock.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { facebookDaily, META_NOT_CONNECTED, publicImage } from './agents/metalaunch.js';
@@ -159,14 +161,16 @@ import {
 } from './agents/speed_to_lead.js';
 import { aggregateNetwork, type WorkspaceSignal } from './usage/network.js';
 import { deliveryStatus, sendEmail, sendSms, smsExcerpt } from './delivery/send.js';
-import { parseBudget, parseEmail, toE164 } from './identity/fields.js';
-import { HELP_SITE, cancelQueued, claimOnce, contradictoryAsk, hideDismissed, isOptOutMessage, isQuietHour, leadOffset, marketingFooter, scrubSecrets } from './qa/ownerrows.js';
-import { grantedIdentity, launchCreditStatus, maybeGrantLaunchCredit, LAUNCH_WAIT } from './billing/launchcredit.js';
+import { parseBudget, parseEmail, toE164, trimText } from './identity/fields.js';
+import { addOptOut, e164, effectiveQuietHours, inQuietHours, isOptedOut, isStopMessage, payloadOptsOut, quietForLead, smsResult, smsRunHead, type SmsResult } from './agents/smsguard.js';
+import { HELP_SITE, cancelQueued, marketingFooter, scrubSecrets } from './qa/ownerrows.js';
+import { grantedIdentity, grantLaunchCreditOnce, launchCreditStatus, needsEmailRecord, launchEmailKey, LAUNCH_WAIT } from './billing/launchcredit.js';
 import { addLead, leadCounts, readLeads, setLeadOptOut, setLeadStatus } from './crm/leads.js';
 import { searchCompetitors } from './research/places.js';
 import { attributeRevenue } from './revenue/attribution.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
 import { hashPassword, verifyPassword, newToken, newUserId, parseCookies } from './auth.js';
+import { signupInputProblem } from './auth/signupRules.js';
 import { isHostedDeploy, MemoryStore, storageStatus, type Store, type User } from './db/index.js';
 
 /**
@@ -190,6 +194,33 @@ export interface ServerDeps {
 }
 
 const SESSION_DAYS = 30;
+/** The Miles logo mark, served as the tab icon. Same drawing as the app's brand row. */
+const FAVICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="1.5" y="1.5" width="97" height="97" rx="27" fill="#111112"/><g fill="none" stroke="#fff" stroke-width="8"><path d="M31.6 31.6A26 26 0 0 0 68.4 68.4" stroke-opacity=".22"/><path d="M31.6 31.6A26 26 0 0 1 68.4 68.4"/></g><circle cx="42" cy="50" r="4" fill="#fff"/><circle cx="58" cy="50" r="4" fill="#fff"/></svg>';
+
+/** Fields PUT /api/profile keeps. Anything else in the body is dropped. */
+const PROFILE_KEYS = new Set([
+  'businessName', 'industry', 'trade', 'vertical', 'category', 'yearStarted', 'employees', 'phone', 'email', 'website', 'websitePlatform', 'description',
+  'address', 'city', 'state', 'zip', 'serviceAreas', 'services', 'topServices', 'avgTicket', 'averageJobValue', 'currentOffers', 'financing',
+  'goal', 'goalChoice', 'goalConfirmed', 'leadGoal', 'leadPeriod', 'leadsPerDay', 'closeRate', 'targetCpa', 'targetCpl', 'dailyBudget', 'monthlyBudget',
+  'idealCustomer', 'runningAds', 'adSpend', 'adResults', 'adChannel', 'competitors', 'targetKeywords', 'keywordFocus', 'jobsToAvoid',
+  'tagline', 'slogan', 'brandVoice', 'fonts', 'audience', 'brandAvoid', 'brandColors', 'logo', 'hours', 'license',
+  'gbpUrl', 'gbpClaimed', 'facebook', 'instagram', 'linkedin', 'tiktok', 'youtube', 'postingFrequency',
+  'collectsEmails', 'emailTool', 'emailListSize', 'sendsNewsletter',
+  'radiusMiles', 'openHour', 'closeHour',
+]);
+const PROFILE_TEXT_MAX = 2000;
+
+/** True when a request field was actually typed (not left out or blank). */
+function typedValue(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== '';
+}
+
+/** A saved opening or closing hour (0 to 24), or undefined when none was typed. */
+function hourOf(value: unknown): number | undefined {
+  if (!typedValue(value)) return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 && n <= 24 ? n : undefined;
+}
 
 // Served from the repo root (npm start / npm run dev both run from there).
 const WEB_DIR = join(process.cwd(), 'web');
@@ -343,6 +374,22 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       bad.statusCode = 400;
       done(bad);
     }
+  });
+  // Plain HTML forms (the "Resend confirmation" button on the expired-link
+  // page). Only the routes listed here take form posts; every other route stays
+  // JSON-only, so a cross-site form cannot reach the API.
+  const FORM_ROUTES = new Set(['/auth/confirm/resend']);
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (req, body, done) => {
+    const path = (req.url || '').split('?')[0] ?? '';
+    if (!FORM_ROUTES.has(path)) {
+      const err = new Error('This address takes JSON, not a form post.') as Error & { statusCode: number };
+      err.statusCode = 415;
+      done(err);
+      return;
+    }
+    const out: Record<string, string> = {};
+    for (const [key, value] of new URLSearchParams(String(body))) out[key] = value;
+    done(null, out);
   });
 
   /**
@@ -537,7 +584,14 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
       const id = grantedIdentity(await authStore.getUserData(user.id));
       if (id) others.push(id);
     }
-    const credit = maybeGrantLaunchCredit(data, progress.ready, others);
+    // Once per email, kept outside the account so deleting it and signing up again earns nothing.
+    const email = launchEmailKey(users.find((user) => user.id === userId)?.email || '');
+    const claimEmail = async () => !!email && authStore.claimLaunchCredit(email, userId);
+    if (needsEmailRecord(data) && email) {
+      await authStore.claimLaunchCredit(email, userId);
+      data.launchCredit = { ...(data.launchCredit as Record<string, unknown>), emailClaimed: true };
+    }
+    const credit = await grantLaunchCreditOnce(data, progress.ready, others, claimEmail);
     await authStore.setUserData(userId, data);
     return { data, progress, credit };
   };
@@ -656,16 +710,35 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { connected: false, externalId: uid };
   };
   const ghlAppFor = async (uid: string): Promise<string | undefined> => (await ghlLink(uid)).slug;
-  const sendGhl = async (uid: string, phone: string, name: string, message: string, verb: string, extra?: Record<string, string>): Promise<boolean> => {
-    if (!phone || !connector.runAppTask) return false;
+  /**
+   * The one shared sender for customer texts. Every SMS path goes through it (or
+   * through the same checks in runSpeedToLead), so none can skip them:
+   * paused account, phone that does not parse, opted-out number, no CRM,
+   * quiet hours, the SOP gate. It writes its approval-log entry onto the
+   * caller's `data`, which the caller saves, so the entry is never lost to a
+   * later save of an older copy. Only status 'sent' means the CRM took it.
+   */
+  const sendGhl = async (uid: string, data: Record<string, unknown>, phone: string, name: string, message: string, verb: string, extra?: Record<string, string>): Promise<SmsResult> => {
+    if (data.accountPaused === true) return smsResult('paused');
+    if (!phone || !phone.trim()) return smsResult('no_phone');
+    const to = e164(phone);
+    if (!to) return smsResult('bad_phone');
+    const log = (kind: 'action' | 'dismissal', detail: string) =>
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind, actor: 'miles', source: 'sop-gate', title: 'ghl_send', detail });
+    if (isOptedOut(data, to)) { log('dismissal', `Not sent to ${to}: the number opted out of texts.`); return smsResult('opted_out'); }
+    if (!connector.runAppTask) return smsResult('not_connected');
     const link = await ghlLink(uid);
-    if (!link.slug) return false;
-    const data = await authStore.getUserData(uid);
-    const gate = runSopGate('ghl_send', { mode: 'automate', ghl: { phone, message } });
-    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: 'miles', source: 'sop-gate', title: 'ghl_send', detail: formatSopLog(gate) });
-    await authStore.setUserData(uid, data);
-    if (gate.disposition === 'block') return false;
-    try { const r = await connector.runAppTask({ externalUserId: link.externalId, app: link.slug, query: verb, params: { message, name, phone, ...(extra ?? {}) } }); return !!r?.ok; } catch { return false; }
+    if (!link.slug) return smsResult('not_connected');
+    if (quietForLead(data, Date.now(), to)) { log('dismissal', `Held for quiet hours: not sent to ${to}.`); return smsResult('quiet_hours'); }
+    const gate = runSopGate('ghl_send', { mode: 'automate', ghl: { phone: to, message } });
+    log(gate.disposition === 'block' ? 'dismissal' : 'action', formatSopLog(gate));
+    if (gate.disposition === 'block') return smsResult('blocked');
+    try {
+      const r = await connector.runAppTask({ externalUserId: link.externalId, app: link.slug, query: verb, params: { message, name, phone: to, ...(extra ?? {}) } });
+      return smsResult(r?.ok ? 'sent' : 'failed');
+    } catch {
+      return smsResult('failed');
+    }
   };
 
   const readWeb = (name: string, fallback: string) => {
@@ -716,7 +789,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   });
 
   const dashboardPage = readWeb('index.html', '<!doctype html><title>Miles</title><p>Build the web/ dir.</p>');
-  const loginPage = readWeb('login.html', '<!doctype html><title>Miles — Sign in</title><p>Login page missing.</p>');
+  const loginPage = readWeb('login.html', '<!doctype html><title>Miles, Sign in</title><p>Login page missing.</p>');
 
   // ── auth helpers ──
   // Secure is set wherever the app is actually served over TLS. It is left off
@@ -743,7 +816,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
    * remembering to gate it. Monitoring reads no model and is untouched.
    */
   const gatePaidWork = (data: Record<string, unknown>) => {
-    blockPaidWork(billingEnforced() && creditState(data).remaining <= 0 ? outOfCreditsReason(data) : undefined);
+    blockPaidWork(paidWorkBlock(data));
   };
   const requireUser = async (req: FastifyRequest, reply: FastifyReply): Promise<User | null> => {
     const u = await getUser(req);
@@ -886,6 +959,15 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return reply.type('text/html').send(u ? dashboardPage : loginPage);
   });
   app.get('/login', async (_req, reply) => reply.type('text/html').send(loginPage));
+  // "Start free" links point here. Opens the login page on the Sign up tab and
+  // keeps any invite or utm parameters the link carried.
+  app.get('/signup', async (req, reply) => {
+    const raw = (req.url || '').split('?')[1] || '';
+    const params = new URLSearchParams(raw);
+    params.delete('signup');
+    const rest = params.toString();
+    return reply.redirect(`/login?signup=1${rest ? '&' + rest : ''}`);
+  });
 
   // Whether accounts actually survive a restart. Public and unauthenticated on
   // purpose: the symptom it explains ("my account is gone", "it doesn't
@@ -932,7 +1014,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     await startSession(reply, demo.id);
     return reply.type('text/html').send(dashboardPage);
   });
-  app.get('/favicon.ico', async (_req, reply) => reply.code(204).send());
+  // The Miles mark, the same one the app shows in its tab. Browsers that ask
+  // for /favicon.ico (status pages, the privacy page) get the SVG too.
+  const sendFavicon = async (_req: unknown, reply: FastifyReply) => {
+    reply.header('cache-control', 'public, max-age=86400');
+    return reply.type('image/svg+xml').send(FAVICON_SVG);
+  };
+  app.get('/favicon.ico', sendFavicon);
+  app.get('/favicon.svg', sendFavicon);
   // Self-hosted third-party assets (the TOAST UI image editor + fabric.js). Served
   // from web/vendor so the editor has no runtime CDN dependency. Read-only, no auth.
   app.get<{ Params: Record<string, string> }>('/vendor/*', async (req, reply) => {
@@ -988,10 +1077,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // ── auth ──
   app.post('/auth/signup', async (req, reply) => {
     const b = (req.body ?? {}) as { email?: string; password?: string; name?: string; invite?: string; tos?: boolean; utmSource?: string; utm_source?: string; utmCampaign?: string; utm_campaign?: string; referrer?: string };
-    if (!b.password || b.password.length < 6)
-      return reply.code(400).send({ error: 'Enter an email and a password of at least 6 characters.' });
+    // The address must be a real one (main's rule), then the sign-up rules
+    // (8+ character password, not a common one) have the final word.
     const signupEmail = parseEmail(b.email, { required: true });
     if (!signupEmail.ok) return reply.code(400).send({ error: signupEmail.error, field: 'email' });
+    const signupProblem = signupInputProblem(signupEmail.value, b.password);
+    if (signupProblem) return reply.code(400).send(signupProblem);
+    b.email = signupEmail.value;
+    b.password = String(b.password);
     // ToS acceptance is required and version-stamped to the account — the
     // in-product acknowledgment matters as much as the document (ToS notes).
     if (b.tos !== true) return reply.code(400).send({ error: 'Please accept the Terms of Service to create an account.' });
@@ -1153,7 +1246,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
 
   app.get('/privacy', async (_req, reply) => {
     const contact = supportEmail();
-    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Miles AI privacy policy</title><style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:820px;margin:0 auto;padding:32px 20px;color:#1e293b;background:#fff;line-height:1.55}a{color:#4f46e5}h1{font-size:28px}h2{font-size:18px;margin-top:28px}</style></head><body>
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Miles, Privacy policy</title><style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:820px;margin:0 auto;padding:32px 20px;color:#1e293b;background:#fff;line-height:1.55}a{color:#4f46e5}h1{font-size:28px}h2{font-size:18px;margin-top:28px}</style></head><body>
 <p><a href="/login">Back to sign in</a></p>
 <h1>Miles AI privacy policy</h1>
 <p>Miles AI is a marketing employee for local service businesses. This page says what we read, why, and how you delete it.</p>
@@ -1177,6 +1270,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return reply.type('text/html').send(html);
   });
 
+  const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   app.get<{ Querystring: { uid?: string; token?: string } }>('/auth/confirm', async (req, reply) => {
     const uid = req.query.uid || '';
     const token = req.query.token || '';
@@ -1184,7 +1278,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = user ? await authStore.getUserData(user.id) : {};
     const pending = (data.emailConfirm ?? {}) as { token?: string; exp?: number };
     const expired = !pending.token || !pending.exp || pending.exp < Date.now() || pending.token !== token;
-    const page = (title: string, body: string, resend: boolean) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head><body style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:480px;margin:48px auto;padding:0 20px"><h1>${title}</h1><p>${body}</p>${resend ? `<form method="post" action="/auth/confirm/resend"><input type="hidden" name="email" value="${user?.email || ''}"><button type="submit">Resend confirmation</button></form>` : '<p><a href="/login">Sign in</a></p>'}<p><a href="/login">Back to sign in</a></p></body></html>`;
+    const page = (title: string, body: string, resend: boolean) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Miles, ${title}</title></head><body style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:480px;margin:48px auto;padding:0 20px"><h1>${title}</h1><p>${body}</p>${resend ? `<form method="post" action="/auth/confirm/resend"><input type="hidden" name="email" value="${escapeHtml(user?.email || '')}"><button type="submit">Resend confirmation</button></form>` : '<p><a href="/login">Sign in</a></p>'}<p><a href="/login">Back to sign in</a></p></body></html>`;
     if (!user || expired) return reply.code(400).type('text/html').send(page('This link expired', 'That confirmation link is no longer valid. Request a new one.', true));
     delete data.emailConfirm;
     data.emailConfirmedAt = new Date().toISOString();
@@ -1226,10 +1320,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = who ? await authStore.getUserByEmail(who) : null;
     if (!u || !verifyPassword(b.password ?? '', u.passwordHash))
       return reply.code(401).send({ error: 'Wrong email or password.' });
-    const pausedData = await authStore.getUserData(u.id);
-    if (pausedData.accountPaused === true) {
-      return reply.code(403).send({ error: 'This account is deactivated. Ask the Miles owner to turn it back on.' });
-    }
+    // A paused account is told so plainly at sign-in, not left to hit 403s panel by panel.
+    if ((await authStore.getUserData(u.id)).accountPaused === true && !(await isAdmin(u)))
+      return reply.code(403).send({ error: 'This account is paused, so it is deactivated for now. Ask the Miles owner to turn it back on.', paused: true });
     await startSession(reply, u.id);
     return { ok: true, user: { id: u.id, email: u.email, name: u.name } };
   });
@@ -1408,6 +1501,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(id);
     data.accountPaused = req.body?.paused !== false;
     await authStore.setUserData(id, data);
+    // Pausing ends every open session, so the account is signed out at once.
+    if (data.accountPaused) await authStore.deleteSessionsForUser(id);
     await auditAdmin(actor.id, { action: data.accountPaused ? 'pause account' : 'resume account', targetId: id, note: data.accountPaused ? 'Paused the account.' : 'Turned the account back on.' });
     return { ok: true, paused: data.accountPaused };
   });
@@ -1654,7 +1749,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const message = (req.body?.message ?? '').trim().slice(0, 2000);
     if (!message) return reply.code(400).send({ error: 'Say a little about what you think.' });
     const ownerId = await adminUserId();
-    if (!ownerId) return { ok: true }; // no owner yet — nothing to store against
+    if (!ownerId) return reply.code(503).send({ ok: false, error: 'Feedback is not set up yet, so this was not sent.' });
     const data = await authStore.getUserData(ownerId);
     const entry = {
       id: newToken().slice(0, 10),
@@ -1704,10 +1799,23 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    const body = (req.body ?? {}) as Record<string, unknown>;
+    const raw = (req.body ?? {}) as Record<string, unknown>;
+    // A save from a second session that read an older profile is refused, so it cannot overwrite newer edits.
     const currentUpdated = String(((data.profile as { updatedAt?: string } | undefined)?.updatedAt) || '');
-    if (typeof body.expectedUpdatedAt === 'string' && currentUpdated && body.expectedUpdatedAt !== currentUpdated) {
+    if (typeof raw.expectedUpdatedAt === 'string' && currentUpdated && raw.expectedUpdatedAt !== currentUpdated) {
       return reply.code(409).send({ error: 'This was changed on another device. Reload and try again.', field: 'updatedAt' });
+    }
+    // Keep only fields the profile knows about, so a stray or oversized key cannot ride along.
+    const body: Record<string, unknown> = {};
+    for (const key of Object.keys(raw)) if (PROFILE_KEYS.has(key)) body[key] = raw[key];
+    for (const [key, value] of Object.entries(body)) {
+      if (typeof value === 'string' && value.length > PROFILE_TEXT_MAX) return reply.code(400).send({ error: `Keep this under ${PROFILE_TEXT_MAX} characters.`, field: key });
+      if (value != null && typeof value === 'object') return reply.code(400).send({ error: 'Enter plain text here.', field: key });
+    }
+    if ('businessName' in body && trimText(body.businessName) === '') {
+      // A blank name never wipes a saved one. Before a name is saved, a blank is simply not stored.
+      if (trimText((data.profile as Record<string, unknown> | undefined)?.businessName)) return reply.code(400).send({ error: 'Enter your business name.', field: 'businessName' });
+      delete body.businessName;
     }
     const next: Record<string, unknown> = { ...((data.profile as object) ?? {}), ...body, updatedAt: new Date().toISOString() };
     delete next.expectedUpdatedAt;
@@ -1739,7 +1847,17 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       data.miles = miles;
     }
     for (const key of Object.keys(next)) if (typeof next[key] === 'string') next[key] = (next[key] as string).trim();
+    const before = (data.profile ?? {}) as Record<string, unknown>;
+    const said = (v: unknown) => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v));
+    // A trade switch: the old trade's offer and services do not carry over
+    // unless this same save sets them.
+    const tradeChanged = 'industry' in body && said(before.industry).toLowerCase() !== said(next.industry).toLowerCase();
+    if (tradeChanged && said(before.industry)) {
+      if (!('currentOffers' in body)) delete next.currentOffers;
+      if (!('services' in body)) delete next.services;
+    }
     data.profile = next;
+    refreshMilesAfterProfile(data, before, next, tradeChanged);
     const step = milesOf(data);
     step.setupStep = ['businessName', 'industry', 'phone', 'website'].find((key) => !String((next as Record<string, unknown>)[key] || '').trim()) || 'done';
     data.miles = step;
@@ -1747,6 +1865,86 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     await refreshLaunchCredit(u.id);
     return { ok: true, profile: data.profile, setupStep: step.setupStep };
   });
+  /**
+   * Keep the saved Miles setup in step with the profile. A new trade rebuilds
+   * the bundle on that trade's playbook (mode, caps and answers kept). A new
+   * business name, website or phone is copied into the bundle. Either way the
+   * saved and approved Google plans are rebuilt, so the next plan uses the new
+   * facts, and the owner approves it again before anything launches.
+   */
+  const refreshMilesAfterProfile = (data: Record<string, unknown>, before: Record<string, unknown>, next: Record<string, unknown>, tradeChanged: boolean) => {
+    const miles = milesOf(data);
+    const old = miles.bundle;
+    if (!old) return;
+    const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v));
+    const p: Record<string, string> = {};
+    for (const [k, v] of Object.entries(next)) if (typeof v === 'string') p[k] = v;
+    const nameChanged = 'businessName' in next && str(next.businessName) !== str(before.businessName);
+    const siteChanged = 'website' in next && normalizeSiteUrl(str(next.website)) !== normalizeSiteUrl(str(before.website));
+    const phoneChanged = 'phone' in next && str(next.phone) !== str(before.phone);
+    if (!tradeChanged && !nameChanged && !siteChanged && !phoneChanged) return;
+    const notes: string[] = [];
+    if (tradeChanged) {
+      const rebuilt = buildBundle({
+        businessName: p.businessName || old.setup.businessName,
+        location: old.setup.location || p.serviceAreas,
+        email: old.setup.email || p.email,
+        website: normalizeSiteUrl(p.website) || old.setup.website,
+        gbpUrl: old.setup.gbpUrl,
+        competitors: old.setup.competitors,
+        html: '',
+        links: miles.crawl?.links,
+        industry: p.industry,
+        services: p.services,
+        goal: old.setup.goal,
+        dailyBudget: old.setup.caps.dailyBudget,
+        leadsPerDay: old.setup.leadsPerDay,
+        googleShare: old.setup.googleShare,
+        mode: old.setup.mode,
+        areaModes: old.setup.areaModes,
+        caps: old.setup.caps,
+      });
+      rebuilt.profile = { ...rebuilt.profile, ...p, hours: old.hours, license: old.license };
+      rebuilt.hours = old.hours;
+      rebuilt.license = old.license;
+      rebuilt.setup.gbpNote = old.setup.gbpNote;
+      rebuilt.channels = old.channels;
+      rebuilt.audits = [
+        ...old.audits.filter((a) => a.id === 'website' || a.id === 'competitor'),
+        performanceAudit({ trade: p.industry || rebuilt.playbook.trade, hasSpend: false, demo: connector.name === 'mock' }),
+      ] as typeof rebuilt.audits;
+      miles.bundle = rebuilt;
+      notes.push(`Trade changed to ${p.industry || 'a new trade'}. Setup rebuilt. ${rebuilt.playbook.title}.`);
+    }
+    const bundle = miles.bundle!;
+    if (nameChanged) {
+      bundle.setup.businessName = p.businessName || '';
+      bundle.profile.businessName = p.businessName || '';
+      if (miles.found) miles.found.businessName = p.businessName || '';
+      notes.push('Business name updated in the setup.');
+    }
+    if (siteChanged) {
+      const site = normalizeSiteUrl(p.website) || '';
+      bundle.setup.website = site;
+      bundle.profile.website = site;
+      if (miles.found) miles.found.website = site;
+      notes.push(site ? `Website updated to ${site} in the setup.` : 'Website removed from the setup.');
+    }
+    if (phoneChanged) {
+      bundle.profile.phone = p.phone || '';
+      if (miles.found) miles.found.phone = p.phone || '';
+      notes.push('Phone updated in the setup.');
+    }
+    // The saved plan was drafted for the old facts. Draft it again from the new
+    // ones, and drop the old approval so nothing launches on the old plan.
+    const hadApproval = miles.planApproved === true || !!miles.approvedPlan;
+    miles.approvedPlan = undefined;
+    miles.planApproved = false;
+    data.miles = miles;
+    bundle.spec = buildSearchPlan(planProfileOf(data, miles)).spec;
+    notes.push(hadApproval ? 'The Google plan was redrafted. Approve it again before Miles launches.' : 'The Google plan was redrafted.');
+    rememberMiles(data, miles, notes.join(' '));
+  };
 
   // Your Business. The page renders this payload. Counts and connection pills
   // come from saved data, not from the operator mock.
@@ -1758,7 +1956,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return { business: await businessProfileFor(u.id, data), profile };
   });
 
-  type MilesInbox = { id: string; kind: 'create' | 'enable' | 'skill'; title: string; reason: string; status: 'queued' | 'applied' | 'reverted'; queuedAt?: string; skill?: string };
+  type MilesInbox = { id: string; kind: 'create' | 'enable' | 'skill'; title: string; reason: string; status: 'queued' | 'applied' | 'reverted' | 'skipped'; queuedAt?: string; skill?: string; skippedAt?: string };
   type MilesFile = {
     phase: 'crawl' | 'questions' | 'ready' | 'running';
     bundle: ReturnType<typeof buildBundle> | null;
@@ -1806,6 +2004,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       setupStep: raw.setupStep,
     };
   };
+  /** The account's daily cap: the saved Miles cap, else the profile's daily budget. 0 when none is set. */
+  const accountDailyCap = (data: Record<string, unknown>): number => {
+    const caps = milesOf(data).bundle?.setup.caps;
+    if (caps && caps.dailyBudget > 0) return caps.dailyBudget;
+    const profileDaily = Number((data.profile as Record<string, string> | undefined)?.dailyBudget);
+    return Number.isFinite(profileDaily) && profileDaily > 0 ? profileDaily : 0;
+  };
   const rememberMiles = (data: Record<string, unknown>, miles: MilesFile, text: string, go = false) => {
     miles.events = [{ ts: new Date().toISOString(), text }, ...miles.events].slice(0, 40);
     if (go) miles.goNote = text;
@@ -1852,7 +2057,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     } else if (!html) {
       fetchNote = 'No website is on the form or the saved profile, so no page was fetched.';
     }
-    const facts = crawlFacts({ businessName, location, email, website, gbpUrl, competitors, html });
+    // The trade the owner saved wins over what the page suggests.
+    const facts = crawlFacts({ businessName, location, email, website, gbpUrl, competitors, html, industry: saved.industry });
     if (gbpUrl) facts.profile.gbpUrl = gbpUrl;
     const savedWebsite = normalizeSiteUrl(website);
     if (savedWebsite) facts.profile.website = savedWebsite;
@@ -1906,6 +2112,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       competitors: String(p.competitors || '').split(',').map((s) => s.trim()).filter(Boolean),
       html: '',
       links: crawl?.links,
+      industry: p.industry || crawl?.profile.industry,
+      services: p.services || crawl?.profile.services,
       goal: body.goal || 'get me leads',
       dailyBudget: Number(body.dailyBudget) || 20,
       leadsPerDay: Number(body.leadsPerDay) || 1,
@@ -1952,6 +2160,20 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(u.id);
     const miles = milesOf(data);
     const body = req.body ?? {};
+    // Caps are the safety floor. Check every typed cap before anything changes, so a
+    // negative or zero cap can never switch a check off.
+    const caps: { dailyBudget?: number; monthlyCeiling?: number; maxChangePct?: number } = {};
+    for (const key of ['dailyBudget', 'monthlyCeiling'] as const) {
+      if (!typedValue(body[key])) continue;
+      const parsed = parseBudget(body[key]);
+      if (!parsed.ok) return reply.code(400).send({ error: parsed.error, field: key });
+      caps[key] = parsed.value;
+    }
+    if (typedValue(body.maxChangePct)) {
+      const pct = Number(body.maxChangePct);
+      if (!Number.isFinite(pct) || pct < 1 || pct > 100) return reply.code(400).send({ error: 'Max change must be between 1 and 100 percent.', field: 'maxChangePct' });
+      caps.maxChangePct = pct;
+    }
     const nextMode = body.mode === 'automate' || body.mode === 'hybrid' || body.mode === 'manual' ? body.mode : undefined;
     if (!nextMode && !miles.bundle) return reply.code(400).send({ error: 'Pick automate, hybrid, or manual. Nothing was created.' });
     if (nextMode) miles.pendingMode = nextMode;
@@ -1968,9 +2190,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         if (value === 'automate' || value === 'hybrid' || value === 'manual') miles.bundle.setup.areaModes[area] = value;
       }
     }
-    if (body.dailyBudget) miles.bundle.setup.caps.dailyBudget = Number(body.dailyBudget);
-    if (body.monthlyCeiling) miles.bundle.setup.caps.monthlyCeiling = Number(body.monthlyCeiling);
-    if (body.maxChangePct) miles.bundle.setup.caps.maxChangePct = Number(body.maxChangePct);
+    if (caps.dailyBudget != null) miles.bundle.setup.caps.dailyBudget = caps.dailyBudget;
+    if (caps.monthlyCeiling != null) miles.bundle.setup.caps.monthlyCeiling = caps.monthlyCeiling;
+    if (caps.maxChangePct != null) miles.bundle.setup.caps.maxChangePct = caps.maxChangePct;
     rememberMiles(data, miles, `Mode is ${miles.bundle.setup.mode}. Nothing was created by this change. Daily cap $${miles.bundle.setup.caps.dailyBudget}. Max change ${miles.bundle.setup.caps.maxChangePct}% a day.`);
     await authStore.setUserData(u.id, data);
     return { ok: true, mode: miles.bundle.setup.mode, created: false, enabled: false, setup: miles.bundle.setup };
@@ -2046,9 +2268,19 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       keywordFocus: profile.keywordFocus,
       gbpUrl: setup?.gbpUrl || profile.gbpUrl,
       links: miles.crawl?.links,
+      claims: claimsFromText(miles.crawl?.text),
     };
   };
+  /** This month's ad spend for the monthly ceiling. Null when it cannot be read. */
+  const monthSpendFor = async (uid: string): Promise<number | null> => {
+    const stored = readSnapshot(await authStore.getUserData(uid));
+    if (stored && snapshotAgeMs(stored) <= STALE_MS) return monthSpendOf(stored);
+    return monthSpendOf(await refreshSnapshot(uid));
+  };
   const runMilesGoBody = async (uid: string, email: string, explicitCreate: boolean, submitted?: CampaignSpec): Promise<GoResult> => {
+    // Spend is read before the account blob, because a snapshot refresh writes that blob too.
+    const peek = milesOf(await authStore.getUserData(uid)).bundle?.setup;
+    const spentMonth = peek && (peek.areaModes?.ppc ?? peek.mode) === 'automate' ? await monthSpendFor(uid) : null;
     const data = await authStore.getUserData(uid);
     const miles = milesOf(data);
     if (!miles.bundle) return { error: 'Save the three questions first.', code: 400 as const };
@@ -2063,6 +2295,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const chosen = submitted?.name ? acceptApprovedPlan(submitted) : standing;
     if (!miles.campaignResource && mode !== 'manual' && !miles.bundle.setup.caps.paused && savedSiteEarly && !chosen) {
       return { error: 'Review the campaign plan and approve it before Miles launches. Nothing was created.', code: 400 as const, needsPlan: true, created: false };
+    }
+    // The daily cap is the safety floor. A plan above it is refused, never created or enabled.
+    const planDaily = Number((chosen ?? miles.bundle.spec)?.dailyBudget) || 0;
+    const overCap = overDailyCap(planDaily, miles.bundle.setup.caps.dailyBudget);
+    if (overCap) {
+      rememberMiles(data, miles, overCap, true);
+      await authStore.setUserData(uid, data);
+      return { error: overCap, code: 400 as const, created: false, enabled: false };
     }
     if (chosen && !miles.campaignResource) {
       const profile = (data.profile ?? {}) as Record<string, string>;
@@ -2084,8 +2324,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       areaModes: miles.bundle.setup.areaModes,
       caps: miles.bundle.setup.caps,
       spentToday: 0,
-      spentMonth: 0,
-      dailySpend: daily,
+      spentMonth,
+      dailySpend: Math.max(daily, planDaily),
       explicitCreate: explicitCreate || !!submitted?.name,
       campaignOnFile: !!miles.campaignResource,
     });
@@ -2490,6 +2730,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         gbpUrl: profile.gbpUrl,
         html: '',
         links: miles.crawl?.links,
+        industry: profile.industry || miles.crawl?.profile.industry,
+        services: profile.services || miles.crawl?.profile.services,
         goal: profile.goal,
         dailyBudget: picked.daily,
         leadsPerDay,
@@ -2537,15 +2779,22 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Confirm required.' });
     const wanted = String(req.body?.id || '');
-    let missing = false;
+    // Claimed once, atomically: a double click or a second tab cannot apply it twice.
+    // Over the daily cap, nothing is claimed and nothing launches.
+    const claim = { missing: false, overCap: '' };
     await authStore.mutateUserData(u.id, (locked) => {
       const box = milesOf(locked);
       const row = box.inbox.find((item) => item.id === wanted && item.status === 'queued');
-      if (!row) { missing = true; return; }
+      if (!row) { claim.missing = true; return; }
+      if (row.kind === 'enable' || row.kind === 'create') {
+        claim.overCap = overDailyCap(Number(box.bundle?.spec?.dailyBudget) || 0, box.bundle?.setup.caps.dailyBudget || 0) || '';
+        if (claim.overCap) return;
+      }
       row.status = 'applied';
       locked.miles = box;
     });
-    if (missing) return reply.code(404).send({ error: 'That item is not waiting.' });
+    if (claim.missing) return reply.code(404).send({ error: 'That item is not waiting.' });
+    if (claim.overCap) return reply.code(400).send({ ok: false, enabled: false, error: claim.overCap, note: claim.overCap });
     const data = await authStore.getUserData(u.id);
     const miles = milesOf(data);
     const item = miles.inbox.find((row) => row.id === wanted);
@@ -2570,7 +2819,30 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       return { ok: verdict.enabled, enabled: verdict.enabled, note };
     }
     if (item.kind === 'create') return runMilesGo(u.id, u.email, true);
-    return { ok: true, item };
+    // Skill proposals have no push to Google or Meta yet. Approving records the
+    // decision. Say so instead of implying the change went live.
+    const note = item.kind === 'skill'
+      ? 'Approved and recorded in your log. Google Ads and Meta were not changed: Miles cannot push this kind of change yet.'
+      : 'Approved and recorded in your log. Google Ads was not changed: there is no live Google campaign on file to turn on.';
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: item.skill || 'inbox', title: `Approved, ${item.title}. Recorded only. Nothing was pushed.` });
+    await authStore.setUserData(u.id, data);
+    return { ok: true, item, pushed: false, recorded: true, note };
+  });
+
+  // Reject (skip) a waiting decision. Nothing is created, enabled, or pushed.
+  app.post<{ Body: { id?: string } }>('/api/miles/reject', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const miles = milesOf(data);
+    const item = miles.inbox.find((row) => row.id === req.body?.id && row.status === 'queued');
+    if (!item) return reply.code(404).send({ error: 'That item is not waiting.' });
+    item.status = 'skipped';
+    item.skippedAt = new Date().toISOString();
+    data.miles = miles;
+    appendApproval(data, { id: newToken().slice(0, 10), ts: item.skippedAt, kind: 'dismissal', actor: u.email, source: item.skill || 'inbox', title: `Skipped, ${item.title}. Nothing was changed.` });
+    await authStore.setUserData(u.id, data);
+    return { ok: true, item, note: 'Skipped. Nothing was changed.' };
   });
 
   app.post<{ Body: { confirm?: boolean } }>('/api/miles/revert', async (req, reply) => {
@@ -2771,7 +3043,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!text) return reply.code(400).send({ error: 'Nothing to send.' });
     if (!connector.runAppTask) return reply.code(400).send({ error: 'Live actions need the connector — configure Pipedream.' });
     const data = await authStore.getUserData(u.id);
-    const gate = runSopGate(match.play.push.app === 'gohighlevel' || match.play.push.app === 'highlevel_oauth' ? 'ghl_send' : 'other', { mode: 'manual', ghl: { phone: (req.body?.recipient ?? '').trim(), message: text } });
+    const isGhl = match.play.push.app === 'gohighlevel' || match.play.push.app === 'highlevel_oauth';
+    if (isGhl && isOptedOut(data, req.body?.recipient)) return reply.code(400).send({ error: 'Not sent. This number opted out of texts.', held: true });
+    const gate = runSopGate(isGhl ? 'ghl_send' : 'other', { mode: 'manual', ghl: { phone: (req.body?.recipient ?? '').trim(), message: text } });
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: u.email, source: 'sop-gate', title: 'skill push', detail: formatSopLog(gate) });
     await authStore.setUserData(u.id, data);
     if (gate.disposition === 'block') return reply.code(400).send({ error: gate.blocks.join(' ') });
@@ -2819,9 +3093,24 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (req.body?.confirm !== 'DELETE') return reply.code(400).send({ error: 'Type DELETE to confirm. Nothing was removed.' });
     const data = await authStore.getUserData(u.id);
     const sub = billingState(data);
-    if (sub.stripeSubscriptionId && stripeReady()) {
-      try { await cancelStripeSubscription(sub.stripeSubscriptionId, false); } catch { /* recorded below */ }
+    // A subscription that is not cancelled keeps billing, so the account stays until it is.
+    if (sub.stripeSubscriptionId && sub.status !== 'canceled') {
+      let failed = '';
+      try {
+        const cancelled = await cancelStripeSubscription(sub.stripeSubscriptionId, false);
+        if ('error' in cancelled) failed = cancelled.error;
+      } catch (err) {
+        failed = String((err as Error)?.message || err);
+      }
+      if (failed) {
+        return reply.code(502).send({
+          ok: false,
+          deleted: false,
+          error: 'Miles could not cancel your subscription with Stripe, so your account was not deleted and nothing was removed. Try again in a few minutes, or cancel the plan from Billing first.',
+        });
+      }
     }
+    if (launchCreditStatus(data) === 'granted') await authStore.claimLaunchCredit(launchEmailKey(u.email), u.id);
     try {
       const accounts = await accountsList(u.id);
       for (const account of accounts) {
@@ -2852,7 +3141,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const next = setLeadOptOut(readLeads(data), body.id, body.optOut);
       if ('error' in next) return reply.code(400).send({ error: next.error });
       data.leads = next;
-      if (body.optOut) data.followUpDrafts = cancelQueued((Array.isArray(data.followUpDrafts) ? data.followUpDrafts : []) as { phone?: string }[], next.find((row) => row.id === body.id)?.phone || '');
+      if (body.optOut) {
+        const optPhone = next.find((row) => row.id === body.id)?.phone || '';
+        data.followUpDrafts = cancelQueued((Array.isArray(data.followUpDrafts) ? data.followUpDrafts : []) as { phone?: string }[], optPhone);
+        // The account's opt-out list is what every send checks, so the number goes on it too.
+        // Unticking later does not take it off: only the person can opt back in.
+        if (optPhone) addOptOut(data, optPhone);
+      }
       await authStore.setUserData(u.id, data);
       return { ok: true, leads: next, counts: leadCounts(next) };
     }
@@ -3112,7 +3407,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
 
   const liveReadersFor = async (uid: string, data: Record<string, unknown>, days: number) => {
     const snap = await getSnapshot(uid, data);
-    const adSpend = snap?.adSpend;
+    // Snapshot spend is the trailing 30 days. Use it only for a 30-day range, so
+    // cost per lead and cost per job never divide 30-day spend by 7-day leads.
+    const adSpend = days === 30 ? snap?.adSpend : undefined;
     const ledger = crmLiveValues(data, days);
     const jobs = Array.isArray(data.jobMarks) ? (data.jobMarks as JobMark[]) : [];
     const fromJobs: Record<string, number> = {};
@@ -3160,8 +3457,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       } else if (Date.now() - lastWeekly >= 7 * 86400_000) {
         d.lastWeekly = new Date().toISOString();
         await authStore.setUserData(u.id, d);
+        const low = lowCredit(creditState(d));
         const base = emailBaseUrl() || '';
-        await sendEmail(u.email, 'Your Miles week', `Open Miles for this week's report.${base ? marketingFooter(base) : ''}`);
+        await sendEmail(u.email, 'Your Miles week', `Open Miles for this week's report.${low.message ? `\n\n${low.message}` : ''}${base ? marketingFooter(base) : ''}`);
       }
     }
     const p = (d.profile ?? {}) as Record<string, string>;
@@ -3273,7 +3571,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       speedToLeadOn: stlOn,
     }, new Date());
     const st = (d.recState as { applied?: Record<string, string>; dismissed?: Record<string, string> }) ?? {};
-    const openRecs = recs.filter((r) => !st.applied?.[r.id] && !hideDismissed(r.why || r.title, st.dismissed?.[r.id]));
+    const openRecs = recs.filter((r) => recIsOpen(st, r.id, r.why || r.title));
     const market = (miles.bundle?.setup.location || p.serviceAreas || '').split(',')[0]?.trim() || '';
     const sampleConnector = connector.name === 'mock';
     const googleRows = (snap?.campaigns ?? []).filter((row) => row.platform === 'google_ads');
@@ -3339,7 +3637,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         : null,
       reviewOn: !!((d.reviewRequest as { enabled?: boolean } | undefined)?.enabled),
       speedOn: stlOn,
-      metrics: metricRows.map((m) => ({ key: m.key, value: m.value, prior_value: m.prior_value, source: m.source })),
+      metrics: metricRows.map((m) => ({ key: m.key, value: m.value, prior_value: m.prior_value, source: m.source, ...(m.noValue ? { noValue: true } : {}) })),
       campaigns: (snap?.campaigns ?? []).map((c) => ({ platform: c.platform, name: c.campaign, spend: c.spend || 0, leads: c.conversions || 0, impressions: c.impressions || 0, clicks: c.clicks || 0, status: c.status })),
       recommendations: openRecs,
       inbox: miles.inbox.filter((row) => row.status === 'queued').map((row) => ({ id: row.id, title: row.title, reason: row.reason })),
@@ -3687,7 +3985,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       data.notifications = [{ text: `Approved: ${row?.title || 'a change'}. Suggested by ${row?.suggestedBy || 'Miles'}.`, at: new Date().toISOString() }, ...notes].slice(0, 40);
     });
     if (!result.ok) return reply.code(400).send({ ok: false, error: result.reason });
-    return { ok: true, reason: result.reason };
+    return { ok: true, reason: result.reason, pushed: false, recorded: true };
   });
 
   app.post<{ Body: { paused?: boolean } }>('/api/automation/kill', async (req, reply) => {
@@ -3741,12 +4039,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!changes.length) return reply.code(400).send({ error: 'No budget moves to apply.' });
     if (!connector.adjustCampaignBudgets) return reply.code(400).send({ error: 'This connector cannot adjust budgets.' });
     const data = await authStore.getUserData(u.id);
-    const autonomy = Number((data.autopilot as any)?.autonomy) || 50;
     const result = await connector.adjustCampaignBudgets(u.id, changes);
-    // Log every approved move to the deploy/change log (pending unless full autonomy).
+    // Log every approved move to the deploy/change log. "live" only when Google
+    // actually took the change; autonomy alone never makes a move live.
     const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
     deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
-    const status = result.live && result.ok ? 'live' : autonomy >= 100 && result.ok ? 'live' : 'pending';
+    const status = result.live && result.ok && result.applied > 0 ? 'live' : 'pending';
     deploy.queue.unshift({
       id: newToken().slice(0, 10),
       label: `Growth Autopilot, ${changes.length} budget move${changes.length === 1 ? '' : 's'} (${changes.filter((c) => c.action === 'scale').length} scale, ${changes.filter((c) => c.action === 'cut' || c.action === 'pause').length} cut/pause)`,
@@ -3759,7 +4057,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     data.deploy = deploy;
     await authStore.setUserData(u.id, data);
     if (result.live && result.applied) await meterUser(u.id, 'agent_run');
-    return { ...result, queuedStatus: status };
+    const pushed = result.live && result.ok && result.applied > 0;
+    const recordedNote = pushed ? undefined : `Recorded ${changes.length} budget move${changes.length === 1 ? '' : 's'} in your Change Log. Google Ads budgets were not changed: the live budget push is not built yet.`;
+    return { ...result, queuedStatus: status, pushed, recorded: true, recordedNote };
   });
   app.put('/api/hub', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -3857,11 +4157,29 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    const d = (req.body as { deploy?: any })?.deploy ?? { auto: false, queue: [] };
-    if (Array.isArray(d.queue)) d.queue = d.queue.slice(0, 300);
-    data.deploy = d;
+    // The change log is written by the server. The browser may switch auto-deploy and
+    // move an entry the server already logged (approve pending to live, or revert it).
+    // It cannot add, rewrite, backdate, or remove an entry; anything else it sends is ignored.
+    const incoming = ((req.body as { deploy?: { auto?: unknown; queue?: unknown } } | undefined)?.deploy ?? {});
+    const current = (data.deploy as { auto?: boolean; queue?: any[]; lastDeployedAt?: string } | undefined) ?? { auto: false, queue: [] };
+    const queue: any[] = Array.isArray(current.queue) ? current.queue : [];
+    const rows = (Array.isArray(incoming.queue) ? incoming.queue : []).filter((row: any) => row && typeof row.id === 'string') as { id: string; status?: unknown }[];
+    const wanted = new Map(rows.map((row) => [row.id, row.status]));
+    const known = new Set(queue.map((row) => row?.id));
+    const now = new Date().toISOString();
+    for (const row of queue) {
+      const next = wanted.get(row?.id);
+      if (next === 'live' && row.status === 'pending') {
+        Object.assign(row, { status: 'live', deployedAt: now, approvedAt: now, approvedBy: u.email });
+        current.lastDeployedAt = now;
+      } else if (next === 'reverted' && (row.status === 'pending' || row.status === 'live')) {
+        Object.assign(row, { status: 'reverted', revertedAt: now, revertedBy: u.email });
+      }
+    }
+    if (typeof incoming.auto === 'boolean') current.auto = incoming.auto;
+    data.deploy = { ...current, queue };
     await authStore.setUserData(u.id, data);
-    return { ok: true };
+    return { ok: true, ignored: rows.filter((row) => !known.has(row.id)).length };
   });
 
   // ── "Miles, do this" — a plain-language request becomes a finished draft ───
@@ -3928,6 +4246,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(u.id);
     const item = ((data.reviewQueue as any[]) ?? []).find((i) => i.id === id);
     if (!item) return reply.code(404).send({ error: 'not found' });
+    // Approve once. A second press must not log a second change or send the email again.
+    if (item.status !== 'review') {
+      if (item.status !== 'approved') return reply.code(409).send({ ok: false, error: 'That draft is no longer waiting for review. Nothing was changed.' });
+      const logged = (((data.deploy as { queue?: any[] } | undefined)?.queue) ?? []).find((row) => row?.id === item.id);
+      return { ok: true, already: true, status: logged?.status ?? 'pending', emailed: false, emailReady: deliveryStatus().email };
+    }
     item.status = 'approved';
     const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
     deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
@@ -3945,13 +4269,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const subject = (m?.[1] || item.title).replace(/[*#]/g, '').trim().slice(0, 160);
       const bodyText = String(item.body || '').replace(/\*\*/g, '').replace(/^#+\s*/gm, '');
       try {
-        await sendEmail(u.email, subject, bodyText);
-        emailed = true;
+        const sent = await sendEmail(u.email, subject, bodyText);
+        emailed = sent.ok === true;
       } catch {
         /* delivery is best-effort */
       }
     }
-    return { ok: true, status, emailed, emailReady: deliveryStatus().email };
+    return { ok: true, status, emailed, emailReady: deliveryStatus().email, pushed: false, note: 'Approved and logged. Nothing was pushed to an ad platform.' };
   });
   app.post<{ Body: { id?: string } }>('/api/review/dismiss', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -3971,11 +4295,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const p = (data.profile ?? {}) as Record<string, string>;
-    const ctx = { business: p.businessName, trade: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), services: p.services, offers: p.currentOffers, radiusMiles: Number(p.radiusMiles) || undefined, hours: { startHour: Number(p.openHour), endHour: Number(p.closeHour) } };
-    const spec = buildCampaignSpec({ goal: req.body?.goal, dailyBudget: req.body?.dailyBudget, finalUrl: req.body?.finalUrl || p.website, locations: req.body?.locations }, ctx);
+    const typedBudget = parseBudget(req.body?.dailyBudget, { allowZero: true });
+    if (!typedBudget.ok) return reply.code(400).send({ error: typedBudget.error, field: 'dailyBudget' });
+    const ctx = { business: p.businessName, trade: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), services: p.services, offers: p.currentOffers, radiusMiles: Number(p.radiusMiles) || undefined, hours: { startHour: hourOf(p.openHour), endHour: hourOf(p.closeHour) } };
+    const spec = buildCampaignSpec({ goal: req.body?.goal, dailyBudget: typedBudget.value > 0 ? typedBudget.value : undefined, finalUrl: req.body?.finalUrl || p.website, locations: req.body?.locations }, ctx);
     let gadsConnected = false;
     try { gadsConnected = (await accountsList(u.id)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
-    return { ok: true, spec, summary: campaignSummary(spec), gadsConnected };
+    const warnings = financingWarnings(spec.adGroups.flatMap((g) => [...g.rsa.headlines, ...g.rsa.descriptions]).join(' \n '));
+    return { ok: true, spec, summary: campaignSummary(spec), gadsConnected, warnings };
   });
 
   // One-click AI auto-fill: build the whole campaign from the business profile and
@@ -3987,7 +4314,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const p = (data.profile ?? {}) as Record<string, string>;
-    const ctx = { business: p.businessName, trade: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), services: p.services, offers: p.currentOffers, radiusMiles: Number(p.radiusMiles) || undefined, hours: { startHour: Number(p.openHour), endHour: Number(p.closeHour) } };
+    const ctx = { business: p.businessName, trade: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), services: p.services, offers: p.currentOffers, radiusMiles: Number(p.radiusMiles) || undefined, hours: { startHour: hourOf(p.openHour), endHour: hourOf(p.closeHour) }, claims: claimsFromText(milesOf(data).crawl?.text) };
     const goal = `Get more ${(p.industry || 'local service').toLowerCase()} customers${p.currentOffers ? ' with ' + p.currentOffers : ''}`;
     const locations = req.body?.locations?.length ? req.body.locations : (p.serviceAreas || '').split(',').map((s) => s.trim()).filter(Boolean);
     const spec = buildCampaignSpec({ goal, dailyBudget: req.body?.dailyBudget, finalUrl: req.body?.finalUrl || p.website, locations }, ctx);
@@ -4010,9 +4337,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
             if (!a) continue;
             // A model reaches for "licensed and insured" and "5-star rated" on
             // its own. Keep a claim only when the owner's profile says it.
+            // Licence, insurance, ownership and years also count when the business's
+            // own site shows them, the same rule the templates use.
             const ownerText = [p.businessName, p.services, p.currentOffers, p.description, p.differentiators, p.usp].filter(Boolean).join(' ');
-            const hl = vouchedLines((a.headlines ?? []).map((s: any) => String(s).trim()).filter((s: string) => s && s.length <= 30), ownerText);
-            const de = vouchedLines((a.descriptions ?? []).map((s: any) => String(s).trim()).filter((s: string) => s && s.length <= 90), ownerText);
+            const hl = vouchedLines((a.headlines ?? []).map((s: any) => String(s).trim()).filter((s: string) => s && s.length <= 30), ownerText, ctx.claims);
+            const de = vouchedLines((a.descriptions ?? []).map((s: any) => String(s).trim()).filter((s: string) => s && s.length <= 90), ownerText, ctx.claims);
             const kw = (a.keywords ?? []).map((s: any) => String(s).trim()).filter(Boolean);
             if (hl.length >= 3) { g.rsa.headlines = [...new Set<string>(hl)].slice(0, 15); aiUsed = true; }
             if (de.length >= 2) g.rsa.descriptions = [...new Set<string>(de)].slice(0, 4);
@@ -4139,8 +4468,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       enforced: billingEnforced(),
       paymentsConnected,
       subscription: sub.status === 'none' ? null : sub,
+      // Failed-payment grace, paused work, and cancellation, said plainly.
+      access: workAccess(data),
+      lowCredit: lowCredit(credits),
       launchCredit: launchCreditStatus(data),
-      launchMessage: launchCreditStatus(data) === 'granted' ? '$100 in credits is unlocked.' : launchCreditStatus(data) === 'duplicate' ? 'This business already received the $100 credit.' : LAUNCH_WAIT,
+      launchMessage: launchCreditStatus(data) === 'granted' ? '$100 in credits is unlocked.' : launchCreditStatus(data) === 'duplicate' ? 'This business or email address already received the $100 credit.' : LAUNCH_WAIT,
       zeroBalance: credits.remaining <= 0,
       zeroMessage: credits.remaining <= 0 ? 'Your credit balance is $0. Reports stay available. Add credits or pick a plan to keep working.' : null,
       note: (credits.launchOffer && sub.band !== 'starter' && sub.band !== 'growth' && sub.band !== 'scale'
@@ -4149,6 +4481,15 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         ? 'Your card is held by Stripe. Miles never sees or stores it.'
         : 'Payments are not connected yet, so nothing is charged.'),
     };
+  });
+
+  // Read-only billing notices for the dashboard: grace period, paused work,
+  // cancellation, and low credits. Writes nothing.
+  app.get('/api/billing/status', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return { access: workAccess(data), lowCredit: lowCredit(creditState(data)), enforced: billingEnforced() };
   });
 
   /**
@@ -4199,7 +4540,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!stripeReady()) return reply.code(503).send({ error: 'Payments are not connected yet. No charge was made.' });
     const first = await authStore.getUserData(u.id);
     const sub = billingState(first);
-    const paidPlan = sub.status === 'active' && (sub.band === 'starter' || sub.band === 'growth' || sub.band === 'scale');
+    const paidPlan = sub.status === 'active' && (sub.band === 'starter' || sub.band === 'growth' || sub.band === 'scale') && workAccess(first).state !== 'ended';
     if (!paidPlan || !sub.stripeCustomerId) {
       return reply.code(409).send({ error: 'Top-ups need an active paid plan, because that is where the card is saved. Pick a plan first. No charge was made.' });
     }
@@ -4399,7 +4740,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
             const failed = await authStore.getUserData(user.id);
             const failedUser = await authStore.getUserById(user.id);
             if (failedUser && (failed.notify as { billing?: boolean } | undefined)?.billing !== false) {
-              await sendEmail(failedUser.email, 'Miles payment failed', 'A payment did not go through. Open Settings, then Billing, to update the card.');
+              const grace = workAccess(failed);
+              const until = grace.graceEndsAt ? ` until ${grace.graceEndsAt.slice(0, 10)}` : '';
+              await sendEmail(failedUser.email, 'Miles payment failed', `A payment did not go through. Paid work keeps running${until} (a ${GRACE_DAYS}-day grace period), then pauses until the payment goes through. Monitoring keeps running. Open Settings, then Billing, to update the card.`);
             }
           }
           break;
@@ -4646,7 +4989,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     data.autonomy = next;
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'autonomy-settings', title: 'Updated Autonomy Settings', detail: `caps: ${next.caps.maxDailyMovePct}%/day move, $${next.caps.floorDailyBudget}/day floor${next.caps.monthlyCeiling ? `, $${next.caps.monthlyCeiling}/mo ceiling` : ''} · auto skills: ${Object.entries(next.perSkill).filter(([, v]) => v === 'auto').map(([k]) => k).join(', ') || 'none'}` });
     await authStore.setUserData(u.id, data);
-    return { ok: true, autonomy: next };
+    // Honest: the per-skill Auto choice is saved, not acted on. No live push
+    // for pausing or budget moves exists, so every one still waits for approval.
+    return { ok: true, autonomy: next, autoActive: false, note: 'Saved. Auto is not active yet: these skills still ask you first, because Miles cannot push pauses or budget moves to Google Ads or Meta yet.' };
   });
 
   // ── Local Presence audit — GBP + LSA scored against the master spec ──────
@@ -4744,7 +5089,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     data.skill_runs = runs;
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: action === 'approve' ? 'approval' : 'dismissal', actor: u.email, source: run.skill, title: `${action === 'approve' ? 'Approved' : 'Dismissed'}, ${run.name}: ${run.summary.slice(0, 120)}` });
     await authStore.setUserData(u.id, data);
-    return { ok: true, run };
+    const note = action === 'approve'
+      ? 'Approved and recorded in your log. Google Ads and Meta were not changed: Miles cannot push this change yet.'
+      : 'Dismissed. Nothing was changed.';
+    return { ok: true, run, pushed: false, recorded: true, note };
   });
 
   // The Google Ads accounts a launch can write into — an MCC login manages
@@ -4770,6 +5118,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const spec = forcePausedSearchSpec(incoming);
     const problems = validateCampaignSpec(spec);
     if (problems.length) return reply.code(400).send({ error: 'Campaign not ready to launch', problems });
+    const overCap = overDailyCap(spec.dailyBudget, accountDailyCap(await authStore.getUserData(u.id)));
+    if (overCap) return reply.code(400).send({ ok: false, live: false, status: 'PAUSED', activation: 'disabled', error: overCap });
     if (!connector.launchCampaign) return reply.code(400).send({ error: 'This connector cannot launch campaigns.' });
     if (isDemoAccount(u.email) && connector.name !== 'mock') {
       return reply.code(403).send({ ok: false, live: false, status: 'PAUSED', activation: 'disabled', error: 'The public demo cannot create a campaign in a live ad account.' });
@@ -4872,8 +5222,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const miles = milesOf(data);
     const cap = miles.bundle?.setup.caps.dailyBudget || Number(p.dailyBudget) || 0;
     const share = miles.bundle?.setup.googleShare;
-    const typed = Number(req.body?.dailyBudget);
-    const explicit = Number.isFinite(typed) && typed > 0 ? Math.round(typed) : undefined;
+    const typedBudget = parseBudget(req.body?.dailyBudget, { allowZero: true });
+    if (!typedBudget.ok) return reply.code(400).send({ error: typedBudget.error, field: 'dailyBudget' });
+    const explicit = typedBudget.value > 0 ? Math.round(typedBudget.value) : undefined;
     let daily: number | undefined = explicit;
     let budgetNote = '';
     if (daily == null && share != null && cap > 0) {
@@ -4914,17 +5265,20 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         primaryText: pack.primaryTexts[0] || (studio ? strip(studio.body) : undefined),
         description: pack.descriptions[0],
       },
-      { business: p.businessName, industry: p.industry, city, serviceAreas: p.serviceAreas, services: p.services },
+      { business: p.businessName, industry: p.industry, city, serviceAreas: p.serviceAreas, services: p.services, claims: claimsFromText(miles.crawl?.text) },
     );
     const issues = validateMetaCampaignSpec(spec);
     if (cap > 0 && spec.dailyBudget > cap) issues.push(`Daily budget $${spec.dailyBudget} is above your $${cap} daily cap.`);
     const monthly = miles.bundle?.setup.caps.monthlyCeiling || 0;
     if (monthly > 0 && spec.dailyBudget * 30 > monthly) issues.push(`$${spec.dailyBudget} a day is about $${spec.dailyBudget * 30} a month, above your $${monthly} monthly cap.`);
     const status = await metaAccountStatus(u.id);
+    // Claims check: financing wording with no terms line is shown to the owner before use.
+    const warnings = financingWarnings([spec.ad.headline, spec.ad.primaryText, spec.ad.description].filter(Boolean).join(' \n '));
     return {
       ok: true,
       spec,
       issues,
+      warnings,
       budgetNote,
       plan: {
         objective: 'Leads',
@@ -5164,6 +5518,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       await authStore.setUserData(u.id, data);
       return reply.code(409).send({ ok: false, live: false, plan, error: search?.reason || 'Search is not executable.', created: false });
     }
+    const searchDaily = plan.searchCampaigns.reduce((sum, row) => sum + (Number(row.spec.dailyBudget) || 0), 0);
+    const overCap = overDailyCap(searchDaily, accountDailyCap(data));
+    if (overCap) return reply.code(400).send({ ok: false, live: false, plan, error: overCap, created: false });
     const digits = (id: string) => id.replace(/[^\d]/g, '');
     let targets: { id: string; label: string }[] = [];
     const savedGoogle = await authStore.getUserData(u.id);
@@ -5247,6 +5604,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       productionBlocked: connector.googleAdsBlock?.(u.id)?.kind === 'connect_production_unavailable',
     });
     if (!decision.allowed) return reply.code(403).send({ ...decision, executed: false });
+    const overCap = overDailyCap(Math.max(requested || 0, Number(owned?.daily) || 0), accountDailyCap(data));
+    if (overCap) return reply.code(403).send({ allowed: false, providerCalled: false, executed: false, reason: overCap });
     if (connector.name === 'mock' || isDemoAccount(u.email)) {
       return reply.code(403).send({ allowed: false, providerCalled: false, executed: false, reason: 'Demo mode does not enable a live campaign.' });
     }
@@ -5698,7 +6057,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       new Date(),
     );
     const st = recState(data);
-    const open = recs.filter((r) => !st.applied?.[r.id] && !st.dismissed?.[r.id]);
+    const open = recs.filter((r) => recIsOpen(st, r.id));
     const connected = spend.length + leads.length + reviews.length + emails.length > 0;
     const digestOn = ((data.schedules as ScheduledAgent[]) ?? []).some((a) => a.task === 'recommend' && a.enabled);
     return { recommendations: open, connected, appliedToday: Object.keys(st.applied ?? {}).length, digestOn };
@@ -5737,6 +6096,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(u.id);
     const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
     deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
+    // Apply once. A second press must not log a second change.
+    if (recState(data).applied?.[rec.id]) {
+      const logged = deploy.queue.find((row) => row?.id === rec.id);
+      return { ok: true, already: true, status: logged?.status ?? 'pending' };
+    }
     const status = deploy.auto ? 'live' : 'pending';
     if (rec.apply?.kind === 'enable_speed_to_lead') {
       const s = (data.speedToLead as Record<string, unknown>) ?? {};
@@ -5750,7 +6114,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     st.applied = { ...(st.applied ?? {}), [rec.id]: new Date().toISOString() };
     data.recState = st;
     await authStore.setUserData(u.id, data);
-    return { ok: true, status };
+    // Honest: approval records the change. Only the Speed-to-Lead toggle is
+    // applied by Miles itself. Nothing is pushed to Google Ads or Meta.
+    const note = rec.apply?.kind === 'enable_speed_to_lead'
+      ? 'Approved. Speed-to-Lead is on in Miles. Google Ads and Meta were not changed.'
+      : 'Approved and recorded in your Change Log. Google Ads and Meta were not changed: Miles cannot push this change yet, so make it in the ad account yourself.';
+    return { ok: true, status, pushed: false, recorded: true, note };
   });
 
   app.post<{ Body: { id?: string } }>('/api/recommendations/dismiss', async (req, reply) => {
@@ -5760,8 +6129,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!id) return reply.code(400).send({ error: 'id is required' });
     const data = await authStore.getUserData(u.id);
     const st = recState(data);
+    // Keyed on the issue, not the day, so it does not come back tomorrow. The
+    // saved value is the reason it was shown: a new reason shows it again.
     const why = String((req.body as { why?: string })?.why || '').trim();
-    st.dismissed = { ...(st.dismissed ?? {}), [id]: why || new Date().toISOString() };
+    st.dismissed = { ...(st.dismissed ?? {}), [stableRecId(id)]: why || new Date().toISOString() };
     data.recState = st;
     await authStore.setUserData(u.id, data);
     return { ok: true };
@@ -5827,15 +6198,50 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const pdReady = pipedreamReady(cfg);
     // An app is "connected" only if THIS account has linked it. The id comes
     // from the session cookie, never from a query parameter.
+    // A revoked or expired account (Pipedream healthy=false) is not connected.
+    // It is listed under needsReconnect so the page can say so plainly.
     let connectedApps: string[] = [];
+    let needsReconnect: string[] = [];
     try {
-      const accts = await accountsList(u.id);
-      connectedApps = [...new Set(accts.map((a) => a.app))];
+      ({ connectedApps, needsReconnect } = splitByHealth(await accountsList(u.id)));
     } catch {
       /* leave empty on any error */
     }
-    return { connector: connector.name, hub: { ready: pdReady, env: cfg.pipedream.environment }, connectedApps, demo: isDemoAccount(u.email) };
+    // The connect window polls this route. When the set of connected apps
+    // changes (a connect finished), rebuild the dashboard numbers behind it.
+    const appsKey = [...connectedApps].sort().join(',');
+    const seenKey = seenConnectedApps.get(u.id);
+    seenConnectedApps.set(u.id, appsKey);
+    if (seenKey !== undefined && seenKey !== appsKey) void rebuildSnapshotNow(u.id);
+    return { connector: connector.name, hub: { ready: pdReady, env: cfg.pipedream.environment }, connectedApps, needsReconnect, demo: isDemoAccount(u.email) };
   });
+  const seenConnectedApps = new Map<string, string>();
+  /**
+   * Rebuild the dashboard snapshot after a connection changes, so it does not
+   * keep showing a disconnected account's numbers until the snapshot ages out.
+   * Waits up to waitMs for the new read. If the read is slower than that, the
+   * old snapshot is dropped so no stale numbers are shown, and the read
+   * finishes behind the response.
+   */
+  const rebuildSnapshotNow = async (uid: string, waitMs = 5_000): Promise<boolean> => {
+    const running = snapshotRefreshing.get(uid);
+    if (running) await running.catch(() => undefined);
+    const build = refreshSnapshot(uid);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const done = await Promise.race([
+      build.then((snap) => !!snap),
+      new Promise<false>((resolve) => { timer = setTimeout(() => resolve(false), waitMs); }),
+    ]);
+    clearTimeout(timer);
+    if (!done) {
+      const data = await authStore.getUserData(uid);
+      if (data.snapshot) {
+        delete data.snapshot;
+        await authStore.setUserData(uid, data);
+      }
+    }
+    return done;
+  };
 
   // The concrete identity of every connected platform — account names, Google
   // customer IDs, Meta ad-account + Page name/logo — so the owner can see exactly
@@ -5881,6 +6287,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const r = await connector.disconnectAccount(u.id, accountId);
     if (!r.ok) return reply.code(400).send({ error: r.note || 'Could not disconnect.' });
     forgetConnectionReads(u.id);
+    seenConnectedApps.delete(u.id);
+    await rebuildSnapshotNow(u.id);
     return { ok: true };
   });
 
@@ -5892,7 +6300,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const [listed, ghlNow] = await Promise.all([accountsOf(u.id), ghlLink(u.id)]);
-    const apps = new Set(listed.accounts.map((a) => a.app));
+    const apps = new Set(splitByHealth(listed.accounts).connectedApps);
     const ghlApp = ghlNow.slug;
     const ghl = ghlNow.connected;
     const gads = apps.has('google_ads');
@@ -6329,7 +6737,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }
     if (source === 'leads') {
       const l = await safeConn(connector.getLeads ? () => connector.getLeads!(userId) : undefined, []);
-      return { text: l.map((x) => `${x.name || 'Lead'}, ${x.service || 'inquiry'} (via ${x.source || 'unknown'})`).join('\n'), summary: `${l.length} leads` };
+      return { text: l.map((x) => `${x.name || 'Lead'}, ${x.service || 'inquiry'} (via ${x.source || 'Unknown'})`).join('\n'), summary: `${l.length} leads` };
     }
     if (source === 'social') {
       const m = await safeConn(connector.getSocialMetrics ? () => connector.getSocialMetrics!(userId) : undefined, null);
@@ -6341,7 +6749,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }
     if (source === 'deals') {
       const d2 = await safeConn(connector.getDeals ? () => connector.getDeals!(userId) : undefined, []);
-      return { text: d2.map((x) => `$${x.value} ${x.won ? 'won' : 'lost'} via ${x.utmSource || 'unknown'}`).join('\n'), summary: `${d2.length} deals` };
+      return { text: d2.map((x) => `$${x.value} ${x.won ? 'won' : 'lost'} via ${x.utmSource || 'Unknown'}`).join('\n'), summary: `${d2.length} deals` };
     }
     return { text: '', summary: '' };
   }
@@ -6440,7 +6848,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const social = await safeConn(connector.getSocialMetrics ? () => connector.getSocialMetrics!(userId) : undefined, null);
       const scheduledPosts = ((data.scheduledPosts as ScheduledPost[]) ?? []).filter((x) => x.status === 'scheduled').length;
       const stl = (data.speedToLead as { enabled?: boolean } | undefined)?.enabled ?? false;
-      const recs = buildRecommendations({ spend, deals, leads, reviews, emails, social, scheduledPosts, targetCpa: Number(p.targetCpa) || null, speedToLeadOn: stl }, new Date());
+      const recSt = data.recState as { applied?: Record<string, string>; dismissed?: Record<string, string> } | undefined;
+      const recs = buildRecommendations({ spend, deals, leads, reviews, emails, social, scheduledPosts, targetCpa: Number(p.targetCpa) || null, speedToLeadOn: stl }, new Date()).filter((r) => recIsOpen(recSt, r.id));
       if (!recs.length) return { title: `Recommendations, ${dl}`, body: `You are all set today. Nothing needs your attention. Nice work.` };
       const urgent = recs.filter((r) => r.severity === 'high').length;
       const lines = recs.map((r, i) => `${i + 1}. ${r.title}\n   Why: ${r.why}\n   Do: ${r.action}`).join('\n\n');
@@ -6640,6 +7049,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // `data.speedToLead` (the dedup ledger + log) and returns a run summary, or null when
   // it's off or there's nothing new. Best-effort — a send failure just holds the draft.
   async function runSpeedToLead(userId: string, data: Record<string, unknown>): Promise<{ run: { title: string; body: string } } | null> {
+    if (data.accountPaused === true) return null;
     const st = (data.speedToLead as SpeedToLeadState) ?? null;
     if (!st?.enabled) return null;
     const leads = await safeConn(connector.getLeads ? () => connector.getLeads!(userId) : undefined, []);
@@ -6661,26 +7071,39 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }
     const ghlApp = ghlSlugOf(connectedApps);
     const canSend = !!ghlApp && !!connector.runAppTask;
+    // Quiet hours: when texts would really go out, leave the new leads untouched
+    // so the first tick after 8 AM answers them. Nothing is marked handled.
+    if (canSend && inQuietHours(effectiveQuietHours(data), Date.now())) return null;
     const nowISO = new Date().toISOString();
     let state = st;
     const blocks: string[] = [];
     for (const lead of fresh) {
+      const phone = e164(lead.phone);
+      // Quiet where the lead is (area code): leave it untouched for a later tick.
+      if (canSend && phone && quietForLead(data, Date.now(), phone)) continue;
+      if (phone && isOptedOut(data, phone)) {
+        state = recordContact(state, lead, nowISO, [], false, undefined, { optedOut: true });
+        blocks.push(`• ${lead.name || 'New lead'}: not sent. This number opted out of texts.`);
+        continue;
+      }
       const { system, user } = instantReplyAgent(lead, ctx);
       const reply = (await generateText({ system, user, maxTokens: 400 })) ?? fallbackInstantReply(lead, ctx);
       const channels: string[] = [];
-      if (canSend && lead.phone) {
+      let failed = false;
+      if (canSend && phone) {
         try {
-          const gate = runSopGate('ghl_send', { mode: 'automate', ghl: { phone: lead.phone, message: smsFromReply(reply) } });
-          if (gate.disposition === 'block') { /* held: SOP 076 */ }
-          const r = gate.disposition === 'block' ? { ok: false } : await connector.runAppTask!({ externalUserId: userId, app: ghlApp!, query: 'Send SMS to new lead', params: { message: smsFromReply(reply), name: lead.name ?? '', phone: lead.phone ?? '' } });
+          const gate = runSopGate('ghl_send', { mode: 'automate', ghl: { phone, message: smsFromReply(reply) } });
+          const r = gate.disposition === 'block' ? { ok: false } : await connector.runAppTask!({ externalUserId: userId, app: ghlApp!, query: 'Send SMS to new lead', params: { message: smsFromReply(reply), name: lead.name ?? '', phone } });
           if (r?.ok) channels.push('sms');
+          else failed = gate.disposition !== 'block';
         } catch {
-          /* held — draft stays ready */
+          failed = true;
         }
       }
-      const held = channels.length === 0;
-      state = recordContact(state, lead, nowISO, channels, held, responseSeconds(lead, nowISO));
-      blocks.push(`• ${lead.name || 'New lead'}, ${lead.service || 'inquiry'} (via ${lead.source || 'website'}): ${held ? 'drafted, ready to send' : `sent ${channels.join(' + ')}`}\n${reply}`);
+      const held = channels.length === 0 && !failed;
+      state = recordContact(state, lead, nowISO, channels, held, responseSeconds(lead, nowISO), { failed });
+      const outcome = failed ? 'Failed, not sent' : held ? (canSend && lead.phone && !phone ? 'not sent, the phone number does not parse' : 'drafted, ready to send') : `sent ${channels.join(' + ')}`;
+      blocks.push(`• ${lead.name || 'New lead'}, ${lead.service || 'inquiry'} (via ${lead.source || 'Unknown'}): ${outcome}\n${reply}`);
     }
     data.speedToLead = state;
     const title = `Speed-to-Lead: answered ${fresh.length} new lead${fresh.length === 1 ? '' : 's'}`;
@@ -6703,7 +7126,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       canSend,
       stats: responderStats(st, new Date().toISOString()),
       recent: st.log.slice(0, 10),
-      quietHours: st.quietHours ?? { enabled: true, tzOffsetMinutes: 0 },
+      quietHours: effectiveQuietHours(data),
       webhook: { newLead: `${hook}?event=new_lead`, missedCall: `${hook}?event=missed_call` },
     };
   });
@@ -6716,17 +7139,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (req.body?.quietHours) st.quietHours = { enabled: !!req.body.quietHours.enabled, tzOffsetMinutes: Number(req.body.quietHours.tzOffsetMinutes) || 0 };
     data.speedToLead = st;
     await authStore.setUserData(u.id, data);
-    return { ok: true, enabled: st.enabled, quietHours: st.quietHours ?? { enabled: true, tzOffsetMinutes: 0 } };
+    return { ok: true, enabled: st.enabled, quietHours: effectiveQuietHours(data) };
   });
 
   // ── Inbound instant-response webhook — the event trigger the CRM fires ────────
   // GHL (or Zapier/Make) posts here the moment a lead comes in or a call is missed;
   // Miles sends the text-back in seconds. Token-authed per user; respects the on/off
   // switch, quiet hours, and the dedup ledger. This is what makes it truly instant.
-  const inQuietHours = (st: SpeedToLeadState, nowMs: number, phone?: string, zip?: string): boolean => {
-    const q = st.quietHours; if (!q || !q.enabled) return false;
-    return isQuietHour(new Date(nowMs), leadOffset(new Date(nowMs), phone, zip, q.tzOffsetMinutes || 0));
-  };
   app.post<{ Params: { token?: string }; Querystring: { event?: string }; Body: Record<string, unknown> }>('/api/hooks/lead/:token', async (req, reply) => {
     const raw = req.params?.token ?? '';
     const dot = raw.indexOf('.');
@@ -6738,6 +7157,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(uid);
     const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     if (!st.webhookSecret || st.webhookSecret !== secret) return reply.code(401).send({ error: 'bad token' });
+    if (data.accountPaused === true) return { ok: true, sent: false, reason: 'This account is paused. Nothing was sent.' };
     // Normalize the payload — accept GHL's field names and common aliases.
     const b = (req.body ?? {}) as Record<string, any>;
     if (b.email != null && b.email !== '') {
@@ -6746,28 +7166,44 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       b.email = leadEmail.value;
     }
     const event = (req.query?.event || b.event || 'new_lead') === 'missed_call' ? 'missed_call' : 'new_lead';
+    const name = String(b.name || b.full_name || b.first_name || b.contact_name || '').trim();
+    const rawPhone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
+    const phone = e164(rawPhone);
+    // Opt-out flags (or a STOP as the whole message) go on the account's list,
+    // whether or not Speed-to-Lead is on, so no later text reaches this number.
+    const optsOut = payloadOptsOut(b) || isStopMessage(b.message);
+    if (optsOut && phone) {
+      addOptOut(data, phone);
+      // Any follow-up already queued for this number is dropped too.
+      data.followUpDrafts = cancelQueued((Array.isArray(data.followUpDrafts) ? data.followUpDrafts : []) as { phone?: string }[], phone);
+    }
+    // No CRM id: key on phone plus lower-cased name, so two people in one
+    // household who share a number are both answered.
+    const lead = { id: b.id ? String(b.id) : `${event}:${phone ? `${phone}|${name.toLowerCase()}` : name.toLowerCase()}`, name, phone, service: String(b.service || b.message_type || '').trim() || undefined, source: String(b.source || 'Unknown').trim(), message: b.message ? String(b.message) : undefined, createdAt: new Date().toISOString(), contacted: false } as import('./connectors/types.js').Lead;
+    const key = leadKey(lead);
+    const replay = st.contacted.includes(key);
     // A lead is a lead whether or not an SMS fires — record it for the
     // dashboard's real CRM metrics before any feature toggle can bail out.
-    appendCrmEvent(data, { type: event === 'missed_call' ? 'missed_call' : 'lead', ts: new Date().toISOString(), name: String(b.name || b.full_name || '').trim() || undefined });
-    if (!st.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Speed-to-Lead is off — turn it on to send.' }; }
-    const name = String(b.name || b.full_name || b.first_name || b.contact_name || '').trim();
-    const phone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
-    const message = b.message ? String(b.message) : '';
-    if (isOptOutMessage(message)) {
-      data.followUpDrafts = cancelQueued((Array.isArray(data.followUpDrafts) ? data.followUpDrafts : []) as { phone?: string }[], phone);
-      data.optOutPhones = [...new Set([...(Array.isArray(data.optOutPhones) ? data.optOutPhones as string[] : []), phone].filter(Boolean))].slice(0, 500);
-      await authStore.setUserData(uid, data);
-      return { ok: true, sent: false, optedOut: true, reason: 'Opt-out received. Queued messages for this number were cancelled.' };
+    // A lead already handled (or a retried webhook with the same id) is not counted again.
+    if (!replay) appendCrmEvent(data, { type: event === 'missed_call' ? 'missed_call' : 'lead', ts: crmEventTsFrom(b), name: String(b.name || b.full_name || '').trim() || undefined, id: crmEventIdFrom(b) });
+    if (replay) {
+      // A replay is not a new lead, but an opt-out it carries still counts.
+      if (optsOut && phone) await authStore.setUserData(uid, data);
+      return { ok: true, sent: false, reason: 'Already handled this lead.' };
     }
-    const lead = { id: b.id ? String(b.id) : `${event}:${phone || name}`, name, phone, service: String(b.service || b.message_type || '').trim() || undefined, source: String(b.source || 'crm-webhook').trim(), message: message || undefined, createdAt: new Date().toISOString(), contacted: false } as import('./connectors/types.js').Lead;
-    const key = leadKey(lead);
-    if (st.contacted.includes(key)) return { ok: true, sent: false, reason: 'Already handled this lead.' };
+    if (!st.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Speed-to-Lead is off — turn it on to send.' }; }
+    if (rawPhone && !phone) { await authStore.setUserData(uid, data); return { ok: true, sent: false, status: 'bad_phone', reason: smsResult('bad_phone').reason }; }
     const nowMs = Date.now();
-    const zip = String(b.zip || b.postal_code || (data.profile as { serviceAreas?: string } | undefined)?.serviceAreas || '').slice(0, 10);
-    if (inQuietHours(st, nowMs, phone, zip)) {
+    if (optsOut || isOptedOut(data, phone)) {
+      data.speedToLead = recordContact(st, lead, new Date(nowMs).toISOString(), [], false, undefined, { optedOut: true });
+      await authStore.setUserData(uid, data);
+      return { ok: true, sent: false, held: false, optedOut: true, status: 'opted_out', reason: smsResult('opted_out').reason };
+    }
+    const zip = String(b.zip || b.postal_code || '').slice(0, 10);
+    if (quietForLead(data, nowMs, phone, zip)) {
       data.speedToLead = recordContact(st, lead, new Date(nowMs).toISOString(), [], true);
       await authStore.setUserData(uid, data);
-      return { ok: true, sent: false, reason: 'Held for quiet hours (8 AM–8 PM local).' };
+      return { ok: true, sent: false, held: true, status: 'quiet_hours', reason: 'Held for quiet hours (8 AM–8 PM local).' };
     }
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry || 'local-service', city: (p.serviceAreas || '').split(',')[0]?.trim() || p.city, services: p.services, offers: p.currentOffers };
@@ -6775,21 +7211,18 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     // The lead is a real person waiting. With no credits the reply still goes
     // out, written from the template instead of by a model.
     setCostAccount(uid);
-    blockPaidWork(billingEnforced() && creditState(data).remaining <= 0 ? outOfCreditsReason(data) : undefined, { quiet: true });
+    blockPaidWork(paidWorkBlock(data), { quiet: true });
     if (event === 'missed_call') sms = missedCallText(ctx, name);
     else { const { system, user } = instantReplyAgent(lead, ctx); sms = smsFromReply((await generateText({ system, user, maxTokens: 400 })) ?? fallbackInstantReply(lead, ctx)); }
-    const sendKey = `lead:${lead.id}`;
-    const claimed = claimOnce(Array.isArray(data.sentKeys) ? data.sentKeys as string[] : [], sendKey);
-    if (!claimed.first) return { ok: true, sent: false, duplicate: true, reason: 'Already sent. A retry did not send again.' };
-    data.sentKeys = claimed.seen;
-    const sent = await sendGhl(uid, phone, name, sms, event === 'missed_call' ? 'Send missed-call text-back SMS' : 'Send SMS to new lead');
+    const result = await sendGhl(uid, data, phone, name, sms, event === 'missed_call' ? 'Send missed-call text-back SMS' : 'Send SMS to new lead');
     const nowISO = new Date(nowMs).toISOString();
-    data.speedToLead = recordContact(st, lead, nowISO, sent ? ['sms'] : [], !sent, responseSeconds(lead, nowISO));
+    const failed = result.status === 'failed';
+    data.speedToLead = recordContact(st, lead, nowISO, result.sent ? ['sms'] : [], !result.sent && !failed, responseSeconds(lead, nowISO), { failed, optedOut: result.status === 'opted_out' });
     bumpMeter(data, 'agent_run');
     const agent: ScheduledAgent = { id: 'speed-to-lead', name: 'Speed-to-Lead', task: 'speed_to_lead', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' };
-    appendRun(data, agent, { title: `Speed-to-Lead: ${event === 'missed_call' ? 'missed-call text-back' : 'answered new lead'}${name ? ' — ' + name : ''}`, body: (sent ? 'Sent via GoHighLevel:\n' : 'Drafted (connect GoHighLevel to auto-send):\n') + sms });
+    appendRun(data, agent, { title: `Speed-to-Lead: ${event === 'missed_call' ? 'missed-call text-back' : 'answered new lead'}${name ? ' — ' + name : ''}`, body: smsRunHead(result) + sms });
     await authStore.setUserData(uid, data);
-    return { ok: true, sent, event, held: !sent, message: sms };
+    return { ok: true, sent: result.sent, event, held: !result.sent && !failed, failed, status: result.status, reason: result.reason, message: sms };
   });
 
   // Lead ingest for the plumber loop. The URL secret maps the tenant. This does
@@ -6806,9 +7239,15 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(uid);
     const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     if (!st.webhookSecret || !sameToken(st.webhookSecret, secret)) return reply.code(401).send({ error: 'bad token' });
+    if (data.accountPaused === true) return { ok: true, duplicate: false, upserted: false, followedUp: false, reason: 'This account is paused. Nothing was written or sent.' };
     const parsed = normalizeLead((req.body ?? {}) as Record<string, unknown>);
     if (!parsed.lead) return reply.code(400).send({ error: parsed.error });
     const lead = parsed.lead;
+    // Texts go to the E.164 form; a phone that does not parse is never texted.
+    const textPhone = e164(lead.phone);
+    // Remember an opt-out (or a missing consent) so no later event texts this number.
+    if ((lead.optOut || lead.consent === false) && textPhone) addOptOut(data, textPhone);
+    if (textPhone && isOptedOut(data, textPhone)) lead.optOut = true;
     const seen = Array.isArray(data.leadEventIds) ? (data.leadEventIds as string[]) : [];
     const decision = decideLead(parsed.lead, seen, !!st.enabled);
     if (!decision.valid) return reply.code(400).send({ error: decision.reason });
@@ -6829,7 +7268,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const profile = (data.profile ?? {}) as { businessName?: string };
     const follow = planFollowUp({
       name: lead.name,
-      phone: lead.phone,
+      phone: textPhone || undefined,
       consent: lead.consent,
       optOut: lead.optOut,
       source: lead.source,
@@ -6842,15 +7281,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const jobs = Array.isArray(data.jobMarks) ? (data.jobMarks as JobMark[]) : [];
     data.jobMarks = [{ eventId: lead.eventId, stage: 'new', channel: lead.source, serviceLine: (data.profile as { industry?: string } | undefined)?.industry }, ...jobs.filter((j) => j.eventId !== lead.eventId)].slice(0, 500);
     let followedUp = false;
+    let smsOut: SmsResult | null = null;
     if (follow.disposition === 'draft') {
       const drafts = Array.isArray(data.followUpDrafts) ? data.followUpDrafts as unknown[] : [];
       data.followUpDrafts = [{ at: new Date().toISOString(), eventId: lead.eventId, kind: follow.kind, body: follow.body, reason: follow.reason }, ...drafts].slice(0, 100);
     } else if (follow.disposition === 'send' && ghl && connector.runAppTask) {
-      try {
-        const gate = runSopGate('ghl_send', { mode: 'automate', ghl: { phone: lead.phone, message: follow.body } });
-        const sms = gate.disposition === 'block' ? { ok: false } : await connector.runAppTask({ externalUserId: link.externalId, app: 'highlevel_oauth', query: 'Send SMS', params: { phone: lead.phone || '', name: lead.name || '', message: follow.body } });
-        followedUp = !!sms?.ok;
-      } catch { followedUp = false; }
+      // The shared sender: opt-out list, quiet hours, SOP gate, approval log.
+      smsOut = await sendGhl(uid, data, textPhone, lead.name || '', follow.body, 'Send SMS');
+      followedUp = smsOut.sent;
     }
     await authStore.setUserData(uid, data);
     return {
@@ -6861,6 +7299,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       crm: ghl ? 'highlevel_oauth' : 'blocked',
       followedUp,
       followUp: follow.disposition,
+      ...(smsOut ? { sms: smsOut.status } : {}),
       opportunity,
       reason: ghl ? decision.reason : 'GoHighLevel (highlevel_oauth) is not connected for this account. No contact was written and no message was sent.',
     };
@@ -6977,8 +7416,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   });
 
   // Inbound job-complete / reply webhook — the review-request event trigger.
-  // job_complete → send the 1–10 ask. reply → parse the score and route: 9–10 to
-  // the Google link, 1–8 to a private service-recovery task (never a public link).
+  // job_complete → send every customer the same ask with the Google link.
+  // reply → log the rating only (no second text); a STOP reply opts the number out.
   app.post<{ Params: { token?: string }; Querystring: { event?: string }; Body: Record<string, unknown> }>('/api/hooks/job/:token', async (req, reply) => {
     const raw = req.params?.token ?? '';
     const dot = raw.indexOf('.');
@@ -6990,47 +7429,56 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(uid);
     const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     if (!stl.webhookSecret || stl.webhookSecret !== secret) return reply.code(401).send({ error: 'bad token' });
+    if (data.accountPaused === true) return { ok: true, sent: false, reason: 'This account is paused. Nothing was sent.' };
     const rs = (data.reviewRequest as ReviewRequestState) ?? emptyReviewState();
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry };
     const b = (req.body ?? {}) as Record<string, any>;
     const event = (req.query?.event || b.event || 'job_complete') === 'reply' ? 'reply' : 'job_complete';
-    // A completed job is real regardless of the review toggle — record it
-    // (with the job value when the CRM sends one) for the dashboard.
-    if (event === 'job_complete') appendCrmEvent(data, { type: 'job_complete', ts: new Date().toISOString(), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b) });
-    if (!rs.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Review requests are off — turn them on to send.' }; }
     const name = String(b.name || b.full_name || b.contact_name || b.first_name || '').trim();
-    const phone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
+    const rawPhone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
+    const phone = e164(rawPhone) || rawPhone;
+    const eventId = b.id ? String(b.id).trim() : '';
     const nowISO = new Date().toISOString();
-    const ghlApp = await ghlAppFor(uid);
-    const canSend = !!ghlApp && !!connector.runAppTask;
-    const send = (message: string, verb: string): Promise<boolean> => sendGhl(uid, phone, name, message, verb);
 
-    if (event === 'job_complete') {
-      const msg = reviewAskText({ ...ctx, googleReviewUrl: rs.googleReviewUrl });
-      const sent = await send(msg, 'Send review request SMS');
-      rs.pending = [{ phone, name, at: nowISO }, ...rs.pending.filter((x) => x.phone !== phone)].slice(0, 500);
-      rs.log = [{ name: name || 'Customer', phone, outcome: 'asked' as const, at: nowISO }, ...rs.log].slice(0, 200);
+    if (event === 'reply') {
+      const text = String(b.message || b.text || b.body || '');
+      // STOP (or UNSUBSCRIBE, CANCEL, END, QUIT) as the whole reply: never text this number again.
+      if (isStopMessage(text)) {
+        const saved = addOptOut(data, phone);
+        rs.pending = rs.pending.filter((x) => x.phone !== phone);
+        rs.log = [{ name: name || 'Customer', phone, outcome: 'opted_out' as const, at: nowISO }, ...rs.log].slice(0, 200);
+        data.reviewRequest = rs;
+        await authStore.setUserData(uid, data);
+        return { ok: true, sent: false, event, optedOut: saved, reason: saved ? 'Opted out. Miles will not text this number again.' : 'STOP received, but the phone number does not parse.' };
+      }
+      // A reply is only logged with its rating. No second text is sent.
+      const rating = parseRating(text);
+      if (rating == null) return { ok: true, sent: false, reason: 'No 1–10 rating found in the reply.' };
+      const pend = rs.pending.find((x) => x.phone === phone);
+      rs.pending = rs.pending.filter((x) => x.phone !== phone);
+      rs.log = [{ name: pend?.name || name || 'Customer', phone, rating, outcome: 'rated' as const, at: nowISO }, ...rs.log].slice(0, 200);
+      appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `Review reply from ${pend?.name || name || 'a customer'}`, body: `Rated ${rating}/10. Logged only, no text was sent.` });
       data.reviewRequest = rs;
-      bumpMeter(data, 'agent_run');
-      appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `Review request sent${name ? ' — ' + name : ''}`, body: (sent ? 'Sent via GoHighLevel:\n' : 'Drafted (connect GoHighLevel to auto-send):\n') + msg });
       await authStore.setUserData(uid, data);
-      return { ok: true, sent, event, message: msg };
+      return { ok: true, sent: false, event, rating, route: 'logged' };
     }
 
-    // event === 'reply' — grade the score and route.
-    const rating = parseRating(String(b.message || b.text || b.body || ''));
-    if (rating == null) return { ok: true, sent: false, reason: 'No 1–10 rating found in the reply.' };
-    const pend = rs.pending.find((x) => x.phone === phone);
-    rs.pending = rs.pending.filter((x) => x.phone !== phone);
+    // A replayed webhook (same event id, already logged and not failed) never texts twice.
+    if (eventId && rs.log.some((e) => e.eventId === eventId && e.status !== 'failed')) return { ok: true, sent: false, duplicate: true, reason: 'Already handled this job.' };
+    // A completed job is real regardless of the review toggle — record it
+    // (with the job value when the CRM sends one) for the dashboard.
+    appendCrmEvent(data, { type: 'job_complete', ts: crmEventTsFrom(b), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b), id: crmEventIdFrom(b, ['job_id', 'jobId', 'appointment_id', 'opportunity_id']) });
+    if (!rs.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Review requests are off — turn them on to send.' }; }
     const msg = reviewAskText({ ...ctx, googleReviewUrl: rs.googleReviewUrl });
-    const sent = await send(msg, 'Send review request SMS');
-    rs.log = [{ name: pend?.name || name || 'Customer', phone, rating, outcome: 'asked' as const, at: nowISO }, ...rs.log].slice(0, 200);
-    appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `Review reply from ${name || 'a customer'}`, body: msg });
-    bumpMeter(data, 'agent_run');
+    const result = await sendGhl(uid, data, rawPhone, name, msg, 'Send review request SMS');
+    if (result.sent) rs.pending = [{ phone, name, at: nowISO }, ...rs.pending.filter((x) => x.phone !== phone)].slice(0, 500);
+    rs.log = [{ name: name || 'Customer', phone, outcome: 'asked' as const, at: nowISO, status: result.status, ...(eventId ? { eventId } : {}) }, ...rs.log].slice(0, 200);
     data.reviewRequest = rs;
+    bumpMeter(data, 'agent_run');
+    appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `Review request${result.sent ? ' sent' : ''}${name ? ' — ' + name : ''}`, body: smsRunHead(result) + msg });
     await authStore.setUserData(uid, data);
-    return { ok: true, sent, event, rating, route: 'asked' };
+    return { ok: true, sent: result.sent, event, status: result.status, reason: result.reason, message: msg };
   });
 
   // ── No-Show Recovery (#7) + New Customer Onboarding (#23) — config + status ──
@@ -7066,7 +7514,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   });
 
   // Shared helpers for the token-authed inbound hooks below.
-  const authHook = async (raw: string): Promise<{ uid: string; data: Record<string, unknown> } | null> => {
+  const authHook = async (raw: string): Promise<{ uid: string; data: Record<string, unknown>; paused: boolean } | null> => {
     const dot = raw.indexOf('.');
     if (dot < 1) return null;
     const uid = raw.slice(0, dot);
@@ -7076,8 +7524,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(uid);
     const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     if (!stl.webhookSecret || stl.webhookSecret !== secret) return null;
-    return { uid, data };
+    return { uid, data, paused: data.accountPaused === true };
   };
+  const PAUSED_HOOK = { ok: true, sent: false, reason: 'This account is paused. Nothing was sent.' };
   const hookField = (b: Record<string, any>, ...keys: string[]): string => {
     for (const k of keys) if (b[k]) return String(b[k]).trim();
     return '';
@@ -7088,30 +7537,36 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const auth = await authHook(req.params?.token ?? '');
     if (!auth) return reply.code(401).send({ error: 'bad token' });
     const { uid, data } = auth;
+    if (auth.paused) return PAUSED_HOOK;
     const au = (data.automations as AutomationsState) ?? emptyAutomationsState();
     const b = (req.body ?? {}) as Record<string, any>;
+    const eventId = b.id ? String(b.id).trim() : '';
+    // A replayed webhook (same event id, already logged and not failed) never texts twice.
+    if (eventId && au.noShow.log.some((e) => e.eventId === eventId && e.status !== 'failed')) return { ok: true, sent: false, duplicate: true, reason: 'Already handled this no-show.' };
+    // A canceled or finished appointment is not a no-show: drop its queued texts and stop.
     const eventName = String(b.event || b.status || '').toLowerCase();
     if (eventName === 'cancelled' || eventName === 'canceled' || eventName === 'completed') {
-      const phone = hookField(b, 'phone', 'phone_number', 'contact_phone');
-      data.followUpDrafts = cancelQueued((Array.isArray(data.followUpDrafts) ? data.followUpDrafts : []) as { phone?: string }[], phone);
+      const stopPhone = hookField(b, 'phone', 'phone_number', 'contact_phone');
+      data.followUpDrafts = cancelQueued((Array.isArray(data.followUpDrafts) ? data.followUpDrafts : []) as { phone?: string }[], stopPhone);
       await authStore.setUserData(uid, data);
       return { ok: true, sent: false, stopped: true, reason: 'Appointment is no longer active. Reminders for this number were cancelled.' };
     }
-    appendCrmEvent(data, { type: 'no_show', ts: new Date().toISOString() });
+    appendCrmEvent(data, { type: 'no_show', ts: crmEventTsFrom(b), id: crmEventIdFrom(b, ['appointment_id', 'appointmentId']) });
     if (!au.noShow.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'No-show recovery is off.' }; }
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry };
     const name = hookField(b, 'name', 'full_name', 'contact_name', 'first_name');
-    const phone = hookField(b, 'phone', 'phone_number', 'contact_phone');
+    const rawPhone = hookField(b, 'phone', 'phone_number', 'contact_phone');
+    const phone = e164(rawPhone) || rawPhone;
     const msg = noShowText(ctx, name, au.noShow.calendarUrl);
-    const sent = await sendGhl(uid, phone, name, msg, 'Send no-show rebook SMS');
+    const result = await sendGhl(uid, data, rawPhone, name, msg, 'Send no-show rebook SMS');
     const nowISO = new Date().toISOString();
-    au.noShow.log = [{ name: name || 'Customer', phone, at: nowISO }, ...au.noShow.log].slice(0, 200);
+    au.noShow.log = [{ name: name || 'Customer', phone, at: nowISO, status: result.status, ...(eventId ? { eventId } : {}) }, ...au.noShow.log].slice(0, 200);
     data.automations = au;
     bumpMeter(data, 'agent_run');
-    appendRun(data, { id: 'no-show', name: 'No-Show Recovery', task: 'lead_followup', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `No-show rebook${name ? ' — ' + name : ''}`, body: (sent ? 'Sent via GoHighLevel:\n' : 'Drafted (connect GoHighLevel to auto-send):\n') + msg });
+    appendRun(data, { id: 'no-show', name: 'No-Show Recovery', task: 'lead_followup', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `No-show rebook${name ? ' — ' + name : ''}`, body: smsRunHead(result) + msg });
     await authStore.setUserData(uid, data);
-    return { ok: true, sent, message: msg };
+    return { ok: true, sent: result.sent, status: result.status, reason: result.reason, message: msg };
   });
 
   // Deal Closed Won → welcome text + stop prospect nurtures (#23).
@@ -7119,8 +7574,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const auth = await authHook(req.params?.token ?? '');
     if (!auth) return reply.code(401).send({ error: 'bad token' });
     const { uid, data } = auth;
+    if (auth.paused) return PAUSED_HOOK;
     const au = (data.automations as AutomationsState) ?? emptyAutomationsState();
     const b = (req.body ?? {}) as Record<string, any>;
+    const eventId = b.id ? String(b.id).trim() : '';
+    // A replayed webhook (same event id, already logged and not failed) never texts twice.
+    if (eventId && au.onboarding.log.some((e) => e.eventId === eventId && e.status !== 'failed')) return { ok: true, sent: false, duplicate: true, reason: 'Already welcomed this customer.' };
     for (const key of ['email', 'contact_email', 'email_address']) {
       if (b[key] == null || b[key] === '') continue;
       const dealEmail = parseEmail(b[key], { required: true });
@@ -7129,26 +7588,30 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }
     // A won deal is revenue whether or not the welcome text fires — record
     // it (with the deal amount when the CRM sends one) for the dashboard.
-    appendCrmEvent(data, { type: 'closed_won', ts: new Date().toISOString(), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b) });
+    appendCrmEvent(data, { type: 'closed_won', ts: crmEventTsFrom(b), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b), id: crmEventIdFrom(b, ['opportunity_id', 'opportunityId', 'deal_id', 'dealId']) });
     if (!au.onboarding.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Onboarding is off.' }; }
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry };
     const name = hookField(b, 'name', 'full_name', 'contact_name', 'first_name');
-    const phone = hookField(b, 'phone', 'phone_number', 'contact_phone');
+    const rawPhone = hookField(b, 'phone', 'phone_number', 'contact_phone');
+    const phone = e164(rawPhone) || rawPhone;
     const msg = onboardingText(ctx, name);
-    const sent = await sendGhl(uid, phone, name, msg, 'Send onboarding welcome SMS');
+    const result = await sendGhl(uid, data, rawPhone, name, msg, 'Send onboarding welcome SMS');
     // Critical: stop prospect nurtures for this now-paying customer. We add their
     // key to the Speed-to-Lead ledger so the responder never re-touches them.
     const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     const key = `id:${(b.id ? String(b.id) : phone || name).trim()}`;
     if (key && !stl.contacted.includes(key)) { stl.contacted = [...stl.contacted, key].slice(-1000); data.speedToLead = stl; }
     const nowISO = new Date().toISOString();
-    au.onboarding.log = [{ name: name || 'Customer', phone, at: nowISO }, ...au.onboarding.log].slice(0, 200);
+    au.onboarding.log = [{ name: name || 'Customer', phone, at: nowISO, status: result.status, ...(eventId ? { eventId } : {}) }, ...au.onboarding.log].slice(0, 200);
     data.automations = au;
     bumpMeter(data, 'agent_run');
-    appendRun(data, { id: 'onboarding', name: 'New Customer Onboarding', task: 'lead_followup', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `Welcomed new customer${name ? ' — ' + name : ''}`, body: (sent ? 'Sent via GoHighLevel + stopped prospect nurtures:\n' : 'Drafted + stopped prospect nurtures (connect GoHighLevel to auto-send):\n') + msg });
+    const head = result.sent ? 'Sent via GoHighLevel + stopped prospect nurtures:\n'
+      : result.status === 'not_connected' ? 'Drafted + stopped prospect nurtures (connect GoHighLevel to auto-send):\n'
+      : `Stopped prospect nurtures. ${result.reason}\n`;
+    appendRun(data, { id: 'onboarding', name: 'New Customer Onboarding', task: 'lead_followup', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `Welcomed new customer${name ? ' — ' + name : ''}`, body: head + msg });
     await authStore.setUserData(uid, data);
-    return { ok: true, sent, message: msg, nurturesStopped: true };
+    return { ok: true, sent: result.sent, status: result.status, reason: result.reason, message: msg, nurturesStopped: true };
   });
 
   app.post('/api/speed-to-lead/run', async (req, reply) => {
@@ -7358,13 +7821,15 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     for (const uid of ids) {
       try {
         const data = await authStore.getUserData(uid);
+        // A paused account runs nothing unattended: no agents, posts, skills or texts.
+        if (data.accountPaused === true) continue;
         const agents = (data.schedules as ScheduledAgent[]) ?? [];
         const delivered: Array<{ agent: ScheduledAgent; run: { title: string; body: string } }> = [];
         let changed = false;
         // A scheduled agent writes with a model, unattended, every day. With
         // no credits it waits: still due, so it runs on the first tick after
         // the account is funded again.
-        const noCredits = billingEnforced() && creditState(data).remaining <= 0;
+        const noCredits = !!paidWorkBlock(data);
         for (const agent of agents) {
           if (!isDue(agent, now)) continue;
           if (noCredits) continue;
@@ -7412,7 +7877,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
               areaModes: milesTick.bundle.setup.areaModes,
               caps: milesTick.bundle.setup.caps,
               spentToday: 0,
-              spentMonth: 0,
+              spentMonth: monthSpendOf(readSnapshot(data)),
               action: {
                 area: 'ppc',
                 kind: 'optimize',
@@ -7927,7 +8392,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       return reply.code(400).send({ error: r?.note || 'Gmail rejected the send — reconnect Gmail in Integrations and try again.' });
     }
     // Fallback: the app's own email provider, when configured.
-    if (deliveryStatus().email) { await sendEmail(to, subject, body); await meterUser(u.id, 'agent_run'); await logSend('provider'); return { ok: true, via: 'provider', note: `Sent to ${to}.` }; }
+    if (deliveryStatus().email) {
+      const sent = await sendEmail(to, subject, body);
+      if (!sent.ok) return reply.code(502).send({ ok: false, error: `Not sent. ${sent.note || 'The email provider did not accept it.'}` });
+      await meterUser(u.id, 'agent_run');
+      await logSend('provider');
+      return { ok: true, via: 'provider', note: `Sent to ${to}.` };
+    }
     return reply.code(400).send({ error: 'Connect Gmail in Integrations so Miles can send email as you (or configure an email provider on Render).' });
   });
 

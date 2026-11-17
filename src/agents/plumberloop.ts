@@ -177,7 +177,7 @@ export function brandedAsset(profile: LoopProfile): BrandedAsset {
   ];
   const descriptions = [
     clip(`${name}${city ? ` in ${city}` : ''}. ${service}. Call for a visit.`, 90),
-    clip('Licensed local crew. You approve every campaign before it is created paused.', 90),
+    clip('Local crew. Call to schedule a visit.', 90),
   ];
   return {
     ok: true,
@@ -344,7 +344,7 @@ export function normalizeLead(body: Record<string, unknown>): { lead?: InboundLe
       phone,
       email,
       consent,
-      optOut: body.optOut === true || body.opt_out === true || isOptOutMessage(String(body.message || body.text || '')),
+      optOut: body.optOut === true || body.opt_out === true || body.dnd === true || isOptOutMessage(String(body.message || body.text || '')),
       campaign: typeof body.campaign === 'string' ? body.campaign.slice(0, 120) : (typeof body.campaign_id === 'string' ? body.campaign_id.slice(0, 120) : undefined),
       gclid: typeof body.gclid === 'string' ? body.gclid.slice(0, 200) : (typeof body.gcl_id === 'string' ? body.gcl_id.slice(0, 200) : undefined),
     },

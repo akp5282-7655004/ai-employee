@@ -120,6 +120,6 @@ describe('recordContact + responderStats', () => {
   });
   it('is honest and empty by default', () => {
     const stats = responderStats(undefined, '2026-08-12T12:00:00Z');
-    expect(stats).toEqual({ enabled: false, today: 0, total: 0, avgResponse: null, held: 0, withinMinute: 0 });
+    expect(stats).toEqual({ enabled: false, today: 0, total: 0, avgResponse: null, held: 0, failed: 0, withinMinute: 0 });
   });
 });

@@ -11,6 +11,8 @@ export class MemoryStore implements Store {
   private data = new Map<string, Record<string, unknown>>();
   private tails = new Map<string, Promise<void>>();
   private launchSlots: string[] = [];
+  /** Normalized email -> the account that got the launch credit. Kept after deleteUser. */
+  private launchCreditClaims = new Map<string, string>();
 
   async init(): Promise<void> {}
 
@@ -83,6 +85,12 @@ export class MemoryStore implements Store {
     if (this.launchSlots.includes(userId)) return true;
     if (this.launchSlots.length >= 100) return false;
     this.launchSlots.push(userId);
+    return true;
+  }
+  async claimLaunchCredit(email: string, userId: string): Promise<boolean> {
+    const owner = this.launchCreditClaims.get(email);
+    if (owner) return owner === userId;
+    this.launchCreditClaims.set(email, userId);
     return true;
   }
   async listUserIds(): Promise<string[]> {

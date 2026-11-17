@@ -2,7 +2,7 @@
  * What Miles prepares from a crawl and the owner's setup.
  * Publishing and enabling go through the policy engine, not through this file.
  */
-import { buildCampaignSpec, deriveServiceLines, normalizeSiteUrl, repairCampaignUrls, shortBrand, type CampaignSpec, type PageLinkRef } from './campaign.js';
+import { buildCampaignSpec, claimsFromText, deriveServiceLines, normalizeSiteUrl, repairCampaignUrls, shortBrand, type CampaignSpec, type PageLinkRef, type VerifiedClaims } from './campaign.js';
 import { enforceRulebook } from './rulebook.js';
 import { runAuditChecks, scoreFindings, gradeFor } from '../research/audit.js';
 import { extractPageLinks, parseSiteHtml, type SiteImport } from '../research/site.js';
@@ -20,6 +20,10 @@ export interface CrawlInput {
   competitors?: string[];
   html?: string;
   links?: PageLinkRef[];
+  /** The saved trade from the profile. Wins over what the page HTML suggests. */
+  industry?: string;
+  /** The saved services list from the profile. Wins over what the page HTML suggests. */
+  services?: string;
 }
 
 export interface SetupAnswers {
@@ -89,6 +93,8 @@ export interface MilesBundle {
   channels: ChannelPlan[];
   hours: string;
   license: string;
+  /** Credential claims the crawled site backs up. Ad copy uses only these. */
+  claims?: VerifiedClaims;
 }
 
 function hoursOf(text: string): string {
@@ -109,8 +115,10 @@ export function crawlFacts(input: CrawlInput): { site: Partial<SiteImport>; text
   const location = input.location || site.serviceAreas || site.city || '';
   const profile: Record<string, string> = {};
   if (name) profile.businessName = name;
-  if (site.industry) profile.industry = site.industry;
-  if (site.services) profile.services = site.services;
+  const industry = (input.industry || '').trim() || site.industry;
+  const services = (input.services || '').trim() || site.services;
+  if (industry) profile.industry = industry;
+  if (services) profile.services = services;
   if (location) profile.serviceAreas = location;
   const siteUrl = normalizeSiteUrl(input.website || site.website);
   if (siteUrl) profile.website = siteUrl;
@@ -227,12 +235,13 @@ export function buildBundle(input: CrawlInput & SetupAnswers & { mode?: MilesMod
   const services = deriveServiceLines(facts.profile.services, trade);
   const website = input.website || facts.profile.website || '';
   const links = input.links?.length ? input.links : facts.links;
+  const claims = claimsFromText(facts.text);
   const drafted = buildCampaignSpec(
     { goal: input.goal, dailyBudget: googleDaily || daily, finalUrl: website, locations: [city] },
-    { business: shortBrand(facts.profile.businessName, trade, city), trade, city, services: services.join(', ') },
+    { business: shortBrand(facts.profile.businessName, trade, city), trade, city, services: services.join(', '), claims },
   );
   const spec = enforceRulebook(repairCampaignUrls(drafted, { website, links }), {
-    trade, city, phone: facts.profile.phone, gbpUrl: input.gbpUrl,
+    trade, city, phone: facts.profile.phone, gbpUrl: input.gbpUrl, claims,
   }).spec;
   const feas = feasibility({ dailyBudget: daily, leadsPerDay: input.leadsPerDay, trade, now: input.now });
   const seo: SeoDraft[] = services.slice(0, 3).map((service) => ({
@@ -288,5 +297,6 @@ export function buildBundle(input: CrawlInput & SetupAnswers & { mode?: MilesMod
     ],
     hours: facts.hours,
     license: facts.license,
+    claims,
   };
 }
