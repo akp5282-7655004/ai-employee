@@ -116,6 +116,8 @@ describe('what a customer is told about pricing', () => {
     expect(bill.json().note).toMatch(/priced per run/);
     const html = readFileSync('web/index.html', 'utf8');
     expect(html).not.toMatch(/at OpenRouter cost/);
+    // A third sentence on the same page, found on the live site after the first two were fixed.
+    expect(html).not.toMatch(/OpenRouter token cost|priced from the OpenRouter/);
     await app.close();
   });
 });

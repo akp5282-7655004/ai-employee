@@ -6102,7 +6102,7 @@ async function openBilling(){
     const right=el('b',null,(buys?buys.includedPerMonth.toLocaleString()+' included each month  ·  ':'')+'then $'+Number(v).toFixed(2)+' each');
     row.append(el('span',null,names[k]||k),right); wc.append(row);
   });
-  wc.append(el('p','appsub','Text, chat, campaign builds, audits, skills, and agent runs use the same credits, priced from the OpenRouter token cost. Monitoring, including reports and the dashboard, stays free.'));
+  wc.append(el('p','appsub','Text, chat, campaign builds, audits, skills, and agent runs use the same credits, priced per run. Monitoring, including reports and the dashboard, stays free.'));
   box.append(wc);
   // Usage ledger
   const lc=el('div','mcard'); lc.style.marginTop='12px'; lc.append(el('div','sect-label','CREDIT USAGE'));
