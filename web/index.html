@@ -4869,23 +4869,23 @@ async function openAutoTriggers(){
   document.querySelectorAll('[data-cp]').forEach(b=>b.onclick=()=>{ try{navigator.clipboard.writeText(b.getAttribute('data-cp'));}catch(e){} toast('Webhook URL copied'); });
   const done=$('#au-done'); if(done) done.onclick=async()=>{ const cal=($('#au-cal').value||'').trim(); let ok=false; try{ const r=await fetch('/api/automations',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({noShow:{calendarUrl:cal}})}); ok=r.ok; }catch(e){} if(!ok){ toast('Could not save. Try again.'); return; } closeModal(); toast('Saved'); openOverview(); };
 }
-// Post-Job Review Request card, fires the 1–10 ask on job completion; 9–10 → Google,
-// 1–8 → private service recovery (never a public link).
+// Post-Job Review Request card: every completed job gets the same thank-you and the
+// Google review link. No score gate (Google and the FTC do not allow review gating).
 function reviewCard(){
   const card=el('div','mcard acard'); card.style.cssText='margin:0;padding:16px 18px;height:100%'; card.innerHTML='<p class="appsub">Loading…</p>';
   (async()=>{
     let d={}; if(REMOTE){ try{ d=await(await fetch('/api/review-request')).json(); }catch(e){} }
     const on=!!d.enabled; card.innerHTML=''; card.style.border='1px solid '+(on?'var(--ink)':'var(--line)');
     const topb=el('div'); topb.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap';
-    const left=el('div'); left.innerHTML='<div class="sect-label" style="margin:0">REVIEW REQUESTS '+ovPill(on)+'</div><p class="mdesc" style="margin:6px 0 0;max-width:640px">When a job is marked complete, Miles texts a 1-10 ask. <b>9-10</b> get your Google review link; <b>1-8</b> route to a private service-recovery call, never the public link.</p>';
+    const left=el('div'); left.innerHTML='<div class="sect-label" style="margin:0">REVIEW REQUESTS '+ovPill(on)+'</div><p class="mdesc" style="margin:6px 0 0;max-width:640px">When a job is marked complete, Miles texts every customer the same thank-you with your Google review link. Everyone gets the link, so reviews stay honest and within Google’s rules.</p>';
     const acts=el('div'); acts.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
     const trig=el('button','ghost','Instant triggers'); trig.onclick=openReviewTriggers;
     const toggle=el('button','go',on?'Turn off':'Turn on'); toggle.onclick=async()=>{ toggle.disabled=true; try{ await fetch('/api/review-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({enabled:!on})}); }catch(e){} openOverview(); };
     acts.append(trig,toggle); topb.append(left,acts); card.append(topb);
     if(on){
-      const recent=d.recent||[]; const proms=recent.filter(r=>r.outcome==='promoter').length; const dets=recent.filter(r=>r.outcome==='detractor').length;
-      card.append(miniStats([['Asked',recent.filter(r=>r.outcome==='asked').length],['Promoters',proms],['Recovered',dets]]));
-      if(!d.googleReviewUrl) card.append(ovNudge('Add your Google review link in ⭐ Instant triggers so promoters can leave a review in one tap.'));
+      const recent=d.recent||[];
+      card.append(miniStats([['Asked',recent.filter(r=>r.outcome==='asked').length],['Replied',recent.filter(r=>r.outcome==='rated').length]]));
+      if(!d.googleReviewUrl) card.append(ovNudge('Add your Google review link in ⭐ Instant triggers so customers can leave a review in one tap.'));
     } else {
       card.append(ovNudge('Turn it on and every completed job becomes a shot at a 5-star review, with unhappy customers caught privately first.'));
     }
@@ -6264,7 +6264,7 @@ async function openAutoHub(){
   box.append(ahCard({ icon:'⚡', title:'Speed-to-Lead + Missed-Call Text-Back', desc:'New lead or missed call → an instant personalized text-back in seconds. The #1 and #2 highest-ROI local plays.', on:!!stl.enabled, onToggle:async()=>{ await post('/api/speed-to-lead',{enabled:!stl.enabled}); openAutoHub(); }, stat:'Answered today: '+(stlStats.today||0)+' · Avg response: '+(stlStats.avgResponse||', ')+' · Total: '+(stlStats.total||0), config:stlCfg, urls:[{label:'New lead (Form / FB Lead) →',url:stl.webhook&&stl.webhook.newLead},{label:'Missed call →',url:stl.webhook&&stl.webhook.missedCall}] }));
   // 3: Review Requests
   const rvRecent=rev.recent||[]; const revCfg=el('div'); revCfg.style.cssText='margin-top:8px'; revCfg.append(el('div','appsub','Your Google review link')); const gi=el('input','f'); gi.style.cssText='width:100%;margin:4px 0 0'; gi.placeholder='https://g.page/r/…/review'; gi.value=rev.googleReviewUrl||''; gi.onchange=async()=>{ const ok=await post('/api/review-request',{googleReviewUrl:gi.value.trim()}); toast(ok?'Saved':'Could not save. Try again.'); }; revCfg.append(gi);
-  box.append(ahCard({ icon:'⭐', title:'Post-Job Review Request', desc:'Job complete → a 1-10 ask. 9-10 get your Google link; 1-8 route to a private recovery call (never the public link).', on:!!rev.enabled, onToggle:async()=>{ await post('/api/review-request',{enabled:!rev.enabled}); openAutoHub(); }, stat:'Promoters (9-10): '+rvRecent.filter(r=>r.outcome==='promoter').length+' · Recovered (1-8): '+rvRecent.filter(r=>r.outcome==='detractor').length, config:revCfg, urls:[{label:'Job complete →',url:rev.webhook&&rev.webhook.jobComplete},{label:'Customer replied →',url:rev.webhook&&rev.webhook.reply}] }));
+  box.append(ahCard({ icon:'⭐', title:'Post-Job Review Request', desc:'Job complete → a thank-you text with your Google review link, sent to every customer.', on:!!rev.enabled, onToggle:async()=>{ await post('/api/review-request',{enabled:!rev.enabled}); openAutoHub(); }, stat:'Asked: '+rvRecent.filter(r=>r.outcome==='asked').length+' · Replied: '+rvRecent.filter(r=>r.outcome==='rated').length, config:revCfg, urls:[{label:'Job complete →',url:rev.webhook&&rev.webhook.jobComplete},{label:'Customer replied →',url:rev.webhook&&rev.webhook.reply}] }));
   // 4: No-Show Recovery
   const nsCfg=el('div'); nsCfg.style.cssText='margin-top:8px'; nsCfg.append(el('div','appsub','Your booking-calendar link')); const ci=el('input','f'); ci.style.cssText='width:100%;margin:4px 0 0'; ci.placeholder='https://your-calendar-link'; ci.value=ns.calendarUrl||''; ci.onchange=async()=>{ const ok=await post('/api/automations',{noShow:{calendarUrl:ci.value.trim()}}); toast(ok?'Saved':'Could not save. Try again.'); }; nsCfg.append(ci);
   box.append(ahCard({ icon:'🗓️', title:'No-Show Recovery', desc:'Appointment marked no-show → a warm rebook text with your booking link. 30–50% rebook within the hour.', on:!!ns.enabled, onToggle:async()=>{ await post('/api/automations',{noShow:{enabled:!ns.enabled}}); openAutoHub(); }, stat:'Rebook texts sent: '+((ns.recent||[]).length), config:nsCfg, urls:[{label:'Appointment No-Show →',url:ns.webhook}] }));

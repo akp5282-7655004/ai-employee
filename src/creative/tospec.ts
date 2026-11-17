@@ -109,12 +109,9 @@ export function buildSearchAssets(input: SpecAssetInput): SearchAssetPack {
     `Free ${Trade} Quote`,
     `Book ${Trade} Today`,
     city ? `${Trade} in ${city}` : `Expert ${Trade}`,
-    'Licensed & Insured',
     'Same-Week Booking',
     'Upfront, Honest Pricing',
     'Free Estimates',
-    '5-Star Rated Locally',
-    'Workmanship Guaranteed',
     'No-Obligation Quote',
     'Talk To A Real Person',
     'Get A Quote Today',
@@ -132,12 +129,12 @@ export function buildSearchAssets(input: SpecAssetInput): SearchAssetPack {
   // the quota rather than leaving the owner short.
   const descriptionCandidates = [
     `${Trade}${where} done right first time.${offer ? ` ${offer}.` : ''} Fast, tidy, on schedule.`,
-    `Licensed, insured and locally reviewed. Clear pricing before we start.`,
+    `Clear pricing before we start. Free quotes, no pressure.`,
     offer ? `${offer}. Get a no-obligation quote and pick a slot that suits you.` : `Free quotes, and a slot that suits you. Real people answer the phone.`,
-    `Tidy crews, on-time arrivals and a written guarantee on every job.`,
-    `Talk to a real person about your ${trade} job. No call centres, no pressure.`,
+    `Tidy crews and on-time arrivals on every job.`,
+    `Talk to a real person about your ${trade} job. No call centers, no pressure.`,
     `Upfront pricing, no surprises on the day. Book online in under a minute.`,
-    `Locally owned and 5-star rated. See recent work before you decide.`,
+    `See recent work before you decide. Free, no-obligation quote.`,
   ];
   const descriptions = fit(descriptionCandidates, DE_CHARS, DE_MAX);
 
@@ -168,8 +165,8 @@ export function buildSearchAssets(input: SpecAssetInput): SearchAssetPack {
   }
 
   const callouts = fit(
-    ['Licensed & Insured', 'Free Estimates', 'Locally Owned', 'Written Guarantee',
-     'Same-Week Booking', 'Upfront Pricing', 'Tidy Crews', 'On-Time Arrival'],
+    ['Free Estimates', 'No-Pressure Quotes', 'Real People Answer', 'Same-Week Booking',
+     'Upfront Pricing', 'Tidy Crews', 'On-Time Arrival'],
     CO_CHARS, CO_WANT,
   );
 
@@ -209,10 +206,10 @@ export function buildMetaAssets(input: SpecAssetInput): MetaAssetPack {
 
   const primaryTexts = fit([
     `Looking for ${trade}${where}?${offer ? ` ${offer}.` : ''} Get a free quote today — no obligation.`,
-    `${offer || 'Free estimates'} on ${trade}${where}. Licensed, insured, and locally reviewed.`,
+    `${offer || 'Free estimates'} on ${trade}${where}. Clear pricing, no surprises.`,
     `Tired of chasing contractors? We answer, we turn up, and we finish. ${offer || 'Free quote'}.`,
     `Clear pricing before we start. ${offer || 'Book a free estimate'} and pick a slot that suits you.`,
-    `Your neighbours already booked us for ${trade}. ${offer || 'See what a job costs'} — free quote.`,
+    `Need ${trade}${where}? ${offer || 'See what a job costs'} — free quote.`,
   ], PT_CHARS, PT_MAX);
 
   const headlines = fit([
@@ -220,7 +217,7 @@ export function buildMetaAssets(input: SpecAssetInput): MetaAssetPack {
     city ? `${Trade} in ${city}` : `${Trade} Near You`,
     'Get Your Free Quote',
     'Book In Under A Minute',
-    'Licensed & Insured',
+    'Upfront, Honest Pricing',
     'Free Estimates',
   ], HL_CHARS, HL_MAX);
 
