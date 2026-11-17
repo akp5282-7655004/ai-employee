@@ -3,6 +3,7 @@ import { buildCampaignSpec } from '../src/agents/campaign.js';
 import { enforceRulebook } from '../src/agents/rulebook.js';
 import { buildSearchAssets, buildMetaAssets } from '../src/creative/tospec.js';
 import { buildSkillsBoard } from '../src/dashboard/skillsboard.js';
+import { unvouchedClaim, vouchedLines } from '../src/agents/claims.js';
 
 const TRADES = ['Roofing', 'HVAC', 'Plumbing', 'Electrical', 'Painting', 'Solar', 'Landscaping'];
 
@@ -56,5 +57,22 @@ describe('every advertised trade is recognised as the account\'s own', () => {
 
   it('marks nothing as yours for a trade Miles has no playbook for', () => {
     expect(buildSkillsBoard({ trade: 'Dental' }).cards.filter((card) => card.group === 'playbook' && card.yours)).toEqual([]);
+  });
+});
+
+describe('copy written by a model keeps a claim only when the owner made it', () => {
+  it('drops the stock claims a model adds on its own', () => {
+    const lines = ['Roof Repair In Little Rock', 'Licensed & Insured Roofers', '5-Star Rated Locally', 'Free Estimates Today', 'Satisfaction Guaranteed', '#1 Roofer In Town', '20+ Years Experience', 'Call For A Visit'];
+    expect(vouchedLines(lines)).toEqual(['Roof Repair In Little Rock', 'Call For A Visit']);
+  });
+
+  it('keeps a claim the profile itself states', () => {
+    const owner = 'Ace Roofing. Licensed and insured. Free roof inspection. Family-owned since 2009.';
+    expect(unvouchedClaim('Licensed & Insured Roofers', owner)).toBeNull();
+    expect(unvouchedClaim('Free Roof Inspection', owner)).toBeNull();
+    expect(unvouchedClaim('Family-Owned Since 2009', owner)).toBeNull();
+    // And still refuses the ones it does not.
+    expect(unvouchedClaim('5-Star Rated Locally', owner)).toBe('rated');
+    expect(unvouchedClaim('Lifetime Warranty', owner)).toBe('warranty');
   });
 });

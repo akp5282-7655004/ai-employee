@@ -38,6 +38,7 @@ import { choiceById, goalCheck, LAUNCH_LINE, MONTH_DAYS, type BudgetPeriod, type
 import { expectationReadout, liveDaysFromEvents, projectBudget, readExpectation, storeExpectation } from './agents/budgetexpect.js';
 import { dashboardRates } from './reports/rates.js';
 import { buildSkillsBoard } from './dashboard/skillsboard.js';
+import { vouchedLines } from './agents/claims.js';
 import { resolveAreas } from './agents/geotarget.js';
 import { formatSopLog, runSopGate } from './agents/sopgate.js';
 import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, plainStepErrors, resourcesFromSteps, searchLaunchNote } from './agents/googlelaunch.js';
@@ -4007,8 +4008,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
           for (const g of spec.adGroups) {
             const a = byName.get(g.name) ?? (j.adGroups ?? [])[spec.adGroups.indexOf(g)];
             if (!a) continue;
-            const hl = (a.headlines ?? []).map((s: any) => String(s).trim()).filter((s: string) => s && s.length <= 30);
-            const de = (a.descriptions ?? []).map((s: any) => String(s).trim()).filter((s: string) => s && s.length <= 90);
+            // A model reaches for "licensed and insured" and "5-star rated" on
+            // its own. Keep a claim only when the owner's profile says it.
+            const ownerText = [p.businessName, p.services, p.currentOffers, p.description, p.differentiators, p.usp].filter(Boolean).join(' ');
+            const hl = vouchedLines((a.headlines ?? []).map((s: any) => String(s).trim()).filter((s: string) => s && s.length <= 30), ownerText);
+            const de = vouchedLines((a.descriptions ?? []).map((s: any) => String(s).trim()).filter((s: string) => s && s.length <= 90), ownerText);
             const kw = (a.keywords ?? []).map((s: any) => String(s).trim()).filter(Boolean);
             if (hl.length >= 3) { g.rsa.headlines = [...new Set<string>(hl)].slice(0, 15); aiUsed = true; }
             if (de.length >= 2) g.rsa.descriptions = [...new Set<string>(de)].slice(0, 4);
