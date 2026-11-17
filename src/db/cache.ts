@@ -75,6 +75,7 @@ export function withUserDataCache(store: Store, ttlMs = TTL_MS): Store & { cache
   };
 
   wrapped.claimLaunchSlot = (userId) => store.claimLaunchSlot(userId);
+  wrapped.claimLaunchCredit = (email, userId) => store.claimLaunchCredit(email, userId);
 
   wrapped.deleteUser = async (id: string) => {
     cache.delete(id); inflight.delete(id);

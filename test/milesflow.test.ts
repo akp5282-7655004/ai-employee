@@ -11,6 +11,8 @@ function appFor(targets: { id: string; label: string }[]) {
     async listAccounts() { return targets.length ? [{ id: 'acct', app: 'google_ads', externalUserId: 'u', healthy: true }] : []; },
     async runAction() { return { ok: true, actionId: 'x', app: 'google_ads', output: null }; },
     async listAdTargets() { calls.push('targets'); return targets; },
+    // This month's spend is known, so automate may enable inside the monthly ceiling.
+    async getAdSpend() { return [{ platform: 'google_ads', campaign: 'Painting', utm: 'painting', spend: 120 }]; },
     async launchCampaign() {
       calls.push('launch');
       return {

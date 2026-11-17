@@ -31,6 +31,8 @@ function appFor(opts?: { delayLaunch?: boolean; missingOnPause?: boolean; listNa
     async listAccounts() { return [{ id: 'acct', app: 'google_ads', externalUserId: 'u', healthy: true }]; },
     async runAction() { return { ok: true, actionId: 'x', app: 'google_ads', output: null }; },
     async listAdTargets() { return [{ id: '9013698905', label: 'Painters' }]; },
+    // This month's spend is known, so automate may enable inside the monthly ceiling.
+    async getAdSpend() { return [{ platform: 'google_ads', campaign: 'Painting', utm: 'painting', spend: 120 }]; },
     async readGoogleCampaignStatus() {
       const name = opts?.listName?.();
       return {

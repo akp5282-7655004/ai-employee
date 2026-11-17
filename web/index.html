@@ -5882,7 +5882,7 @@ async function openBilling(){
   const pc=el('div','mcard'); pc.append(el('div','sect-label','YOUR PLAN'));
   if(d.launchOffer){
     const h=el('div'); h.innerHTML='<b style="font-size:16px">Launch offer: $0 a month</b>'; pc.append(h);
-    pc.append(el('p','appsub','First 100 accounts. $'+(d.launchGrant||100)+' in media credits, $'+Number((d.credits&&d.credits.remaining)||0).toFixed(2)+' left. Images $0.10, voiceover $0.50, video $1.50. Monitoring, campaigns, and skill runs do not use these credits. This is not a performance guarantee.'));
+    pc.append(el('p','appsub','First 100 accounts. $'+(d.launchGrant||100)+' in credits, $'+Number((d.credits&&d.credits.remaining)||0).toFixed(2)+' left. Images $0.10, voiceover $0.50, video $1.50. Text, chat, campaign builds and launches, audits, skill runs, and agent runs also draw from these credits, priced per run. Monitoring does not use credits. This is not a performance guarantee.'));
     if(d.launchMessage) pc.append(el('p','appsub', d.launchMessage));
   }
   const spendLine=el('p','appsub',(d.spendKnown?('Trailing-30-day ad spend under management: $'+Math.round(d.spend30).toLocaleString()):'Ad spend not readable yet, connect Google Ads for band assignment.')+(d.impliedBand?' → implied band: '+d.impliedBand.name+' ($'+d.impliedBand.monthlyPrice+'/mo)':''));
