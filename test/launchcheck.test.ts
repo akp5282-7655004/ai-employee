@@ -34,6 +34,8 @@ const good = (): LaunchFacts => ({
     GOOGLE_CLIENT_ID: 'gid',
     GOOGLE_CLIENT_SECRET: 'gsecret',
     ADMIN_EMAIL: 'owner@example.com',
+    LEGAL_ENTITY: 'Example Roofing Software LLC',
+    LEGAL_GOVERNING_LAW: 'the laws of the State of Arkansas.',
   },
   durableStore: true,
   connectorLive: true,
@@ -187,7 +189,7 @@ describe('launch check verdicts', () => {
     f.env.STRIPE_SECRET_KEY = 'sk_test_SECRETVALUE';
     f.stripe!.mode = 'test';
     const text = JSON.stringify(launchChecks(f));
-    for (const v of ['SECRETVALUE', 'whsec_abc', 'price_s', 'price_g', 'price_x', 'gsecret', 'owner@example.com']) {
+    for (const v of ['SECRETVALUE', 'whsec_abc', 'price_s', 'price_g', 'price_x', 'gsecret', 'owner@example.com', 'Example Roofing Software']) {
       expect(text).not.toContain(v);
     }
   });

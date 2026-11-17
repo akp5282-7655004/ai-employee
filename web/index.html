@@ -3019,18 +3019,18 @@ function renderResearch(d){
   const grid=el('div','stats'); grid.style.marginBottom='18px';
   grid.append(
     statCard('Population', (d.population||0).toLocaleString()),
-    statCard('Median household income', d.medianIncome? '$'+d.medianIncome.toLocaleString() : ', '),
-    statCard('Median home value', d.medianHomeValue? '$'+d.medianHomeValue.toLocaleString() : ', '),
-    statCard('Homeownership', d.homeownershipPct? d.homeownershipPct+'%' : ', ')
+    statCard('Median household income', d.medianIncome? '$'+d.medianIncome.toLocaleString() : '-'),
+    statCard('Median home value', d.medianHomeValue? '$'+d.medianHomeValue.toLocaleString() : '-'),
+    statCard('Homeownership', d.homeownershipPct? d.homeownershipPct+'%' : '-')
   );
   box.append(grid);
   box.append(el('div','sect-label','HOUSING & MARKET'));
   const hg=el('div','stats'); hg.style.marginBottom='16px';
   hg.append(
-    statCard('Median year built', d.medianYearBuilt? d.medianYearBuilt : ', '),
-    statCard('Homes built pre-1980', d.pctOlderHomes!=null? d.pctOlderHomes+'%' : ', '),
-    statCard('Housing units', d.housingUnits? d.housingUnits.toLocaleString() : ', '),
-    statCard('Trade competitors', d.competition!=null? d.competition : ', ')
+    statCard('Median year built', d.medianYearBuilt? d.medianYearBuilt : '-'),
+    statCard('Homes built pre-1980', d.pctOlderHomes!=null? d.pctOlderHomes+'%' : '-'),
+    statCard('Housing units', d.housingUnits? d.housingUnits.toLocaleString() : '-'),
+    statCard('Trade competitors', d.competition!=null? d.competition : '-')
   );
   box.append(hg);
   if(d.marketFit){ const mf=el('div','verdict ok'); mf.style.marginBottom='6px'; mf.textContent='🏗️ '+d.marketFit; box.append(mf); }
@@ -3101,10 +3101,10 @@ function renderWeather(data){
   box.append(el('div','sect-label', ((w.place||'')+' · '+(w.zip||'')).toUpperCase()));
   const grid=el('div','stats'); grid.style.marginBottom='18px';
   grid.append(
-    statCard('Temperature', w.tempF!=null? w.tempF+'°F':', '),
-    statCard('Feels like', w.feelsLikeF!=null? w.feelsLikeF+'°F':', '),
-    statCard('Humidity', w.humidity!=null? w.humidity+'%':', '),
-    statCard('Wind', w.windMph!=null? w.windMph+' mph':', ')
+    statCard('Temperature', w.tempF!=null? w.tempF+'°F':'-'),
+    statCard('Feels like', w.feelsLikeF!=null? w.feelsLikeF+'°F':'-'),
+    statCard('Humidity', w.humidity!=null? w.humidity+'%':'-'),
+    statCard('Wind', w.windMph!=null? w.windMph+' mph':'-')
   );
   box.append(grid);
   if(w.shortForecast){ const s=el('div','appsub'); s.style.margin='-8px 0 16px'; s.textContent='Now: '+w.shortForecast; box.append(s); }
@@ -3303,7 +3303,7 @@ const revMoney=n=>'$'+Number(n||0).toLocaleString();
 function roiHtml(rev){
   const rep=rev&&rev.report; const has=rep&&(rep.totalSpend>0||rep.attributedRevenue>0);
   const head='<div class="mdesc" style="margin:-4px 0 18px">Attributed revenue from your CRM matched to ad spend by UTM campaign, real data from your connected accounts.</div>';
-  if(!has) return head+kpis([['Total Spend','$0'],['Attributed Revenue','$0'],['Blended ROAS',', '],['Won Deals','0']])
+  if(!has) return head+kpis([['Total Spend','$0'],['Attributed Revenue','$0'],['Blended ROAS','-'],['Won Deals','0']])
     +card('By Platform',emptyState('No campaigns or deals yet. Connect an ad platform and a CRM to see attributed ROAS.'))
     +card('By Campaign',emptyState('No campaigns or deals yet. Connect an ad platform and a CRM to see attributed ROAS.'));
   const rows=arr=>(arr||[]).map(r=>`<div class="arow"><div class="rl"><b>${esc(r.key)}</b><span>${revMoney(r.spend)} spend · ${r.wonDeals} customers</span></div><div style="text-align:right"><b style="color:var(--good)">${r.roas}x</b><div style="font-size:11px;color:var(--faint)">${revMoney(r.revenue)} revenue</div></div></div>`).join('');
@@ -3316,7 +3316,7 @@ function crmHtml(rev){
   const head='<div class="mdesc" style="margin:-4px 0 18px">Deals synced from your connected CRMs. The UTM source on each deal powers attributed ROAS.</div>';
   if(!deals.length) return head+kpis([['Total Deals','0'],['Won','0'],['Won Revenue','$0.00']])+card('Recent Deals',emptyState('No deals yet. Connect a CRM (GoHighLevel, ServiceTitan, HubSpot, Salesforce) to start syncing.'));
   const won=deals.filter(d=>d.won), wonRev=won.reduce((s,d)=>s+(d.value||0),0);
-  const rows=deals.map(d=>`<div class="arow"><div class="rl"><b>${revMoney(d.value)}${d.won?'':' · lost'}</b><span>${esc(d.utmSource||', ')} · ${esc(d.utmCampaign||'no UTM')}</span></div><span class="apill ${d.won?'active':'paused'}">${d.won?'WON':'OPEN'}</span></div>`).join('');
+  const rows=deals.map(d=>`<div class="arow"><div class="rl"><b>${revMoney(d.value)}${d.won?'':' · lost'}</b><span>${esc(d.utmSource||'No source')} · ${esc(d.utmCampaign||'no UTM')}</span></div><span class="apill ${d.won?'active':'paused'}">${d.won?'WON':'OPEN'}</span></div>`).join('');
   return head+kpis([['Total Deals',String(deals.length)],['Won',String(won.length)],['Won Revenue',revMoney(wonRev)]])+card('Recent Deals',rows);
 }
 function dashRoi(){ return roiHtml(REV); }
@@ -3918,8 +3918,8 @@ async function dashHero(wrap, d){
     if(m) sub.append(ccSourceTag(m.source));
     w.append(sub); return w;
   };
-  const money=v=>v==null?', ':('$'+Math.round(v).toLocaleString());
-  const count=v=>v==null?', ':Math.round(v).toLocaleString();
+  const money=v=>v==null?'-':('$'+Math.round(v).toLocaleString());
+  const count=v=>v==null?'-':Math.round(v).toLocaleString();
   const cpl=g('calc.blended_cpl');
   four.append(
     cell('Leads',count(g('calc.blended_leads')),'calc.blended_leads',cpl!=null?(money(cpl)+' per lead'):'last 30 days',0),
@@ -3943,7 +3943,7 @@ async function dashHero(wrap, d){
 // and what is leaking. Rows are only shown when the data supports them.
 function dashSignals(wrap, d, M){
   const g=k=>M[k]?M[k].value:null;
-  const money=v=>v==null?', ':('$'+Math.round(v).toLocaleString());
+  const money=v=>v==null?'-':('$'+Math.round(v).toLocaleString());
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px;margin-top:16px';
   const panel=(title,tone)=>{
     const c=el('div','dcard'); c.style.cssText+='padding:18px 20px';
@@ -4940,7 +4940,7 @@ function stlCard(st){
   acts.append(trig,toggle);
   topb.append(left,acts); card.append(topb);
   if(on){
-    card.append(miniStats([['Answered today',st.today||0],['Avg response',st.avgResponse||', '],['Total answered',st.total||0]]));
+    card.append(miniStats([['Answered today',st.today||0],['Avg response',st.avgResponse||'-'],['Total answered',st.total||0]]));
     if(st.held) card.append(ovNudge('⚠︎ '+st.held+' draft'+(st.held===1?'':'s')+' ready but not sent, connect your CRM (GoHighLevel) in Integrations so replies send automatically.'));
     const run=el('button',null,'Run now'); run.style.cssText='margin-top:12px;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans)';
     run.onclick=async()=>{ run.disabled=true; run.textContent='Answering new leads…'; try{ const r=await(await fetch('/api/speed-to-lead/run',{method:'POST'})).json(); toast(r.ran?('Answered '+((r.stats&&r.stats.today)||0)+' today'):'No new leads right now'); }catch(e){} openOverview(); };
@@ -5549,7 +5549,7 @@ function ccConnected(plat){ if(plat==='calculated') return true;
   if(plat==='crm') return CC.connected.some(a=>['gohighlevel','highlevel_oauth','highlevel','leadconnector'].includes(a));
   if(plat==='meta') return CC.connected.some(a=>['facebook_ads','facebook'].includes(a));
   return false; }
-function ccFmt(format,v){ if(v==null||!isFinite(v)) return ', ';
+function ccFmt(format,v){ if(v==null||!isFinite(v)) return '-';
   if(format==='currency') return v>=1000?'$'+Math.round(v).toLocaleString():'$'+(+v).toFixed(2).replace(/\.00$/,'');
   if(format==='percent_1dp') return (+v).toFixed(1)+'%';
   if(format==='decimal_2dp') return (+v).toFixed(2);
@@ -5577,7 +5577,7 @@ function ccKpiCard(key){
   const m=CC.metrics[key], entry=ccEntry(key);
   const c=el('div','md-tile'); c.style.cssText='display:flex;flex-direction:column;gap:4px;min-width:0';
   const lab=el('div','appsub',(entry?entry.label:key)); lab.style.whiteSpace='nowrap'; lab.style.overflow='hidden'; lab.style.textOverflow='ellipsis'; c.append(lab);
-  const v=el('div',null,m?ccFmt(m.format,m.value):', '); v.style.cssText='font-size:22px;font-weight:800;letter-spacing:-.02em'; c.append(v);
+  const v=el('div',null,m?ccFmt(m.format,m.value):'-'); v.style.cssText='font-size:22px;font-weight:800;letter-spacing:-.02em'; c.append(v);
   if(m){ c.append(ccDelta(m)); c.append(ccSpark(m.series));
     // Every card says what it is, LIVE (real account/CRM data) or SAMPLE.
     c.append(ccSourceTag(m.source));
@@ -5700,7 +5700,7 @@ function ccWidgetCard(w,idx){
     $('#ccw-size').onclick=()=>{ w.size=(w.size==='1x1'||!w.size)?'2x1':(w.size==='2x1'?'2x2':'1x1'); ccSaveLayout().then(renderCmdCenter); closeModal(); };
     $('#ccw-del').onclick=()=>{ CC.layout.widgets=CC.layout.widgets.filter(x=>x!==w); ccSaveLayout().then(renderCmdCenter); closeModal(); }; };
   top.append(menu); c.append(top);
-  const v=el('div',null,m?ccFmt(m.format,m.value):', '); v.style.cssText='font-size:'+(w.size==='2x2'?'34px':'22px')+';font-weight:800;letter-spacing:-.02em'; c.append(v);
+  const v=el('div',null,m?ccFmt(m.format,m.value):'-'); v.style.cssText='font-size:'+(w.size==='2x2'?'34px':'22px')+';font-weight:800;letter-spacing:-.02em'; c.append(v);
   if(m){ c.append(ccDelta(m)); if(w.card_type!=='number') c.append(ccSpark(m.series)); c.append(ccSourceTag(m.source)); }
   c.ondragstart=e=>{ e.dataTransfer.setData('text/plain',String(idx)); };
   c.ondragover=e=>e.preventDefault();
@@ -5795,7 +5795,7 @@ async function renderCmdCenter(){
 
 // ── Plan & Credits, bands by ad spend, launch-offer credit meter ──
 // ── Unit economics, what the work sells for vs what it costs to serve ──────
-const mgPct=v=>v===null||v===undefined?', ':(v*100).toFixed(1)+'%';
+const mgPct=v=>v===null||v===undefined?'-':(v*100).toFixed(1)+'%';
 const mgUsd=v=>'$'+(Math.abs(v)<0.01&&v!==0?v.toFixed(5):v.toFixed(2));
 async function renderEconomics(box){
   // Owner only. This card shows cost-to-serve and per-item margin, the
@@ -5910,7 +5910,7 @@ async function openBilling(){
   pc.append(spendLine);
   if(d.subscription){
     const s=d.subscription;
-    const statusLabel={active:['Active','var(--good-tint);color:var(--good)'],past_due:['Payment failed, update your card','var(--warn-tint);color:var(--warn)'],canceled:['Canceled','var(--panel-2);color:var(--muted)']}[s.status]||[', ','var(--panel-2);color:var(--muted)'];
+    const statusLabel={active:['Active','var(--good-tint);color:var(--good)'],past_due:['Payment failed, update your card','var(--warn-tint);color:var(--warn)'],canceled:['Canceled','var(--panel-2);color:var(--muted)']}[s.status]||['Not active','var(--panel-2);color:var(--muted)'];
     const row=el('div'); row.style.cssText='display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px';
     const chip=el('span',null,statusLabel[0]); chip.style.cssText='font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;background:'+statusLabel[1];
     const bandName=s.band==='launch'?'Launch offer':(((d.bands||[]).find(b=>b.key===s.band)||{}).name||s.band);
@@ -6238,7 +6238,7 @@ async function openAutoHub(){
   const stlStats = stl.stats||{};
   const stlCfg=el('div'); stlCfg.style.cssText='margin-top:8px'; const qh=!!(stl.quietHours&&stl.quietHours.enabled);
   const qlab=el('label'); qlab.style.cssText='display:flex;align-items:center;gap:8px;font-size:13px'; const qcb=el('input'); qcb.type='checkbox'; qcb.checked=qh; qcb.onchange=async()=>{ await post('/api/speed-to-lead',{quietHours:{enabled:qcb.checked,tzOffsetMinutes:-new Date().getTimezoneOffset()}}); toast(qcb.checked?'Quiet hours on':'Quiet hours off'); }; qlab.append(qcb,document.createTextNode('Quiet hours, hold texts outside 8 AM–8 PM')); stlCfg.append(qlab);
-  box.append(ahCard({ icon:'⚡', title:'Speed-to-Lead + Missed-Call Text-Back', desc:'New lead or missed call → an instant personalized text-back in seconds. The #1 and #2 highest-ROI local plays.', on:!!stl.enabled, onToggle:async()=>{ await post('/api/speed-to-lead',{enabled:!stl.enabled}); openAutoHub(); }, stat:'Answered today: '+(stlStats.today||0)+' · Avg response: '+(stlStats.avgResponse||', ')+' · Total: '+(stlStats.total||0), config:stlCfg, urls:[{label:'New lead (Form / FB Lead) →',url:stl.webhook&&stl.webhook.newLead},{label:'Missed call →',url:stl.webhook&&stl.webhook.missedCall}] }));
+  box.append(ahCard({ icon:'⚡', title:'Speed-to-Lead + Missed-Call Text-Back', desc:'New lead or missed call → an instant personalized text-back in seconds. The #1 and #2 highest-ROI local plays.', on:!!stl.enabled, onToggle:async()=>{ await post('/api/speed-to-lead',{enabled:!stl.enabled}); openAutoHub(); }, stat:'Answered today: '+(stlStats.today||0)+' · Avg response: '+(stlStats.avgResponse||'-')+' · Total: '+(stlStats.total||0), config:stlCfg, urls:[{label:'New lead (Form / FB Lead) →',url:stl.webhook&&stl.webhook.newLead},{label:'Missed call →',url:stl.webhook&&stl.webhook.missedCall}] }));
   // 3: Review Requests
   const rvRecent=rev.recent||[]; const revCfg=el('div'); revCfg.style.cssText='margin-top:8px'; revCfg.append(el('div','appsub','Your Google review link')); const gi=el('input','f'); gi.style.cssText='width:100%;margin:4px 0 0'; gi.placeholder='https://g.page/r/…/review'; gi.value=rev.googleReviewUrl||''; gi.onchange=async()=>{ await post('/api/review-request',{googleReviewUrl:gi.value.trim()}); toast('Saved'); }; revCfg.append(gi);
   box.append(ahCard({ icon:'⭐', title:'Post-Job Review Request', desc:'Job complete → a 1-10 ask. 9-10 get your Google link; 1-8 route to a private recovery call (never the public link).', on:!!rev.enabled, onToggle:async()=>{ await post('/api/review-request',{enabled:!rev.enabled}); openAutoHub(); }, stat:'Promoters (9-10): '+rvRecent.filter(r=>r.outcome==='promoter').length+' · Recovered (1-8): '+rvRecent.filter(r=>r.outcome==='detractor').length, config:revCfg, urls:[{label:'Job complete →',url:rev.webhook&&rev.webhook.jobComplete},{label:'Customer replied →',url:rev.webhook&&rev.webhook.reply}] }));
@@ -6478,7 +6478,7 @@ function renderAffluence(){
     rec.innerHTML='<b>💰 Premium-offer targets:</b> '+premium.map(z=>z.zip).join(', ')+'<div class="mdesc" style="margin:4px 0 0">Highest ability to spend, send your high-ticket / premium offers here.</div>';
     const b=el('button','go','Launch a campaign for these ZIPs →'); b.style.marginTop='10px'; b.onclick=()=>{ window.__prefillLocations=premium.map(z=>z.zip).join(', '); setPage('launch'); }; rec.append(b); wrap.append(rec);
   }
-  const money=(n)=> n==null?', ':'$'+Number(n).toLocaleString();
+  const money=(n)=> n==null?'-':'$'+Number(n).toLocaleString();
   const tierBadge=(t)=> t==='premium'?'<span class="apill active">💰 Premium</span>':t==='mid'?'<span class="apill paused">Mid</span>':'<span class="apill">🎯 Value</span>';
   const rows=AFFL.zips.map((z,i)=>`<tr><td style="text-align:left;font-weight:600">#${i+1} · ${z.zip}${z.demo?' <span style="color:var(--faint);font-weight:400">(demo)</span>':''}</td><td>${tierBadge(z.tier)}</td><td>${money(z.medianIncome)}</td><td>${z.pctHighEarner!=null?z.pctHighEarner+'%':', '}</td><td>${money(z.medianHomeValue)}</td><td><div style="display:flex;align-items:center;gap:6px;min-width:90px"><div style="flex:1;height:6px;background:var(--line);border-radius:4px;overflow:hidden"><div style="height:100%;width:${z.affluenceScore}%;background:var(--good)"></div></div><b>${z.affluenceScore}</b></div></td><td>${money(z.discretionaryEst)}</td></tr>`).join('');
   const c=el('div','mcard');
@@ -6510,7 +6510,7 @@ async function openAdsManager(){
     renderConversionSync(box); return;
   }
   const t=d.totals||{}; const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(110px,1fr));margin-bottom:18px';
-  g.append(statCard('Spend','$'+(t.spend||0).toLocaleString()), statCard('Revenue','$'+(t.revenue||0).toLocaleString()), statCard('ROAS', t.roas!=null?(t.roas+'x'):', '), statCard('ROI', t.roiPct!=null?(t.roiPct+'%'):', '), statCard('Leads',(t.leads||0).toLocaleString()), statCard('Cost / lead', t.costPerLead!=null?('$'+t.costPerLead):', '));
+  g.append(statCard('Spend','$'+(t.spend||0).toLocaleString()), statCard('Revenue','$'+(t.revenue||0).toLocaleString()), statCard('ROAS', t.roas!=null?(t.roas+'x'):'-'), statCard('ROI', t.roiPct!=null?(t.roiPct+'%'):'-'), statCard('Leads',(t.leads||0).toLocaleString()), statCard('Cost / lead', t.costPerLead!=null?('$'+t.costPerLead):'-'));
   box.append(g);
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px';
   (d.campaigns||[]).forEach(c=>{
@@ -6520,9 +6520,9 @@ async function openAdsManager(){
       +'<div style="font-size:24px;font-weight:800;letter-spacing:-.02em;margin:10px 0 2px">$'+(c.spend||0).toLocaleString()+'</div><div class="appsub">spend · '+mktRangeLabel(d.range)+'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;font-size:13px">'
       +'<div><div class="appsub">Revenue</div><b>$'+(c.revenue||0).toLocaleString()+'</b></div>'
-      +'<div><div class="appsub">ROAS</div><b'+(c.roas!=null&&c.roas>=3?' style="color:var(--good)"':'')+'>'+(c.roas!=null?c.roas+'x':', ')+'</b></div>'
+      +'<div><div class="appsub">ROAS</div><b'+(c.roas!=null&&c.roas>=3?' style="color:var(--good)"':'')+'>'+(c.roas!=null?c.roas+'x':'-')+'</b></div>'
       +'<div><div class="appsub">Leads</div><b>'+(c.leads||0).toLocaleString()+'</b></div>'
-      +'<div><div class="appsub">Cost / lead</div><b>'+(c.costPerLead!=null?'$'+c.costPerLead:', ')+'</b></div>'
+      +'<div><div class="appsub">Cost / lead</div><b>'+(c.costPerLead!=null?'$'+c.costPerLead:'-')+'</b></div>'
       +'</div>';
     grid.append(card);
   });
@@ -6579,7 +6579,7 @@ async function openGrowth(){
     return;
   }
   const t=d.totals||{}; const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(105px,1fr));margin-bottom:16px';
-  g.append(statCard('Spend','$'+(t.spend||0).toLocaleString()), statCard('Revenue','$'+(t.revenue||0).toLocaleString()), statCard('ROAS', t.roas!=null?(t.roas+'x'):', '), statCard('ROI', t.roiPct!=null?(t.roiPct+'%'):', '), statCard('Target / job', t.targetCpa!=null?('$'+t.targetCpa):', '));
+  g.append(statCard('Spend','$'+(t.spend||0).toLocaleString()), statCard('Revenue','$'+(t.revenue||0).toLocaleString()), statCard('ROAS', t.roas!=null?(t.roas+'x'):'-'), statCard('ROI', t.roiPct!=null?(t.roiPct+'%'):'-'), statCard('Target / job', t.targetCpa!=null?('$'+t.targetCpa):'-'));
   box.append(g);
   const lvl={10:'Assist',20:'Guided',50:'Co-pilot',100:'Autopilot'}[d.autonomy]||('lvl '+d.autonomy);
   box.append(el('div','appsub','⚙️ Autonomy: '+d.autonomy+'% ('+lvl+') · max budget change '+d.guardrailPct+'% per move'+(d.protectProven?' · proven funnels protected':'')+'. '+(d.autonomy>=100?'Approved moves apply immediately.':'Approved moves wait in Deploy for your OK.')));
@@ -6588,7 +6588,7 @@ async function openGrowth(){
   if(!moves.length){ card.append(el('div','verdict ok','✅ Everything’s in a healthy range, no budget moves needed right now. Hold steady.')); }
   (d.actions||[]).forEach(a=>{
     const row=el('div'); row.style.cssText='display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-soft)';
-    const icon=a.action==='scale'?'▲':a.action==='pause'?'⏸':a.action==='cut'?'▼':', ';
+    const icon=a.action==='scale'?'▲':a.action==='pause'?'⏸':a.action==='cut'?'▼':'•';
     const badge=a.verdict==='winner'?'<span class="apill active">WINNER</span>':a.verdict==='loser'?'<span class="apill" style="background:rgba(164,83,89,.14);color:#a45359">LOSER</span>':a.verdict==='no-data'?'<span class="apill">NEW</span>':'<span class="apill paused">STEADY</span>';
     row.innerHTML='<div style="flex:none;font-size:17px;width:22px;text-align:center">'+icon+'</div><div style="flex:1"><b style="font-size:13.5px">'+esc(a.campaign)+'</b> '+badge+'<div class="mdesc" style="margin:2px 0 0">'+esc(a.reason)+'</div></div>';
     card.append(row);
@@ -7354,6 +7354,35 @@ function closeModal(){ $('#modal').classList.remove('on'); const box=document.qu
 $('#modal-x').onclick=closeModal; $('#modal').onclick=(e)=>{ if(e.target.id==='modal') closeModal(); };
 document.addEventListener('keydown',(e)=>{ if(e.key==='Escape') closeModal(); });
 function toast(msg){ let t=$('#toast'); if(!t){ t=el('div'); t.id='toast'; t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:100;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;transition:opacity .2s'; document.body.append(t);} t.textContent=msg; t.style.opacity='1'; clearTimeout(t._t); t._t=setTimeout(()=>{t.style.opacity='0';},1900); }
+
+// Out of credits is the same answer from every part of the app, so it is shown
+// in one place. Each button used to print its own "could not do that", which
+// told the owner something broke when the real answer was "add credits".
+function creditsNotice(msg){
+  let n=$('#credits-notice');
+  if(!n){
+    n=el('div'); n.id='credits-notice'; n.setAttribute('role','alert');
+    n.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:76px;z-index:9999;max-width:min(560px,calc(100vw - 32px));background:var(--card,#fff);color:var(--ink,#111);border:1px solid var(--line,#ddd);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:14px 16px;font-size:13.5px;line-height:1.45';
+    document.body.append(n);
+  }
+  n.innerHTML='';
+  const text=el('div',null,msg); text.style.marginBottom='10px';
+  const row=el('div'); row.style.cssText='display:flex;gap:8px;flex-wrap:wrap';
+  const plan=el('button','go','Plan & Credits'); plan.onclick=()=>{ n.remove(); setPage('billing'); };
+  const connect=el('button','ghost','Integrations'); connect.onclick=()=>{ n.remove(); setPage('integrations'); };
+  const close=el('button','ghost','Close'); close.onclick=()=>n.remove();
+  row.append(plan, connect, close); n.append(text,row);
+}
+(function(){
+  const raw=window.fetch;
+  window.fetch=async function(){
+    const res=await raw.apply(this, arguments);
+    if(res.status===402){
+      try{ const d=await res.clone().json(); if(d && d.error) creditsNotice(String(d.error)); }catch(e){}
+    }
+    return res;
+  };
+})();
 
 let HUB={campaigns:[]}, HUB_LOADED=false, hubView=null;
 async function loadHub(){ if(!REMOTE){ HUB_LOADED=true; return; } try{ const r=await fetch('/api/hub'); const d=await r.json(); HUB=d.hub||{campaigns:[]}; }catch(e){} HUB_LOADED=true; }
@@ -8288,7 +8317,7 @@ async function setUsage(box){
   if(!net.workspaces){ card3.append(el('div','verdict tight','Network learning is just getting started, insights appear as more businesses join Miles.')); }
   else{
     const ns=el('div','stats'); ns.style.margin='4px 0 12px';
-    ns.append(statCard('Businesses',net.workspaces||0), statCard('Agents deployed',net.totalAgentsDeployed||0), statCard('Agent runs',net.totalAgentRuns||0), statCard('Median target CPA',net.medianTargetCpa?('$'+net.medianTargetCpa):', '));
+    ns.append(statCard('Businesses',net.workspaces||0), statCard('Agents deployed',net.totalAgentsDeployed||0), statCard('Agent runs',net.totalAgentRuns||0), statCard('Median target CPA',net.medianTargetCpa?('$'+net.medianTargetCpa):'-'));
     card3.append(ns);
     if((net.topAgents||[]).length){ const t=el('div'); t.append(el('div','sect-label','MOST-DEPLOYED AGENTS ACROSS THE NETWORK'));
       for(const a of net.topAgents){ const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px'; row.innerHTML='<span>'+esc(NET_TASK_LABEL[a.task]||a.task)+'</span><span class="appsub">'+a.count+' business'+(a.count===1?'':'es')+'</span>'; t.append(row); }
@@ -8910,11 +8939,11 @@ function clusterCard(){
   const years=yr?(new Date().getFullYear()-yr):0;
   let size='Solo / startup'; if(emp>=25) size='Large operator'; else if(emp>=6) size='Established mid-size'; else if(emp>=1) size='Small team';
   const tenure=years>=10?'10+ yrs':years>=3?(years+' yrs'):(years>0?(years+' yr'):'newer');
-  const area=((PROFILE&&PROFILE.serviceAreas)||'your market').split(',')[0]||', ';
+  const area=((PROFILE&&PROFILE.serviceAreas)||'your market').split(',')[0]||'Not set';
   const card=el('div','mcard'); card.style.maxWidth='860px';
   card.innerHTML='<p class="mdesc" style="margin:0 0 12px">A label for businesses of a similar size and age. Miles does not copy another customer\'s campaigns into yours.</p>';
   const g=el('div','stats'); g.style.margin='0';
-  g.append(statCard('Size band',size),statCard('Tenure',tenure),statCard('Market',area),statCard('Employees',emp||', '));
+  g.append(statCard('Size band',size),statCard('Tenure',tenure),statCard('Market',area),statCard('Employees',emp||'Not set'));
   card.append(g);
   const v=el('div','verdict ok'); v.style.marginTop='14px'; v.textContent='This is a size label only. Nothing is copied from other businesses, and nothing is changed in your ad account.'; card.append(v);
   return card;
@@ -9837,7 +9866,7 @@ function buildProfileForm(container,vals){
       let inp;
       // A select with blank:true starts genuinely empty, so "not answered yet"
       // is visible instead of masquerading as the first option.
-      if(f.type==='select'){ inp=el('select'); const opts=f.blank?['',...f.options]:f.options; for(const o of opts){ const op=el('option',null,o||', '); op.value=o; if((vals[f.k]||'')===o)op.selected=true; inp.append(op);} }
+      if(f.type==='select'){ inp=el('select'); const opts=f.blank?['',...f.options]:f.options; for(const o of opts){ const op=el('option',null,o||'Select...'); op.value=o; if((vals[f.k]||'')===o)op.selected=true; inp.append(op);} }
       else if(f.type==='textarea'){ inp=el('textarea'); inp.value=vals[f.k]||''; if(f.ph)inp.placeholder=f.ph; }
       else { inp=el('input'); inp.type=f.type; inp.value=(vals[f.k]!=null?vals[f.k]:''); if(f.ph)inp.placeholder=f.ph; }
       inp.dataset.k=f.k; w.append(inp); container.append(w);

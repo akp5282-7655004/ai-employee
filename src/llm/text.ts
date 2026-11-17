@@ -4,7 +4,7 @@
  * vendor) via plain fetch, falls back to the Anthropic SDK, and returns null when
  * neither key is set or the call fails — callers then use a deterministic template.
  */
-import { recordCost } from '../billing/costsink.js';
+import { recordCost, paidWorkRefusal } from '../billing/costsink.js';
 import { tokenCostUsd } from '../billing/cogs.js';
 
 export function textLlmReady(): boolean {
@@ -19,6 +19,9 @@ export interface TextRequest {
 
 export async function generateText(req: TextRequest): Promise<string | null> {
   const maxTokens = req.maxTokens ?? 700;
+  // An account with no credits does not reach the model. Callers get null,
+  // exactly as when no key is set, and the server answers the request with 402.
+  if (paidWorkRefusal()) return null;
   if (process.env.OPENROUTER_API_KEY) return viaOpenRouter(req, maxTokens);
   if (process.env.ANTHROPIC_API_KEY) return viaAnthropic(req, maxTokens);
   return null;
