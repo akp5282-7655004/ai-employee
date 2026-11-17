@@ -18,6 +18,10 @@ export interface AutoLog {
   name: string;
   phone?: string;
   at: string;
+  /** The CRM's event id, when it sent one, so a replayed webhook does not text twice. */
+  eventId?: string;
+  /** What happened to the text: sent, failed, opted_out, quiet_hours, not_connected, … */
+  status?: string;
 }
 export interface AutomationsState {
   noShow: { enabled: boolean; calendarUrl?: string; log: AutoLog[] };

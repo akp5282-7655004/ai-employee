@@ -30,6 +30,10 @@ export interface ResponderLog {
   channels: string[];
   /** True when nothing was connected, so the draft is ready but unsent. */
   held: boolean;
+  /** True when GoHighLevel was connected but did not accept the text. Not sent. */
+  failed?: boolean;
+  /** True when the number is on the account's opt-out list. Never texted. */
+  optedOut?: boolean;
   /** Seconds from lead arrival to our response, when the lead's arrival is known. */
   responseSec?: number;
 }
@@ -140,6 +144,7 @@ export function recordContact(
   channels: string[],
   held: boolean,
   responseSec?: number,
+  extra?: { failed?: boolean; optedOut?: boolean },
 ): SpeedToLeadState {
   const key = leadKey(lead);
   const entry: ResponderLog = {
@@ -150,11 +155,14 @@ export function recordContact(
     at: nowISO,
     channels,
     held,
+    ...(extra?.failed ? { failed: true } : {}),
+    ...(extra?.optedOut ? { optedOut: true } : {}),
     ...(responseSec != null ? { responseSec } : {}),
   };
   return {
     ...state,
-    contacted: [...state.contacted, key].slice(-1000),
+    // A failed send is not marked handled, so a retry of the same lead can send once.
+    contacted: extra?.failed || state.contacted.includes(key) ? state.contacted : [...state.contacted, key].slice(-1000),
     log: [entry, ...state.log].slice(0, 100),
   };
 }
@@ -173,7 +181,7 @@ function fmtDuration(sec: number): string {
 export function responderStats(
   state: SpeedToLeadState | undefined,
   nowISO: string,
-): { enabled: boolean; today: number; total: number; avgResponse: string | null; held: number; withinMinute: number } {
+): { enabled: boolean; today: number; total: number; avgResponse: string | null; held: number; failed: number; withinMinute: number } {
   const s = state ?? emptyState();
   const today = nowISO.slice(0, 10);
   const todays = s.log.filter((e) => e.at.slice(0, 10) === today);
@@ -185,6 +193,7 @@ export function responderStats(
     total: s.log.length,
     avgResponse: avgSec != null ? fmtDuration(avgSec) : null,
     held: todays.filter((e) => e.held).length,
+    failed: todays.filter((e) => e.failed).length,
     withinMinute: timed.filter((e) => (e.responseSec ?? 999) <= 60).length,
   };
 }

@@ -158,6 +158,7 @@ import {
 import { aggregateNetwork, type WorkspaceSignal } from './usage/network.js';
 import { deliveryStatus, sendEmail, sendSms, smsExcerpt } from './delivery/send.js';
 import { parseBudget, toE164 } from './identity/fields.js';
+import { addOptOut, e164, effectiveQuietHours, inQuietHours, isOptedOut, isStopMessage, payloadOptsOut, smsResult, smsRunHead, type SmsResult } from './agents/smsguard.js';
 import { grantedIdentity, launchCreditStatus, maybeGrantLaunchCredit, LAUNCH_WAIT } from './billing/launchcredit.js';
 import { addLead, leadCounts, readLeads, setLeadStatus } from './crm/leads.js';
 import { searchCompetitors } from './research/places.js';
@@ -602,16 +603,35 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     return { connected: false, externalId: uid };
   };
   const ghlAppFor = async (uid: string): Promise<string | undefined> => (await ghlLink(uid)).slug;
-  const sendGhl = async (uid: string, phone: string, name: string, message: string, verb: string, extra?: Record<string, string>): Promise<boolean> => {
-    if (!phone || !connector.runAppTask) return false;
+  /**
+   * The one shared sender for customer texts. Every SMS path goes through it (or
+   * through the same checks in runSpeedToLead), so none can skip them:
+   * paused account, phone that does not parse, opted-out number, no CRM,
+   * quiet hours, the SOP gate. It writes its approval-log entry onto the
+   * caller's `data`, which the caller saves, so the entry is never lost to a
+   * later save of an older copy. Only status 'sent' means the CRM took it.
+   */
+  const sendGhl = async (uid: string, data: Record<string, unknown>, phone: string, name: string, message: string, verb: string, extra?: Record<string, string>): Promise<SmsResult> => {
+    if (data.accountPaused === true) return smsResult('paused');
+    if (!phone || !phone.trim()) return smsResult('no_phone');
+    const to = e164(phone);
+    if (!to) return smsResult('bad_phone');
+    const log = (kind: 'action' | 'dismissal', detail: string) =>
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind, actor: 'miles', source: 'sop-gate', title: 'ghl_send', detail });
+    if (isOptedOut(data, to)) { log('dismissal', `Not sent to ${to}: the number opted out of texts.`); return smsResult('opted_out'); }
+    if (!connector.runAppTask) return smsResult('not_connected');
     const link = await ghlLink(uid);
-    if (!link.slug) return false;
-    const data = await authStore.getUserData(uid);
-    const gate = runSopGate('ghl_send', { mode: 'automate', ghl: { phone, message } });
-    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: 'miles', source: 'sop-gate', title: 'ghl_send', detail: formatSopLog(gate) });
-    await authStore.setUserData(uid, data);
-    if (gate.disposition === 'block') return false;
-    try { const r = await connector.runAppTask({ externalUserId: link.externalId, app: link.slug, query: verb, params: { message, name, phone, ...(extra ?? {}) } }); return !!r?.ok; } catch { return false; }
+    if (!link.slug) return smsResult('not_connected');
+    if (inQuietHours(effectiveQuietHours(data), Date.now())) { log('dismissal', `Held for quiet hours: not sent to ${to}.`); return smsResult('quiet_hours'); }
+    const gate = runSopGate('ghl_send', { mode: 'automate', ghl: { phone: to, message } });
+    log(gate.disposition === 'block' ? 'dismissal' : 'action', formatSopLog(gate));
+    if (gate.disposition === 'block') return smsResult('blocked');
+    try {
+      const r = await connector.runAppTask({ externalUserId: link.externalId, app: link.slug, query: verb, params: { message, name, phone: to, ...(extra ?? {}) } });
+      return smsResult(r?.ok ? 'sent' : 'failed');
+    } catch {
+      return smsResult('failed');
+    }
   };
 
   const readWeb = (name: string, fallback: string) => {
@@ -1142,6 +1162,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = who ? await authStore.getUserByEmail(who) : null;
     if (!u || !verifyPassword(b.password ?? '', u.passwordHash))
       return reply.code(401).send({ error: 'Wrong email or password.' });
+    // A paused account is told so plainly at sign-in, not left to hit 403s panel by panel.
+    if ((await authStore.getUserData(u.id)).accountPaused === true && !(await isAdmin(u)))
+      return reply.code(403).send({ error: 'This account is paused. Ask the Miles owner to turn it back on.', paused: true });
     await startSession(reply, u.id);
     return { ok: true, user: { id: u.id, email: u.email, name: u.name } };
   });
@@ -1317,6 +1340,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(id);
     data.accountPaused = req.body?.paused !== false;
     await authStore.setUserData(id, data);
+    // Pausing ends every open session, so the account is signed out at once.
+    if (data.accountPaused) await authStore.deleteSessionsForUser(id);
     await auditAdmin(actor.id, { action: data.accountPaused ? 'pause account' : 'resume account', targetId: id, note: data.accountPaused ? 'Paused the account.' : 'Turned the account back on.' });
     return { ok: true, paused: data.accountPaused };
   });
@@ -2612,7 +2637,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!text) return reply.code(400).send({ error: 'Nothing to send.' });
     if (!connector.runAppTask) return reply.code(400).send({ error: 'Live actions need the connector — configure Pipedream.' });
     const data = await authStore.getUserData(u.id);
-    const gate = runSopGate(match.play.push.app === 'gohighlevel' || match.play.push.app === 'highlevel_oauth' ? 'ghl_send' : 'other', { mode: 'manual', ghl: { phone: (req.body?.recipient ?? '').trim(), message: text } });
+    const isGhl = match.play.push.app === 'gohighlevel' || match.play.push.app === 'highlevel_oauth';
+    if (isGhl && isOptedOut(data, req.body?.recipient)) return reply.code(400).send({ error: 'Not sent. This number opted out of texts.', held: true });
+    const gate = runSopGate(isGhl ? 'ghl_send' : 'other', { mode: 'manual', ghl: { phone: (req.body?.recipient ?? '').trim(), message: text } });
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: u.email, source: 'sop-gate', title: 'skill push', detail: formatSopLog(gate) });
     await authStore.setUserData(u.id, data);
     if (gate.disposition === 'block') return reply.code(400).send({ error: gate.blocks.join(' ') });
@@ -6439,6 +6466,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // `data.speedToLead` (the dedup ledger + log) and returns a run summary, or null when
   // it's off or there's nothing new. Best-effort — a send failure just holds the draft.
   async function runSpeedToLead(userId: string, data: Record<string, unknown>): Promise<{ run: { title: string; body: string } } | null> {
+    if (data.accountPaused === true) return null;
     const st = (data.speedToLead as SpeedToLeadState) ?? null;
     if (!st?.enabled) return null;
     const leads = await safeConn(connector.getLeads ? () => connector.getLeads!(userId) : undefined, []);
@@ -6460,26 +6488,37 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }
     const ghlApp = ghlSlugOf(connectedApps);
     const canSend = !!ghlApp && !!connector.runAppTask;
+    // Quiet hours: when texts would really go out, leave the new leads untouched
+    // so the first tick after 8 AM answers them. Nothing is marked handled.
+    if (canSend && inQuietHours(effectiveQuietHours(data), Date.now())) return null;
     const nowISO = new Date().toISOString();
     let state = st;
     const blocks: string[] = [];
     for (const lead of fresh) {
+      const phone = e164(lead.phone);
+      if (phone && isOptedOut(data, phone)) {
+        state = recordContact(state, lead, nowISO, [], false, undefined, { optedOut: true });
+        blocks.push(`• ${lead.name || 'New lead'}: not sent. This number opted out of texts.`);
+        continue;
+      }
       const { system, user } = instantReplyAgent(lead, ctx);
       const reply = (await generateText({ system, user, maxTokens: 400 })) ?? fallbackInstantReply(lead, ctx);
       const channels: string[] = [];
-      if (canSend && lead.phone) {
+      let failed = false;
+      if (canSend && phone) {
         try {
-          const gate = runSopGate('ghl_send', { mode: 'automate', ghl: { phone: lead.phone, message: smsFromReply(reply) } });
-          if (gate.disposition === 'block') { /* held: SOP 076 */ }
-          const r = gate.disposition === 'block' ? { ok: false } : await connector.runAppTask!({ externalUserId: userId, app: ghlApp!, query: 'Send SMS to new lead', params: { message: smsFromReply(reply), name: lead.name ?? '', phone: lead.phone ?? '' } });
+          const gate = runSopGate('ghl_send', { mode: 'automate', ghl: { phone, message: smsFromReply(reply) } });
+          const r = gate.disposition === 'block' ? { ok: false } : await connector.runAppTask!({ externalUserId: userId, app: ghlApp!, query: 'Send SMS to new lead', params: { message: smsFromReply(reply), name: lead.name ?? '', phone } });
           if (r?.ok) channels.push('sms');
+          else failed = gate.disposition !== 'block';
         } catch {
-          /* held — draft stays ready */
+          failed = true;
         }
       }
-      const held = channels.length === 0;
-      state = recordContact(state, lead, nowISO, channels, held, responseSeconds(lead, nowISO));
-      blocks.push(`• ${lead.name || 'New lead'}, ${lead.service || 'inquiry'} (via ${lead.source || 'website'}): ${held ? 'drafted, ready to send' : `sent ${channels.join(' + ')}`}\n${reply}`);
+      const held = channels.length === 0 && !failed;
+      state = recordContact(state, lead, nowISO, channels, held, responseSeconds(lead, nowISO), { failed });
+      const outcome = failed ? 'Failed, not sent' : held ? (canSend && lead.phone && !phone ? 'not sent, the phone number does not parse' : 'drafted, ready to send') : `sent ${channels.join(' + ')}`;
+      blocks.push(`• ${lead.name || 'New lead'}, ${lead.service || 'inquiry'} (via ${lead.source || 'website'}): ${outcome}\n${reply}`);
     }
     data.speedToLead = state;
     const title = `Speed-to-Lead: answered ${fresh.length} new lead${fresh.length === 1 ? '' : 's'}`;
@@ -6502,7 +6541,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       canSend,
       stats: responderStats(st, new Date().toISOString()),
       recent: st.log.slice(0, 10),
-      quietHours: st.quietHours ?? { enabled: true, tzOffsetMinutes: 0 },
+      quietHours: effectiveQuietHours(data),
       webhook: { newLead: `${hook}?event=new_lead`, missedCall: `${hook}?event=missed_call` },
     };
   });
@@ -6515,19 +6554,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (req.body?.quietHours) st.quietHours = { enabled: !!req.body.quietHours.enabled, tzOffsetMinutes: Number(req.body.quietHours.tzOffsetMinutes) || 0 };
     data.speedToLead = st;
     await authStore.setUserData(u.id, data);
-    return { ok: true, enabled: st.enabled, quietHours: st.quietHours ?? { enabled: true, tzOffsetMinutes: 0 } };
+    return { ok: true, enabled: st.enabled, quietHours: effectiveQuietHours(data) };
   });
 
   // ── Inbound instant-response webhook — the event trigger the CRM fires ────────
   // GHL (or Zapier/Make) posts here the moment a lead comes in or a call is missed;
   // Miles sends the text-back in seconds. Token-authed per user; respects the on/off
   // switch, quiet hours, and the dedup ledger. This is what makes it truly instant.
-  const inQuietHours = (st: SpeedToLeadState, nowMs: number): boolean => {
-    const q = st.quietHours; if (!q || !q.enabled) return false;
-    const local = new Date(nowMs + (q.tzOffsetMinutes || 0) * 60_000);
-    const h = local.getUTCHours();
-    return h < 8 || h >= 20;
-  };
   app.post<{ Params: { token?: string }; Querystring: { event?: string }; Body: Record<string, unknown> }>('/api/hooks/lead/:token', async (req, reply) => {
     const raw = req.params?.token ?? '';
     const dot = raw.indexOf('.');
@@ -6539,37 +6572,56 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(uid);
     const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     if (!st.webhookSecret || st.webhookSecret !== secret) return reply.code(401).send({ error: 'bad token' });
+    if (data.accountPaused === true) return { ok: true, sent: false, reason: 'This account is paused. Nothing was sent.' };
     // Normalize the payload — accept GHL's field names and common aliases.
     const b = (req.body ?? {}) as Record<string, any>;
     const event = (req.query?.event || b.event || 'new_lead') === 'missed_call' ? 'missed_call' : 'new_lead';
     // A lead is a lead whether or not an SMS fires — record it for the
     // dashboard's real CRM metrics before any feature toggle can bail out.
     appendCrmEvent(data, { type: event === 'missed_call' ? 'missed_call' : 'lead', ts: new Date().toISOString(), name: String(b.name || b.full_name || '').trim() || undefined });
-    if (!st.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Speed-to-Lead is off — turn it on to send.' }; }
     const name = String(b.name || b.full_name || b.first_name || b.contact_name || '').trim();
-    const phone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
-    const lead = { id: b.id ? String(b.id) : `${event}:${phone || name}`, name, phone, service: String(b.service || b.message_type || '').trim() || undefined, source: String(b.source || 'crm-webhook').trim(), message: b.message ? String(b.message) : undefined, createdAt: new Date().toISOString(), contacted: false } as import('./connectors/types.js').Lead;
+    const rawPhone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
+    const phone = e164(rawPhone);
+    // Opt-out flags (or a STOP as the whole message) go on the account's list,
+    // whether or not Speed-to-Lead is on, so no later text reaches this number.
+    const optsOut = payloadOptsOut(b) || isStopMessage(b.message);
+    if (optsOut && phone) addOptOut(data, phone);
+    if (!st.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Speed-to-Lead is off — turn it on to send.' }; }
+    if (rawPhone && !phone) { await authStore.setUserData(uid, data); return { ok: true, sent: false, status: 'bad_phone', reason: smsResult('bad_phone').reason }; }
+    // No CRM id: key on phone plus lower-cased name, so two people in one
+    // household who share a number are both answered.
+    const lead = { id: b.id ? String(b.id) : `${event}:${phone ? `${phone}|${name.toLowerCase()}` : name.toLowerCase()}`, name, phone, service: String(b.service || b.message_type || '').trim() || undefined, source: String(b.source || 'crm-webhook').trim(), message: b.message ? String(b.message) : undefined, createdAt: new Date().toISOString(), contacted: false } as import('./connectors/types.js').Lead;
     const key = leadKey(lead);
-    if (st.contacted.includes(key)) return { ok: true, sent: false, reason: 'Already handled this lead.' };
+    if (st.contacted.includes(key)) {
+      // A replay is not a new lead (the CRM event is not counted again), but an opt-out it carries still counts.
+      if (optsOut && phone) { const fresh = await authStore.getUserData(uid); addOptOut(fresh, phone); await authStore.setUserData(uid, fresh); }
+      return { ok: true, sent: false, reason: 'Already handled this lead.' };
+    }
     const nowMs = Date.now();
-    if (inQuietHours(st, nowMs)) {
+    if (optsOut || isOptedOut(data, phone)) {
+      data.speedToLead = recordContact(st, lead, new Date(nowMs).toISOString(), [], false, undefined, { optedOut: true });
+      await authStore.setUserData(uid, data);
+      return { ok: true, sent: false, held: false, status: 'opted_out', reason: smsResult('opted_out').reason };
+    }
+    if (inQuietHours(effectiveQuietHours(data), nowMs)) {
       data.speedToLead = recordContact(st, lead, new Date(nowMs).toISOString(), [], true);
       await authStore.setUserData(uid, data);
-      return { ok: true, sent: false, reason: 'Held for quiet hours (8 AM–8 PM local).' };
+      return { ok: true, sent: false, held: true, status: 'quiet_hours', reason: 'Held for quiet hours (8 AM–8 PM local).' };
     }
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry || 'local-service', city: (p.serviceAreas || '').split(',')[0]?.trim() || p.city, services: p.services, offers: p.currentOffers };
     let sms: string;
     if (event === 'missed_call') sms = missedCallText(ctx, name);
     else { const { system, user } = instantReplyAgent(lead, ctx); sms = smsFromReply((await generateText({ system, user, maxTokens: 400 })) ?? fallbackInstantReply(lead, ctx)); }
-    const sent = await sendGhl(uid, phone, name, sms, event === 'missed_call' ? 'Send missed-call text-back SMS' : 'Send SMS to new lead');
+    const result = await sendGhl(uid, data, phone, name, sms, event === 'missed_call' ? 'Send missed-call text-back SMS' : 'Send SMS to new lead');
     const nowISO = new Date(nowMs).toISOString();
-    data.speedToLead = recordContact(st, lead, nowISO, sent ? ['sms'] : [], !sent, responseSeconds(lead, nowISO));
+    const failed = result.status === 'failed';
+    data.speedToLead = recordContact(st, lead, nowISO, result.sent ? ['sms'] : [], !result.sent && !failed, responseSeconds(lead, nowISO), { failed, optedOut: result.status === 'opted_out' });
     bumpMeter(data, 'agent_run');
     const agent: ScheduledAgent = { id: 'speed-to-lead', name: 'Speed-to-Lead', task: 'speed_to_lead', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' };
-    appendRun(data, agent, { title: `Speed-to-Lead: ${event === 'missed_call' ? 'missed-call text-back' : 'answered new lead'}${name ? ' — ' + name : ''}`, body: (sent ? 'Sent via GoHighLevel:\n' : 'Drafted (connect GoHighLevel to auto-send):\n') + sms });
+    appendRun(data, agent, { title: `Speed-to-Lead: ${event === 'missed_call' ? 'missed-call text-back' : 'answered new lead'}${name ? ' — ' + name : ''}`, body: smsRunHead(result) + sms });
     await authStore.setUserData(uid, data);
-    return { ok: true, sent, event, held: !sent, message: sms };
+    return { ok: true, sent: result.sent, event, held: !result.sent && !failed, failed, status: result.status, reason: result.reason, message: sms };
   });
 
   // Lead ingest for the plumber loop. The URL secret maps the tenant. This does
@@ -6586,9 +6638,15 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(uid);
     const st = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     if (!st.webhookSecret || !sameToken(st.webhookSecret, secret)) return reply.code(401).send({ error: 'bad token' });
+    if (data.accountPaused === true) return { ok: true, duplicate: false, upserted: false, followedUp: false, reason: 'This account is paused. Nothing was written or sent.' };
     const parsed = normalizeLead((req.body ?? {}) as Record<string, unknown>);
     if (!parsed.lead) return reply.code(400).send({ error: parsed.error });
     const lead = parsed.lead;
+    // Texts go to the E.164 form; a phone that does not parse is never texted.
+    const textPhone = e164(lead.phone);
+    // Remember an opt-out (or a missing consent) so no later event texts this number.
+    if ((lead.optOut || lead.consent === false) && textPhone) addOptOut(data, textPhone);
+    if (textPhone && isOptedOut(data, textPhone)) lead.optOut = true;
     const seen = Array.isArray(data.leadEventIds) ? (data.leadEventIds as string[]) : [];
     const decision = decideLead(parsed.lead, seen, !!st.enabled);
     if (!decision.valid) return reply.code(400).send({ error: decision.reason });
@@ -6609,7 +6667,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const profile = (data.profile ?? {}) as { businessName?: string };
     const follow = planFollowUp({
       name: lead.name,
-      phone: lead.phone,
+      phone: textPhone || undefined,
       consent: lead.consent,
       optOut: lead.optOut,
       source: lead.source,
@@ -6622,15 +6680,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const jobs = Array.isArray(data.jobMarks) ? (data.jobMarks as JobMark[]) : [];
     data.jobMarks = [{ eventId: lead.eventId, stage: 'new', channel: lead.source, serviceLine: (data.profile as { industry?: string } | undefined)?.industry }, ...jobs.filter((j) => j.eventId !== lead.eventId)].slice(0, 500);
     let followedUp = false;
+    let smsOut: SmsResult | null = null;
     if (follow.disposition === 'draft') {
       const drafts = Array.isArray(data.followUpDrafts) ? data.followUpDrafts as unknown[] : [];
       data.followUpDrafts = [{ at: new Date().toISOString(), eventId: lead.eventId, kind: follow.kind, body: follow.body, reason: follow.reason }, ...drafts].slice(0, 100);
     } else if (follow.disposition === 'send' && ghl && connector.runAppTask) {
-      try {
-        const gate = runSopGate('ghl_send', { mode: 'automate', ghl: { phone: lead.phone, message: follow.body } });
-        const sms = gate.disposition === 'block' ? { ok: false } : await connector.runAppTask({ externalUserId: link.externalId, app: 'highlevel_oauth', query: 'Send SMS', params: { phone: lead.phone || '', name: lead.name || '', message: follow.body } });
-        followedUp = !!sms?.ok;
-      } catch { followedUp = false; }
+      // The shared sender: opt-out list, quiet hours, SOP gate, approval log.
+      smsOut = await sendGhl(uid, data, textPhone, lead.name || '', follow.body, 'Send SMS');
+      followedUp = smsOut.sent;
     }
     await authStore.setUserData(uid, data);
     return {
@@ -6641,6 +6698,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       crm: ghl ? 'highlevel_oauth' : 'blocked',
       followedUp,
       followUp: follow.disposition,
+      ...(smsOut ? { sms: smsOut.status } : {}),
       opportunity,
       reason: ghl ? decision.reason : 'GoHighLevel (highlevel_oauth) is not connected for this account. No contact was written and no message was sent.',
     };
@@ -6757,8 +6815,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   });
 
   // Inbound job-complete / reply webhook — the review-request event trigger.
-  // job_complete → send the 1–10 ask. reply → parse the score and route: 9–10 to
-  // the Google link, 1–8 to a private service-recovery task (never a public link).
+  // job_complete → send every customer the same ask with the Google link.
+  // reply → log the rating only (no second text); a STOP reply opts the number out.
   app.post<{ Params: { token?: string }; Querystring: { event?: string }; Body: Record<string, unknown> }>('/api/hooks/job/:token', async (req, reply) => {
     const raw = req.params?.token ?? '';
     const dot = raw.indexOf('.');
@@ -6770,47 +6828,56 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(uid);
     const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     if (!stl.webhookSecret || stl.webhookSecret !== secret) return reply.code(401).send({ error: 'bad token' });
+    if (data.accountPaused === true) return { ok: true, sent: false, reason: 'This account is paused. Nothing was sent.' };
     const rs = (data.reviewRequest as ReviewRequestState) ?? emptyReviewState();
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry };
     const b = (req.body ?? {}) as Record<string, any>;
     const event = (req.query?.event || b.event || 'job_complete') === 'reply' ? 'reply' : 'job_complete';
-    // A completed job is real regardless of the review toggle — record it
-    // (with the job value when the CRM sends one) for the dashboard.
-    if (event === 'job_complete') appendCrmEvent(data, { type: 'job_complete', ts: new Date().toISOString(), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b) });
-    if (!rs.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Review requests are off — turn them on to send.' }; }
     const name = String(b.name || b.full_name || b.contact_name || b.first_name || '').trim();
-    const phone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
+    const rawPhone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
+    const phone = e164(rawPhone) || rawPhone;
+    const eventId = b.id ? String(b.id).trim() : '';
     const nowISO = new Date().toISOString();
-    const ghlApp = await ghlAppFor(uid);
-    const canSend = !!ghlApp && !!connector.runAppTask;
-    const send = (message: string, verb: string): Promise<boolean> => sendGhl(uid, phone, name, message, verb);
 
-    if (event === 'job_complete') {
-      const msg = reviewAskText({ ...ctx, googleReviewUrl: rs.googleReviewUrl });
-      const sent = await send(msg, 'Send review request SMS');
-      rs.pending = [{ phone, name, at: nowISO }, ...rs.pending.filter((x) => x.phone !== phone)].slice(0, 500);
-      rs.log = [{ name: name || 'Customer', phone, outcome: 'asked' as const, at: nowISO }, ...rs.log].slice(0, 200);
+    if (event === 'reply') {
+      const text = String(b.message || b.text || b.body || '');
+      // STOP (or UNSUBSCRIBE, CANCEL, END, QUIT) as the whole reply: never text this number again.
+      if (isStopMessage(text)) {
+        const saved = addOptOut(data, phone);
+        rs.pending = rs.pending.filter((x) => x.phone !== phone);
+        rs.log = [{ name: name || 'Customer', phone, outcome: 'opted_out' as const, at: nowISO }, ...rs.log].slice(0, 200);
+        data.reviewRequest = rs;
+        await authStore.setUserData(uid, data);
+        return { ok: true, sent: false, event, optedOut: saved, reason: saved ? 'Opted out. Miles will not text this number again.' : 'STOP received, but the phone number does not parse.' };
+      }
+      // A reply is only logged with its rating. No second text is sent.
+      const rating = parseRating(text);
+      if (rating == null) return { ok: true, sent: false, reason: 'No 1–10 rating found in the reply.' };
+      const pend = rs.pending.find((x) => x.phone === phone);
+      rs.pending = rs.pending.filter((x) => x.phone !== phone);
+      rs.log = [{ name: pend?.name || name || 'Customer', phone, rating, outcome: 'rated' as const, at: nowISO }, ...rs.log].slice(0, 200);
+      appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `Review reply from ${pend?.name || name || 'a customer'}`, body: `Rated ${rating}/10. Logged only, no text was sent.` });
       data.reviewRequest = rs;
-      bumpMeter(data, 'agent_run');
-      appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `Review request sent${name ? ' — ' + name : ''}`, body: (sent ? 'Sent via GoHighLevel:\n' : 'Drafted (connect GoHighLevel to auto-send):\n') + msg });
       await authStore.setUserData(uid, data);
-      return { ok: true, sent, event, message: msg };
+      return { ok: true, sent: false, event, rating, route: 'logged' };
     }
 
-    // event === 'reply' — grade the score and route.
-    const rating = parseRating(String(b.message || b.text || b.body || ''));
-    if (rating == null) return { ok: true, sent: false, reason: 'No 1–10 rating found in the reply.' };
-    const pend = rs.pending.find((x) => x.phone === phone);
-    rs.pending = rs.pending.filter((x) => x.phone !== phone);
+    // A replayed webhook (same event id, already logged and not failed) never texts twice.
+    if (eventId && rs.log.some((e) => e.eventId === eventId && e.status !== 'failed')) return { ok: true, sent: false, duplicate: true, reason: 'Already handled this job.' };
+    // A completed job is real regardless of the review toggle — record it
+    // (with the job value when the CRM sends one) for the dashboard.
+    appendCrmEvent(data, { type: 'job_complete', ts: nowISO, name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b) });
+    if (!rs.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Review requests are off — turn them on to send.' }; }
     const msg = reviewAskText({ ...ctx, googleReviewUrl: rs.googleReviewUrl });
-    const sent = await send(msg, 'Send review request SMS');
-    rs.log = [{ name: pend?.name || name || 'Customer', phone, rating, outcome: 'asked' as const, at: nowISO }, ...rs.log].slice(0, 200);
-    appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `Review reply from ${name || 'a customer'}`, body: msg });
-    bumpMeter(data, 'agent_run');
+    const result = await sendGhl(uid, data, rawPhone, name, msg, 'Send review request SMS');
+    if (result.sent) rs.pending = [{ phone, name, at: nowISO }, ...rs.pending.filter((x) => x.phone !== phone)].slice(0, 500);
+    rs.log = [{ name: name || 'Customer', phone, outcome: 'asked' as const, at: nowISO, status: result.status, ...(eventId ? { eventId } : {}) }, ...rs.log].slice(0, 200);
     data.reviewRequest = rs;
+    bumpMeter(data, 'agent_run');
+    appendRun(data, { id: 'review-request', name: 'Review Request', task: 'review_responder', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `Review request${result.sent ? ' sent' : ''}${name ? ' — ' + name : ''}`, body: smsRunHead(result) + msg });
     await authStore.setUserData(uid, data);
-    return { ok: true, sent, event, rating, route: 'asked' };
+    return { ok: true, sent: result.sent, event, status: result.status, reason: result.reason, message: msg };
   });
 
   // ── No-Show Recovery (#7) + New Customer Onboarding (#23) — config + status ──
@@ -6846,7 +6913,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   });
 
   // Shared helpers for the token-authed inbound hooks below.
-  const authHook = async (raw: string): Promise<{ uid: string; data: Record<string, unknown> } | null> => {
+  const authHook = async (raw: string): Promise<{ uid: string; data: Record<string, unknown>; paused: boolean } | null> => {
     const dot = raw.indexOf('.');
     if (dot < 1) return null;
     const uid = raw.slice(0, dot);
@@ -6856,8 +6923,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(uid);
     const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     if (!stl.webhookSecret || stl.webhookSecret !== secret) return null;
-    return { uid, data };
+    return { uid, data, paused: data.accountPaused === true };
   };
+  const PAUSED_HOOK = { ok: true, sent: false, reason: 'This account is paused. Nothing was sent.' };
   const hookField = (b: Record<string, any>, ...keys: string[]): string => {
     for (const k of keys) if (b[k]) return String(b[k]).trim();
     return '';
@@ -6868,23 +6936,28 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const auth = await authHook(req.params?.token ?? '');
     if (!auth) return reply.code(401).send({ error: 'bad token' });
     const { uid, data } = auth;
+    if (auth.paused) return PAUSED_HOOK;
     const au = (data.automations as AutomationsState) ?? emptyAutomationsState();
+    const b = (req.body ?? {}) as Record<string, any>;
+    const eventId = b.id ? String(b.id).trim() : '';
+    // A replayed webhook (same event id, already logged and not failed) never texts twice.
+    if (eventId && au.noShow.log.some((e) => e.eventId === eventId && e.status !== 'failed')) return { ok: true, sent: false, duplicate: true, reason: 'Already handled this no-show.' };
     appendCrmEvent(data, { type: 'no_show', ts: new Date().toISOString() });
     if (!au.noShow.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'No-show recovery is off.' }; }
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry };
-    const b = (req.body ?? {}) as Record<string, any>;
     const name = hookField(b, 'name', 'full_name', 'contact_name', 'first_name');
-    const phone = hookField(b, 'phone', 'phone_number', 'contact_phone');
+    const rawPhone = hookField(b, 'phone', 'phone_number', 'contact_phone');
+    const phone = e164(rawPhone) || rawPhone;
     const msg = noShowText(ctx, name, au.noShow.calendarUrl);
-    const sent = await sendGhl(uid, phone, name, msg, 'Send no-show rebook SMS');
+    const result = await sendGhl(uid, data, rawPhone, name, msg, 'Send no-show rebook SMS');
     const nowISO = new Date().toISOString();
-    au.noShow.log = [{ name: name || 'Customer', phone, at: nowISO }, ...au.noShow.log].slice(0, 200);
+    au.noShow.log = [{ name: name || 'Customer', phone, at: nowISO, status: result.status, ...(eventId ? { eventId } : {}) }, ...au.noShow.log].slice(0, 200);
     data.automations = au;
     bumpMeter(data, 'agent_run');
-    appendRun(data, { id: 'no-show', name: 'No-Show Recovery', task: 'lead_followup', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `No-show rebook${name ? ' — ' + name : ''}`, body: (sent ? 'Sent via GoHighLevel:\n' : 'Drafted (connect GoHighLevel to auto-send):\n') + msg });
+    appendRun(data, { id: 'no-show', name: 'No-Show Recovery', task: 'lead_followup', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `No-show rebook${name ? ' — ' + name : ''}`, body: smsRunHead(result) + msg });
     await authStore.setUserData(uid, data);
-    return { ok: true, sent, message: msg };
+    return { ok: true, sent: result.sent, status: result.status, reason: result.reason, message: msg };
   });
 
   // Deal Closed Won → welcome text + stop prospect nurtures (#23).
@@ -6892,8 +6965,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const auth = await authHook(req.params?.token ?? '');
     if (!auth) return reply.code(401).send({ error: 'bad token' });
     const { uid, data } = auth;
+    if (auth.paused) return PAUSED_HOOK;
     const au = (data.automations as AutomationsState) ?? emptyAutomationsState();
     const b = (req.body ?? {}) as Record<string, any>;
+    const eventId = b.id ? String(b.id).trim() : '';
+    // A replayed webhook (same event id, already logged and not failed) never texts twice.
+    if (eventId && au.onboarding.log.some((e) => e.eventId === eventId && e.status !== 'failed')) return { ok: true, sent: false, duplicate: true, reason: 'Already welcomed this customer.' };
     // A won deal is revenue whether or not the welcome text fires — record
     // it (with the deal amount when the CRM sends one) for the dashboard.
     appendCrmEvent(data, { type: 'closed_won', ts: new Date().toISOString(), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b) });
@@ -6901,21 +6978,25 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry };
     const name = hookField(b, 'name', 'full_name', 'contact_name', 'first_name');
-    const phone = hookField(b, 'phone', 'phone_number', 'contact_phone');
+    const rawPhone = hookField(b, 'phone', 'phone_number', 'contact_phone');
+    const phone = e164(rawPhone) || rawPhone;
     const msg = onboardingText(ctx, name);
-    const sent = await sendGhl(uid, phone, name, msg, 'Send onboarding welcome SMS');
+    const result = await sendGhl(uid, data, rawPhone, name, msg, 'Send onboarding welcome SMS');
     // Critical: stop prospect nurtures for this now-paying customer. We add their
     // key to the Speed-to-Lead ledger so the responder never re-touches them.
     const stl = (data.speedToLead as SpeedToLeadState) ?? emptyStlState();
     const key = `id:${(b.id ? String(b.id) : phone || name).trim()}`;
     if (key && !stl.contacted.includes(key)) { stl.contacted = [...stl.contacted, key].slice(-1000); data.speedToLead = stl; }
     const nowISO = new Date().toISOString();
-    au.onboarding.log = [{ name: name || 'Customer', phone, at: nowISO }, ...au.onboarding.log].slice(0, 200);
+    au.onboarding.log = [{ name: name || 'Customer', phone, at: nowISO, status: result.status, ...(eventId ? { eventId } : {}) }, ...au.onboarding.log].slice(0, 200);
     data.automations = au;
     bumpMeter(data, 'agent_run');
-    appendRun(data, { id: 'onboarding', name: 'New Customer Onboarding', task: 'lead_followup', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `Welcomed new customer${name ? ' — ' + name : ''}`, body: (sent ? 'Sent via GoHighLevel + stopped prospect nurtures:\n' : 'Drafted + stopped prospect nurtures (connect GoHighLevel to auto-send):\n') + msg });
+    const head = result.sent ? 'Sent via GoHighLevel + stopped prospect nurtures:\n'
+      : result.status === 'not_connected' ? 'Drafted + stopped prospect nurtures (connect GoHighLevel to auto-send):\n'
+      : `Stopped prospect nurtures. ${result.reason}\n`;
+    appendRun(data, { id: 'onboarding', name: 'New Customer Onboarding', task: 'lead_followup', time: '', days: [], enabled: true, tzOffset: 0, createdAt: '' }, { title: `Welcomed new customer${name ? ' — ' + name : ''}`, body: head + msg });
     await authStore.setUserData(uid, data);
-    return { ok: true, sent, message: msg, nurturesStopped: true };
+    return { ok: true, sent: result.sent, status: result.status, reason: result.reason, message: msg, nurturesStopped: true };
   });
 
   app.post('/api/speed-to-lead/run', async (req, reply) => {
@@ -7125,6 +7206,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     for (const uid of ids) {
       try {
         const data = await authStore.getUserData(uid);
+        // A paused account runs nothing unattended: no agents, posts, skills or texts.
+        if (data.accountPaused === true) continue;
         const agents = (data.schedules as ScheduledAgent[]) ?? [];
         const delivered: Array<{ agent: ScheduledAgent; run: { title: string; body: string } }> = [];
         let changed = false;

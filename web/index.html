@@ -4921,6 +4921,7 @@ function stlCard(st){
   if(on){
     card.append(miniStats([['Answered today',st.today||0],['Avg response',st.avgResponse||', '],['Total answered',st.total||0]]));
     if(st.held) card.append(ovNudge('⚠︎ '+st.held+' draft'+(st.held===1?'':'s')+' ready but not sent, connect your CRM (GoHighLevel) in Integrations so replies send automatically.'));
+    if(st.failed) card.append(ovNudge('⚠︎ '+st.failed+' text'+(st.failed===1?'':'s')+' failed, not sent. GoHighLevel did not accept '+(st.failed===1?'it':'them')+'.'));
     const run=el('button',null,'Run now'); run.style.cssText='margin-top:12px;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans)';
     run.onclick=async()=>{ run.disabled=true; run.textContent='Answering new leads…'; try{ const r=await(await fetch('/api/speed-to-lead/run',{method:'POST'})).json(); toast(r.ran?('Answered '+((r.stats&&r.stats.today)||0)+' today'):'No new leads right now'); }catch(e){} openOverview(); };
     card.append(run);
