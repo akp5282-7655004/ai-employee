@@ -318,6 +318,12 @@ function ratio(spend: number, count: number): number | null {
   return money(spend / count);
 }
 
+/** A blank or "unknown" channel shows as Unknown, so spend and jobs land in the same row. */
+function channelLabel(channel: string | undefined): string {
+  const text = (channel || '').trim();
+  return !text || text.toLowerCase() === 'unknown' ? 'Unknown' : text;
+}
+
 export function rollupJobs(args: {
   spend: { channel: string; serviceLine?: string; amount: number }[];
   jobs: JobMark[];
@@ -326,9 +332,9 @@ export function rollupJobs(args: {
   const group = (keyOf: (channel: string, line: string) => string) => {
     const map = new Map<string, PerfRow>();
     const ensure = (key: string) => map.get(key) ?? map.set(key, { key, spend: 0, leads: 0, qualified: 0, booked: 0, won: 0, jobValue: 0, cpl: null, costPerQualified: null, costPerBookedJob: null, cac: null, roi: null }).get(key)!;
-    for (const s of args.spend) ensure(keyOf(s.channel || 'unknown', s.serviceLine || 'general')).spend += s.amount || 0;
+    for (const s of args.spend) ensure(keyOf(channelLabel(s.channel), s.serviceLine || 'general')).spend += s.amount || 0;
     for (const job of args.jobs) {
-      const row = ensure(keyOf(job.channel || 'unknown', job.serviceLine || 'general'));
+      const row = ensure(keyOf(channelLabel(job.channel), job.serviceLine || 'general'));
       row.leads += 1;
       if (job.stage === 'qualified' || job.stage === 'booked' || job.stage === 'won') row.qualified += 1;
       if (job.stage === 'booked' || job.stage === 'won') row.booked += 1;

@@ -120,6 +120,40 @@ export function validateIntake(pack: CommandPack, monthlyBudget: number, targetL
 export interface ClaimsCheck {
   ok: boolean;
   violations: string[];
+  /** Things the owner must see before using the copy (they do not flip ok). */
+  warnings: string[];
+}
+
+/**
+ * Financing wording that needs a terms line. "0% financing", "APR", "$99/mo",
+ * "$0 down" and "no interest" are credit offers: they need lender terms next to
+ * them, so Miles flags them for the owner instead of running them bare.
+ */
+const FINANCING_PATTERNS: RegExp[] = [
+  /\b0\s?%/,
+  /\bzero\s+(percent|interest|down)\b/i,
+  /\bAPR\b/i,
+  /\$\s?\d[\d,]*(\.\d+)?\s?\/\s?(mo|mos|month)\b/i,
+  /\$\s?\d[\d,]*(\.\d+)?\s+(a|per)\s+month\b/i,
+  /\$\s?0\s+down\b/i,
+  /\bno\s+money\s+down\b/i,
+  /\bno[-\s]interest\b/i,
+  /\binterest[-\s]free\b/i,
+  /\bpayments\s+as\s+low\s+as\b/i,
+];
+const FINANCING_TERMS = /\b(with|on|upon|subject to)\s+(approved\s+credit|credit\s+approval)\b|\bsee\s+(full\s+)?terms\b|\bterms\s+(and\s+conditions\s+)?apply\b|\bOAC\b/i;
+
+/** Warnings for financing claims that have no terms line in the same copy. */
+export function financingWarnings(text: string): string[] {
+  const body = String(text || '');
+  if (!body || FINANCING_TERMS.test(body)) return [];
+  const hits: string[] = [];
+  for (const pattern of FINANCING_PATTERNS) {
+    const hit = pattern.exec(body)?.[0];
+    if (hit && !hits.includes(hit.trim())) hits.push(hit.trim());
+  }
+  if (!hits.length) return [];
+  return [`Financing claim without terms: ${hits.map((h) => `"${h}"`).join(', ')}. Add a terms line such as "With approved credit. See terms." and check it with your lender before this runs.`];
 }
 
 /** Universal claims that no vertical may make. */
@@ -146,5 +180,5 @@ export function checkClaims(pack: CommandPack, text: string): ClaimsCheck {
   for (const { pattern, reason } of pack.compliance.bannedPatterns) {
     if (pattern.test(text)) violations.push(`${reason}: "${pattern.exec(text)?.[0] ?? ''}"`);
   }
-  return { ok: violations.length === 0, violations };
+  return { ok: violations.length === 0, violations, warnings: financingWarnings(text) };
 }

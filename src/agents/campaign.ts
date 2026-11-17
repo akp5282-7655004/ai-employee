@@ -359,7 +359,7 @@ function rsaFor(theme: string, ctx: CampaignCtx, brand: string): RsaSpec {
       'Ask about timing.',
     ], 90),
     fitCopy([`Schedule ${themeTitle.toLowerCase()} with a local crew.`, 'Schedule a visit with a local crew.'], 90),
-    'Honest pricing. You approve the campaign before it is created paused.',
+    'Honest pricing. Call to schedule.',
   ].filter((line, i, all) => line && line.length <= 90 && all.indexOf(line) === i);
   return { headlines: headlines.slice(0, 15), descriptions: descriptions.slice(0, 4) };
 }

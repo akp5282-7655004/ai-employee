@@ -14,7 +14,7 @@ import { createReadThrough, withTimeout } from './connectors/readcache.js';
 import { withUserDataCache } from './db/cache.js';
 import { buildSnapshot, readSnapshot, snapshotAgeMs, spendRowsOf, STALE_MS, type PlatformSnapshot } from './metrics/snapshot.js';
 import { loadConfig, pipedreamReady } from './config.js';
-import { getPack, listPacks, validateIntake } from './packs/index.js';
+import { financingWarnings, getPack, listPacks, validateIntake } from './packs/index.js';
 import { LSA_TRADES, LSA_BLENDED, LSA_VS_GOOGLE, BENCHMARK_META, BENCHMARK_HUB, hubCoverage } from './packs/benchmarks.js';
 import { generateAdCopy, type CreativeRequest } from './creative/creative.js';
 import { falReady, falGenerateImage, falGenerateVideo, falGenerateAudio, type Aspect } from './creative/fal.js';
@@ -50,7 +50,7 @@ import { getMetrics } from './metrics/resolver.js';
 import { buildOperatorView } from './dashboard/operator.js';
 import { buildLaunchView, previewSpec } from './dashboard/launch.js';
 import { buildBusinessProfile } from './profile/business.js';
-import { appendCrmEvent, amountFrom, crmLiveValues, calcLiveValues, dealsLiveValues } from './metrics/crmledger.js';
+import { appendCrmEvent, amountFrom, crmEventIdFrom, crmEventTsFrom, crmLiveValues, calcLiveValues, dealsLiveValues } from './metrics/crmledger.js';
 import { buildLocalPresenceAudit, gbpCompletenessScore, type AuditAnswer } from './agents/localpresence.js';
 import { appendApproval, approvalLog, defaultAutonomy, normalizeAutonomy, TOS_VERSION, type ApprovalEntry } from './agents/approvallog.js';
 import { listSkills as listLibrarySkills, readSkill as readLibrarySkill } from './skills/library.js';
@@ -157,7 +157,7 @@ import {
 } from './agents/speed_to_lead.js';
 import { aggregateNetwork, type WorkspaceSignal } from './usage/network.js';
 import { deliveryStatus, sendEmail, sendSms, smsExcerpt } from './delivery/send.js';
-import { parseBudget, toE164 } from './identity/fields.js';
+import { parseBudget, toE164, trimText } from './identity/fields.js';
 import { grantedIdentity, launchCreditStatus, maybeGrantLaunchCredit, LAUNCH_WAIT } from './billing/launchcredit.js';
 import { addLead, leadCounts, readLeads, setLeadStatus } from './crm/leads.js';
 import { searchCompetitors } from './research/places.js';
@@ -187,6 +187,23 @@ export interface ServerDeps {
 }
 
 const SESSION_DAYS = 30;
+
+/** Fields PUT /api/profile keeps. Anything else in the body is dropped. */
+const PROFILE_KEYS = new Set([
+  'businessName', 'industry', 'trade', 'vertical', 'category', 'yearStarted', 'employees', 'phone', 'email', 'website', 'websitePlatform', 'description',
+  'address', 'city', 'state', 'zip', 'serviceAreas', 'services', 'topServices', 'avgTicket', 'averageJobValue', 'currentOffers', 'financing',
+  'goal', 'goalChoice', 'goalConfirmed', 'leadGoal', 'leadPeriod', 'leadsPerDay', 'closeRate', 'targetCpa', 'targetCpl', 'dailyBudget', 'monthlyBudget',
+  'idealCustomer', 'runningAds', 'adSpend', 'adResults', 'adChannel', 'competitors', 'targetKeywords', 'keywordFocus', 'jobsToAvoid',
+  'tagline', 'slogan', 'brandVoice', 'fonts', 'audience', 'brandAvoid', 'brandColors', 'logo', 'hours', 'license',
+  'gbpUrl', 'gbpClaimed', 'facebook', 'instagram', 'linkedin', 'tiktok', 'youtube', 'postingFrequency',
+  'collectsEmails', 'emailTool', 'emailListSize', 'sendsNewsletter',
+]);
+const PROFILE_TEXT_MAX = 2000;
+
+/** True when a request field was actually typed (not left out or blank). */
+function typedValue(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== '';
+}
 
 // Served from the repo root (npm start / npm run dev both run from there).
 const WEB_DIR = join(process.cwd(), 'web');
@@ -1555,7 +1572,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const message = (req.body?.message ?? '').trim().slice(0, 2000);
     if (!message) return reply.code(400).send({ error: 'Say a little about what you think.' });
     const ownerId = await adminUserId();
-    if (!ownerId) return { ok: true }; // no owner yet — nothing to store against
+    if (!ownerId) return reply.code(503).send({ ok: false, error: 'Feedback is not set up yet, so this was not sent.' });
     const data = await authStore.getUserData(ownerId);
     const entry = {
       id: newToken().slice(0, 10),
@@ -1605,7 +1622,19 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    const body = (req.body ?? {}) as Record<string, unknown>;
+    const raw = (req.body ?? {}) as Record<string, unknown>;
+    // Keep only fields the profile knows about, so a stray or oversized key cannot ride along.
+    const body: Record<string, unknown> = {};
+    for (const key of Object.keys(raw)) if (PROFILE_KEYS.has(key)) body[key] = raw[key];
+    for (const [key, value] of Object.entries(body)) {
+      if (typeof value === 'string' && value.length > PROFILE_TEXT_MAX) return reply.code(400).send({ error: `Keep this under ${PROFILE_TEXT_MAX} characters.`, field: key });
+      if (value != null && typeof value === 'object') return reply.code(400).send({ error: 'Enter plain text here.', field: key });
+    }
+    if ('businessName' in body && trimText(body.businessName) === '') {
+      // A blank name never wipes a saved one. Before a name is saved, a blank is simply not stored.
+      if (trimText((data.profile as Record<string, unknown> | undefined)?.businessName)) return reply.code(400).send({ error: 'Enter your business name.', field: 'businessName' });
+      delete body.businessName;
+    }
     const next: Record<string, unknown> = { ...((data.profile as object) ?? {}), ...body, updatedAt: new Date().toISOString() };
     if ('dailyBudget' in body || 'targetCpa' in body || 'avgTicket' in body) {
       for (const key of ['dailyBudget', 'targetCpa', 'avgTicket'] as const) {
@@ -1823,6 +1852,20 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const data = await authStore.getUserData(u.id);
     const miles = milesOf(data);
     const body = req.body ?? {};
+    // Caps are the safety floor. Check every typed cap before anything changes, so a
+    // negative or zero cap can never switch a check off.
+    const caps: { dailyBudget?: number; monthlyCeiling?: number; maxChangePct?: number } = {};
+    for (const key of ['dailyBudget', 'monthlyCeiling'] as const) {
+      if (!typedValue(body[key])) continue;
+      const parsed = parseBudget(body[key]);
+      if (!parsed.ok) return reply.code(400).send({ error: parsed.error, field: key });
+      caps[key] = parsed.value;
+    }
+    if (typedValue(body.maxChangePct)) {
+      const pct = Number(body.maxChangePct);
+      if (!Number.isFinite(pct) || pct < 1 || pct > 100) return reply.code(400).send({ error: 'Max change must be between 1 and 100 percent.', field: 'maxChangePct' });
+      caps.maxChangePct = pct;
+    }
     const nextMode = body.mode === 'automate' || body.mode === 'hybrid' || body.mode === 'manual' ? body.mode : undefined;
     if (!nextMode && !miles.bundle) return reply.code(400).send({ error: 'Pick automate, hybrid, or manual. Nothing was created.' });
     if (nextMode) miles.pendingMode = nextMode;
@@ -1839,9 +1882,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         if (value === 'automate' || value === 'hybrid' || value === 'manual') miles.bundle.setup.areaModes[area] = value;
       }
     }
-    if (body.dailyBudget) miles.bundle.setup.caps.dailyBudget = Number(body.dailyBudget);
-    if (body.monthlyCeiling) miles.bundle.setup.caps.monthlyCeiling = Number(body.monthlyCeiling);
-    if (body.maxChangePct) miles.bundle.setup.caps.maxChangePct = Number(body.maxChangePct);
+    if (caps.dailyBudget != null) miles.bundle.setup.caps.dailyBudget = caps.dailyBudget;
+    if (caps.monthlyCeiling != null) miles.bundle.setup.caps.monthlyCeiling = caps.monthlyCeiling;
+    if (caps.maxChangePct != null) miles.bundle.setup.caps.maxChangePct = caps.maxChangePct;
     rememberMiles(data, miles, `Mode is ${miles.bundle.setup.mode}. Nothing was created by this change. Daily cap $${miles.bundle.setup.caps.dailyBudget}. Max change ${miles.bundle.setup.caps.maxChangePct}% a day.`);
     await authStore.setUserData(u.id, data);
     return { ok: true, mode: miles.bundle.setup.mode, created: false, enabled: false, setup: miles.bundle.setup };
@@ -2933,7 +2976,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
 
   const liveReadersFor = async (uid: string, data: Record<string, unknown>, days: number) => {
     const snap = await getSnapshot(uid, data);
-    const adSpend = snap?.adSpend;
+    // Snapshot spend is the trailing 30 days. Use it only for a 30-day range, so
+    // cost per lead and cost per job never divide 30-day spend by 7-day leads.
+    const adSpend = days === 30 ? snap?.adSpend : undefined;
     const ledger = crmLiveValues(data, days);
     const jobs = Array.isArray(data.jobMarks) ? (data.jobMarks as JobMark[]) : [];
     const fromJobs: Record<string, number> = {};
@@ -3159,7 +3204,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         : null,
       reviewOn: !!((d.reviewRequest as { enabled?: boolean } | undefined)?.enabled),
       speedOn: stlOn,
-      metrics: metricRows.map((m) => ({ key: m.key, value: m.value, prior_value: m.prior_value, source: m.source })),
+      metrics: metricRows.map((m) => ({ key: m.key, value: m.value, prior_value: m.prior_value, source: m.source, ...(m.noValue ? { noValue: true } : {}) })),
       campaigns: (snap?.campaigns ?? []).map((c) => ({ platform: c.platform, name: c.campaign, spend: c.spend || 0, leads: c.conversions || 0, impressions: c.impressions || 0, clicks: c.clicks || 0, status: c.status })),
       recommendations: openRecs,
       inbox: miles.inbox.filter((row) => row.status === 'queued').map((row) => ({ id: row.id, title: row.title, reason: row.reason })),
@@ -3753,13 +3798,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const subject = (m?.[1] || item.title).replace(/[*#]/g, '').trim().slice(0, 160);
       const bodyText = String(item.body || '').replace(/\*\*/g, '').replace(/^#+\s*/gm, '');
       try {
-        await sendEmail(u.email, subject, bodyText);
-        emailed = true;
+        const sent = await sendEmail(u.email, subject, bodyText);
+        emailed = sent.ok === true;
       } catch {
         /* delivery is best-effort */
       }
     }
-    return { ok: true, status, emailed, emailReady: deliveryStatus().email };
+    return { ok: true, status, emailed, emailReady: deliveryStatus().email, pushed: false, note: 'Approved and logged. Nothing was pushed to an ad platform.' };
   });
   app.post<{ Body: { id?: string } }>('/api/review/dismiss', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -3779,11 +3824,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const p = (data.profile ?? {}) as Record<string, string>;
+    const typedBudget = parseBudget(req.body?.dailyBudget, { allowZero: true });
+    if (!typedBudget.ok) return reply.code(400).send({ error: typedBudget.error, field: 'dailyBudget' });
     const ctx = { business: p.businessName, trade: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), services: p.services, offers: p.currentOffers };
-    const spec = buildCampaignSpec({ goal: req.body?.goal, dailyBudget: req.body?.dailyBudget, finalUrl: req.body?.finalUrl || p.website, locations: req.body?.locations }, ctx);
+    const spec = buildCampaignSpec({ goal: req.body?.goal, dailyBudget: typedBudget.value > 0 ? typedBudget.value : undefined, finalUrl: req.body?.finalUrl || p.website, locations: req.body?.locations }, ctx);
     let gadsConnected = false;
     try { gadsConnected = (await accountsList(u.id)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
-    return { ok: true, spec, summary: campaignSummary(spec), gadsConnected };
+    const warnings = financingWarnings(spec.adGroups.flatMap((g) => [...g.rsa.headlines, ...g.rsa.descriptions]).join(' \n '));
+    return { ok: true, spec, summary: campaignSummary(spec), gadsConnected, warnings };
   });
 
   // One-click AI auto-fill: build the whole campaign from the business profile and
@@ -4675,8 +4723,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const miles = milesOf(data);
     const cap = miles.bundle?.setup.caps.dailyBudget || Number(p.dailyBudget) || 0;
     const share = miles.bundle?.setup.googleShare;
-    const typed = Number(req.body?.dailyBudget);
-    const explicit = Number.isFinite(typed) && typed > 0 ? Math.round(typed) : undefined;
+    const typedBudget = parseBudget(req.body?.dailyBudget, { allowZero: true });
+    if (!typedBudget.ok) return reply.code(400).send({ error: typedBudget.error, field: 'dailyBudget' });
+    const explicit = typedBudget.value > 0 ? Math.round(typedBudget.value) : undefined;
     let daily: number | undefined = explicit;
     let budgetNote = '';
     if (daily == null && share != null && cap > 0) {
@@ -4724,10 +4773,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const monthly = miles.bundle?.setup.caps.monthlyCeiling || 0;
     if (monthly > 0 && spec.dailyBudget * 30 > monthly) issues.push(`$${spec.dailyBudget} a day is about $${spec.dailyBudget * 30} a month, above your $${monthly} monthly cap.`);
     const status = await metaAccountStatus(u.id);
+    // Claims check: financing wording with no terms line is shown to the owner before use.
+    const warnings = financingWarnings([spec.ad.headline, spec.ad.primaryText, spec.ad.description].filter(Boolean).join(' \n '));
     return {
       ok: true,
       spec,
       issues,
+      warnings,
       budgetNote,
       plan: {
         objective: 'Leads',
@@ -6128,7 +6180,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }
     if (source === 'leads') {
       const l = await safeConn(connector.getLeads ? () => connector.getLeads!(userId) : undefined, []);
-      return { text: l.map((x) => `${x.name || 'Lead'}, ${x.service || 'inquiry'} (via ${x.source || 'unknown'})`).join('\n'), summary: `${l.length} leads` };
+      return { text: l.map((x) => `${x.name || 'Lead'}, ${x.service || 'inquiry'} (via ${x.source || 'Unknown'})`).join('\n'), summary: `${l.length} leads` };
     }
     if (source === 'social') {
       const m = await safeConn(connector.getSocialMetrics ? () => connector.getSocialMetrics!(userId) : undefined, null);
@@ -6140,7 +6192,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }
     if (source === 'deals') {
       const d2 = await safeConn(connector.getDeals ? () => connector.getDeals!(userId) : undefined, []);
-      return { text: d2.map((x) => `$${x.value} ${x.won ? 'won' : 'lost'} via ${x.utmSource || 'unknown'}`).join('\n'), summary: `${d2.length} deals` };
+      return { text: d2.map((x) => `$${x.value} ${x.won ? 'won' : 'lost'} via ${x.utmSource || 'Unknown'}`).join('\n'), summary: `${d2.length} deals` };
     }
     return { text: '', summary: '' };
   }
@@ -6479,7 +6531,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       }
       const held = channels.length === 0;
       state = recordContact(state, lead, nowISO, channels, held, responseSeconds(lead, nowISO));
-      blocks.push(`• ${lead.name || 'New lead'}, ${lead.service || 'inquiry'} (via ${lead.source || 'website'}): ${held ? 'drafted, ready to send' : `sent ${channels.join(' + ')}`}\n${reply}`);
+      blocks.push(`• ${lead.name || 'New lead'}, ${lead.service || 'inquiry'} (via ${lead.source || 'Unknown'}): ${held ? 'drafted, ready to send' : `sent ${channels.join(' + ')}`}\n${reply}`);
     }
     data.speedToLead = state;
     const title = `Speed-to-Lead: answered ${fresh.length} new lead${fresh.length === 1 ? '' : 's'}`;
@@ -6542,15 +6594,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     // Normalize the payload — accept GHL's field names and common aliases.
     const b = (req.body ?? {}) as Record<string, any>;
     const event = (req.query?.event || b.event || 'new_lead') === 'missed_call' ? 'missed_call' : 'new_lead';
-    // A lead is a lead whether or not an SMS fires — record it for the
-    // dashboard's real CRM metrics before any feature toggle can bail out.
-    appendCrmEvent(data, { type: event === 'missed_call' ? 'missed_call' : 'lead', ts: new Date().toISOString(), name: String(b.name || b.full_name || '').trim() || undefined });
-    if (!st.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Speed-to-Lead is off — turn it on to send.' }; }
     const name = String(b.name || b.full_name || b.first_name || b.contact_name || '').trim();
     const phone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
     const lead = { id: b.id ? String(b.id) : `${event}:${phone || name}`, name, phone, service: String(b.service || b.message_type || '').trim() || undefined, source: String(b.source || 'crm-webhook').trim(), message: b.message ? String(b.message) : undefined, createdAt: new Date().toISOString(), contacted: false } as import('./connectors/types.js').Lead;
     const key = leadKey(lead);
     if (st.contacted.includes(key)) return { ok: true, sent: false, reason: 'Already handled this lead.' };
+    // A lead is a lead whether or not an SMS fires — record it for the
+    // dashboard's real CRM metrics before any feature toggle can bail out.
+    // A lead already handled (or a retried webhook with the same id) is not counted again.
+    appendCrmEvent(data, { type: event === 'missed_call' ? 'missed_call' : 'lead', ts: crmEventTsFrom(b), name: String(b.name || b.full_name || '').trim() || undefined, id: crmEventIdFrom(b) });
+    if (!st.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Speed-to-Lead is off — turn it on to send.' }; }
     const nowMs = Date.now();
     if (inQuietHours(st, nowMs)) {
       data.speedToLead = recordContact(st, lead, new Date(nowMs).toISOString(), [], true);
@@ -6777,7 +6830,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const event = (req.query?.event || b.event || 'job_complete') === 'reply' ? 'reply' : 'job_complete';
     // A completed job is real regardless of the review toggle — record it
     // (with the job value when the CRM sends one) for the dashboard.
-    if (event === 'job_complete') appendCrmEvent(data, { type: 'job_complete', ts: new Date().toISOString(), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b) });
+    if (event === 'job_complete') appendCrmEvent(data, { type: 'job_complete', ts: crmEventTsFrom(b), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b), id: crmEventIdFrom(b, ['job_id', 'jobId', 'appointment_id', 'opportunity_id']) });
     if (!rs.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Review requests are off — turn them on to send.' }; }
     const name = String(b.name || b.full_name || b.contact_name || b.first_name || '').trim();
     const phone = String(b.phone || b.phone_number || b.contact_phone || '').trim();
@@ -6869,7 +6922,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!auth) return reply.code(401).send({ error: 'bad token' });
     const { uid, data } = auth;
     const au = (data.automations as AutomationsState) ?? emptyAutomationsState();
-    appendCrmEvent(data, { type: 'no_show', ts: new Date().toISOString() });
+    appendCrmEvent(data, { type: 'no_show', ts: crmEventTsFrom((req.body ?? {}) as Record<string, unknown>), id: crmEventIdFrom((req.body ?? {}) as Record<string, unknown>, ['appointment_id', 'appointmentId']) });
     if (!au.noShow.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'No-show recovery is off.' }; }
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry };
@@ -6896,7 +6949,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const b = (req.body ?? {}) as Record<string, any>;
     // A won deal is revenue whether or not the welcome text fires — record
     // it (with the deal amount when the CRM sends one) for the dashboard.
-    appendCrmEvent(data, { type: 'closed_won', ts: new Date().toISOString(), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b) });
+    appendCrmEvent(data, { type: 'closed_won', ts: crmEventTsFrom(b), name: String(b.name || b.full_name || '').trim() || undefined, amount: amountFrom(b), id: crmEventIdFrom(b, ['opportunity_id', 'opportunityId', 'deal_id', 'dealId']) });
     if (!au.onboarding.enabled) { await authStore.setUserData(uid, data); return { ok: true, sent: false, reason: 'Onboarding is off.' }; }
     const p = (data.profile ?? {}) as Record<string, string>;
     const ctx = { business: p.businessName, trade: p.industry };
@@ -7648,7 +7701,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       return reply.code(400).send({ error: r?.note || 'Gmail rejected the send — reconnect Gmail in Integrations and try again.' });
     }
     // Fallback: the app's own email provider, when configured.
-    if (deliveryStatus().email) { await sendEmail(to, subject, body); await meterUser(u.id, 'agent_run'); await logSend('provider'); return { ok: true, via: 'provider', note: `Sent to ${to}.` }; }
+    if (deliveryStatus().email) {
+      const sent = await sendEmail(to, subject, body);
+      if (!sent.ok) return reply.code(502).send({ ok: false, error: `Not sent. ${sent.note || 'The email provider did not accept it.'}` });
+      await meterUser(u.id, 'agent_run');
+      await logSend('provider');
+      return { ok: true, via: 'provider', note: `Sent to ${to}.` };
+    }
     return reply.code(400).send({ error: 'Connect Gmail in Integrations so Miles can send email as you (or configure an email provider on Render).' });
   });
 

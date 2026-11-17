@@ -2332,7 +2332,7 @@
       "key": "crm.job_revenue",
       "platform": "crm",
       "label": "Job Revenue",
-      "description": "Revenue from completed jobs",
+      "description": "Revenue from won deals",
       "api_field": "crm.job_revenue",
       "unit": "currency",
       "format": "currency",

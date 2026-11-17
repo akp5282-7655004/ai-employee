@@ -20,6 +20,8 @@ export interface MetricResult {
   prior_value: number;
   series: number[];
   source: 'live' | 'sample';
+  /** Live, but there is no number: a real denominator is 0. Show a dash. */
+  noValue?: boolean;
 }
 
 /** Deterministic pseudo-random stream from a string seed (stable dashboards). */
@@ -50,7 +52,8 @@ export interface LiveReaders {
   /** Total ad spend for the range, or undefined when not connected. */
   googleAdsCost?: (days: number) => Promise<number | undefined>;
   /** Precomputed live values by metric key (CRM ledger, calc blends, …).
-   *  Any key present here is REAL data and overrides the sample. */
+   *  Any key present here is REAL data and overrides the sample. NaN means
+   *  live with no value (a real denominator is 0). */
   values?: Record<string, number | undefined>;
 }
 
@@ -59,6 +62,9 @@ export async function getMetric(key: string, days: number, live: LiveReaders = {
   if (!entry) return undefined;
   const base: MetricResult = { key, label: entry.label, format: entry.format, direction: entry.direction, source: 'sample', ...sampleResult(entry, days) };
   const lv = live.values?.[key];
+  if (typeof lv === 'number' && Number.isNaN(lv)) {
+    return { ...base, value: 0, prior_value: 0, series: [], source: 'live', noValue: true };
+  }
   if (typeof lv === 'number' && Number.isFinite(lv)) {
     // Live values carry no prior-period series yet — show the number alone
     // (prior 0 = no delta shown) rather than a fabricated trend.
@@ -78,7 +84,7 @@ export async function getMetric(key: string, days: number, live: LiveReaders = {
 /** Numbers a decision is allowed to use. Sample placeholders are dropped. */
 export function liveFacts(results: Pick<MetricResult, 'key' | 'value' | 'source'>[]): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const row of results) if (row.source === 'live') out[row.key] = row.value;
+  for (const row of results) if (row.source === 'live' && !(row as { noValue?: boolean }).noValue) out[row.key] = row.value;
   return out;
 }
 
