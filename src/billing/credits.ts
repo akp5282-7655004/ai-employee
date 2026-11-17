@@ -14,6 +14,7 @@
  * settleTopUp sees a succeeded payment id.
  */
 
+import { workAccess, type WorkAccess } from './access.js';
 import { claimCostItem } from './costsink.js';
 import { isMediaKind, mediaCost } from './media.js';
 import { textQuote } from './textprice.js';
@@ -364,6 +365,13 @@ export function chargeCredits(
     return { state: before, blocked: false, toppedUp: 0 };
   }
 
+  // A failed payment past its grace period, or a plan that has ended, pauses
+  // paid work no matter the balance (Terms 4.5-4.7). Monitoring never reaches here.
+  const access = workAccess(data, now);
+  if (billingEnforced() && access.paused) {
+    return { state: before, blocked: true, toppedUp: 0, reason: pausedReason(access) };
+  }
+
   const used = (before.usedThisMonth[item] ?? 0) + 1;
   const persist = (patch: Partial<Omit<CreditState, 'remaining'>>) => {
     writeCredits(data, { ...patch, usedThisMonth: { ...before.usedThisMonth, [item]: used } }, now);
@@ -465,6 +473,8 @@ export function chargeCredits(
 export function canAfford(data: Record<string, unknown>, item: string): { ok: boolean; reason?: string } {
   if (!isOutputWork(item)) return { ok: true }; // monitoring — never gated
   if (!billingEnforced()) return { ok: true }; // meter runs, wall is off
+  const access = workAccess(data);
+  if (access.paused) return { ok: false, reason: pausedReason(access) };
   const state = creditState(data);
   if (state.remaining > 0) return { ok: true }; // a positive balance always passes
   // A pending card charge is not credits. Work waits until the payment succeeds.
@@ -490,6 +500,12 @@ export function outOfCreditsReason(data: Record<string, unknown>): string {
     return `${head} Add $${band.topUp.toFixed(2)} on Plan & Credits${upgrade ? `, or upgrade to ${upgrade}` : ''}.`;
   }
   return `${head} Pick a plan on Plan & Credits to keep going. Plans start at $${BANDS[0]!.monthlyPrice} a month.`;
+}
+
+/** Why billing state pauses paid work, with the plan price when a new plan is the way back. */
+export function pausedReason(access: WorkAccess): string {
+  const base = access.message ?? 'Paid work is paused. Monitoring keeps running.';
+  return access.state === 'ended' ? `${base} Plans start at $${BANDS[0]!.monthlyPrice} a month.` : base;
 }
 
 /** The band above this one, for the upgrade prompt. Undefined at the top. */

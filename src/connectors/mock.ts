@@ -216,7 +216,7 @@ export class MockConnector implements Connector {
     const connected = this.acc(externalUserId).some((a) => a.app === 'google_ads');
     if (!connected) return { ok: false, live: false, applied: 0, steps: changes.map((c) => ({ campaign: c.campaign, ok: false, error: 'Connect Google Ads first.' })), note: 'No Google Ads account connected.' };
     const acted = changes.filter((c) => c.action !== 'hold');
-    return { ok: true, live: false, applied: acted.length, steps: acted.map((c) => ({ campaign: c.campaign, ok: true })), note: 'Demo connector — no real budget change. On Render with Google Ads connected, this pushes the approved budget moves live.' };
+    return { ok: true, live: false, applied: acted.length, steps: acted.map((c) => ({ campaign: c.campaign, ok: true })), note: 'Demo connector. No real budget change. The live Google Ads budget push is not built yet, so approved moves are recorded only.' };
   }
 
   async readMarketingAds(): Promise<{ google: { connected: boolean; note: string; rows: [] }; meta: { connected: boolean; note: string; rows: [] } }> {

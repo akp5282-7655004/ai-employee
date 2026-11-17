@@ -261,7 +261,7 @@ function decisionsOf(input: OperatorInput): OperatorDecision[] {
         detail: NO_SPEND_SHIFT,
         impact: null,
         kind: 'inbox' as const,
-        canSkip: false,
+        canSkip: true,
         canApprove: false,
       };
     }
@@ -271,7 +271,7 @@ function decisionsOf(input: OperatorInput): OperatorDecision[] {
       detail: plain(item.reason),
       impact: impactOf(`${item.title} ${item.reason}`),
       kind: 'inbox' as const,
-      canSkip: false,
+      canSkip: true,
       canApprove: true,
     };
   });

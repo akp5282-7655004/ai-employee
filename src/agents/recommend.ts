@@ -47,6 +47,21 @@ const SEV_RANK: Record<RecSeverity, number> = { high: 0, medium: 1, low: 2 };
 const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
 const pct = (a: number, b: number) => Math.round(((a - b) / b) * 100);
 
+/**
+ * The issue a recommendation is about, without the day. Ids carry the day so
+ * an approval is per day, but a dismissal means "stop showing me this", so it
+ * is keyed on this stable part and survives the next day's rebuild.
+ */
+export function stableRecId(id: string): string {
+  return String(id || '').replace(/:\d{4}-\d{2}-\d{2}$/, '');
+}
+
+/** Still open: not applied today and not dismissed (on any day). */
+export function recIsOpen(st: { applied?: Record<string, string>; dismissed?: Record<string, string> } | undefined, id: string): boolean {
+  if (st?.applied?.[id]) return false;
+  return !st?.dismissed?.[id] && !st?.dismissed?.[stableRecId(id)];
+}
+
 function dayKey(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 }

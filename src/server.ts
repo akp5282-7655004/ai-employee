@@ -21,7 +21,7 @@ import { falReady, falGenerateImage, falGenerateVideo, falGenerateAudio, type As
 import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText, optimizerSystem, type BrandContext } from './creative/studio.js';
 import { resolveKit, kitHasGuidance, parseColors, type BrandKit } from './brand/kit.js';
 import { templatedReady, templatedListTemplates, templatedRender, type RenderLayer } from './creative/templated.js';
-import { buildRecommendations, type Recommendation } from './agents/recommend.js';
+import { buildRecommendations, recIsOpen, stableRecId, type Recommendation } from './agents/recommend.js';
 import { competitorAdReport, searchCompetitorAds } from './research/adlibrary.js';
 import { offerBrief, offerMix, readWinners, suggestedOfferLines, survivalByOfferKind } from './research/offers.js';
 import { parseCapturedAds, readCaptured, writeCaptured } from './research/capture.js';
@@ -71,6 +71,8 @@ import type { DailyInput } from './automation/skills.js';
 import { DEFAULT_CAPS, type MilesMode } from './agents/policy.js';
 import { buildAdminBusiness } from './admin/business.js';
 import { adSpendAllowed } from './billing/gate.js';
+import { splitByHealth } from './connectors/health.js';
+import { lowCredit, workAccess, GRACE_DAYS } from './billing/access.js';
 import { isMediaKind, MEDIA_LABEL, MEDIA_KINDS, mediaCost } from './billing/media.js';
 import {
   applySubscriptionCoupon, bandForPriceId, cancelStripeSubscription, createCheckoutSession, createPortalSession, createTopUpPaymentIntent, priceIdForBand, probeStripe,
@@ -1637,7 +1639,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return { business: await businessProfileFor(u.id, data), profile };
   });
 
-  type MilesInbox = { id: string; kind: 'create' | 'enable' | 'skill'; title: string; reason: string; status: 'queued' | 'applied' | 'reverted'; queuedAt?: string; skill?: string };
+  type MilesInbox = { id: string; kind: 'create' | 'enable' | 'skill'; title: string; reason: string; status: 'queued' | 'applied' | 'reverted' | 'skipped'; queuedAt?: string; skill?: string; skippedAt?: string };
   type MilesFile = {
     phase: 'crawl' | 'questions' | 'ready' | 'running';
     bundle: ReturnType<typeof buildBundle> | null;
@@ -2434,7 +2436,30 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       return { ok: verdict.enabled, enabled: verdict.enabled, note };
     }
     if (item.kind === 'create') return runMilesGo(u.id, u.email, true);
-    return { ok: true, item };
+    // Skill proposals have no push to Google or Meta yet. Approving records the
+    // decision. Say so instead of implying the change went live.
+    const note = item.kind === 'skill'
+      ? 'Approved and recorded in your log. Google Ads and Meta were not changed: Miles cannot push this kind of change yet.'
+      : 'Approved and recorded in your log. Google Ads was not changed: there is no live Google campaign on file to turn on.';
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: item.skill || 'inbox', title: `Approved, ${item.title}. Recorded only. Nothing was pushed.` });
+    await authStore.setUserData(u.id, data);
+    return { ok: true, item, pushed: false, recorded: true, note };
+  });
+
+  // Reject (skip) a waiting decision. Nothing is created, enabled, or pushed.
+  app.post<{ Body: { id?: string } }>('/api/miles/reject', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const miles = milesOf(data);
+    const item = miles.inbox.find((row) => row.id === req.body?.id && row.status === 'queued');
+    if (!item) return reply.code(404).send({ error: 'That item is not waiting.' });
+    item.status = 'skipped';
+    item.skippedAt = new Date().toISOString();
+    data.miles = miles;
+    appendApproval(data, { id: newToken().slice(0, 10), ts: item.skippedAt, kind: 'dismissal', actor: u.email, source: item.skill || 'inbox', title: `Skipped, ${item.title}. Nothing was changed.` });
+    await authStore.setUserData(u.id, data);
+    return { ok: true, item, note: 'Skipped. Nothing was changed.' };
   });
 
   app.post<{ Body: { confirm?: boolean } }>('/api/miles/revert', async (req, reply) => {
@@ -2981,7 +3006,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       } else if (Date.now() - lastWeekly >= 7 * 86400_000) {
         d.lastWeekly = new Date().toISOString();
         await authStore.setUserData(u.id, d);
-        await sendEmail(u.email, 'Your Miles week', 'Open Miles for this week\'s report.');
+        const low = lowCredit(creditState(d));
+        await sendEmail(u.email, 'Your Miles week', `Open Miles for this week's report.${low.message ? `\n\n${low.message}` : ''}`);
       }
     }
     const p = (d.profile ?? {}) as Record<string, string>;
@@ -3093,7 +3119,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       speedToLeadOn: stlOn,
     }, new Date());
     const st = (d.recState as { applied?: Record<string, string>; dismissed?: Record<string, string> }) ?? {};
-    const openRecs = recs.filter((r) => !st.applied?.[r.id] && !st.dismissed?.[r.id]);
+    const openRecs = recs.filter((r) => recIsOpen(st, r.id));
     const market = (miles.bundle?.setup.location || p.serviceAreas || '').split(',')[0]?.trim() || '';
     const sampleConnector = connector.name === 'mock';
     const googleRows = (snap?.campaigns ?? []).filter((row) => row.platform === 'google_ads');
@@ -3495,7 +3521,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!result.ok) return reply.code(400).send({ ok: false, error: result.reason });
     data.automation = { ...state, log: result.log };
     await authStore.setUserData(u.id, data);
-    return { ok: true, reason: result.reason };
+    return { ok: true, reason: result.reason, pushed: false, recorded: true };
   });
 
   app.post<{ Body: { paused?: boolean } }>('/api/automation/kill', async (req, reply) => {
@@ -3549,12 +3575,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!changes.length) return reply.code(400).send({ error: 'No budget moves to apply.' });
     if (!connector.adjustCampaignBudgets) return reply.code(400).send({ error: 'This connector cannot adjust budgets.' });
     const data = await authStore.getUserData(u.id);
-    const autonomy = Number((data.autopilot as any)?.autonomy) || 50;
     const result = await connector.adjustCampaignBudgets(u.id, changes);
-    // Log every approved move to the deploy/change log (pending unless full autonomy).
+    // Log every approved move to the deploy/change log. "live" only when Google
+    // actually took the change; autonomy alone never makes a move live.
     const deploy = (data.deploy as { auto?: boolean; queue?: any[] }) ?? { auto: false, queue: [] };
     deploy.queue = Array.isArray(deploy.queue) ? deploy.queue : [];
-    const status = result.live && result.ok ? 'live' : autonomy >= 100 && result.ok ? 'live' : 'pending';
+    const status = result.live && result.ok && result.applied > 0 ? 'live' : 'pending';
     deploy.queue.unshift({
       id: newToken().slice(0, 10),
       label: `Growth Autopilot, ${changes.length} budget move${changes.length === 1 ? '' : 's'} (${changes.filter((c) => c.action === 'scale').length} scale, ${changes.filter((c) => c.action === 'cut' || c.action === 'pause').length} cut/pause)`,
@@ -3567,7 +3593,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     data.deploy = deploy;
     await authStore.setUserData(u.id, data);
     if (result.live && result.applied) await meterUser(u.id, 'agent_run');
-    return { ...result, queuedStatus: status };
+    const pushed = result.live && result.ok && result.applied > 0;
+    const recordedNote = pushed ? undefined : `Recorded ${changes.length} budget move${changes.length === 1 ? '' : 's'} in your Change Log. Google Ads budgets were not changed: the live budget push is not built yet.`;
+    return { ...result, queuedStatus: status, pushed, recorded: true, recordedNote };
   });
   app.put('/api/hub', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -3944,6 +3972,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       enforced: billingEnforced(),
       paymentsConnected,
       subscription: sub.status === 'none' ? null : sub,
+      // Failed-payment grace, paused work, and cancellation, said plainly.
+      access: workAccess(data),
+      lowCredit: lowCredit(credits),
       launchCredit: launchCreditStatus(data),
       launchMessage: launchCreditStatus(data) === 'granted' ? '$100 in credits is unlocked.' : launchCreditStatus(data) === 'duplicate' ? 'This business already received the $100 credit.' : LAUNCH_WAIT,
       note: (credits.launchOffer && sub.band !== 'starter' && sub.band !== 'growth' && sub.band !== 'scale'
@@ -3952,6 +3983,15 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         ? 'Your card is held by Stripe. Miles never sees or stores it.'
         : 'Payments are not connected yet, so nothing is charged.'),
     };
+  });
+
+  // Read-only billing notices for the dashboard: grace period, paused work,
+  // cancellation, and low credits. Writes nothing.
+  app.get('/api/billing/status', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    return { access: workAccess(data), lowCredit: lowCredit(creditState(data)), enforced: billingEnforced() };
   });
 
   /**
@@ -4002,7 +4042,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!stripeReady()) return reply.code(503).send({ error: 'Payments are not connected yet. No charge was made.' });
     const first = await authStore.getUserData(u.id);
     const sub = billingState(first);
-    const paidPlan = sub.status === 'active' && (sub.band === 'starter' || sub.band === 'growth' || sub.band === 'scale');
+    const paidPlan = sub.status === 'active' && (sub.band === 'starter' || sub.band === 'growth' || sub.band === 'scale') && workAccess(first).state !== 'ended';
     if (!paidPlan || !sub.stripeCustomerId) {
       return reply.code(409).send({ error: 'Top-ups need an active paid plan, because that is where the card is saved. Pick a plan first. No charge was made.' });
     }
@@ -4202,7 +4242,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
             const failed = await authStore.getUserData(user.id);
             const failedUser = await authStore.getUserById(user.id);
             if (failedUser && (failed.notify as { billing?: boolean } | undefined)?.billing !== false) {
-              await sendEmail(failedUser.email, 'Miles payment failed', 'A payment did not go through. Open Settings, then Billing, to update the card.');
+              const grace = workAccess(failed);
+              const until = grace.graceEndsAt ? ` until ${grace.graceEndsAt.slice(0, 10)}` : '';
+              await sendEmail(failedUser.email, 'Miles payment failed', `A payment did not go through. Paid work keeps running${until} (a ${GRACE_DAYS}-day grace period), then pauses until the payment goes through. Monitoring keeps running. Open Settings, then Billing, to update the card.`);
             }
           }
           break;
@@ -4449,7 +4491,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     data.autonomy = next;
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'autonomy-settings', title: 'Updated Autonomy Settings', detail: `caps: ${next.caps.maxDailyMovePct}%/day move, $${next.caps.floorDailyBudget}/day floor${next.caps.monthlyCeiling ? `, $${next.caps.monthlyCeiling}/mo ceiling` : ''} · auto skills: ${Object.entries(next.perSkill).filter(([, v]) => v === 'auto').map(([k]) => k).join(', ') || 'none'}` });
     await authStore.setUserData(u.id, data);
-    return { ok: true, autonomy: next };
+    // Honest: the per-skill Auto choice is saved, not acted on. No live push
+    // for pausing or budget moves exists, so every one still waits for approval.
+    return { ok: true, autonomy: next, autoActive: false, note: 'Saved. Auto is not active yet: these skills still ask you first, because Miles cannot push pauses or budget moves to Google Ads or Meta yet.' };
   });
 
   // ── Local Presence audit — GBP + LSA scored against the master spec ──────
@@ -4547,7 +4591,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     data.skill_runs = runs;
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: action === 'approve' ? 'approval' : 'dismissal', actor: u.email, source: run.skill, title: `${action === 'approve' ? 'Approved' : 'Dismissed'}, ${run.name}: ${run.summary.slice(0, 120)}` });
     await authStore.setUserData(u.id, data);
-    return { ok: true, run };
+    const note = action === 'approve'
+      ? 'Approved and recorded in your log. Google Ads and Meta were not changed: Miles cannot push this change yet.'
+      : 'Dismissed. Nothing was changed.';
+    return { ok: true, run, pushed: false, recorded: true, note };
   });
 
   // The Google Ads accounts a launch can write into — an MCC login manages
@@ -5498,7 +5545,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       new Date(),
     );
     const st = recState(data);
-    const open = recs.filter((r) => !st.applied?.[r.id] && !st.dismissed?.[r.id]);
+    const open = recs.filter((r) => recIsOpen(st, r.id));
     const connected = spend.length + leads.length + reviews.length + emails.length > 0;
     const digestOn = ((data.schedules as ScheduledAgent[]) ?? []).some((a) => a.task === 'recommend' && a.enabled);
     return { recommendations: open, connected, appliedToday: Object.keys(st.applied ?? {}).length, digestOn };
@@ -5550,7 +5597,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     st.applied = { ...(st.applied ?? {}), [rec.id]: new Date().toISOString() };
     data.recState = st;
     await authStore.setUserData(u.id, data);
-    return { ok: true, status };
+    // Honest: approval records the change. Only the Speed-to-Lead toggle is
+    // applied by Miles itself. Nothing is pushed to Google Ads or Meta.
+    const note = rec.apply?.kind === 'enable_speed_to_lead'
+      ? 'Approved. Speed-to-Lead is on in Miles. Google Ads and Meta were not changed.'
+      : 'Approved and recorded in your Change Log. Google Ads and Meta were not changed: Miles cannot push this change yet, so make it in the ad account yourself.';
+    return { ok: true, status, pushed: false, recorded: true, note };
   });
 
   app.post<{ Body: { id?: string } }>('/api/recommendations/dismiss', async (req, reply) => {
@@ -5560,7 +5612,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!id) return reply.code(400).send({ error: 'id is required' });
     const data = await authStore.getUserData(u.id);
     const st = recState(data);
-    st.dismissed = { ...(st.dismissed ?? {}), [id]: new Date().toISOString() };
+    // Keyed on the issue, not the day, so it does not come back tomorrow.
+    st.dismissed = { ...(st.dismissed ?? {}), [stableRecId(id)]: new Date().toISOString() };
     data.recState = st;
     await authStore.setUserData(u.id, data);
     return { ok: true };
@@ -5626,14 +5679,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const pdReady = pipedreamReady(cfg);
     // An app is "connected" only if THIS account has linked it. The id comes
     // from the session cookie, never from a query parameter.
+    // A revoked or expired account (Pipedream healthy=false) is not connected.
+    // It is listed under needsReconnect so the page can say so plainly.
     let connectedApps: string[] = [];
+    let needsReconnect: string[] = [];
     try {
-      const accts = await accountsList(u.id);
-      connectedApps = [...new Set(accts.map((a) => a.app))];
+      ({ connectedApps, needsReconnect } = splitByHealth(await accountsList(u.id)));
     } catch {
       /* leave empty on any error */
     }
-    return { connector: connector.name, hub: { ready: pdReady, env: cfg.pipedream.environment }, connectedApps, demo: isDemoAccount(u.email) };
+    return { connector: connector.name, hub: { ready: pdReady, env: cfg.pipedream.environment }, connectedApps, needsReconnect, demo: isDemoAccount(u.email) };
   });
 
   // The concrete identity of every connected platform — account names, Google
@@ -5691,7 +5746,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const [listed, ghlNow] = await Promise.all([accountsOf(u.id), ghlLink(u.id)]);
-    const apps = new Set(listed.accounts.map((a) => a.app));
+    const apps = new Set(splitByHealth(listed.accounts).connectedApps);
     const ghlApp = ghlNow.slug;
     const ghl = ghlNow.connected;
     const gads = apps.has('google_ads');
@@ -6239,7 +6294,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const social = await safeConn(connector.getSocialMetrics ? () => connector.getSocialMetrics!(userId) : undefined, null);
       const scheduledPosts = ((data.scheduledPosts as ScheduledPost[]) ?? []).filter((x) => x.status === 'scheduled').length;
       const stl = (data.speedToLead as { enabled?: boolean } | undefined)?.enabled ?? false;
-      const recs = buildRecommendations({ spend, deals, leads, reviews, emails, social, scheduledPosts, targetCpa: Number(p.targetCpa) || null, speedToLeadOn: stl }, new Date());
+      const recSt = data.recState as { applied?: Record<string, string>; dismissed?: Record<string, string> } | undefined;
+      const recs = buildRecommendations({ spend, deals, leads, reviews, emails, social, scheduledPosts, targetCpa: Number(p.targetCpa) || null, speedToLeadOn: stl }, new Date()).filter((r) => recIsOpen(recSt, r.id));
       if (!recs.length) return { title: `Recommendations, ${dl}`, body: `You are all set today. Nothing needs your attention. Nice work.` };
       const urgent = recs.filter((r) => r.severity === 'high').length;
       const lines = recs.map((r, i) => `${i + 1}. ${r.title}\n   Why: ${r.why}\n   Do: ${r.action}`).join('\n\n');

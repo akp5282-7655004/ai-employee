@@ -136,6 +136,9 @@ export function approveChange(log: ChangeEntry[], id: string): { ok: boolean; lo
   const hit = log.find((row) => row.id === id);
   if (!hit) return { ok: false, log, reason: 'That change is not on the log.' };
   if (hit.effect !== 'queued') return { ok: false, log, reason: 'That change is not waiting for approval.' };
-  const next = log.map((row) => row.id === id ? { ...row, effect: 'applied' as const, reason: 'You approved this. Logged so you can revert it.' } : row);
-  return { ok: true, log: next, reason: 'You approved this. Logged so you can revert it.' };
+  // Approval is recorded. There is no live push for these changes yet, so the
+  // reason says so instead of implying Google or Meta changed.
+  const reason = 'You approved this. Miles recorded it. Google Ads and Meta were not changed: Miles cannot push this change yet.';
+  const next = log.map((row) => row.id === id ? { ...row, effect: 'applied' as const, reason } : row);
+  return { ok: true, log: next, reason };
 }
