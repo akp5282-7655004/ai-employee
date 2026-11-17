@@ -64,6 +64,7 @@ export async function createCheckoutSession(args: {
       success_url: args.successUrl,
       cancel_url: args.cancelUrl,
       allow_promotion_codes: true,
+      automatic_tax: { enabled: process.env.STRIPE_TAX_ENABLED === '1' },
     });
     if (!session.url) return { error: 'Stripe did not return a checkout link — try again.' };
     return { url: session.url };

@@ -2247,6 +2247,7 @@ function setPage(id){
   openNavGroupFor(id);
   renderSubTabs(id);
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
+  if (location.hash !== '#'+id) history.replaceState({ page: id }, '', '#'+id);
   const homeIds=['agents'];
   $('#page-home').classList.toggle('on',homeIds.includes(id));
   $('#page-overview').classList.toggle('on',id==='overview');
@@ -2345,6 +2346,7 @@ function updateConnStat(){
 // True when live AND in production (customers can connect their own accounts).
 function connLiveForCustomers(){ return !!(CONN.hub && CONN.hub.ready && CONN.hub.env==='production'); }
 document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>{ if(typeof closeOnboard==='function') closeOnboard(); setPage(a.dataset.page); });
+window.addEventListener('hashchange', () => { const id = location.hash.replace('#',''); if (id && TITLES[id]) setPage(id); });
 // Collapsible nav groups: expand the group holding the active page; a header click
 // toggles its group open (accordion, opening one collapses the others).
 function openNavGroupFor(id){
@@ -5959,6 +5961,7 @@ async function openBilling(){
   const leftUnits=vp?Math.floor(c.remaining/vp):null;
   // The dollar balance is an operator's number, not a customer's. Owners get it
   // for reconciliation; customers get what it buys.
+  if (d.zeroBalance) pc.append(el('p','verdict tight', d.zeroMessage || 'Your credit balance is $0. Reports stay available.'));
   pc.append(el('div','appsub',
     (leftUnits!==null ? leftUnits+' videos left this month' : 'Media allowance')
     + (IS_ADMIN ? ' · $'+c.remaining.toFixed(2)+' of $'+c.granted.toFixed(2)+' in media credits' : '')));

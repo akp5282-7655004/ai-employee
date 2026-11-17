@@ -19,6 +19,9 @@ export function guardCopy(text: string): { ok: boolean; text: string; reason?: s
   if (claim) {
     return { ok: false, text: '', reason: `Miles will not write "${claim[0]}". That claim was not on the profile.` };
   }
+  if (/\b(financing|0%\s*apr|monthly payments?)\b/i.test(text) && !/\b(subject to credit|terms apply|apr)\b/i.test(text)) {
+    return { ok: false, text: '', reason: 'Financing copy needs the terms disclaimer, including APR and that it is subject to credit.' };
+  }
   return { ok: true, text };
 }
 

@@ -36,6 +36,7 @@ import { housekeepingProposals } from './agents/rulebook.js';
 import { acceptApprovedPlan, applyPlanAnswer, areaGuess, buildSearchPlan, type PlanProfile } from './agents/campaignplan.js';
 import { choiceById, goalCheck, LAUNCH_LINE, MONTH_DAYS, type BudgetPeriod, type GoalChannel, type GoalChoiceId, type GoalCheck, type LeadPeriod } from './agents/goalcheck.js';
 import { expectationReadout, liveDaysFromEvents, projectBudget, readExpectation, storeExpectation } from './agents/budgetexpect.js';
+import { dashboardRates } from './reports/rates.js';
 import { buildSkillsBoard } from './dashboard/skillsboard.js';
 import { resolveAreas } from './agents/geotarget.js';
 import { formatSopLog, runSopGate } from './agents/sopgate.js';
@@ -1629,7 +1630,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const body = (req.body ?? {}) as Record<string, unknown>;
+    const currentUpdated = String(((data.profile as { updatedAt?: string } | undefined)?.updatedAt) || '');
+    if (typeof body.expectedUpdatedAt === 'string' && currentUpdated && body.expectedUpdatedAt !== currentUpdated) {
+      return reply.code(409).send({ error: 'This was changed on another device. Reload and try again.', field: 'updatedAt' });
+    }
     const next: Record<string, unknown> = { ...((data.profile as object) ?? {}), ...body, updatedAt: new Date().toISOString() };
+    delete next.expectedUpdatedAt;
     if ('dailyBudget' in body || 'targetCpa' in body || 'avgTicket' in body) {
       for (const key of ['dailyBudget', 'targetCpa', 'avgTicket'] as const) {
         if (!(key in body)) continue;
@@ -2522,6 +2528,29 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     return { ok: turned.ok, note, activation: miles.activation };
   });
 
+  app.post<{ Body: { confirm?: boolean } }>('/api/miles/resume', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Confirm required. Nothing was resumed.' });
+    const data = await authStore.getUserData(u.id);
+    const miles = milesOf(data);
+    if (!miles.campaignResource) return reply.code(400).send({ error: 'No Google campaign is on file to resume.' });
+    if (!connector.setGoogleCampaignStatus) return reply.code(400).send({ error: 'This connector cannot resume a campaign.' });
+    const turned = await connector.setGoogleCampaignStatus(u.id, { campaignResource: miles.campaignResource, status: 'ENABLED', adGroupResources: miles.adGroupResources, adResources: miles.adResources });
+    const verdict = judgeEnableReadback(turned.readback ?? { campaign: 'UNKNOWN', adGroups: [], ads: [], note: turned.note || 'No status was read back.' });
+    if (!verdict.enabled) {
+      const note = 'Resume was not confirmed. The platform did not report the campaign as enabled. Nothing was marked live.';
+      rememberMiles(data, miles, note, true);
+      await authStore.setUserData(u.id, data);
+      return reply.code(409).send({ ok: false, enabled: false, note });
+    }
+    miles.activation = 'enabled';
+    const note = 'Resumed. Google reports the campaign as enabled.';
+    rememberMiles(data, miles, note, true);
+    await authStore.setUserData(u.id, data);
+    return { ok: true, enabled: true, note, readback: turned.readback?.campaign ?? 'ENABLED' };
+  });
+
   app.get('/api/miles/home', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
@@ -3273,12 +3302,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       : await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id, range) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
     const deals = (snap?.deals ?? []) as import('./revenue/attribution.js').Deal[];
     const google = await googleReadiness(u.id);
-    const r2 = (n: number) => Math.round(n * 100) / 100;
     const revFor = (utm: string, name: string) => { const k = (utm || name || '').toLowerCase(); return deals.filter((d) => d.won && (d.value || 0) > 0 && String(d.utmCampaign || '').toLowerCase() === k).reduce((s, d) => s + (d.value || 0), 0); };
     const campaigns = spend
       .map((c) => {
         const s = Math.round(c.spend || 0); const clicks = c.clicks || 0; const conv = c.conversions || 0; const revenue = Math.round(revFor(c.utm || '', c.campaign));
-        return { platform: c.platform, name: c.campaign, status: c.status ?? null, spend: s, impressions: Math.round(c.impressions || 0), clicks, leads: conv, revenue, roas: s ? r2(revenue / s) : null, cpc: clicks ? r2(s / clicks) : null, costPerLead: conv ? r2(s / conv) : null };
+        const rates = dashboardRates({ spend: s, clicks, leads: conv, booked: 0, revenue });
+        return { platform: c.platform, name: c.campaign, status: c.status ?? null, spend: s, impressions: Math.round(c.impressions || 0), clicks, leads: conv, revenue, roas: rates.roas, cpc: rates.cpc, costPerLead: rates.costPerLead };
       })
       .sort((a, b) => b.spend - a.spend);
     const totSpend = campaigns.reduce((a, c) => a + c.spend, 0);
@@ -3287,7 +3316,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const totRev = campaigns.reduce((a, c) => a + c.revenue, 0);
     return {
       connected: google.oauth, googleReady: google.ready, googleNote: google.note, metaAds: false, hasData: campaigns.length > 0, range,
-      totals: { spend: totSpend, clicks: totClicks, leads: totLeads, revenue: totRev, roas: totSpend ? r2(totRev / totSpend) : null, roiPct: totSpend ? Math.round(((totRev - totSpend) / totSpend) * 100) : null, cpc: totClicks ? r2(totSpend / totClicks) : null, costPerLead: totLeads ? r2(totSpend / totLeads) : null },
+      totals: { spend: totSpend, clicks: totClicks, leads: totLeads, revenue: totRev, ...dashboardRates({ spend: totSpend, clicks: totClicks, leads: totLeads, booked: 0, revenue: totRev }) },
       campaigns,
     };
   });
@@ -3864,7 +3893,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const p = (data.profile ?? {}) as Record<string, string>;
-    const ctx = { business: p.businessName, trade: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), services: p.services, offers: p.currentOffers };
+    const ctx = { business: p.businessName, trade: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), services: p.services, offers: p.currentOffers, radiusMiles: Number(p.radiusMiles) || undefined, hours: { startHour: Number(p.openHour), endHour: Number(p.closeHour) } };
     const spec = buildCampaignSpec({ goal: req.body?.goal, dailyBudget: req.body?.dailyBudget, finalUrl: req.body?.finalUrl || p.website, locations: req.body?.locations }, ctx);
     let gadsConnected = false;
     try { gadsConnected = (await accountsList(u.id)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
@@ -3880,7 +3909,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const p = (data.profile ?? {}) as Record<string, string>;
-    const ctx = { business: p.businessName, trade: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), services: p.services, offers: p.currentOffers };
+    const ctx = { business: p.businessName, trade: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), services: p.services, offers: p.currentOffers, radiusMiles: Number(p.radiusMiles) || undefined, hours: { startHour: Number(p.openHour), endHour: Number(p.closeHour) } };
     const goal = `Get more ${(p.industry || 'local service').toLowerCase()} customers${p.currentOffers ? ' with ' + p.currentOffers : ''}`;
     const locations = req.body?.locations?.length ? req.body.locations : (p.serviceAreas || '').split(',').map((s) => s.trim()).filter(Boolean);
     const spec = buildCampaignSpec({ goal, dailyBudget: req.body?.dailyBudget, finalUrl: req.body?.finalUrl || p.website, locations }, ctx);
@@ -4031,6 +4060,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       subscription: sub.status === 'none' ? null : sub,
       launchCredit: launchCreditStatus(data),
       launchMessage: launchCreditStatus(data) === 'granted' ? '$100 in credits is unlocked.' : launchCreditStatus(data) === 'duplicate' ? 'This business already received the $100 credit.' : LAUNCH_WAIT,
+      zeroBalance: credits.remaining <= 0,
+      zeroMessage: credits.remaining <= 0 ? 'Your credit balance is $0. Reports stay available. Add credits or pick a plan to keep working.' : null,
       note: (credits.launchOffer && sub.band !== 'starter' && sub.band !== 'growth' && sub.band !== 'scale'
         ? `Launch offer: $0 a month and $${LAUNCH_GRANT} in credits. $${credits.remaining.toFixed(2)} remaining. Images are $0.10, voiceover is $0.50, video is $1.50. Text, chat, campaign builds, audits, skills, and agent runs also draw from this balance at OpenRouter cost plus a 75% margin. Monitoring stays free. `
         : '') + (paymentsConnected

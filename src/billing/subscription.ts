@@ -217,6 +217,16 @@ export function markPastDue(data: Record<string, unknown>, subscriptionId: strin
   saveBilling(data, b);
 }
 
+/** Access lasts through the paid period after cancel. A new subscription turns it back on. */
+export function accessOpen(billing: { status?: string; currentPeriodEnd?: string }, now = Date.now()): boolean {
+  if (billing.status === 'active' || billing.status === 'trialing') return true;
+  if (billing.status === 'canceled' && billing.currentPeriodEnd) {
+    const end = Date.parse(billing.currentPeriodEnd);
+    return Number.isFinite(end) && end > now;
+  }
+  return false;
+}
+
 /** The subscription ended — cancellation, or Stripe gave up retrying a failed card. */
 export function markCanceled(data: Record<string, unknown>, subscriptionId: string): void {
   const b = billingState(data);
