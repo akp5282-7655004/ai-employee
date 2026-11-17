@@ -95,7 +95,7 @@ export async function runSevenSkill(key: string, ctx: SkillCtx): Promise<Omit<Sk
       const leak = leadToQual < qualToBook ? 'lead → qualified' : 'qualified → booked';
       return {
         skill: key, name: def.name, status: 'read_only', approvable: false, source,
-        summary: `30-day readout: ${fmt$(v('calc.blended_spend'))} spent → ${Math.round(v('calc.blended_leads'))} leads → ${Math.round(v('crm.booked_jobs'))} booked (${fmt$(v('calc.cost_per_booked'))}/booked). Biggest leak: ${leak}.`,
+        summary: `30-day readout: ${fmt$(v('calc.blended_spend'))} spent → ${Math.round(v('calc.blended_leads'))} leads → ${Math.round(v('crm.booked_jobs'))} booked (${m.find((x) => x.key === 'calc.cost_per_booked')?.noValue ? 'no booked jobs yet' : `${fmt$(v('calc.cost_per_booked'))}/booked`}). Biggest leak: ${leak}.`,
         details: [
           `Lead → qualified: ${leadToQual.toFixed(0)}% · qualified → booked: ${qualToBook.toFixed(0)}%.`,
           `Missed-call leak: ${Math.round(v('calls.missed'))} missed calls ≈ ${fmt$(v('calc.lead_leak_dollars'))} in bookable revenue walking away.`,
@@ -160,7 +160,7 @@ export async function runSevenSkill(key: string, ctx: SkillCtx): Promise<Omit<Sk
       return {
         skill: key, name: def.name, status: 'needs_approval', approvable: true, source,
         approve_disabled_reason: 'Execution hands off to Budget Shifter once write access is connected.',
-        summary: `Channel mix this month — Google ${fmt$(v('google_ads.cost'))} · LSA ${fmt$(v('lsa.spend'))} · Meta ${fmt$(v('meta.spend'))}. Compare on cost per BOOKED JOB (${fmt$(v('calc.cost_per_booked'))} blended), never on cost per lead.`,
+        summary: `Channel mix this month — Google ${fmt$(v('google_ads.cost'))} · LSA ${fmt$(v('lsa.spend'))} · Meta ${fmt$(v('meta.spend'))}. Compare on cost per BOOKED JOB (${m.find((x) => x.key === 'calc.cost_per_booked')?.noValue ? 'no booked jobs yet' : `${fmt$(v('calc.cost_per_booked'))} blended`}), never on cost per lead.`,
         details: [
           'LSA leads are pay-per-lead and pre-qualified by Google Guaranteed; Search leads are cheaper but rawer — normalizing on booked jobs is the only fair comparison.',
           'GBP is $0 media cost and upstream of LSA (reviews drive LSA rank) — its calls count as booked-job source, not spend.',

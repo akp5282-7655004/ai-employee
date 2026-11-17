@@ -1687,7 +1687,7 @@
       <div id="int-connected"></div>
       <div id="int-stack"></div>
       <div class="sect-label" style="margin-top:22px">BROWSE THE APP CATALOGUE</div>
-      <input class="searchbar" id="app-search" placeholder="Search the catalogue. Most apps are not wired yet." autocomplete="off">
+      <input class="searchbar" id="app-search" placeholder="Search apps. Some connect now, more are on the way." autocomplete="off">
       <div class="sect-label" id="cat-label">POPULAR</div>
       <div class="appgrid" id="int-catalog"></div>
     </section>
@@ -2427,9 +2427,9 @@ function buildReviewCard(it,onResolved){
   card.append(el('div','appsub',(REVIEW_KIND[it.kind]||it.kind)+' · '+fmtWhen(it.createdAt)));
   const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px;flex-wrap:wrap';
   const rev=el('button','adsave','👁 Review'); rev.onclick=()=>openReviewModal(it);
-  const ap=el('button','go','✓ Approve & Deploy'); ap.style.flex='none';
+  const ap=el('button','go','✓ Approve'); ap.style.flex='none';
   const dm=el('button','adsave','Dismiss');
-  ap.onclick=async()=>{ ap.disabled=true; dm.disabled=true; try{ const r=await(await fetch('/api/review/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:it.id})})).json(); bar.remove(); card.style.opacity='.7'; const done=el('div','verdict ok'); let msg=(r&&r.status==='live')?'✓ Approved & deployed, see the Change Log.':'✓ Approved, queued in Deploy to push live.'; if(it.kind==='email'){ msg += r&&r.emailed ? ' Sent to your inbox.' : (r&&r.emailReady===false ? ' Connect email to send it.' : ''); } done.textContent=msg; card.append(done); onResolved&&onResolved(); }catch(e){ ap.disabled=false; dm.disabled=false; toast('Couldn’t approve, try again.'); } };
+  ap.onclick=async()=>{ ap.disabled=true; dm.disabled=true; try{ const res=await fetch('/api/review/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:it.id})}); const r=await res.json().catch(()=>({})); if(!res.ok) throw new Error((r&&r.error)||'approve failed'); bar.remove(); card.style.opacity='.7'; const done=el('div','verdict ok'); let msg='✓ Approved and logged. Nothing was pushed to an ad platform.'; if(it.kind==='email'){ msg += r&&r.emailed ? ' Sent to your inbox.' : (r&&r.emailReady===false ? ' Connect email to send it.' : ' The email did not send.'); } done.textContent=msg; card.append(done); onResolved&&onResolved(); }catch(e){ ap.disabled=false; dm.disabled=false; toast('Couldn’t approve, try again.'); } };
   dm.onclick=async()=>{ try{ await fetch('/api/review/dismiss',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:it.id})}); }catch(e){} card.style.transition='opacity .2s'; card.style.opacity='0'; setTimeout(()=>{ card.remove(); onResolved&&onResolved(); },200); };
   bar.append(rev,ap,dm); card.append(bar);
   return card;
@@ -3007,18 +3007,18 @@ function renderResearch(d){
   const grid=el('div','stats'); grid.style.marginBottom='18px';
   grid.append(
     statCard('Population', (d.population||0).toLocaleString()),
-    statCard('Median household income', d.medianIncome? '$'+d.medianIncome.toLocaleString() : ', '),
-    statCard('Median home value', d.medianHomeValue? '$'+d.medianHomeValue.toLocaleString() : ', '),
-    statCard('Homeownership', d.homeownershipPct? d.homeownershipPct+'%' : ', ')
+    statCard('Median household income', d.medianIncome? '$'+d.medianIncome.toLocaleString() : '-'),
+    statCard('Median home value', d.medianHomeValue? '$'+d.medianHomeValue.toLocaleString() : '-'),
+    statCard('Homeownership', d.homeownershipPct? d.homeownershipPct+'%' : '-')
   );
   box.append(grid);
   box.append(el('div','sect-label','HOUSING & MARKET'));
   const hg=el('div','stats'); hg.style.marginBottom='16px';
   hg.append(
-    statCard('Median year built', d.medianYearBuilt? d.medianYearBuilt : ', '),
-    statCard('Homes built pre-1980', d.pctOlderHomes!=null? d.pctOlderHomes+'%' : ', '),
-    statCard('Housing units', d.housingUnits? d.housingUnits.toLocaleString() : ', '),
-    statCard('Trade competitors', d.competition!=null? d.competition : ', ')
+    statCard('Median year built', d.medianYearBuilt? d.medianYearBuilt : '-'),
+    statCard('Homes built pre-1980', d.pctOlderHomes!=null? d.pctOlderHomes+'%' : '-'),
+    statCard('Housing units', d.housingUnits? d.housingUnits.toLocaleString() : '-'),
+    statCard('Trade competitors', d.competition!=null? d.competition : '-')
   );
   box.append(hg);
   if(d.marketFit){ const mf=el('div','verdict ok'); mf.style.marginBottom='6px'; mf.textContent='🏗️ '+d.marketFit; box.append(mf); }
@@ -3089,10 +3089,10 @@ function renderWeather(data){
   box.append(el('div','sect-label', ((w.place||'')+' · '+(w.zip||'')).toUpperCase()));
   const grid=el('div','stats'); grid.style.marginBottom='18px';
   grid.append(
-    statCard('Temperature', w.tempF!=null? w.tempF+'°F':', '),
-    statCard('Feels like', w.feelsLikeF!=null? w.feelsLikeF+'°F':', '),
-    statCard('Humidity', w.humidity!=null? w.humidity+'%':', '),
-    statCard('Wind', w.windMph!=null? w.windMph+' mph':', ')
+    statCard('Temperature', w.tempF!=null? w.tempF+'°F':'-'),
+    statCard('Feels like', w.feelsLikeF!=null? w.feelsLikeF+'°F':'-'),
+    statCard('Humidity', w.humidity!=null? w.humidity+'%':'-'),
+    statCard('Wind', w.windMph!=null? w.windMph+' mph':'-')
   );
   box.append(grid);
   if(w.shortForecast){ const s=el('div','appsub'); s.style.margin='-8px 0 16px'; s.textContent='Now: '+w.shortForecast; box.append(s); }
@@ -4347,11 +4347,10 @@ function renderOverview(d, miles, op, setup){
       const row=el('div','md-crow');
       if(entry.effect==='reverted') row.style.opacity='.55';
       row.append(el('span',null, noDash(entry.title||'Change')), el('span','md-legend', fmtWhen(entry.ts)));
-      if(entry.effect==='applied'){
-        const undo=el('button','md-link','Undo');
-        undo.onclick=async()=>{ undo.disabled=true; const r=await fetch('/api/automation/revert',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:entry.id})}); if(r.ok) openOverview(); else { undo.disabled=false; toast('That change could not be undone.'); } };
-        row.append(undo);
-      } else row.append(el('span','md-legend', entry.effect||''));
+      // No verified write to Google Ads exists for these changes yet, so an
+      // "applied" entry is logged only. Say that instead of offering an Undo.
+      if(entry.effect==='applied') row.append(el('span','md-legend','Logged only. Google Ads was not changed.'));
+      else row.append(el('span','md-legend', entry.effect||''));
       act.append(row);
     });
     if(!shown.length){
@@ -4849,7 +4848,7 @@ async function openAutoTriggers(){
     +urlRow('Deal Closed Won →',ob.webhook)
     +'<button class="go" id="au-done" style="width:100%;margin-top:14px">Save &amp; close</button>');
   document.querySelectorAll('[data-cp]').forEach(b=>b.onclick=()=>{ try{navigator.clipboard.writeText(b.getAttribute('data-cp'));}catch(e){} toast('Webhook URL copied'); });
-  const done=$('#au-done'); if(done) done.onclick=async()=>{ const cal=($('#au-cal').value||'').trim(); try{ await fetch('/api/automations',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({noShow:{calendarUrl:cal}})}); }catch(e){} closeModal(); toast('Saved'); openOverview(); };
+  const done=$('#au-done'); if(done) done.onclick=async()=>{ const cal=($('#au-cal').value||'').trim(); let ok=false; try{ const r=await fetch('/api/automations',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({noShow:{calendarUrl:cal}})}); ok=r.ok; }catch(e){} if(!ok){ toast('Could not save. Try again.'); return; } closeModal(); toast('Saved'); openOverview(); };
 }
 // Post-Job Review Request card, fires the 1–10 ask on job completion; 9–10 → Google,
 // 1–8 → private service recovery (never a public link).
@@ -4886,7 +4885,7 @@ async function openReviewTriggers(){
     +urlRow('Customer replied →',wh.reply)
     +'<button class="go" id="rr-done" style="width:100%;margin-top:14px">Save &amp; close</button>');
   document.querySelectorAll('[data-cp]').forEach(b=>b.onclick=()=>{ try{navigator.clipboard.writeText(b.getAttribute('data-cp'));}catch(e){} toast('Webhook URL copied'); });
-  const done=$('#rr-done'); if(done) done.onclick=async()=>{ const url=($('#rr-url').value||'').trim(); try{ await fetch('/api/review-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({googleReviewUrl:url})}); }catch(e){} closeModal(); toast('Saved'); openOverview(); };
+  const done=$('#rr-done'); if(done) done.onclick=async()=>{ const url=($('#rr-url').value||'').trim(); let ok=false; try{ const r=await fetch('/api/review-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({googleReviewUrl:url})}); ok=r.ok; }catch(e){} if(!ok){ toast('Could not save. Try again.'); return; } closeModal(); toast('Saved'); openOverview(); };
 }
 // Instant-trigger setup: the per-user webhook URLs GHL fires the moment a lead
 // comes in or a call is missed, so the text-back sends in seconds (not on a poll).
@@ -4977,7 +4976,7 @@ function renderBrand(){
 
   const save=el('button','go','Save brand guidelines'); save.style.marginTop='20px';
   const note=el('span','appsub'); note.style.marginLeft='12px';
-  save.onclick=async()=>{ save.disabled=true; try{ const r=await fetch('/api/brand',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({kit:BRAND})}); const d=await r.json(); note.textContent=d.ok?'Saved ✓, every creative tool now follows this.':'Could not save.'; toast('Brand guidelines saved'); }catch(e){ note.textContent='Could not save.'; } save.disabled=false; setTimeout(()=>note.textContent='',3500); };
+  save.onclick=async()=>{ save.disabled=true; try{ const r=await fetch('/api/brand',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({kit:BRAND})}); const d=await r.json(); const saved=r.ok&&d.ok; note.textContent=saved?'Saved ✓, every creative tool now follows this.':(d.error||'Could not save.'); toast(saved?'Brand guidelines saved':'Could not save brand guidelines'); }catch(e){ note.textContent='Could not save.'; } save.disabled=false; setTimeout(()=>note.textContent='',3500); };
   const row=el('div'); row.append(save,note); card.append(row);
   box.append(card);
 }
@@ -5532,7 +5531,8 @@ function ccConnected(plat){ if(plat==='calculated') return true;
   if(plat==='crm') return CC.connected.some(a=>['gohighlevel','highlevel_oauth','highlevel','leadconnector'].includes(a));
   if(plat==='meta') return CC.connected.some(a=>['facebook_ads','facebook'].includes(a));
   return false; }
-function ccFmt(format,v){ if(v==null||!isFinite(v)) return ', ';
+// A dash, never a sample number, when there is no value (a real denominator is 0).
+function ccFmt(format,v){ if(v==null||!isFinite(v)) return '-';
   if(format==='currency') return v>=1000?'$'+Math.round(v).toLocaleString():'$'+(+v).toFixed(2).replace(/\.00$/,'');
   if(format==='percent_1dp') return (+v).toFixed(1)+'%';
   if(format==='decimal_2dp') return (+v).toFixed(2);
@@ -5560,7 +5560,7 @@ function ccKpiCard(key){
   const m=CC.metrics[key], entry=ccEntry(key);
   const c=el('div','md-tile'); c.style.cssText='display:flex;flex-direction:column;gap:4px;min-width:0';
   const lab=el('div','appsub',(entry?entry.label:key)); lab.style.whiteSpace='nowrap'; lab.style.overflow='hidden'; lab.style.textOverflow='ellipsis'; c.append(lab);
-  const v=el('div',null,m?ccFmt(m.format,m.value):', '); v.style.cssText='font-size:22px;font-weight:800;letter-spacing:-.02em'; c.append(v);
+  const v=el('div',null,m&&!m.noValue?ccFmt(m.format,m.value):'-'); v.style.cssText='font-size:22px;font-weight:800;letter-spacing:-.02em'; c.append(v);
   if(m){ c.append(ccDelta(m)); c.append(ccSpark(m.series));
     // Every card says what it is, LIVE (real account/CRM data) or SAMPLE.
     c.append(ccSourceTag(m.source));
@@ -5683,7 +5683,7 @@ function ccWidgetCard(w,idx){
     $('#ccw-size').onclick=()=>{ w.size=(w.size==='1x1'||!w.size)?'2x1':(w.size==='2x1'?'2x2':'1x1'); ccSaveLayout().then(renderCmdCenter); closeModal(); };
     $('#ccw-del').onclick=()=>{ CC.layout.widgets=CC.layout.widgets.filter(x=>x!==w); ccSaveLayout().then(renderCmdCenter); closeModal(); }; };
   top.append(menu); c.append(top);
-  const v=el('div',null,m?ccFmt(m.format,m.value):', '); v.style.cssText='font-size:'+(w.size==='2x2'?'34px':'22px')+';font-weight:800;letter-spacing:-.02em'; c.append(v);
+  const v=el('div',null,m&&!m.noValue?ccFmt(m.format,m.value):'-'); v.style.cssText='font-size:'+(w.size==='2x2'?'34px':'22px')+';font-weight:800;letter-spacing:-.02em'; c.append(v);
   if(m){ c.append(ccDelta(m)); if(w.card_type!=='number') c.append(ccSpark(m.series)); c.append(ccSourceTag(m.source)); }
   c.ondragstart=e=>{ e.dataTransfer.setData('text/plain',String(idx)); };
   c.ondragover=e=>e.preventDefault();
@@ -6215,17 +6215,17 @@ async function openAutoHub(){
   const canSend = stl.canSend||rev.canSend||au.canSend;
   if(!canSend){ const b=el('div','mcard'); b.style.borderLeft='3px solid var(--warn)'; b.append(el('div','verdict tight','Connect GoHighLevel in Integrations so these actually send. Until then Miles drafts each message and holds it.')); box.append(b); }
   const ns=au.noShow||{}, ob=au.onboarding||{};
-  const post=(url,body)=>fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).catch(()=>{});
+  const post=(url,body)=>fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(r=>r.ok).catch(()=>false);
   // 1 + 2: Speed-to-Lead (new lead + missed call share the responder)
   const stlStats = stl.stats||{};
   const stlCfg=el('div'); stlCfg.style.cssText='margin-top:8px'; const qh=!!(stl.quietHours&&stl.quietHours.enabled);
   const qlab=el('label'); qlab.style.cssText='display:flex;align-items:center;gap:8px;font-size:13px'; const qcb=el('input'); qcb.type='checkbox'; qcb.checked=qh; qcb.onchange=async()=>{ await post('/api/speed-to-lead',{quietHours:{enabled:qcb.checked,tzOffsetMinutes:-new Date().getTimezoneOffset()}}); toast(qcb.checked?'Quiet hours on':'Quiet hours off'); }; qlab.append(qcb,document.createTextNode('Quiet hours, hold texts outside 8 AM–8 PM')); stlCfg.append(qlab);
   box.append(ahCard({ icon:'⚡', title:'Speed-to-Lead + Missed-Call Text-Back', desc:'New lead or missed call → an instant personalized text-back in seconds. The #1 and #2 highest-ROI local plays.', on:!!stl.enabled, onToggle:async()=>{ await post('/api/speed-to-lead',{enabled:!stl.enabled}); openAutoHub(); }, stat:'Answered today: '+(stlStats.today||0)+' · Avg response: '+(stlStats.avgResponse||', ')+' · Total: '+(stlStats.total||0), config:stlCfg, urls:[{label:'New lead (Form / FB Lead) →',url:stl.webhook&&stl.webhook.newLead},{label:'Missed call →',url:stl.webhook&&stl.webhook.missedCall}] }));
   // 3: Review Requests
-  const rvRecent=rev.recent||[]; const revCfg=el('div'); revCfg.style.cssText='margin-top:8px'; revCfg.append(el('div','appsub','Your Google review link')); const gi=el('input','f'); gi.style.cssText='width:100%;margin:4px 0 0'; gi.placeholder='https://g.page/r/…/review'; gi.value=rev.googleReviewUrl||''; gi.onchange=async()=>{ await post('/api/review-request',{googleReviewUrl:gi.value.trim()}); toast('Saved'); }; revCfg.append(gi);
+  const rvRecent=rev.recent||[]; const revCfg=el('div'); revCfg.style.cssText='margin-top:8px'; revCfg.append(el('div','appsub','Your Google review link')); const gi=el('input','f'); gi.style.cssText='width:100%;margin:4px 0 0'; gi.placeholder='https://g.page/r/…/review'; gi.value=rev.googleReviewUrl||''; gi.onchange=async()=>{ const ok=await post('/api/review-request',{googleReviewUrl:gi.value.trim()}); toast(ok?'Saved':'Could not save. Try again.'); }; revCfg.append(gi);
   box.append(ahCard({ icon:'⭐', title:'Post-Job Review Request', desc:'Job complete → a 1-10 ask. 9-10 get your Google link; 1-8 route to a private recovery call (never the public link).', on:!!rev.enabled, onToggle:async()=>{ await post('/api/review-request',{enabled:!rev.enabled}); openAutoHub(); }, stat:'Promoters (9-10): '+rvRecent.filter(r=>r.outcome==='promoter').length+' · Recovered (1-8): '+rvRecent.filter(r=>r.outcome==='detractor').length, config:revCfg, urls:[{label:'Job complete →',url:rev.webhook&&rev.webhook.jobComplete},{label:'Customer replied →',url:rev.webhook&&rev.webhook.reply}] }));
   // 4: No-Show Recovery
-  const nsCfg=el('div'); nsCfg.style.cssText='margin-top:8px'; nsCfg.append(el('div','appsub','Your booking-calendar link')); const ci=el('input','f'); ci.style.cssText='width:100%;margin:4px 0 0'; ci.placeholder='https://your-calendar-link'; ci.value=ns.calendarUrl||''; ci.onchange=async()=>{ await post('/api/automations',{noShow:{calendarUrl:ci.value.trim()}}); toast('Saved'); }; nsCfg.append(ci);
+  const nsCfg=el('div'); nsCfg.style.cssText='margin-top:8px'; nsCfg.append(el('div','appsub','Your booking-calendar link')); const ci=el('input','f'); ci.style.cssText='width:100%;margin:4px 0 0'; ci.placeholder='https://your-calendar-link'; ci.value=ns.calendarUrl||''; ci.onchange=async()=>{ const ok=await post('/api/automations',{noShow:{calendarUrl:ci.value.trim()}}); toast(ok?'Saved':'Could not save. Try again.'); }; nsCfg.append(ci);
   box.append(ahCard({ icon:'🗓️', title:'No-Show Recovery', desc:'Appointment marked no-show → a warm rebook text with your booking link. 30–50% rebook within the hour.', on:!!ns.enabled, onToggle:async()=>{ await post('/api/automations',{noShow:{enabled:!ns.enabled}}); openAutoHub(); }, stat:'Rebook texts sent: '+((ns.recent||[]).length), config:nsCfg, urls:[{label:'Appointment No-Show →',url:ns.webhook}] }));
   // 5: Onboarding
   box.append(ahCard({ icon:'🎉', title:'New Customer Onboarding', desc:'Deal marked Closed Won → a welcome text, and Miles stops all prospect nurtures (no "still thinking?" text after they’ve paid).', on:!!ob.enabled, onToggle:async()=>{ await post('/api/automations',{onboarding:{enabled:!ob.enabled}}); openAutoHub(); }, stat:'Customers onboarded: '+((ob.recent||[]).length), urls:[{label:'Deal Closed Won →',url:ob.webhook}] }));
@@ -6318,6 +6318,7 @@ function renderFbReview(built){
   const spec=built&&built.spec;
   const status=(built&&built.status)||{ready:false,note:'Connect a Facebook ad account and a Page. Nothing was created.'};
   const issues=(built&&built.issues)||[];
+  const claimWarnings=(built&&built.warnings)||[];
   const h=el('div','mcard');
   h.innerHTML='<h3 style="margin:0">Facebook campaign</h3><p class="mdesc" style="margin:6px 0 0">A paused leads campaign for Facebook and Instagram. Miles creates it only after you approve it, and only inside your daily cap. Nothing spends until you turn it on in Meta.</p>';
   box.append(h);
@@ -6351,6 +6352,7 @@ function renderFbReview(built){
   foot.append(el('div','appsub',(spec.ad&&spec.ad.description)||''));
   card.append(foot); ap.append(card); box.append(ap);
   if(issues.length){ const iw=el('div','mcard'); iw.style.marginTop='14px'; iw.style.borderLeft='3px solid var(--warn)'; iw.append(el('div','sect-label','BEFORE YOU APPROVE')); const ul=el('ul'); ul.style.cssText='margin:8px 0 0;padding-left:18px'; issues.forEach(i=>ul.append(el('li','appsub',i))); iw.append(ul); box.append(iw); }
+  if(claimWarnings.length){ const ww=el('div','mcard'); ww.style.marginTop='14px'; ww.style.borderLeft='3px solid var(--warn)'; ww.append(el('div','sect-label','CHECK THIS AD COPY')); const ul=el('ul'); ul.style.cssText='margin:8px 0 0;padding-left:18px'; claimWarnings.forEach(i=>ul.append(el('li','appsub',i))); ww.append(ul); box.append(ww); }
   const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','CHANGE THE PLAN'));
   const mk=(label,val,type)=>{ const w=el('div'); w.style.cssText='display:flex;flex-direction:column;gap:4px;margin:10px 0'; w.append(el('div','appsub',label)); const i=el('input','f'); i.value=val||''; if(type)i.type=type; i.style.width='100%'; w.append(i); return i; };
   const offer=mk('Offer', (spec.ad&&spec.ad.headline)||'');
@@ -6358,7 +6360,7 @@ function renderFbReview(built){
   const budget=mk('Facebook daily budget', spec.dailyBudget?String(spec.dailyBudget):'', 'number');
   f.append(offer.parentNode, website.parentNode, budget.parentNode);
   const rebuild=el('button','ghost','Update the plan');
-  rebuild.onclick=async()=>{ rebuild.disabled=true; try{ const r=await(await fetch('/api/meta/build',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({offer:offer.value,website:website.value,dailyBudget:Number(budget.value)||undefined})})).json(); renderFbReview(r); }catch(e){ toast('Could not update the plan.'); rebuild.disabled=false; } };
+  rebuild.onclick=async()=>{ rebuild.disabled=true; try{ const r=await(await fetch('/api/meta/build',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({offer:offer.value,website:website.value,dailyBudget:budget.value===''?undefined:Number(budget.value)})})).json(); if(r&&r.error){ toast(r.error); rebuild.disabled=false; return; } renderFbReview(r); }catch(e){ toast('Could not update the plan.'); rebuild.disabled=false; } };
   f.append(rebuild); box.append(f);
   const bar=el('div','mcard'); bar.style.marginTop='14px';
   const ready=!!(status.ready&&!issues.length);
@@ -6492,7 +6494,7 @@ async function openAdsManager(){
     renderConversionSync(box); return;
   }
   const t=d.totals||{}; const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(110px,1fr));margin-bottom:18px';
-  g.append(statCard('Spend','$'+(t.spend||0).toLocaleString()), statCard('Revenue','$'+(t.revenue||0).toLocaleString()), statCard('ROAS', t.roas!=null?(t.roas+'x'):', '), statCard('ROI', t.roiPct!=null?(t.roiPct+'%'):', '), statCard('Leads',(t.leads||0).toLocaleString()), statCard('Cost / lead', t.costPerLead!=null?('$'+t.costPerLead):', '));
+  g.append(statCard('Spend','$'+(t.spend||0).toLocaleString()), statCard('Revenue','$'+(t.revenue||0).toLocaleString()), statCard('ROAS', t.roas!=null?(t.roas+'x'):'-'), statCard('ROI', t.roiPct!=null?(t.roiPct+'%'):'-'), statCard('Leads',(t.leads||0).toLocaleString()), statCard('Cost / lead', t.costPerLead!=null?('$'+t.costPerLead):'-'));
   box.append(g);
   const grid=el('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px';
   (d.campaigns||[]).forEach(c=>{
@@ -6502,9 +6504,9 @@ async function openAdsManager(){
       +'<div style="font-size:24px;font-weight:800;letter-spacing:-.02em;margin:10px 0 2px">$'+(c.spend||0).toLocaleString()+'</div><div class="appsub">spend · '+mktRangeLabel(d.range)+'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;font-size:13px">'
       +'<div><div class="appsub">Revenue</div><b>$'+(c.revenue||0).toLocaleString()+'</b></div>'
-      +'<div><div class="appsub">ROAS</div><b'+(c.roas!=null&&c.roas>=3?' style="color:var(--good)"':'')+'>'+(c.roas!=null?c.roas+'x':', ')+'</b></div>'
+      +'<div><div class="appsub">ROAS</div><b'+(c.roas!=null&&c.roas>=3?' style="color:var(--good)"':'')+'>'+(c.roas!=null?c.roas+'x':'-')+'</b></div>'
       +'<div><div class="appsub">Leads</div><b>'+(c.leads||0).toLocaleString()+'</b></div>'
-      +'<div><div class="appsub">Cost / lead</div><b>'+(c.costPerLead!=null?'$'+c.costPerLead:', ')+'</b></div>'
+      +'<div><div class="appsub">Cost / lead</div><b>'+(c.costPerLead!=null?'$'+c.costPerLead:'-')+'</b></div>'
       +'</div>';
     grid.append(card);
   });
@@ -6561,7 +6563,7 @@ async function openGrowth(){
     return;
   }
   const t=d.totals||{}; const g=el('div','stats'); g.style.cssText='grid-template-columns:repeat(auto-fit,minmax(105px,1fr));margin-bottom:16px';
-  g.append(statCard('Spend','$'+(t.spend||0).toLocaleString()), statCard('Revenue','$'+(t.revenue||0).toLocaleString()), statCard('ROAS', t.roas!=null?(t.roas+'x'):', '), statCard('ROI', t.roiPct!=null?(t.roiPct+'%'):', '), statCard('Target / job', t.targetCpa!=null?('$'+t.targetCpa):', '));
+  g.append(statCard('Spend','$'+(t.spend||0).toLocaleString()), statCard('Revenue','$'+(t.revenue||0).toLocaleString()), statCard('ROAS', t.roas!=null?(t.roas+'x'):'-'), statCard('ROI', t.roiPct!=null?(t.roiPct+'%'):'-'), statCard('Target / job', t.targetCpa!=null?('$'+t.targetCpa):'-'));
   box.append(g);
   const lvl={10:'Assist',20:'Guided',50:'Co-pilot',100:'Autopilot'}[d.autonomy]||('lvl '+d.autonomy);
   box.append(el('div','appsub','⚙️ Autonomy: '+d.autonomy+'% ('+lvl+') · max budget change '+d.guardrailPct+'% per move'+(d.protectProven?' · proven funnels protected':'')+'. '+(d.autonomy>=100?'Approved moves apply immediately.':'Approved moves wait in Deploy for your OK.')));
@@ -7021,7 +7023,7 @@ function renderStudioResult(r,spec){
     const im=el('img'); im.src=r.url; im.style.cssText='max-width:100%;border-radius:12px;border:1px solid var(--line)'; box.append(im);
     let current=r.url; // the image Save/Download/Deploy act on (composited when logo is on)
     const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:12px;flex-wrap:wrap';
-    const save=el('button','go','Save to Assets'); save.style.flex='none'; save.onclick=()=>{ ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:current,caption:'Creative Studio: '+spec.label}); saveAssets(); toast('Saved to Assets'); };
+    const save=el('button','go','Save to Assets'); save.style.flex='none'; save.onclick=async()=>{ ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:current,caption:'Creative Studio: '+spec.label}); const ok=await saveAssets(); toast(ok?'Saved to Assets':'Could not save to Assets. Try again.'); };
     const dl=studioDownload(r.url,spec.type+'.png');
     const edit=el('button','adsave','✏️ Edit'); edit.onclick=()=>openEditor(current);
     const sch=el('button','adsave','📅 Schedule'); sch.onclick=()=>scheduleAsset(current,'image');
@@ -7106,7 +7108,7 @@ async function openEditor(bgUrl){
 
   const exportPng=()=>{ try{ return editor.toDataURL({ format:'png' }); }catch(e){ return null; } };
   const bSave=el('button','go','Save to Assets'); bSave.style.cssText='padding:6px 14px';
-  bSave.onclick=()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export this image (it blocks cross-origin capture).'); return; } ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:u,caption:'Edited design'}); saveAssets(); toast('Saved to Assets ✓'); };
+  bSave.onclick=async()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export this image (it blocks cross-origin capture).'); return; } ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:u,caption:'Edited design'}); const ok=await saveAssets(); toast(ok?'Saved to Assets ✓':'Could not save to Assets. Try again.'); };
   const bDl=el('button','adsave','⤓ Download'); bDl.onclick=()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export (cross-origin image).'); return; } const a=el('a'); a.href=u; a.download='miles-design.png'; a.click(); };
   const bDeploy=el('button','go','↗ Send to Deploy'); bDeploy.style.cssText='padding:6px 14px';
   bDeploy.onclick=()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export (cross-origin image).'); return; } if(typeof queueChange==='function') queueChange('creative','Edited design','pending'); ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:u,caption:'Edited design (sent to Deploy)'}); saveAssets(); toast('Sent to Deploy (pending approval)'); };
@@ -7188,7 +7190,7 @@ function openEditorLegacy(bgUrl){
 
   function exportPng(){ try{ const f=bg.naturalWidth/cw; const oc=document.createElement('canvas'); oc.width=bg.naturalWidth; oc.height=bg.naturalHeight; const o=oc.getContext('2d'); o.drawImage(bg,0,0,oc.width,oc.height); for(const l of layers){ if(l.type==='image'){ o.drawImage(l.img,l.x*f,l.y*f,l.w*f,l.h*f); } else if(l.type==='shape'){ o.save(); o.globalAlpha=(l.opacity==null?1:l.opacity); o.fillStyle=l.fill||'#111'; if(l.radius){ roundRectPath(o,l.x*f,l.y*f,l.w*f,l.h*f,Math.min(l.radius*f,l.w*f/2,l.h*f/2)); o.fill(); } else o.fillRect(l.x*f,l.y*f,l.w*f,l.h*f); o.restore(); } else { o.font=(l.weight||'700')+' '+(l.size*f)+'px '+(l.font||'Inter, system-ui, sans-serif'); o.textBaseline='top'; o.fillStyle=l.color||'#fff'; o.shadowColor='rgba(0,0,0,.55)'; o.shadowBlur=Math.max(2,l.size*f*0.12); o.shadowOffsetY=f; o.fillText(l.text,l.x*f,l.y*f); } } return oc.toDataURL('image/png'); }catch(err){ return null; } }
   const bSave=el('button','go','Save to Assets'); bSave.style.cssText='flex:none;padding:6px 14px';
-  bSave.onclick=()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export (image is cross-origin). Save it to Assets first, then edit that copy.'); return; } ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:u,caption:'Edited design'}); saveAssets(); toast('Saved to Assets ✓'); };
+  bSave.onclick=async()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export (image is cross-origin). Save it to Assets first, then edit that copy.'); return; } ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:u,caption:'Edited design'}); const ok=await saveAssets(); toast(ok?'Saved to Assets ✓':'Could not save to Assets. Try again.'); };
   const bDl=el('button','adsave','⤓ Download'); bDl.onclick=()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export (cross-origin image).'); return; } const a=el('a'); a.href=u; a.download='miles-design.png'; a.click(); };
   const bDeploy=el('button','go','↗ Send to Deploy'); bDeploy.style.cssText='flex:none;padding:6px 14px';
   bDeploy.onclick=()=>{ const u=exportPng(); if(!u){ toast('Couldn’t export (cross-origin image).'); return; } if(typeof queueChange==='function'){ queueChange('creative','Edited design','pending'); } ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url:u,caption:'Edited design (sent to Deploy)'}); saveAssets(); toast('Sent to Deploy (pending approval)'); };
@@ -8269,7 +8271,7 @@ async function setUsage(box){
   if(!net.workspaces){ card3.append(el('div','verdict tight','Network learning is just getting started, insights appear as more businesses join Miles.')); }
   else{
     const ns=el('div','stats'); ns.style.margin='4px 0 12px';
-    ns.append(statCard('Businesses',net.workspaces||0), statCard('Agents deployed',net.totalAgentsDeployed||0), statCard('Agent runs',net.totalAgentRuns||0), statCard('Median target CPA',net.medianTargetCpa?('$'+net.medianTargetCpa):', '));
+    ns.append(statCard('Businesses',net.workspaces||0), statCard('Agents deployed',net.totalAgentsDeployed||0), statCard('Agent runs',net.totalAgentRuns||0), statCard('Median target CPA',net.medianTargetCpa?('$'+net.medianTargetCpa):'-'));
     card3.append(ns);
     if((net.topAgents||[]).length){ const t=el('div'); t.append(el('div','sect-label','MOST-DEPLOYED AGENTS ACROSS THE NETWORK'));
       for(const a of net.topAgents){ const row=el('div'); row.style.cssText='display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px'; row.innerHTML='<span>'+esc(NET_TASK_LABEL[a.task]||a.task)+'</span><span class="appsub">'+a.count+' business'+(a.count===1?'':'es')+'</span>'; t.append(row); }
@@ -8830,7 +8832,7 @@ function openFeedback(){ fbRating=0;
 async function submitFeedback(){ const msg=($('#fb-msg').value||'').trim(); if(!msg){ toast('Type your feedback first'); return; }
   const btn=$('#fb-send'); btn.disabled=true; btn.textContent='Sending…';
   try{ const r=await fetch('/api/feedback',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:msg,rating:fbRating,page:($('#ptitle')?$('#ptitle').textContent:'')})});
-    if(r.ok){ closeModal(); toast('Thanks, feedback sent! 🙏'); } else { toast('Could not send'); btn.disabled=false; btn.textContent='Send feedback'; }
+    if(r.ok){ closeModal(); toast('Thanks, feedback sent! 🙏'); } else { const d=await r.json().catch(()=>({})); toast(d.error||'Could not send'); btn.disabled=false; btn.textContent='Send feedback'; }
   }catch(e){ toast('Could not send'); btn.disabled=false; btn.textContent='Send feedback'; }
 }
 async function setFeedback(box){

@@ -175,7 +175,7 @@ export function brandedAsset(profile: LoopProfile): BrandedAsset {
   ];
   const descriptions = [
     clip(`${name}${city ? ` in ${city}` : ''}. ${service}. Call for a visit.`, 90),
-    clip('Licensed local crew. You approve every campaign before it is created paused.', 90),
+    clip('Local crew. Call to schedule a visit.', 90),
   ];
   return {
     ok: true,

@@ -139,7 +139,7 @@ function engineerOffer(raw: string, financing: boolean, season: string): Campaig
     deadline,
     reasonWhy: `We're filling our install calendar ${season} — that's the honest reason for the discount (roofing/home-services buyers are suspicious of naked discounts).`,
     stack: ['+ free 10-point inspection with photos', '+ free gutter cleaning with every install'],
-    financing: financing ? 'Payments as low as ~$149/mo — the monthly-payment reframe is what actually moves five-figure decisions. Put it in every ad.' : 'No financing yet — get Service Finance / GreenSky / Hearth before scaling spend; on big-ticket trades it out-pulls the discount.',
+    financing: financing ? 'Use the monthly payment your lender actually quotes, with its terms line (for example "With approved credit. See terms."). The monthly-payment reframe moves five-figure decisions. Miles does not invent a payment amount.' : 'No financing yet — get Service Finance / GreenSky / Hearth before scaling spend; on big-ticket trades it out-pulls the discount.',
     riskReversal: ['Licensed & insured (show the license #)', 'Multi-year workmanship warranty', 'Manufacturer certification badges (GAF / Owens Corning where applicable)', 'Real local crew — not a storm-chaser'],
   };
 }
