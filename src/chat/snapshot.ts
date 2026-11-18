@@ -123,6 +123,8 @@ export interface ChatSources {
   /** Slugs actually linked. Omitted means infer them from the integration flags. */
   connectedApps?: string[];
   creditsRemaining?: number | null;
+  /** True once this business was granted the launch credit. */
+  launchGranted?: boolean;
 }
 
 const META_NOTE = 'Meta ads are coming later. A Facebook Page is not an ad account, and this build cannot launch Meta campaigns.';
@@ -317,7 +319,7 @@ export function buildAccountSnapshot(sources: ChatSources): AccountSnapshot {
       contacted: lead.contacted === true,
       sample: leadSample,
     })),
-    account: accountFacts(listedApps(sources), clean(p.website, 180), sources.creditsRemaining ?? null),
+    account: accountFacts(listedApps(sources), clean(p.website, 180), sources.creditsRemaining ?? null, sources.launchGranted === true),
   };
 }
 

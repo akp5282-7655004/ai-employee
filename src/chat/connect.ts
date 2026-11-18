@@ -38,7 +38,7 @@ const NAMED: { re: RegExp; app: string }[] = [
   { re: /facebook[_\s-]*pages|\bfacebook\b|\bmeta\b/i, app: 'facebook_pages' },
 ];
 
-const SECRET_URL = /https?:\/\/[^\s<>"'`)\\\]]+/gi;
+const SECRET_URL = /(?:https?:\/\/)?(?:[\w.-]+\.)?pipedream\.com\/[^\s<>"'`)\\\]]+|https?:\/\/[^\s<>"'`)\\\]]+/gi;
 const BARE_TOKEN = /\bctok_[A-Za-z0-9._~-]*/gi;
 const LINK_WORD = /\bconnect_link_url\b|\bconnectLinkUrl\b|\bconnect_link\b/g;
 const REMOVED = '[connect link removed]';
@@ -88,7 +88,7 @@ function looksLikeConnectSecret(url: string): boolean {
   try { decoded = decodeURIComponent(url); } catch { /* keep the raw url */ }
   const blob = `${url} ${decoded}`.toLowerCase();
   if (blob.includes('ctok_')) return true;
-  if (blob.includes('connect_link') || blob.includes('connectlinkurl')) return true;
+  if (blob.includes('connect_link') || blob.includes('connectlink')) return true;
   if (/[?&#]token=/.test(blob)) return true;
   if (/pipedream\.com/.test(blob) && /connect/.test(blob)) return true;
   return false;
@@ -153,9 +153,20 @@ export function scrubStoredMessages(input: unknown): { messages: StoredChatMessa
     if (!text && !action) { changed = true; continue; }
     const next: StoredChatMessage = { role, text };
     if (action) next.action = action;
+    const prev = messages[messages.length - 1];
+    if (prev && prev.role === next.role && prev.text === next.text) { changed = true; continue; }
     messages.push(next);
   }
   const capped = messages.slice(-200);
   if (capped.length !== messages.length) changed = true;
   return { messages: capped, changed };
+}
+
+/** True when every incoming row is already the start of the stored thread. */
+export function isStoredPrefix(incoming: StoredChatMessage[], stored: StoredChatMessage[]): boolean {
+  if (incoming.length === 0 || incoming.length >= stored.length) return false;
+  return incoming.every((row, i) => {
+    const prev = stored[i];
+    return !!prev && prev.role === row.role && prev.text === row.text;
+  });
 }

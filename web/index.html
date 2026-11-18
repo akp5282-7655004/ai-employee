@@ -9722,7 +9722,7 @@ document.querySelector('.main').addEventListener('scroll', async (e)=>{
 const chat=$('#chat'), cinput=$('#cinput');
 const APP_LABEL={google_ads:'Google Ads',google_my_business:'Business Profile',google_lsa:'Local Services Ads',facebook_ads:'Meta Ads',gohighlevel:'GoHighLevel'};
 function addRow(role){const r=el('div','row '+(role==='user'?'user':'emp'));const a=el('div','av '+(role==='user'?'you':'emp'),role==='user'?'A':'M');const b=el('div','bubble');r.append(a,b);chat.append(r);chat.scrollTop=chat.scrollHeight;return b;}
-function say(role,text){const b=addRow(role);b.textContent=text;chat.scrollTop=chat.scrollHeight;logChat(role,text);return b;}
+function say(role,text){ const shown=role==='user'?text:scrubConnectText(text); const b=addRow(role); b.textContent=shown; chat.scrollTop=chat.scrollHeight; logChat(role,shown); return b; }
 function renderPlan(reply){
   const b=addRow('emp'); b.append(el('div',null,reply.text)); const plan=reply.plan,card=el('div','pcard');
   const h=el('h4');h.append(el('span',null,'Proposed plan'),el('span',null,plan.band+' · '+money(plan.monthlyBudget)+'/mo'));card.append(h);
@@ -9761,7 +9761,7 @@ function dispatch(r){ if(r.plan){renderPlan(r); logChat('emp', r.summary || 'Her
 let chatMode='medium';
 // Light Markdown → HTML for assistant replies (headings, bold, code, bullets).
 function mdToHtml(md){
-  let s=esc(md||'');
+  let s=esc(scrubConnectText(md||''));
   s=s.replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
   const lines=s.split(/\n/); let html='', list=null;
   const closeList=()=>{ if(list){ html+='</'+list+'>'; list=null; } };
@@ -9789,11 +9789,16 @@ function scrubConnectText(text){
       let decoded=url;
       try{ decoded=decodeURIComponent(url); }catch(e){}
       const blob=(url+' '+decoded).toLowerCase();
-      if(blob.includes('ctok_')||blob.includes('connect_link')||blob.includes('connectlinkurl')||/[?&#]token=/.test(blob)||(blob.includes('pipedream.com')&&blob.includes('connect'))) return '';
+      if(blob.includes('ctok_')||blob.includes('connect_link')||blob.includes('connectlink')||/[?&#]token=/.test(blob)||(blob.includes('pipedream.com')&&blob.includes('connect'))) return '[connect link removed]';
       return url;
     })
-    .replace(/\bctok_[A-Za-z0-9._~-]*/gi,'')
-    .replace(/\bconnect_link_url\b|\bconnectLinkUrl\b|\bconnect_link\b/g,'')
+    .replace(/(?:https?:\/\/)?pipedream\.com\/[^\s<>"'`)\\\]]+/gi, (url)=>{
+      const blob=url.toLowerCase();
+      if(blob.includes('ctok_')||blob.includes('connect')||/[?&#]token=/.test(blob)||blob.includes('connectlink')) return '[connect link removed]';
+      return url;
+    })
+    .replace(/\bctok_[A-Za-z0-9._~-]*/gi,'[connect link removed]')
+    .replace(/\bconnect_link_url\b|\bconnectLinkUrl\b|\bconnect_link\b/g,'[connect link removed]')
     .replace(/[ \t]{2,}/g,' ')
     .trim();
 }
@@ -9912,7 +9917,7 @@ function logChat(role,text,action){
   if(REMOTE){ clearTimeout(chatSaveT); chatSaveT=setTimeout(saveChat,600); }
 }
 function saveChat(){ if(!REMOTE || !chatLoadOk) return; try{ fetch('/api/chat',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-200)})}); }catch(e){} }
-async function loadChat(){ if(!REMOTE){ CHAT_LOADED=true; chatLoadOk=true; await paintChatEmpty(); return; } try{ const r=await fetch('/api/chat'); const d=await r.json(); if(!r.ok) return; const rows=(d.messages||[]).filter(m=>m&&(m.text||(m.action&&m.action.app))).map(m=>{ const action=m.action&&m.action.kind==='connect'?{kind:'connect', app:String(m.action.app).replace(/[^a-z0-9_]/gi,''), label:scrubConnectText(m.action.label||'Connect')}:null; const row={role:m.role, text:scrubConnectText(m.text||'')}; if(action&&action.app) row.action=action; return row; }).filter(m=>m.text||m.action); CHAT_LOG=rows; chatLoadOk=true; CHAT_LOADED=true; chat.innerHTML=''; for(const m of CHAT_LOG){ const b=addRow(m.role==='user'?'user':'emp'); if(m.role==='user') b.textContent=m.text; else { b.className='bubble md'; const body=el('div'); body.innerHTML=mdToHtml(m.text); b.append(body); if(m.action&&m.action.kind==='connect') appendConnectButton(b, body, m.action); } } chat.scrollTop=chat.scrollHeight; }catch(e){} await paintChatEmpty(); }
+async function loadChat(){ if(!REMOTE){ CHAT_LOADED=true; chatLoadOk=true; await paintChatEmpty(); return; } try{ const r=await fetch('/api/chat'); const d=await r.json(); if(!r.ok) return; const rows=(d.messages||[]).filter(m=>m&&(m.text||(m.action&&m.action.app))).map(m=>{ const action=m.action&&m.action.kind==='connect'?{kind:'connect', app:String(m.action.app).replace(/[^a-z0-9_]/gi,''), label:scrubConnectText(m.action.label||'Connect')}:null; const row={role:m.role, text:scrubConnectText(m.text||'')}; if(action&&action.app) row.action=action; return row; }).filter(m=>m.text||m.action); const deduped=[]; for(const row of rows){ const prev=deduped[deduped.length-1]; if(prev&&prev.role===row.role&&prev.text===row.text) continue; deduped.push(row); } CHAT_LOG=deduped; chatLoadOk=true; CHAT_LOADED=true; chat.innerHTML=''; for(const m of CHAT_LOG){ const b=addRow(m.role==='user'?'user':'emp'); if(m.role==='user') b.textContent=m.text; else { b.className='bubble md'; const body=el('div'); body.innerHTML=mdToHtml(m.text); b.append(body); if(m.action&&m.action.kind==='connect') appendConnectButton(b, body, m.action); } } chat.scrollTop=chat.scrollHeight; }catch(e){} await paintChatEmpty(); }
 async function paintChatEmpty(){
   const box=$('#chat-empty'); if(!box) return;
   const has=!!(chat&&chat.children.length);
