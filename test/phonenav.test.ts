@@ -47,6 +47,16 @@ describe('phone navigation', () => {
     expect(inputs.length).toBe(3);
     for (const h of inputs) expect(h).toBeGreaterThanOrEqual(24);
 
+    // A lead search with no match says so, and clearing it takes the message away.
+    await page.evaluate(async () => { await fetch('/api/leads', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Dana Homeowner', phone: '(501) 555-0177' }) }); });
+    await page.reload();
+    await page.waitForSelector('#lead-search');
+    await page.locator('#onboard').evaluate((el) => el.classList.remove('on'));
+    await page.fill('#lead-search', 'zzzz');
+    await expect.poll(() => page.locator('#lead-nomatch').innerText()).toMatch(/No leads match "zzzz"/);
+    await page.fill('#lead-search', 'dana');
+    await expect.poll(() => page.locator('#lead-nomatch').isVisible()).toBe(false);
+
     // Stand-alone text links are tall enough to tap (24px minimum).
     await page.evaluate(() => (globalThis as unknown as { setPage: (x: string) => void }).setPage('settings'));
     await page.waitForSelector('#page-settings a.taplink');
