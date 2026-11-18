@@ -2278,7 +2278,9 @@ function setPage(id){
   openNavGroupFor(id);
   renderSubTabs(id);
   $('#ptitle').textContent = TITLES[id]||'Dashboard';
-  if (location.hash !== '#'+id) history.replaceState({ page: id }, '', '#'+id);
+  // The first page of a visit fills in the bare address. Every later move adds a
+  // history entry, so Back returns to the page before it instead of leaving the app.
+  if (location.hash !== '#'+id) { if (location.hash) history.pushState({ page: id }, '', '#'+id); else history.replaceState({ page: id }, '', '#'+id); }
   const homeIds=['agents'];
   $('#page-home').classList.toggle('on',homeIds.includes(id));
   $('#page-overview').classList.toggle('on',id==='overview');
@@ -2378,6 +2380,13 @@ function updateConnStat(){
 function connLiveForCustomers(){ return !!(CONN.hub && CONN.hub.ready && CONN.hub.env==='production'); }
 document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>{ if(typeof closeOnboard==='function') closeOnboard(); setPage(a.dataset.page); });
 window.addEventListener('hashchange', () => { const id = location.hash.replace('#',''); if (id && TITLES[id]) setPage(id); });
+// The page to open on load: the one named in the address, so Refresh stays put.
+function startPage(){
+  if(location.pathname==='/admin' && IS_ADMIN) return 'owneradmin';
+  const id=location.hash.replace('#','');
+  if(id && TITLES[id] && (id!=='owneradmin' || IS_ADMIN)) return id;
+  return 'overview';
+}
 // Collapsible nav groups: expand the group holding the active page; a header click
 // toggles its group open (accordion, opening one collapses the others).
 function openNavGroupFor(id){
@@ -11085,7 +11094,7 @@ function openPlayDetail(){
   card.append(el('p',null,p.results));
   box.append(card);
 }
-(async()=>{ await authInit(); await loadPacks(); await fetchConnections(); updateConnStat(); renderTabs(); renderCards(); loadActivePlaybooks(); setPage(location.pathname==='/admin' && IS_ADMIN ? 'owneradmin' : 'overview'); handleBillingReturn(); })();
+(async()=>{ await authInit(); await loadPacks(); await fetchConnections(); updateConnStat(); renderTabs(); renderCards(); loadActivePlaybooks(); setPage(startPage()); handleBillingReturn(); })();
 </script>
 </body>
 </html>

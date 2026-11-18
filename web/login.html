@@ -249,7 +249,7 @@
       if(mode==='reset'){
         const r=await fetch('/auth/reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({uid:resetUid,token:resetToken,password:$('password').value})});
         const d=await r.json().catch(()=>({})); if(!r.ok){ $('err').textContent=d.error||'Could not reset.'; btn.disabled=false; return; }
-        window.location='/'; return;
+        window.location.replace('/'); return;
       }
       if(mode==='signup' && !$('tos').checked){ $('err').textContent='Please accept the Terms of Service to create an account.'; btn.disabled=false; return; }
       const body={ email:$('email').value.trim(), password:$('password').value, name:$('name').value.trim(), invite:inviteToken||undefined, tos:mode==='signup'?$('tos').checked:undefined };
@@ -257,7 +257,7 @@
       const d=await r.json().catch(()=>({}));
       if(!r.ok){ showError(d,'Something went wrong.'); btn.disabled=false; return; }
       await saveCredential(body.email, body.password, body.name);
-      window.location='/';
+      window.location.replace('/');
     }catch(err){ $('err').textContent='Network error, try again.'; btn.disabled=false; }
   });
 </script>
