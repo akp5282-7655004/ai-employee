@@ -54,11 +54,13 @@ export class PostgresStore implements Store {
     const r = await this.pool.query('SELECT * FROM users WHERE id=$1', [id]);
     return r.rows[0] ? this.mapUser(r.rows[0]) : null;
   }
-  async updateUser(id: string, patch: { name?: string; passwordHash?: string }): Promise<void> {
+  async updateUser(id: string, patch: { name?: string; passwordHash?: string; email?: string }): Promise<void> {
     const sets: string[] = [];
     const vals: unknown[] = [];
     if (patch.name !== undefined) { sets.push(`name=$${sets.length + 1}`); vals.push(patch.name); }
     if (patch.passwordHash !== undefined) { sets.push(`password_hash=$${sets.length + 1}`); vals.push(patch.passwordHash); }
+    // users.email is UNIQUE, so the database refuses an address another account holds.
+    if (patch.email !== undefined) { sets.push(`email=$${sets.length + 1}`); vals.push(patch.email); }
     if (!sets.length) return;
     vals.push(id);
     await this.pool.query(`UPDATE users SET ${sets.join(', ')} WHERE id=$${vals.length}`, vals);

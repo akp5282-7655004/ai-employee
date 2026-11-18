@@ -921,6 +921,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // shared sending quota. One limiter per direction.
   const forgotByEmail = new RateLimiter(3, 60 * 60_000); // 3 per address per hour
   const forgotByIp = new RateLimiter(10, 60 * 60_000); // 10 per caller per hour
+  // An email change mails an address the account does not own yet. Three an
+  // hour is plenty for a typo and too few to use Miles as a way to spam people.
+  const emailChangeByUser = new RateLimiter(3, 60 * 60_000);
   // Sign-in guessing. Tight per account (that is the target), loose per caller
   // (shared office and household IPs must not lock each other out).
   const loginByEmail = new RateLimiter(8, 15 * 60_000);
@@ -3075,6 +3078,81 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     await authStore.updateUser(u.id, { name: req.body.name.trim().slice(0, 120) });
     return { ok: true };
   });
+
+  /**
+   * Change the sign-in email.
+   *
+   * The address is the account's identity: it is where the password reset
+   * goes. So nothing changes on the request. The request needs the current
+   * password, and the new address has to prove it can receive mail by opening
+   * a link that is only ever sent there. Until that link is opened the old
+   * address keeps working, and a typo in the new one locks nobody out.
+   */
+  app.post<{ Body: { email?: string; password?: string } }>('/api/account/email', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const posted = parseEmail(req.body?.email, { required: true });
+    if (!posted.ok) return reply.code(400).send({ error: posted.error, field: 'email' });
+    const next = posted.value;
+    if (next === u.email.toLowerCase()) return reply.code(400).send({ error: 'That is already your sign-in email. Nothing was changed.', field: 'email' });
+    const data = await authStore.getUserData(u.id);
+    // A Google account is matched to Miles by its address at every sign-in.
+    // Changing the address here would leave it with no way back in.
+    if ((data.tosAccepted as { via?: string } | undefined)?.via === 'google') {
+      return reply.code(409).send({ error: 'This account signs in with Google, so its email is the Google address. Nothing was changed.' });
+    }
+    if (!verifyPassword(String(req.body?.password ?? ''), u.passwordHash)) {
+      return reply.code(401).send({ error: 'Your current password is wrong. Nothing was changed.', field: 'password' });
+    }
+    const base = emailBaseUrl();
+    if (!deliveryStatus().email || !base) {
+      return reply.code(503).send({ error: 'Email sending is not set up on this server, so the new address cannot be confirmed. Nothing was changed.' });
+    }
+    if (!emailChangeByUser.check(u.id).allowed) {
+      return reply.code(429).send({ error: 'Too many email change requests. Try again in an hour. Nothing was changed.' });
+    }
+    // The same answer whether or not the address is taken, so this cannot be
+    // used to find out who has an account. A taken address just gets no link.
+    if (!(await authStore.getUserByEmail(next))) {
+      const token = newToken();
+      await authStore.mutateUserData(u.id, (d) => { d.emailChange = { email: next, token, exp: Date.now() + 24 * 3600_000 }; });
+      await sendEmail(next, 'Confirm your new Miles sign-in email',
+        `Someone asked to use this address to sign in to Miles in place of ${u.email}.\n\nIf that was you, confirm it with this link. It works for 24 hours, on any device:\n\n${base}/auth/email-change?uid=${encodeURIComponent(u.id)}&token=${token}\n\nIf it was not you, ignore this email and nothing changes.\n`);
+    }
+    return { ok: true, pending: next, note: `Check ${next} for a confirmation link. Your sign-in email stays ${u.email} until you open it.` };
+  });
+
+  app.get<{ Querystring: { uid?: string; token?: string } }>('/auth/email-change', async (req, reply) => {
+    const uid = String(req.query.uid || '');
+    const token = String(req.query.token || '');
+    const user = uid ? await authStore.getUserById(uid) : null;
+    const data = user ? await authStore.getUserData(user.id) : {};
+    const pending = (data.emailChange ?? {}) as { email?: string; token?: string; exp?: number };
+    const bad = !user || !pending.token || !pending.email || !pending.exp || pending.exp < Date.now() || !token || !sameToken(pending.token, token);
+    if (bad) {
+      return reply.code(400).type('text/html').send(statusPage(400, 'This link expired', 'That email-change link is no longer valid. Sign in with your current email and ask for a new one in Settings.'));
+    }
+    const oldEmail = user!.email;
+    const newEmail = pending.email!;
+    try {
+      // Someone else may have registered the address since the link was sent.
+      if (await authStore.getUserByEmail(newEmail)) throw new Error('taken');
+      await authStore.updateUser(user!.id, { email: newEmail });
+    } catch {
+      await authStore.mutateUserData(user!.id, (d) => { delete d.emailChange; });
+      return reply.code(409).type('text/html').send(statusPage(409, 'That email is already in use', `Another account uses that address, so nothing was changed. Your sign-in email is still ${oldEmail}.`));
+    }
+    await authStore.mutateUserData(user!.id, (d) => { delete d.emailChange; d.emailConfirmedAt = new Date().toISOString(); });
+    // Every device signs in again, with the new address. If the change was not
+    // the owner's doing, this is also what throws the other person out.
+    await authStore.deleteSessionsForUser(user!.id);
+    if (deliveryStatus().email) {
+      await sendEmail(oldEmail, 'Your Miles sign-in email was changed',
+        `The sign-in email for your Miles account was changed from ${oldEmail} to ${newEmail}.\n\nIf you did not do this, contact ${supportEmail()} right away.\n`);
+    }
+    return reply.type('text/html').send(statusPage(200, 'Email changed', `Your sign-in email is now ${newEmail}. Sign in again with it.`));
+  });
+
   app.post<{ Body: { current?: string; next?: string } }>('/auth/change-password', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;

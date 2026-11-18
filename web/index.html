@@ -1802,8 +1802,13 @@
       const ours = !/^https?:\/\//.test(url) || url.startsWith(location.origin);
       // /auth/login answers 401 for a wrong password, that is the form's to
       // report, not a sign the session died.
-      const isSignIn = /\/auth\/(login|signup|forgot|reset)/.test(url);
-      if (res.status === 401 && ours && !isSignIn && !leaving) {
+      // The same goes for the two Settings forms that ask for the current
+      // password: a typo there answered 401 and threw the owner out to the
+      // login page with "Your session expired".
+      const isSignIn = /\/auth\/(login|signup|forgot|reset|change-password)|\/api\/account\/email/.test(url);
+      // Pressing Log out is not an expired session either. A dashboard request
+      // still in flight lands just after the session ends.
+      if (res.status === 401 && ours && !isSignIn && !leaving && !window.__signingOut) {
         leaving = true;
         location.href = '/login?expired=1';
       }
@@ -8325,7 +8330,26 @@ function setAccount(box){
   const pg=el('div','pf-grid'); pg.innerHTML='<div class="full"><label>Current password</label><input id="set-pw-cur" type="password" autocomplete="current-password"></div><div class="full"><label>New password</label><input id="set-pw-new" type="password" placeholder="at least 6 characters" autocomplete="new-password"></div>';
   pw.append(pg);
   const pwbtn=el('button','pf-save','Update password'); pwbtn.type='button'; const pwnote=el('span','appsub'); const prow=el('div','ui-actions'); prow.append(pwbtn,pwnote); pw.append(prow);
-  card.append(account, pw);
+  // Changing the sign-in email. The field above stays read-only because the
+  // address does not change when this is saved: it changes when the link sent
+  // to the new address is opened.
+  const em=el('div','ui-section');
+  em.append(el('div','sect-label','Change sign-in email'));
+  const eg=el('div','pf-grid'); eg.innerHTML='<div class="full"><label>New email</label><input id="set-email-new" type="email" placeholder="you@business.com" autocomplete="email"></div><div class="full"><label>Current password</label><input id="set-email-pw" type="password" autocomplete="current-password"></div>';
+  em.append(eg);
+  const embtn=el('button','pf-save','Send confirmation link'); embtn.type='button'; const emnote=el('span','appsub'); const erow=el('div','ui-actions'); erow.append(embtn,emnote); em.append(erow);
+  embtn.onclick=async()=>{
+    if(!REMOTE) return;
+    embtn.disabled=true; emnote.textContent='Sending...';
+    try{
+      const r=await fetch('/api/account/email',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:$('#set-email-new').value,password:$('#set-email-pw').value})});
+      const d=await r.json().catch(()=>({}));
+      emnote.textContent=r.ok?(d.note||'Check the new address for a confirmation link.'):(d.error||'That did not work. Nothing was changed.');
+      if(r.ok){ $('#set-email-pw').value=''; }
+    }catch(e){ emnote.textContent='That did not send. Check your connection. Nothing was changed.'; }
+    embtn.disabled=false;
+  };
+  card.append(account, em, pw);
   box.append(card);
   $('#set-name').value=savedAccountName(SETTINGS.account); $('#set-email').value=SETTINGS.account.email||'';
   save.onclick=async()=>{ if(!REMOTE) return; save.disabled=true; note.textContent='Saving...'; const name=$('#set-name').value.trim(); let ok=false; try{ const r=await fetch('/api/account',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({name})}); ok=r.ok; }catch(e){ ok=false; } if(ok){ SETTINGS.account.name=name; ME.name=name; applyIdentity(); note.textContent='Saved ✓'; } else note.textContent='Could not save, Retry'; save.disabled=false; if(ok) setTimeout(()=>{ if(note.textContent==='Saved ✓') note.textContent=''; },2000); };
@@ -10609,7 +10633,7 @@ $('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=r
   // Returning to desktop width must never leave the drawer state stuck on.
   window.addEventListener('resize',()=>{ if(window.innerWidth>760) setOpen(false); });
 })();
-async function doLogout(){ try{ await fetch('/auth/logout',{method:'POST'}); }catch(e){} window.location='/login'; }
+async function doLogout(){ window.__signingOut=true; try{ await fetch('/auth/logout',{method:'POST'}); }catch(e){} window.location='/login'; }
 $('#logout').onclick=doLogout; const headerOut=$('#header-logout'); if(headerOut) headerOut.onclick=doLogout;
 document.addEventListener('submit',(e)=>{ const btn=e.target&&e.target.querySelector&&e.target.querySelector('button'); if(btn) btn.disabled=true; });
 let formDirty=false;
