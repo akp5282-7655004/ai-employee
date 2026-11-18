@@ -738,7 +738,7 @@
   .dv2-numbers .md-pills button{color:#d7d7dc;}
   .dv2-numbers .md-pills button.on{background:#fff;color:#111112;}
   .dv2-numbers .md-bar{background:#2a2a30;}
-  .dv2-numbers .md-bar i{background:#4b8bf5;}
+  .dv2-numbers .md-bar i{background:#1f8a4c;}
   .dv2-table{width:100%;border-collapse:collapse;font-size:13.5px;}
   .dv2-table th{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8a8a92;text-align:left;padding:8px 8px 10px;border-bottom:1px solid #e4e4e8;}
   .dv2-table td{padding:10px 8px;border-bottom:1px solid #f2f2f4;vertical-align:top;}
@@ -4252,7 +4252,7 @@ function drawRevenueGauge(svg, booked, goal){
   };
   svg.innerHTML='';
   path(arc(Math.PI, 0), '#3a3a42');
-  if(known && ratio>0) path(arc(Math.PI, mid), '#4b8bf5');
+  if(known && ratio>0) path(arc(Math.PI, mid), '#1f8a4c');
   const needle=document.createElementNS(ns,'line');
   needle.setAttribute('x1', cx); needle.setAttribute('y1', cy);
   needle.setAttribute('x2', cx+(r-10)*Math.cos(mid));
@@ -4738,7 +4738,7 @@ function renderOverview(d, miles, op, setup){
       const has=series.length && buckets.values.some(v=>v>0);
       if(!has || typeof Chart!=='function'){ tnote.textContent=typeof Chart==='function'?'No month-by-month history is saved yet.':'Chart.js did not load.'; return; }
       if(tbox._chart){ try{ tbox._chart.destroy(); }catch(e){} }
-      tbox._chart=mountDashChart(tcanvas, {type:'bar', data:{labels:buckets.labels, datasets:[{data:buckets.values, backgroundColor:'#4b8bf5', borderRadius:3, maxBarThickness:28}]}, options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{grid:{display:false}, ticks:{color:'#c8c8cc'}}, y:{grid:{color:'#3a3a42'}, border:{display:false}, ticks:{color:'#c8c8cc', maxTicksLimit:4}}}}});
+      tbox._chart=mountDashChart(tcanvas, {type:'bar', data:{labels:buckets.labels, datasets:[{data:buckets.values, backgroundColor:'#1f8a4c', hoverBackgroundColor:'#1f8a4c', borderRadius:3, maxBarThickness:28}]}, options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{grid:{display:false}, ticks:{color:'#c8c8cc'}}, y:{grid:{color:'#3a3a42'}, border:{display:false}, ticks:{color:'#c8c8cc', maxTicksLimit:4}}}}});
       tnote.textContent=sample?'Example monthly bars from the preview series. Not your account.':'Monthly bars from the connected source.';
     };
     seg.querySelectorAll('button').forEach(b=>b.onclick=()=>{ metric=b.dataset.metric; seg.querySelectorAll('button').forEach(x=>{ x.className=x===b?'on':''; x.setAttribute('aria-pressed', x===b?'true':'false'); }); draw(); });

@@ -18,6 +18,10 @@ describe('dashboard v2', () => {
     expect(html).toContain("card.id='dash-findings'");
     expect(html).toContain('Open Integrations');
     expect(html).toContain('renderOverview(d, miles, op, setup)');
+    expect(html).toContain('.md-bar i{display:block;height:100%;background:#1f8a4c;');
+    expect(html).toContain(".dv2-numbers .md-bar i{background:#1f8a4c;}");
+    expect(html).toContain("backgroundColor:'#1f8a4c', hoverBackgroundColor:'#1f8a4c'");
+    expect(html).toContain("path(arc(Math.PI, mid), '#1f8a4c')");
   });
 
   it('returns the change log without running a new read', async () => {
