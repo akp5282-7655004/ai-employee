@@ -11,6 +11,7 @@ import { CHAT_TOOLS, runChatTool, toolStepLabel, type ChatReaders } from './tool
 import { logUngrounded, redactNumbers, unsupportedNumberTokens } from './ground.js';
 import { contradictoryAsk } from '../qa/ownerrows.js';
 import { connectReply, parseConnectAsk, readConnectAction, scrubAssistantText, scrubConnectSecrets, type ChatConnectAction } from './connect.js';
+import { asksOwnerStatus, asksSpendWork, ownerStatusAnswer, spendWorkReply } from './account.js';
 
 const TOKENS: Record<string, number> = {
   easy: 320,
@@ -58,6 +59,8 @@ export async function answerChat(args: {
   mode?: string;
   model: ChatModel;
   readers: ChatReaders;
+  /** False when the balance cannot pay for a model call. Reads still answer. */
+  allowModel?: boolean;
 }): Promise<ChatAnswer> {
   const mode = TOKENS[args.mode ?? ''] ? args.mode! : 'medium';
   const history = (args.messages ?? [])
@@ -106,6 +109,8 @@ export async function answerChat(args: {
   const contradiction = contradictoryAsk(question);
   if (contradiction) return pack(contradiction, { live: false, mode, steps: [], plan: null, intent: null, next: null, usage: emptyUsage });
   if (connectAction) return pack(connectReply(connectAction), { live: false, mode, steps: [], plan: null, intent: null, next: null, usage: emptyUsage });
+  if (asksOwnerStatus(question)) return pack(ownerStatusAnswer(args.snapshot, question), { live: false, mode, steps: [], plan: null, intent: null, next: null, usage: emptyUsage });
+  if (args.allowModel === false && asksSpendWork(question)) return pack(spendWorkReply(args.snapshot, question), { live: false, mode, steps: [], plan: null, intent: null, next: null, usage: emptyUsage });
   const intent = parseActionIntent(question);
   if (intent) {
     const said = intentReply(intent, args.snapshot.business.name);
@@ -128,6 +133,10 @@ export async function answerChat(args: {
       toolTexts.push(JSON.stringify(read));
       return pack(await ground(spendLeadAnswer(read), false), { live: false, mode, steps: ['Checking the numbers...'], plan: null, intent: null, next: null, usage: emptyUsage });
     }
+  }
+  if (args.allowModel === false) {
+    const text = asksAdsPerformance(question) ? adsPerformanceAnswer(args.snapshot).text : fallbackAnswer(args.snapshot, question);
+    return pack(text, { live: false, mode, steps, plan: null, intent: null, next: asksAdsPerformance(question) ? adsPerformanceAnswer(args.snapshot).next : null, usage: emptyUsage });
   }
   let modelRan = false;
 

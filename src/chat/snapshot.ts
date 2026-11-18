@@ -8,6 +8,7 @@
  * Sample numbers stay labeled SAMPLE and are never marked live.
  */
 import type { MilesMode } from '../agents/policy.js';
+import { accountFacts, type AccountFacts } from './facts.js';
 
 export interface SnapshotCaps {
   dailyBudget: number;
@@ -87,6 +88,8 @@ export interface AccountSnapshot {
   changeLog: { ts: string; kind: string; title: string }[];
   inbox: { id: string; kind: string; title: string; reason: string }[];
   leads: SnapshotLead[];
+  /** Connected tool names and the credit balance. Reads use this and do not call the model. */
+  account: AccountFacts;
 }
 
 export interface ChatSources {
@@ -117,6 +120,9 @@ export interface ChatSources {
   changeLog: { ts: string; kind: string; title: string }[];
   inbox: { id: string; kind: string; title: string; reason: string }[];
   leads: { name?: string; service?: string; source?: string; createdAt?: string; contacted?: boolean }[];
+  /** Slugs actually linked. Omitted means infer them from the integration flags. */
+  connectedApps?: string[];
+  creditsRemaining?: number | null;
 }
 
 const META_NOTE = 'Meta ads are coming later. A Facebook Page is not an ad account, and this build cannot launch Meta campaigns.';
@@ -311,7 +317,20 @@ export function buildAccountSnapshot(sources: ChatSources): AccountSnapshot {
       contacted: lead.contacted === true,
       sample: leadSample,
     })),
+    account: accountFacts(listedApps(sources), clean(p.website, 180), sources.creditsRemaining ?? null),
   };
+}
+
+function listedApps(sources: ChatSources): string[] {
+  if (sources.connectedApps) return sources.connectedApps;
+  const apps: string[] = [];
+  if (sources.google.oauth) apps.push('google_ads');
+  if (sources.social.gbp) apps.push('google_my_business');
+  if (sources.social.facebook) apps.push('facebook');
+  if (sources.social.instagram) apps.push('instagram');
+  if (sources.social.linkedin) apps.push('linkedin');
+  if (sources.ghl.connected) apps.push('gohighlevel');
+  return apps;
 }
 
 function money(n: number): string {

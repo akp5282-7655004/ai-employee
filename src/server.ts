@@ -98,7 +98,9 @@ import { buildMarketingReport, reportRangeId, reportWindow } from './reports/mar
 import { activePlaybooks } from './agents/activeplaybooks.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { answerChat } from './chat/ask.js';
-import { sanitizeConnectAction, scrubAssistantText, scrubStoredMessages } from './chat/connect.js';
+import { answersWithoutModel, asksSpendWork, spendWorkReply } from './chat/account.js';
+import { sanitizeConnectAction, scrubAssistantText, scrubStoredMessages, type StoredChatMessage } from './chat/connect.js';
+import { fallbackAnswer } from './chat/prompt.js';
 import { chatEmptyLine, chatSuggestions } from './chat/prompt.js';
 import { defaultChatModel, type ChatModel } from './chat/model.js';
 import { buildAccountSnapshot, leadFacts } from './chat/snapshot.js';
@@ -6271,7 +6273,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const msgs = (req.body as { messages?: unknown[] })?.messages ?? [];
-    data.chat = scrubStoredMessages(Array.isArray(msgs) ? msgs : []).messages;
+    const cleaned = scrubStoredMessages(Array.isArray(msgs) ? msgs : []).messages;
+    const existing = scrubStoredMessages(data.chat).messages;
+    // A refresh used to PUT an empty log before history loaded and erase the thread.
+    if (cleaned.length === 0 && existing.length > 0) return { ok: true, kept: true };
+    data.chat = cleaned;
     await authStore.setUserData(u.id, data);
     return { ok: true };
   });
@@ -8231,6 +8237,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       changeLog: approvalLog(data).slice(0, 8).map((entry) => ({ ts: entry.ts, kind: entry.kind, title: entry.title })),
       inbox: miles.inbox.filter((row) => row.status === 'queued').map((row) => ({ id: row.id, kind: row.kind, title: row.title, reason: row.reason })),
       leads: (snap?.leads ?? []).map(leadFacts).filter((lead): lead is NonNullable<typeof lead> => !!lead),
+      connectedApps: [...linked],
+      creditsRemaining: creditState(data).remaining,
     });
   }
 
@@ -8400,33 +8408,67 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const pace = chatByUser.check(u.id);
     if (!pace.allowed) return reply.code(429).send({ error: `Too many questions. Try again in ${pace.retryAfter} seconds. Nothing was changed.` });
     const mode = ['easy', 'medium', 'high', 'research'].includes(req.body?.mode ?? '') ? req.body!.mode! : 'medium';
+    const messages = req.body?.messages ?? [];
+    const question = [...messages].reverse().find((message) => message?.role === 'user' && message.text?.trim())?.text?.trim() || '';
     const before = await authStore.getUserData(u.id);
     const afford = canAfford(before, 'chat');
-    if (!afford.ok) return { text: afford.reason || 'Out of credits. Nothing was changed.', live: false, mode, steps: [], plan: null };
+    // A charge happens only after a model turn reports a serve cost. Reads and
+    // the connect button never call the model, so an empty balance does not
+    // replace them with the no-credits notice.
+    const remember = async (text: string, action: unknown) => {
+      const saved = await authStore.getUserData(u.id);
+      const prior = scrubStoredMessages(saved.chat).messages;
+      const user = scrubAssistantText(question);
+      const reply = scrubAssistantText(text);
+      const act = sanitizeConnectAction(action);
+      const next: StoredChatMessage[] = [...prior];
+      if (user) next.push({ role: 'user', text: user });
+      const row: StoredChatMessage = { role: 'emp', text: reply };
+      if (act) row.action = act;
+      if (row.text || act) next.push(row);
+      saved.chat = next.slice(-200);
+      await authStore.setUserData(u.id, saved);
+    };
+    if (!afford.ok && !answersWithoutModel(question)) {
+      // A paused or ended plan keeps the payment message. A new account with
+      // no credits still gets a snapshot answer, and a tailored note only when
+      // the ask is work that would spend credits.
+      const text = workAccess(before).paused
+        ? (afford.reason || 'Paid work is paused.')
+        : asksSpendWork(question)
+          ? spendWorkReply(await chatSnapshotFor(u.id), question)
+          : fallbackAnswer(await chatSnapshotFor(u.id), question);
+      await remember(text, null);
+      return { text, live: false, mode, steps: [], plan: null, next: null, action: null };
+    }
     const snapshot = await chatSnapshotFor(u.id);
     const out = await answerChat({
       snapshot,
-      messages: req.body?.messages ?? [],
+      messages,
       mode,
       model: deps.chatModel ?? defaultChatModel,
       readers: chatReadersFor(u.id),
+      allowModel: afford.ok,
     });
     const saved = await authStore.getUserData(u.id);
     if (out.intent) {
       const prior = Array.isArray(saved.agentIntents) ? saved.agentIntents as unknown[] : [];
-      saved.agentIntents = [{ ...out.intent, at: new Date().toISOString(), text: (req.body?.messages ?? []).slice(-1)[0]?.text || '' }, ...prior].slice(0, 20);
+      saved.agentIntents = [{ ...out.intent, at: new Date().toISOString(), text: question }, ...prior].slice(0, 20);
     }
-    if (out.usage && out.usage.serveUsd > 0) chargeCredits(saved, 'chat', 'Miles agent', new Date(), out.usage);
-    if (out.intent || (out.usage && out.usage.serveUsd > 0)) await authStore.setUserData(u.id, saved);
+    if (afford.ok && out.usage && out.usage.serveUsd > 0) chargeCredits(saved, 'chat', 'Miles agent', new Date(), out.usage);
+    if (out.intent || (afford.ok && out.usage && out.usage.serveUsd > 0)) await authStore.setUserData(u.id, saved);
     if (out.live) await meterUser(u.id, 'text');
+    const text = scrubAssistantText(out.text);
+    const action = sanitizeConnectAction(out.action);
+    await remember(text, action);
     return {
-      text: scrubAssistantText(out.text),
+      text,
       live: out.live,
       mode: out.mode,
       steps: out.steps,
       plan: out.plan,
       next: out.next,
-      action: sanitizeConnectAction(out.action),
+      action,
     };
   });
 
