@@ -225,7 +225,7 @@ describe('reports route', () => {
     const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
     expect(html).toContain('data-page="reports"');
     expect(html).toContain('rep-tiles');
-    expect(html).toContain('chart.umd.min.js');
+    expect(html).toContain('/vendor/chart/chart.umd.js');
     expect(html).toContain('Sample data');
     expect(html).toContain('Print or save as PDF');
     await app.close();

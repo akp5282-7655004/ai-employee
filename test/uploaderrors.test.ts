@@ -51,3 +51,42 @@ describe('uploading a logo', () => {
     await app.close();
   }, 60_000);
 });
+
+/**
+ * The dashboard charts loaded Chart.js from an outside host. Where that host
+ * is blocked the owner saw "Chart.js did not load." in place of a chart.
+ */
+describe('the chart library', () => {
+  it('is served by this app, and the page asks no outside host for a script', async () => {
+    const { readFileSync } = await import('node:fs');
+    const html = readFileSync('web/index.html', 'utf8') + readFileSync('web/login.html', 'utf8');
+    expect(html.match(/<script[^>]+src="https?:\/\//g) ?? []).toEqual([]);
+    const app = buildServer({ authStore: new MemoryStore() });
+    for (const file of ['chart.umd.js', 'chartjs-chart-funnel.umd.min.js']) {
+      const r = await app.inject({ method: 'GET', url: '/vendor/chart/' + file });
+      expect(r.statusCode, file).toBe(200);
+      expect(String(r.headers['content-type'])).toMatch(/javascript/);
+      expect(r.body.length).toBeGreaterThan(40_000);
+    }
+    await app.close();
+  });
+
+  it('loads in the browser, so the dashboard can draw', async () => {
+    const app = buildServer({ authStore: new MemoryStore() });
+    const base = await app.listen({ port: 0, host: '127.0.0.1' });
+    const s = await app.inject({ method: 'POST', url: '/auth/signup', payload: { email: 'chart@example.com', password: 'Harbor-Lantern-42', tos: true } });
+    const [name, value] = String(s.headers['set-cookie']).split(';')[0]!.split('=');
+    browser ??= await chromium.launch();
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.addCookies([{ name: name!, value: value!, url: base }]);
+    const page = await ctx.newPage();
+    const refused: string[] = [];
+    page.on('requestfailed', (r) => refused.push(r.url()));
+    await page.goto(base + '/');
+    await page.waitForSelector('#nav', { state: 'attached' });
+    expect(await page.evaluate(() => typeof (globalThis as unknown as { Chart?: unknown }).Chart)).toBe('function');
+    expect(await page.locator('body').innerText()).not.toMatch(/chart could not load|Chart\.js did not load/i);
+    expect(refused.filter((u) => /\.js(\?|$)/.test(u))).toEqual([]);
+    await app.close();
+  }, 60_000);
+});
