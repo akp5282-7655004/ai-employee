@@ -66,8 +66,9 @@ function has(facts: AccountFacts, label: string): boolean {
 
 function googleStatus(snapshot: AccountSnapshot, q: string): string {
   const facts = snapshot.account;
-  const ads = has(facts, 'Google Ads') || snapshot.integrations.google.oauth;
-  const gbp = has(facts, 'Google Business Profile') || snapshot.integrations.social.gbp;
+  // Same name list as "what's connected". Google readiness is a different check and is not used here.
+  const ads = has(facts, 'Google Ads');
+  const gbp = has(facts, 'Google Business Profile');
   const analytics = has(facts, 'Google Analytics');
   if (/analytics|\bga4\b/.test(q)) {
     return `${analytics ? 'Google Analytics is connected.' : 'Google Analytics is not connected.'} ${unlockLine(facts)}`.trim();

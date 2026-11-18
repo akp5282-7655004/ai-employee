@@ -10,6 +10,8 @@ export interface AccountFacts {
   unlockConnected: number;
   unlockRequired: number;
   creditsRemaining: number | null;
+  /** The $100 launch credit was already granted for this business. */
+  launchGranted: boolean;
 }
 
 const APP_NAMES: Record<string, string> = {
@@ -29,7 +31,7 @@ const APP_NAMES: Record<string, string> = {
   gmail: 'Gmail',
 };
 
-export function accountFacts(apps: string[], website: string, creditsRemaining: number | null): AccountFacts {
+export function accountFacts(apps: string[], website: string, creditsRemaining: number | null, launchGranted = false): AccountFacts {
   const progress = setupProgress({ apps, website });
   const connectedNames: string[] = [];
   for (const app of apps) {
@@ -43,6 +45,7 @@ export function accountFacts(apps: string[], website: string, creditsRemaining: 
     unlockConnected: progress.connected,
     unlockRequired: progress.required || REQUIRED_TOOLS,
     creditsRemaining,
+    launchGranted,
   };
 }
 
@@ -51,8 +54,9 @@ export function unlockLine(facts: AccountFacts): string {
   const need = facts.unlockRequired;
   const left = Math.max(0, need - n);
   const names = facts.unlockNames.join(', ');
+  const listed = `You have ${n} of ${need} tools connected${names ? `: ${names}` : ''}.`;
+  if (facts.launchGranted || left === 0) return listed;
   if (n <= 0) return `You have 0 of ${need} tools connected. Connect ${need} to unlock $${LAUNCH_GRANT} in credits.`;
-  if (left === 0) return `You have ${n} of ${need} tools connected${names ? `: ${names}` : ''}.`;
   const more = left === 1 ? '1 more' : `${left} more`;
   return `You have ${n} of ${need} tools connected: ${names || 'your tools'}. Connect ${more} to unlock $${LAUNCH_GRANT} in credits.`;
 }

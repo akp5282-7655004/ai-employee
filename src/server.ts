@@ -99,7 +99,7 @@ import { activePlaybooks } from './agents/activeplaybooks.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { answerChat } from './chat/ask.js';
 import { answersWithoutModel, asksSpendWork, spendWorkReply } from './chat/account.js';
-import { sanitizeConnectAction, scrubAssistantText, scrubStoredMessages, type StoredChatMessage } from './chat/connect.js';
+import { isStoredPrefix, sanitizeConnectAction, scrubAssistantText, scrubStoredMessages, type StoredChatMessage } from './chat/connect.js';
 import { fallbackAnswer } from './chat/prompt.js';
 import { chatEmptyLine, chatSuggestions } from './chat/prompt.js';
 import { defaultChatModel, type ChatModel } from './chat/model.js';
@@ -6275,8 +6275,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const msgs = (req.body as { messages?: unknown[] })?.messages ?? [];
     const cleaned = scrubStoredMessages(Array.isArray(msgs) ? msgs : []).messages;
     const existing = scrubStoredMessages(data.chat).messages;
-    // A refresh used to PUT an empty log before history loaded and erase the thread.
-    if (cleaned.length === 0 && existing.length > 0) return { ok: true, kept: true };
+    // A refresh used to PUT an empty or not-yet-finished log and erase the thread.
+    if ((cleaned.length === 0 || isStoredPrefix(cleaned, existing)) && existing.length > 0) return { ok: true, kept: true };
     data.chat = cleaned;
     await authStore.setUserData(u.id, data);
     return { ok: true };
@@ -8152,6 +8152,17 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     });
   }
 
+  // Same healthy-app list the Integrations page shows. An unfinished read keeps the last confirmed list so two chat questions cannot disagree.
+  const lastHealthyApps = new Map<string, string[]>();
+  const healthyAppsFor = (uid: string, accounts: { app: string; healthy: boolean }[], confirmed: boolean): string[] => {
+    const healthy = splitByHealth(accounts).connectedApps;
+    if (confirmed) {
+      lastHealthyApps.set(uid, healthy);
+      return healthy;
+    }
+    return lastHealthyApps.get(uid) ?? healthy;
+  };
+
   // One signed-in tenant. Journey rows owned by anyone else are left out.
   async function chatSnapshotFor(uid: string) {
     const data = await authStore.getUserData(uid);
@@ -8165,7 +8176,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       accountsOf(uid),
       getSnapshot(uid, data),
     ]);
-    const linked = new Set(listed.accounts.map((a) => a.app));
+    const linked = new Set(healthyAppsFor(uid, listed.accounts, listed.confirmed));
     const gbpField = business.sections.flatMap((section) => section.fields).find((field) => field.id === 'gbp');
     const access = connector.googleAdsAccess?.(uid) ?? null;
     const savedId = typeof data.googleAdsCustomerId === 'string' ? data.googleAdsCustomerId.replace(/\D/g, '') : '';
@@ -8239,6 +8250,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       leads: (snap?.leads ?? []).map(leadFacts).filter((lead): lead is NonNullable<typeof lead> => !!lead),
       connectedApps: [...linked],
       creditsRemaining: creditState(data).remaining,
+      launchGranted: launchCreditStatus(data) === 'granted',
     });
   }
 
@@ -8422,7 +8434,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       const reply = scrubAssistantText(text);
       const act = sanitizeConnectAction(action);
       const next: StoredChatMessage[] = [...prior];
-      if (user) next.push({ role: 'user', text: user });
+      const last = next[next.length - 1];
+      if (user && !(last && last.role === 'user' && last.text === user)) next.push({ role: 'user', text: user });
       const row: StoredChatMessage = { role: 'emp', text: reply };
       if (act) row.action = act;
       if (row.text || act) next.push(row);
