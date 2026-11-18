@@ -27,11 +27,20 @@ export class MemoryStore implements Store {
   async getUserById(id: string): Promise<User | null> {
     return this.users.get(id) ?? null;
   }
-  async updateUser(id: string, patch: { name?: string; passwordHash?: string }): Promise<void> {
+  async updateUser(id: string, patch: { name?: string; passwordHash?: string; email?: string }): Promise<void> {
     const u = this.users.get(id);
     if (!u) return;
     if (patch.name !== undefined) u.name = patch.name;
     if (patch.passwordHash !== undefined) u.passwordHash = patch.passwordHash;
+    if (patch.email !== undefined && patch.email.toLowerCase() !== u.email.toLowerCase()) {
+      // The same rule the database enforces with its unique index.
+      const next = patch.email.toLowerCase();
+      if (this.byEmail.has(next)) throw new Error('email already in use');
+      const index = new Map([...this.byEmail].filter(([, owner]) => owner !== id));
+      index.set(next, id);
+      this.byEmail = index;
+      u.email = patch.email;
+    }
     this.users.set(id, u);
   }
 
