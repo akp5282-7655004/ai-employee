@@ -74,3 +74,39 @@ describe('Back, Forward and Refresh inside the app', () => {
     await app.close();
   }, 60_000);
 });
+
+/**
+ * Checklist row 110. The "Leave site?" warning was set by the first typed
+ * letter and never cleared, so it fired on every Refresh and Log out for the
+ * rest of the visit, saved or not.
+ */
+describe('the unsaved-changes warning', () => {
+  it('is on after typing in a form, off after the save, and never on for a search box', async () => {
+    const app = buildServer({ authStore: new MemoryStore() });
+    const base = await app.listen({ port: 0, host: '127.0.0.1' });
+    const s = await app.inject({ method: 'POST', url: '/auth/signup', payload: { email: 'dirty@example.com', password: PASSWORD, tos: true } });
+    const [name, value] = String(s.headers['set-cookie']).split(';')[0]!.split('=');
+    browser ??= await chromium.launch();
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.addCookies([{ name: name!, value: value!, url: base }]);
+    const page = await ctx.newPage();
+    await page.goto(base + '/');
+    await page.waitForSelector('#nav', { state: 'attached' });
+    await page.locator('#onboard').evaluate((el) => el.classList.remove('on'));
+    const dirty = () => page.evaluate(() => (globalThis as unknown as { __formDirty: () => boolean }).__formDirty());
+
+    // A search box is not a form.
+    await page.waitForSelector('#lead-search');
+    await page.fill('#lead-search', 'dana');
+    expect(await dirty()).toBe(false);
+
+    // Typing a new name is an unsaved change; saving it clears the warning.
+    await page.evaluate(() => (globalThis as unknown as W).setPage('settings'));
+    await page.waitForSelector('#set-name');
+    await page.fill('#set-name', 'Casey Renamed');
+    expect(await dirty()).toBe(true);
+    await page.locator('#page-settings .pf-save').first().click();
+    await expect.poll(dirty).toBe(false);
+    await app.close();
+  }, 60_000);
+});

@@ -10649,9 +10649,15 @@ $('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=r
 async function doLogout(){ window.__signingOut=true; try{ await fetch('/auth/logout',{method:'POST'}); }catch(e){} window.location='/login'; }
 $('#logout').onclick=doLogout; const headerOut=$('#header-logout'); if(headerOut) headerOut.onclick=doLogout;
 document.addEventListener('submit',(e)=>{ const btn=e.target&&e.target.querySelector&&e.target.querySelector('button'); if(btn) btn.disabled=true; });
+// The "Leave site?" warning for unsaved typing. Typing in a form sets it and a
+// save that goes through clears it. It was never cleared before, so one typed
+// letter made every later Refresh and Log out ask, even after saving.
 let formDirty=false;
-document.addEventListener('input',(e)=>{ if(e.target&&e.target.closest&&e.target.closest('input,textarea,select')&&!(e.target.closest('#page-chat'))) formDirty=true; });
-window.addEventListener('beforeunload',(e)=>{ if(!formDirty) return; e.preventDefault(); e.returnValue=''; });
+const NOT_A_FORM='#lead-search,#askbar-input,.searchbar,[type=search],[type=checkbox],[type=radio],[type=password]';
+document.addEventListener('input',(e)=>{ const t=e.target; if(!t||!t.closest||!t.closest('input,textarea,select')) return; if(t.closest('#page-chat')||t.matches(NOT_A_FORM)) return; formDirty=true; });
+window.addEventListener('beforeunload',(e)=>{ if(!formDirty||window.__signingOut) return; e.preventDefault(); e.returnValue=''; });
+(function(){ const sent=window.fetch; window.fetch=async function(input,init){ const r=await sent.apply(this,arguments); try{ const m=String((init&&init.method)||(input&&input.method)||'GET').toUpperCase(); if(m!=='GET'&&r.ok) formDirty=false; }catch(e){} return r; }; })();
+window.__formDirty=()=>formDirty;
 fetch('/api/support').then(r=>r.json()).then(d=>{ if(d.email){ const a=$('#help-mail'); if(a){ a.href='mailto:'+d.email; a.textContent='Help'; const addr=el('span','help-addr',' '+d.email); a.append(addr); } } }).catch(()=>{});
 async function authInit(){
   if(!REMOTE) return;
