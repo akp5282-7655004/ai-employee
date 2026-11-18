@@ -39,6 +39,14 @@ describe('phone navigation', () => {
       expect(off, `header overflow on ${id}`).toBe(0);
     }
 
+    // Stand-alone text links are tall enough to tap (24px minimum).
+    await page.evaluate(() => (globalThis as unknown as { setPage: (x: string) => void }).setPage('settings'));
+    await page.waitForSelector('#page-settings a.taplink');
+    const heights = await page.$$eval('#page-settings a.taplink', (els) =>
+      els.map((e) => (e as { getBoundingClientRect(): { height: number } }).getBoundingClientRect().height));
+    expect(heights.length).toBe(2);
+    for (const h of heights) expect(h).toBeGreaterThanOrEqual(24);
+
     await page.evaluate(() => (globalThis as unknown as { setPage: (x: string) => void }).setPage('overview'));
     await page.locator('#navtoggle').tap();
     await expect.poll(() => page.locator('.side.open').count()).toBe(1);

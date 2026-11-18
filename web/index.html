@@ -1276,6 +1276,8 @@
   /* The owner's Admin link is marked hidden for everyone else. `.nav a` sets
      display:flex, which beat the attribute, so every account saw the link. */
   .nav a[hidden]{display:none;}
+  /* A text link that stands alone: tall enough to tap (24px minimum). */
+  a.taplink{display:inline-block;min-height:24px;line-height:24px;padding:2px 4px;}
 
   /* Phone header.
      The menu button and Log out live in the page header. Dashboard, Launch,
@@ -6862,7 +6864,7 @@ async function openEditorPage(){
   const creatives=photos.concat(saved);
   for(const p of creatives.slice().reverse()){ const cell=el('div'); cell.style.cssText='cursor:pointer;border:1px solid var(--line);border-radius:10px;overflow:hidden;aspect-ratio:1/1;background:var(--panel-2);position:relative'; const im=el('img'); im.src=p.url; im.loading='lazy'; im.style.cssText='width:100%;height:100%;object-fit:cover'; im.onerror=()=>{ cell.style.display='none'; }; cell.append(im); if(p.caption){ const cap=el('div'); cap.textContent=p.caption; cap.style.cssText='position:absolute;left:0;right:0;bottom:0;font-size:10.5px;padding:4px 6px;background:linear-gradient(transparent,rgba(0,0,0,.7));color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'; cell.append(cap); } cell.onclick=()=>openEditor(p.url); grid.append(cell); }
   card.append(grid);
-  if(!creatives.length){ const empty=el('div','appsub'); empty.style.marginTop='12px'; empty.append(document.createTextNode('No creatives yet. Upload an image above, or generate one in ')); const lnk=el('a',null,'Creative Studio'); lnk.style.cssText='color:var(--accent);cursor:pointer'; lnk.onclick=()=>setPage('studio'); empty.append(lnk); empty.append(document.createTextNode(', then save it. It will show up here.')); card.append(empty); }
+  if(!creatives.length){ const empty=el('div','appsub'); empty.style.marginTop='12px'; empty.append(document.createTextNode('No creatives yet. Upload an image above, or generate one in ')); const lnk=el('a','taplink','Creative Studio'); lnk.style.cssText='color:var(--accent);cursor:pointer'; lnk.onclick=()=>setPage('studio'); empty.append(lnk); empty.append(document.createTextNode(', then save it. It will show up here.')); card.append(empty); }
   box.append(card);
 }
 // The "Start from a template" block: choose service + offer, see auto-filled
@@ -8360,7 +8362,7 @@ function setAccount(box){
   const savedNotes=(SETTINGS&&SETTINGS.notify)||{};
   toggles.forEach(([id,label])=>{ const lab=el('label'); lab.style.cssText='display:flex;gap:8px;align-items:center;justify-content:flex-start;margin:8px 0;font-size:13px;font-weight:500'; const on=savedNotes[id]!==false; lab.innerHTML='<input type="checkbox" data-note="'+id+'" style="width:auto;margin:0"'+(on?' checked':'')+'> <span>'+label+'</span>'; alerts.append(lab); });
   const alertSave=el('button','pf-save','Save alerts'); alertSave.type='button'; const alertNote=el('span','appsub'); const arow=el('div','ui-actions'); arow.append(alertSave, alertNote); alerts.append(arow);
-  const legal=el('p','appsub'); legal.innerHTML='<a href="/privacy">Privacy</a> · <a href="/terms">Terms</a>';
+  const legal=el('p','appsub'); legal.innerHTML='<a class="taplink" href="/privacy">Privacy</a> · <a class="taplink" href="/terms">Terms</a>';
   const danger=el('div','ui-section');
   danger.innerHTML='<h3>Delete account</h3><p class="mdesc">This disconnects integrations, cancels a paid plan, and deletes this workspace.</p><label>Type DELETE</label><input id="set-delete" autocomplete="off">';
   const del=el('button','ghost','Delete account'); del.type='button'; const dnote=el('span','appsub'); const drow=el('div','ui-actions'); drow.append(del, dnote); danger.append(drow);
