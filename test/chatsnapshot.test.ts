@@ -172,7 +172,7 @@ describe('chat turn', () => {
     let seen = '';
     const model: ChatModel = async (req) => {
       seen = req.system;
-      expect(req.tools.map((tool) => tool.name).sort()).toEqual(['get_account_overview', 'get_benchmarks', 'get_campaign_detail', 'get_campaigns', 'get_change_log', 'get_connections', 'get_daily_findings', 'get_leads', 'get_metrics', 'get_pending_approvals', 'get_playbook', 'get_profile']);
+      expect(req.tools.map((tool) => tool.name).sort()).toEqual(['get_account_overview', 'get_benchmarks', 'get_campaign_detail', 'get_campaigns', 'get_change_log', 'get_connections', 'get_daily_findings', 'get_leads', 'get_metrics', 'get_pending_approvals', 'get_playbook', 'get_profile', 'request_connect']);
       return { text: 'Google Ads is signed in and the customer id is not resolved.', toolCalls: [] };
     };
     const out = await answerChat({
