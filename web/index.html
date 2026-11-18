@@ -2368,6 +2368,7 @@ function setPage(id){
   if(id==='logs') openLogs();
   if(id==='settings') openSettings();
   if(id==='integrations'){ loadIntegrations(); }
+  if(id==='chat' && !CHAT_LOADED) loadChat();
 }
 function updateConnStat(){
   const configured = !!(CONN.hub && CONN.hub.ready);
@@ -9820,7 +9821,7 @@ function chatConnectClick(slug, label, body){
 async function send(text,silent){
   const msg=(text!=null?text:cinput.value).trim(); if(!msg) return;
   if(!silent) say('user',msg);
-  logChat('user',msg);
+  else logChat('user',msg);
   const empty=$('#chat-empty'); if(empty) empty.hidden=true;
   cinput.value=''; cinput.style.height='auto';
   if(!REMOTE){ const b=addRow('emp'); b.textContent='Chat runs on the live app.'; return; }
@@ -9895,7 +9896,7 @@ async function milesEmailFlow(msg){
   b.append(card); logChat('emp','Drafted an email to '+(d.to||'')); chat.scrollTop=chat.scrollHeight;
 }
 async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}); }catch(e){} } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER); } }
-let CHAT_LOG=[], CHAT_LOADED=false, chatSaveT;
+let CHAT_LOG=[], CHAT_LOADED=false, chatLoadOk=false, chatSaveT;
 function logChat(role,text,action){
   const clean=scrubConnectText(text||'');
   let act=null;
@@ -9910,8 +9911,8 @@ function logChat(role,text,action){
   CHAT_LOG.push(row);
   if(REMOTE){ clearTimeout(chatSaveT); chatSaveT=setTimeout(saveChat,600); }
 }
-function saveChat(){ if(!REMOTE) return; try{ fetch('/api/chat',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-200)})}); }catch(e){} }
-async function loadChat(){ CHAT_LOADED=true; if(!REMOTE){ await paintChatEmpty(); return; } try{ const r=await fetch('/api/chat'); const d=await r.json(); CHAT_LOG=(d.messages||[]).filter(m=>m&&(m.text||(m.action&&m.action.app))).map(m=>{ const action=m.action&&m.action.kind==='connect'?{kind:'connect', app:String(m.action.app).replace(/[^a-z0-9_]/gi,''), label:scrubConnectText(m.action.label||'Connect')}:null; const row={role:m.role, text:scrubConnectText(m.text||'')}; if(action&&action.app) row.action=action; return row; }); chat.innerHTML=''; for(const m of CHAT_LOG){ const b=addRow(m.role==='user'?'user':'emp'); if(m.role==='user') b.textContent=m.text; else { b.className='bubble md'; const body=el('div'); body.innerHTML=mdToHtml(m.text); b.append(body); if(m.action&&m.action.kind==='connect') appendConnectButton(b, body, m.action); } } chat.scrollTop=chat.scrollHeight; }catch(e){} await paintChatEmpty(); }
+function saveChat(){ if(!REMOTE || !chatLoadOk) return; try{ fetch('/api/chat',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-200)})}); }catch(e){} }
+async function loadChat(){ if(!REMOTE){ CHAT_LOADED=true; chatLoadOk=true; await paintChatEmpty(); return; } try{ const r=await fetch('/api/chat'); const d=await r.json(); if(!r.ok) return; const rows=(d.messages||[]).filter(m=>m&&(m.text||(m.action&&m.action.app))).map(m=>{ const action=m.action&&m.action.kind==='connect'?{kind:'connect', app:String(m.action.app).replace(/[^a-z0-9_]/gi,''), label:scrubConnectText(m.action.label||'Connect')}:null; const row={role:m.role, text:scrubConnectText(m.text||'')}; if(action&&action.app) row.action=action; return row; }).filter(m=>m.text||m.action); CHAT_LOG=rows; chatLoadOk=true; CHAT_LOADED=true; chat.innerHTML=''; for(const m of CHAT_LOG){ const b=addRow(m.role==='user'?'user':'emp'); if(m.role==='user') b.textContent=m.text; else { b.className='bubble md'; const body=el('div'); body.innerHTML=mdToHtml(m.text); b.append(body); if(m.action&&m.action.kind==='connect') appendConnectButton(b, body, m.action); } } chat.scrollTop=chat.scrollHeight; }catch(e){} await paintChatEmpty(); }
 async function paintChatEmpty(){
   const box=$('#chat-empty'); if(!box) return;
   const has=!!(chat&&chat.children.length);
