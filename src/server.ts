@@ -170,7 +170,7 @@ import { searchCompetitors } from './research/places.js';
 import { attributeRevenue } from './revenue/attribution.js';
 import { MemorySessionStore, type SessionStore } from './session.js';
 import { hashPassword, verifyPassword, newToken, newUserId, parseCookies } from './auth.js';
-import { signupInputProblem } from './auth/signupRules.js';
+import { passwordProblem, signupInputProblem } from './auth/signupRules.js';
 import { isHostedDeploy, MemoryStore, storageStatus, type Store, type User } from './db/index.js';
 
 /**
@@ -1365,13 +1365,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // Complete a reset from the emailed (or admin-generated) link.
   app.post('/auth/reset', async (req, reply) => {
     const b = (req.body ?? {}) as { uid?: string; token?: string; password?: string };
-    if (!b.uid || !b.token || !b.password || b.password.length < 6) return reply.code(400).send({ error: 'Enter a new password (at least 6 characters).' });
+    if (!b.uid || !b.token) return reply.code(400).send({ error: 'Invalid reset link.' });
+    // The same rule as sign-up, so a reset cannot set a weaker password than a new account can.
+    const weakReset = passwordProblem(b.password);
+    if (weakReset) return reply.code(400).send({ error: weakReset, field: 'password' });
     const u = await authStore.getUserById(b.uid);
     if (!u) return reply.code(400).send({ error: 'Invalid reset link.' });
     const data = await authStore.getUserData(u.id);
     const rt = data.resetToken as { token?: string; exp?: number } | undefined;
     if (!rt || !rt.token || !sameToken(rt.token, b.token) || !rt.exp || rt.exp < Date.now()) return reply.code(400).send({ error: 'This reset link is invalid or has expired — request a new one.' });
-    await authStore.updateUser(u.id, { passwordHash: hashPassword(b.password) });
+    await authStore.updateUser(u.id, { passwordHash: hashPassword(String(b.password)) });
     delete data.resetToken;
     await authStore.setUserData(u.id, data);
     // Sign out every existing device. If the reset happened because someone else
@@ -3157,9 +3160,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const b = req.body ?? {};
-    if (!b.next || b.next.length < 6) return reply.code(400).send({ error: 'New password must be at least 6 characters.' });
+    const weakNext = passwordProblem(b.next);
+    if (weakNext) return reply.code(400).send({ error: weakNext, field: 'password' });
     if (!verifyPassword(b.current ?? '', u.passwordHash)) return reply.code(401).send({ error: 'Your current password is wrong.' });
-    await authStore.updateUser(u.id, { passwordHash: hashPassword(b.next) });
+    await authStore.updateUser(u.id, { passwordHash: hashPassword(String(b.next)) });
     await authStore.deleteSessionsForUser(u.id);
     await startSession(reply, u.id);
     return { ok: true };
