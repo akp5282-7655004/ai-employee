@@ -5028,7 +5028,7 @@ function renderBrand(){
   const setLogo=()=>{ logoBox.innerHTML=''; if(BRAND.logoUrl){ const im=el('img'); im.src=BRAND.logoUrl; im.style.cssText='max-width:100%;max-height:100%;object-fit:contain'; logoBox.append(im);} else logoBox.innerHTML='<span class="appsub" style="text-align:center">+ Logo</span>'; };
   setLogo();
   const logoInput=el('input'); logoInput.type='file'; logoInput.accept='image/*'; logoInput.style.display='none';
-  logoInput.onchange=()=>{ const f=logoInput.files&&logoInput.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ BRAND.logoUrl=r.result; setLogo(); }; r.readAsDataURL(f); };
+  logoInput.onchange=async()=>{ const f=logoInput.files&&logoInput.files[0]; if(!f) return; try{ BRAND.logoUrl=await downscaleImage(f,320,'image/png'); setLogo(); }catch(err){ toast((err&&err.message)||IMAGE_UNREADABLE); } logoInput.value=''; };
   logoBox.onclick=()=>logoInput.click();
   const logoTxt=el('div'); logoTxt.innerHTML='<label>Logo</label><div class="appsub" style="max-width:320px">Uploaded here and composited onto your designs. AI never redraws it.</div>';
   const rmLogo=el('button',null,'Remove'); rmLogo.style.cssText='margin-top:8px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:var(--sans)'; rmLogo.onclick=()=>{ BRAND.logoUrl=''; setLogo(); }; logoTxt.append(rmLogo);
@@ -6861,7 +6861,7 @@ async function openEditorPage(){
   const fVid=el('input'); fVid.type='file'; fVid.accept='video/*'; fVid.style.display='none';
   card.append(fImg,fVid);
   bUp.onclick=()=>fImg.click();
-  fImg.onchange=async()=>{ const f=fImg.files&&fImg.files[0]; if(!f) return; try{ const url=await downscaleImage(f,1600,'image/png'); openEditor(url); }catch(e){ toast('Couldn’t read that image.'); } fImg.value=''; };
+  fImg.onchange=async()=>{ const f=fImg.files&&fImg.files[0]; if(!f) return; try{ const url=await downscaleImage(f,1600,'image/png'); openEditor(url); }catch(e){ toast((e&&e.message)||IMAGE_UNREADABLE); } fImg.value=''; };
   bVid.onclick=()=>fVid.click();
   fVid.onchange=()=>{ const f=fVid.files&&fVid.files[0]; if(!f) return; try{ const url=URL.createObjectURL(f); openVideoEditor(url); }catch(e){ toast('Couldn’t open that video.'); } fVid.value=''; };
 
@@ -7534,7 +7534,11 @@ async function pickCampaign(cb){ if(!HUB_LOADED) await loadHub();
 function saveCreativeToCampaign(cr){ pickCampaign((cid)=>{ const c=HUB.campaigns.find(x=>x.id===cid); if(!c) return; c.items.unshift({id:newId(),type:'copy',angle:cr.angle,headline:cr.headline,body:cr.body,cta:cr.cta,imageUrl:cr.imageUrl,logoUrl:cr.logoUrl,createdAt:new Date().toISOString()}); saveHub(); queueChange('creative','Ad “'+(cr.headline||'').slice(0,40)+'” → '+c.name); toast('Saved to “'+c.name+'”'); }); }
 
 // ═══ brand assets (first-party data) ═══
-function downscaleImage(file, maxDim, type){ return new Promise((resolve,reject)=>{ const fr=new FileReader(); fr.onload=()=>{ const img=new Image(); img.onload=()=>{ let w=img.width,h=img.height; const s=Math.min(1,maxDim/Math.max(w,h)); w=Math.round(w*s); h=Math.round(h*s); const cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h); resolve(type==='image/png'?cv.toDataURL('image/png'):cv.toDataURL('image/jpeg',0.82)); }; img.onerror=reject; img.src=fr.result; }; fr.onerror=reject; fr.readAsDataURL(file); }); }
+// Why a chosen file cannot be used as an image, in words an owner can act on.
+const IMAGE_MAX_MB=25;
+function imageProblem(file){ if(!file) return 'No file was chosen.'; if(!/^image\//.test(file.type||'')) return 'That file is not an image. Use a PNG or JPG.'; if(file.size>IMAGE_MAX_MB*1024*1024) return 'That image is over '+IMAGE_MAX_MB+' MB. Use a smaller one.'; if(!file.size) return 'That file is empty. Try another one.'; return ''; }
+const IMAGE_UNREADABLE='That image could not be read. It may be damaged. Try another file.';
+function downscaleImage(file, maxDim, type){ return new Promise((resolve,reject)=>{ const bad=imageProblem(file); if(bad){ reject(new Error(bad)); return; } const fr=new FileReader(); fr.onload=()=>{ const img=new Image(); img.onload=()=>{ let w=img.width,h=img.height; const s=Math.min(1,maxDim/Math.max(w,h)); w=Math.round(w*s); h=Math.round(h*s); const cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h); resolve(type==='image/png'?cv.toDataURL('image/png'):cv.toDataURL('image/jpeg',0.82)); }; img.onerror=()=>reject(new Error(IMAGE_UNREADABLE)); img.src=fr.result; }; fr.onerror=()=>reject(new Error(IMAGE_UNREADABLE)); fr.readAsDataURL(file); }); }
 let ASSETS={photos:[]}, ASSETS_LOADED=false;
 async function loadAssets(){ if(!REMOTE){ ASSETS_LOADED=true; return; } try{ const r=await fetch('/api/assets'); const d=await r.json(); ASSETS=d.assets||{photos:[]}; if(!ASSETS.photos) ASSETS.photos=[]; }catch(e){} ASSETS_LOADED=true; }
 async function saveAssets(){ if(!REMOTE) return false; try{ const r=await fetch('/api/assets',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({assets:ASSETS})}); return r.ok; }catch(e){ return false; } }
@@ -7551,10 +7555,10 @@ function renderAssets(){
   for(const p of photos){ const it=el('div','photo-item'); const im=el('img'); im.src=p.url; im.alt=''; const d=el('button','photo-del','×'); d.onclick=()=>{ ASSETS.photos=ASSETS.photos.filter(x=>x.id!==p.id); saveAssets(); renderAssets(); }; it.append(im,d); g.append(it); }
 }
 $('#logo-box').onclick=()=>$('#logo-input').click();
-$('#logo-input').onchange=async(e)=>{ const f=e.target.files[0]; if(!f)return; const note=$('#assets-note'); if(note) note.textContent='Saving...'; try{ ASSETS.logo=await downscaleImage(f,320,'image/png'); const ok=await saveAssets(); renderAssets(); if(note) note.textContent=ok?'Saved ✓':'Could not save, Retry'; }catch(err){ if(note) note.textContent='Could not save, Retry'; } e.target.value=''; };
+$('#logo-input').onchange=async(e)=>{ const f=e.target.files[0]; if(!f)return; const note=$('#assets-note'); if(note) note.textContent='Saving...'; try{ ASSETS.logo=await downscaleImage(f,320,'image/png'); const ok=await saveAssets(); renderAssets(); if(note) note.textContent=ok?'Saved ✓':'Could not save, Retry'; }catch(err){ if(note) note.textContent=(err&&err.message)||IMAGE_UNREADABLE; } e.target.value=''; };
 $('#logo-remove').onclick=async()=>{ delete ASSETS.logo; await saveAssets(); renderAssets(); };
 $('#photo-add').onclick=()=>$('#photo-input').click();
-$('#photo-input').onchange=async(e)=>{ const files=[...e.target.files]; let failed=0; for(const f of files){ try{ const url=await downscaleImage(f,1024,'image/jpeg'); (ASSETS.photos=ASSETS.photos||[]).push({id:newId(),url,caption:''}); }catch(err){ failed++; } } const ok=await saveAssets(); renderAssets(); if(failed||!ok) toast(failed?(failed+' photo'+(failed===1?'':'s')+' could not be saved.'):'Could not save photos.'); e.target.value=''; };
+$('#photo-input').onchange=async(e)=>{ const files=[...e.target.files]; let failed=0, why=''; for(const f of files){ try{ const url=await downscaleImage(f,1024,'image/jpeg'); (ASSETS.photos=ASSETS.photos||[]).push({id:newId(),url,caption:''}); }catch(err){ failed++; why=why||(err&&err.message)||''; } } const ok=await saveAssets(); renderAssets(); if(failed||!ok) toast(failed?(failed+' photo'+(failed===1?'':'s')+' not added. '+(why||IMAGE_UNREADABLE)):'Could not save photos.'); e.target.value=''; };
 $('#assets-save').onclick=async()=>{ ASSETS.tagline=$('#as-tagline').value.trim(); ASSETS.services=$('#as-services').value.trim(); ASSETS.brandColor=$('#as-color').value.trim(); ASSETS.phone=$('#as-phone').value.trim(); ASSETS.website=$('#as-website').value.trim(); ASSETS.differentiators=$('#as-diff').value.trim(); const btn=$('#assets-save'); const note=$('#assets-note'); btn.disabled=true; if(note) note.textContent='Saving...'; const ok=await saveAssets(); if(ok && typeof queueChange==='function') queueChange('assets','Brand assets updated'); if(note) note.textContent=ok?'Saved ✓':'Could not save, Retry'; btn.disabled=false; if(ok) setTimeout(()=>{ if(note && note.textContent==='Saved ✓') note.textContent=''; },2200); };
 $('#as-import').onclick=async()=>{ const url=$('#as-import-url').value.trim(); if(!url) return; if(!REMOTE){ $('#assets-note').textContent='Website import runs on the deployed app.'; return; }
   // capture whatever they've already typed so we don't overwrite it
@@ -9917,7 +9921,7 @@ function openCMenu(){ const m=$('#cmenu'); if(!m) return; m.innerHTML=''; for(co
 function closeCMenu(){ const m=$('#cmenu'); if(m) m.style.display='none'; }
 $('#cplus').onclick=(e)=>{ e.stopPropagation(); const m=$('#cmenu'); (m.style.display==='none')?openCMenu():closeCMenu(); };
 document.addEventListener('click',(e)=>{ if(!e.target.closest('.cplus-wrap')) closeCMenu(); });
-$('#chat-file').onchange=async(e)=>{ const f=e.target.files[0]; if(!f) return; if(!ASSETS_LOADED) await loadAssets(); try{ const url=await downscaleImage(f,1024,'image/jpeg'); ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url,caption:'Added from chat'}); await saveAssets(); say('emp','📎 Saved that photo to your Assets, you can drop it into ads from Creative Studio or Ad Studio.'); }catch(err){ say('emp','Sorry, I couldn’t read that image.'); } e.target.value=''; };
+$('#chat-file').onchange=async(e)=>{ const f=e.target.files[0]; if(!f) return; if(!ASSETS_LOADED) await loadAssets(); try{ const url=await downscaleImage(f,1024,'image/jpeg'); ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url,caption:'Added from chat'}); await saveAssets(); say('emp','📎 Saved that photo to your Assets, you can drop it into ads from Creative Studio or Ad Studio.'); }catch(err){ say('emp',(err&&err.message)||IMAGE_UNREADABLE); } e.target.value=''; };
 cinput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
 cinput.addEventListener('input',()=>{cinput.style.height='auto';cinput.style.height=Math.min(cinput.scrollHeight,120)+'px';});
 $('#theme').onclick=()=>{const c=document.documentElement.getAttribute('data-theme');document.documentElement.setAttribute('data-theme',c==='dark'?'light':'dark');};
@@ -10230,7 +10234,8 @@ function bizLogo(){
   file.onchange=async()=>{
     const f=file.files&&file.files[0]; if(!f) return;
     try{ YB.view.draft.logoUrl=await downscaleImage(f, 320, 'image/png'); scheduleBizSave('brand'); }
-    catch(e){ toast('Could not read that image.'); }
+    catch(e){ toast((e&&e.message)||IMAGE_UNREADABLE); }
+    file.value='';
   };
   const rm=el('button','yb-edit','Remove'); rm.type='button';
   rm.onclick=()=>{ YB.view.draft.logoUrl=''; YBEDIT.brand=true; scheduleBizSave('brand'); renderBusiness($('#biz-body'), YB.view, YB.miles); };
@@ -10352,7 +10357,9 @@ function renderPhotos(sec){
     const files=[...(file.files||[])];
     setBizStatus('photos','saving','profile');
     if(!ASSETS_LOADED) await loadAssets();
-    for(const f of files){ try{ const url=await downscaleImage(f, 1024, 'image/jpeg'); (ASSETS.photos=ASSETS.photos||[]).push({id:newId(), url, caption:''}); }catch(e){} }
+    let skipped=0, why='';
+    for(const f of files){ try{ const url=await downscaleImage(f, 1024, 'image/jpeg'); (ASSETS.photos=ASSETS.photos||[]).push({id:newId(), url, caption:''}); }catch(e){ skipped++; why=why||(e&&e.message)||''; } }
+    if(skipped) toast(skipped+' photo'+(skipped===1?'':'s')+' not added. '+(why||IMAGE_UNREADABLE));
     const ok=await saveAssets();
     setBizStatus('photos', ok?'saved':'error', 'profile');
     if(ok) await loadProfile();
