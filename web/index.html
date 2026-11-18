@@ -1278,6 +1278,8 @@
   .nav a[hidden]{display:none;}
   /* A text link that stands alone: tall enough to tap (24px minimum). */
   a.taplink{display:inline-block;min-height:24px;line-height:24px;padding:2px 4px;}
+  /* The dashboard's lead inputs were bare browser inputs, 21px tall. */
+  #lead-search,#lead-name,#lead-phone{min-height:36px;padding:7px 12px;border:1px solid #e4e4e8;border-radius:10px;background:#fff;color:#111;font:inherit;font-size:14px;box-sizing:border-box;}
 
   /* Phone header.
      The menu button and Log out live in the page header. Dashboard, Launch,
@@ -8329,7 +8331,7 @@ function setAccount(box){
   const save=el('button','pf-save','Save'); save.type='button'; const note=el('span','appsub'); const row=el('div','ui-actions'); row.append(save,note); account.append(row);
   const pw=el('div','ui-section');
   pw.append(el('div','sect-label','Change password'));
-  const pg=el('div','pf-grid'); pg.innerHTML='<div class="full"><label>Current password</label><input id="set-pw-cur" type="password" autocomplete="current-password"></div><div class="full"><label>New password</label><input id="set-pw-new" type="password" placeholder="at least 6 characters" autocomplete="new-password"></div>';
+  const pg=el('div','pf-grid'); pg.innerHTML='<div class="full"><label>Current password</label><input id="set-pw-cur" type="password" autocomplete="current-password"></div><div class="full"><label>New password</label><input id="set-pw-new" type="password" placeholder="at least 8 characters" autocomplete="new-password"></div>';
   pw.append(pg);
   const pwbtn=el('button','pf-save','Update password'); pwbtn.type='button'; const pwnote=el('span','appsub'); const prow=el('div','ui-actions'); prow.append(pwbtn,pwnote); pw.append(prow);
   // Changing the sign-in email. The field above stays read-only because the
