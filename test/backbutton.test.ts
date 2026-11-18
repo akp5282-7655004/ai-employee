@@ -53,8 +53,12 @@ describe('Back, Forward and Refresh inside the app', () => {
 
     // Back from the first page of the app does not show a login form to a signed-in owner.
     await page.goBack(); // library
+    await expect.poll(current).toBe('page-library');
     await page.goBack(); // overview
-    await page.goBack(); // whatever came before the app
+    await expect.poll(current).toBe('page-overview');
+    // One more step leaves the app for whatever came before it. A blank tab has
+    // nothing to load, so do not wait on it: only the address matters here.
+    await page.goBack({ timeout: 5000 }).catch(() => null);
     expect(page.url()).not.toMatch(/\/login/);
     await app.close();
   }, 60_000);

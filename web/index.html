@@ -4171,7 +4171,8 @@ async function renderLeadsCard(host){
     }
     card.append(row);
   }
-  search.oninput=()=>{ const q=search.value.toLowerCase(); card.querySelectorAll('[data-q]').forEach(row=>{ row.style.display=row.dataset.q.includes(q)?'':'none'; }); };
+  const noMatch=el('p','md-explain'); noMatch.id='lead-nomatch'; noMatch.hidden=true; card.append(noMatch);
+  search.oninput=()=>{ const q=search.value.trim().toLowerCase(); let shown=0; card.querySelectorAll('[data-q]').forEach(row=>{ const hit=row.dataset.q.includes(q); row.style.display=hit?'':'none'; if(hit) shown++; }); noMatch.hidden=!(q&&leads.length&&!shown); noMatch.textContent=noMatch.hidden?'':'No leads match "'+search.value.trim()+'". Clear the search to see all '+leads.length+'.'; };
   const add=card.querySelector('#lead-add');
   if(add) add.onclick=async()=>{
     const r=await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:card.querySelector('#lead-name').value,phone:card.querySelector('#lead-phone').value})});
