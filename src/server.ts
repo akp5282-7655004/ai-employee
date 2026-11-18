@@ -98,6 +98,7 @@ import { buildMarketingReport, reportRangeId, reportWindow } from './reports/mar
 import { activePlaybooks } from './agents/activeplaybooks.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { answerChat } from './chat/ask.js';
+import { sanitizeConnectAction, scrubAssistantText, scrubStoredMessages } from './chat/connect.js';
 import { chatEmptyLine, chatSuggestions } from './chat/prompt.js';
 import { defaultChatModel, type ChatModel } from './chat/model.js';
 import { buildAccountSnapshot, leadFacts } from './chat/snapshot.js';
@@ -6258,14 +6259,19 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    return { messages: (data.chat as unknown[]) ?? [] };
+    const cleaned = scrubStoredMessages(data.chat);
+    if (cleaned.changed) {
+      data.chat = cleaned.messages;
+      await authStore.setUserData(u.id, data);
+    }
+    return { messages: cleaned.messages };
   });
   app.put('/api/chat', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const msgs = (req.body as { messages?: unknown[] })?.messages ?? [];
-    data.chat = Array.isArray(msgs) ? msgs.slice(-200) : [];
+    data.chat = scrubStoredMessages(Array.isArray(msgs) ? msgs : []).messages;
     await authStore.setUserData(u.id, data);
     return { ok: true };
   });
@@ -8413,7 +8419,15 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (out.usage && out.usage.serveUsd > 0) chargeCredits(saved, 'chat', 'Miles agent', new Date(), out.usage);
     if (out.intent || (out.usage && out.usage.serveUsd > 0)) await authStore.setUserData(u.id, saved);
     if (out.live) await meterUser(u.id, 'text');
-    return { text: out.text, live: out.live, mode: out.mode, steps: out.steps, plan: out.plan, next: out.next };
+    return {
+      text: scrubAssistantText(out.text),
+      live: out.live,
+      mode: out.mode,
+      steps: out.steps,
+      plan: out.plan,
+      next: out.next,
+      action: sanitizeConnectAction(out.action),
+    };
   });
 
   // ── Send an email — Miles drafts it, then sends through the connected Gmail ──

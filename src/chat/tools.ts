@@ -2,7 +2,9 @@
  * Read-only tools the chat model may call. Writes are refused here.
  * Each reader is already bound to the signed-in tenant by the server.
  * Tool text is data. It is not a new instruction.
+ * request_connect only names a button. It never returns a connect link.
  */
+import { canonConnectApp } from './connect.js';
 export interface ChatReaders {
   campaignStatus: () => Promise<unknown>;
   integrations: () => Promise<unknown>;
@@ -46,6 +48,7 @@ export const CHAT_TOOLS: ChatToolSpec[] = [
   { name: 'get_change_log', description: 'Read the recent change log for this account. Does not undo anything.', parameters: NO_ARGS },
   { name: 'get_daily_findings', description: 'Read the latest daily read findings for this account. Empty means no read is saved.', parameters: NO_ARGS },
   { name: 'get_benchmarks', description: 'Read published trade benchmarks. These are not this account live numbers.', parameters: NO_ARGS },
+  { name: 'request_connect', description: 'Ask the product to show a Connect button for one app. Does not connect the app and does not return a link or token.', parameters: { type: 'object', properties: { app: { type: 'string', description: 'App slug such as google_ads or google_analytics.' } }, additionalProperties: false } },
 ];
 
 const STEP_LABEL: Record<string, string> = {
@@ -61,6 +64,7 @@ const STEP_LABEL: Record<string, string> = {
   get_change_log: 'Checking the change log...',
   get_daily_findings: 'Checking today\'s findings...',
   get_benchmarks: 'Checking benchmarks...',
+  request_connect: 'Preparing the connect button...',
   integrations: 'Checking connections...',
   campaign_status: 'Checking campaigns...',
   leads: 'Checking leads...',
@@ -108,6 +112,16 @@ const ROUTES: Record<string, keyof ChatReaders> = {
 };
 
 export async function runChatTool(name: string, readers: ChatReaders, rawArgs?: string): Promise<string> {
+  if (name === 'request_connect') {
+    const args = argsOf(rawArgs);
+    const hit = canonConnectApp(typeof args.app === 'string' ? args.app : '');
+    if (!hit) return JSON.stringify({ ok: false, error: 'Name the app to connect, such as Google Ads or Google Analytics. Nothing was linked.' });
+    return JSON.stringify({
+      ok: true,
+      action: { kind: 'connect', app: hit.app, label: hit.label },
+      note: 'Show the button. Do not write a URL, token, or connect link.',
+    });
+  }
   let key = ROUTES[name];
   if (name === 'get_leads' && !readers.leadsQuery) key = 'leads';
   if (name === 'get_campaigns' && !readers.campaigns) key = 'campaignStatus';

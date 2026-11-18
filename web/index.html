@@ -9782,6 +9782,41 @@ function isBuildRequest(t){
   const asset=/\b(campaign|email|newsletter|ad|ads|post|posts|social|flyer|promo|sequence|blog|landing page)\b/i.test(t);
   return verb && asset;
 }
+function scrubConnectText(text){
+  return String(text||'')
+    .replace(/https?:\/\/[^\s<>"'`)\\\]]+/gi, (url)=>{
+      let decoded=url;
+      try{ decoded=decodeURIComponent(url); }catch(e){}
+      const blob=(url+' '+decoded).toLowerCase();
+      if(blob.includes('ctok_')||blob.includes('connect_link')||blob.includes('connectlinkurl')||/[?&#]token=/.test(blob)||(blob.includes('pipedream.com')&&blob.includes('connect'))) return '';
+      return url;
+    })
+    .replace(/\bctok_[A-Za-z0-9._~-]*/gi,'')
+    .replace(/\bconnect_link_url\b|\bconnectLinkUrl\b|\bconnect_link\b/g,'')
+    .replace(/[ \t]{2,}/g,' ')
+    .trim();
+}
+function appendConnectButton(bubble, body, action){
+  const label=String((action&&action.label)||'Connect');
+  const slug=String((action&&action.app)||'').replace(/[^a-z0-9_]/gi,'').slice(0,40);
+  if(!slug) return;
+  const go=el('button','go', label);
+  go.type='button';
+  go.style.marginTop='8px';
+  go.onclick=function(){ chatConnectClick(slug, label, body); };
+  bubble.append(go);
+}
+function chatConnectClick(slug, label, body){
+  const popup=window.open('about:blank','miles_connect','width=520,height=760');
+  if(!popup){
+    const text='Your browser blocked the connect window. Click '+label+' to try again.';
+    if(body) body.textContent=text;
+    const last=[...CHAT_LOG].reverse().find(m=>m&&m.action&&m.action.kind==='connect'&&m.action.app===slug);
+    if(last) last.text=text;
+    if(REMOTE){ clearTimeout(chatSaveT); chatSaveT=setTimeout(saveChat,600); }
+  }
+  connectApp(slug, popup);
+}
 async function send(text,silent){
   const msg=(text!=null?text:cinput.value).trim(); if(!msg) return;
   if(!silent) say('user',msg);
@@ -9807,9 +9842,11 @@ async function send(text,silent){
       card.append(el('div','appsub', d.plan.note||'Building actions arrives in the next update.'));
       b.append(card);
     }
-    const body=el('div'); body.innerHTML=mdToHtml(d.text||d.error||'I could not answer that. Nothing was changed.'); b.append(body);
+    const said=scrubConnectText(d.text||d.error||'I could not answer that. Nothing was changed.');
+    const body=el('div'); body.innerHTML=mdToHtml(said); b.append(body);
     if(d.next&&d.next.label){ const go=el('button','go', d.next.label); go.type='button'; go.style.marginTop='8px'; go.onclick=()=>setPage(d.next.page||'integrations'); b.append(go); }
-    logChat('emp', d.text||''); chat.scrollTop=chat.scrollHeight;
+    if(d.action&&d.action.kind==='connect') appendConnectButton(b, body, d.action);
+    logChat('emp', said, d.action); chat.scrollTop=chat.scrollHeight;
   }catch(e){ b.textContent=e&&e.name==='AbortError'?'That took too long. Try again in a moment. Nothing was changed.':'I could not reach the server just now. Try again.'; }
 }
 // Miles takes the request, picks the workflow, builds it on-brand, and leaves it
@@ -9859,9 +9896,22 @@ async function milesEmailFlow(msg){
 }
 async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}); }catch(e){} } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER); } }
 let CHAT_LOG=[], CHAT_LOADED=false, chatSaveT;
-function logChat(role,text){ if(!text) return; CHAT_LOG.push({role,text}); if(REMOTE){ clearTimeout(chatSaveT); chatSaveT=setTimeout(saveChat,600); } }
+function logChat(role,text,action){
+  const clean=scrubConnectText(text||'');
+  let act=null;
+  if(action&&action.kind==='connect'){
+    const app=String(action.app||'').replace(/[^a-z0-9_]/gi,'').slice(0,40);
+    const label=scrubConnectText(action.label||'Connect').slice(0,80);
+    if(app&&label) act={kind:'connect', app, label};
+  }
+  if(!clean&&!act) return;
+  const row={role, text:clean};
+  if(act) row.action=act;
+  CHAT_LOG.push(row);
+  if(REMOTE){ clearTimeout(chatSaveT); chatSaveT=setTimeout(saveChat,600); }
+}
 function saveChat(){ if(!REMOTE) return; try{ fetch('/api/chat',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-200)})}); }catch(e){} }
-async function loadChat(){ CHAT_LOADED=true; if(!REMOTE){ await paintChatEmpty(); return; } try{ const r=await fetch('/api/chat'); const d=await r.json(); CHAT_LOG=(d.messages||[]).filter(m=>m&&m.text); chat.innerHTML=''; for(const m of CHAT_LOG){ const b=addRow(m.role==='user'?'user':'emp'); if(m.role==='user') b.textContent=m.text; else { b.className='bubble md'; b.innerHTML=mdToHtml(m.text); } } chat.scrollTop=chat.scrollHeight; }catch(e){} await paintChatEmpty(); }
+async function loadChat(){ CHAT_LOADED=true; if(!REMOTE){ await paintChatEmpty(); return; } try{ const r=await fetch('/api/chat'); const d=await r.json(); CHAT_LOG=(d.messages||[]).filter(m=>m&&(m.text||(m.action&&m.action.app))).map(m=>{ const action=m.action&&m.action.kind==='connect'?{kind:'connect', app:String(m.action.app).replace(/[^a-z0-9_]/gi,''), label:scrubConnectText(m.action.label||'Connect')}:null; const row={role:m.role, text:scrubConnectText(m.text||'')}; if(action&&action.app) row.action=action; return row; }); chat.innerHTML=''; for(const m of CHAT_LOG){ const b=addRow(m.role==='user'?'user':'emp'); if(m.role==='user') b.textContent=m.text; else { b.className='bubble md'; const body=el('div'); body.innerHTML=mdToHtml(m.text); b.append(body); if(m.action&&m.action.kind==='connect') appendConnectButton(b, body, m.action); } } chat.scrollTop=chat.scrollHeight; }catch(e){} await paintChatEmpty(); }
 async function paintChatEmpty(){
   const box=$('#chat-empty'); if(!box) return;
   const has=!!(chat&&chat.children.length);

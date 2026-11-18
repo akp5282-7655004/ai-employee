@@ -10,6 +10,7 @@ import { intentReply, parseActionIntent, type AgentIntent } from './intent.js';
 import { CHAT_TOOLS, runChatTool, toolStepLabel, type ChatReaders } from './tools.js';
 import { logUngrounded, redactNumbers, unsupportedNumberTokens } from './ground.js';
 import { contradictoryAsk } from '../qa/ownerrows.js';
+import { connectReply, parseConnectAsk, readConnectAction, scrubAssistantText, scrubConnectSecrets, type ChatConnectAction } from './connect.js';
 
 const TOKENS: Record<string, number> = {
   easy: 320,
@@ -48,6 +49,7 @@ export interface ChatAnswer {
   intent: AgentIntent | null;
   next: ChatNext | null;
   usage: ChatUsage;
+  action: ChatConnectAction | null;
 }
 
 export async function answerChat(args: {
@@ -63,8 +65,9 @@ export async function answerChat(args: {
     .slice(-12)
     .map((message): ChatWireMessage => ({
       role: message.role === 'user' ? 'user' : 'assistant',
-      content: message.text!.trim().slice(0, 4000),
-    }));
+      content: scrubConnectSecrets(message.text!.trim().slice(0, 4000)),
+    }))
+    .filter((message) => message.content.replace(/\[connect link removed\]/g, '').trim());
   const question = [...history].reverse().find((message) => message.role === 'user')?.content || '';
   const ownerTexts = history.filter((message) => message.role === 'user').map((message) => message.content);
   const toolTexts: string[] = [];
@@ -73,6 +76,12 @@ export async function answerChat(args: {
   let usage = emptyUsage;
   const steps: string[] = [];
   const wire: ChatWireMessage[] = history.length ? [...history] : [{ role: 'user', content: 'The owner just opened the chat.' }];
+  let connectAction: ChatConnectAction | null = parseConnectAsk(question);
+  const pack = (text: string, extra: Omit<ChatAnswer, 'text' | 'action'>): ChatAnswer => ({
+    ...extra,
+    text: scrubAssistantText(text),
+    action: connectAction,
+  });
   const ground = async (text: string, canRetry: boolean): Promise<string> => {
     const bad = unsupportedNumberTokens(text, toolTexts, ownerTexts);
     if (!bad.length) return text;
@@ -95,7 +104,8 @@ export async function answerChat(args: {
     return redactNumbers(text, bad);
   };
   const contradiction = contradictoryAsk(question);
-  if (contradiction) return { text: contradiction, live: false, mode, steps: [], plan: null, intent: null, next: null, usage: emptyUsage };
+  if (contradiction) return pack(contradiction, { live: false, mode, steps: [], plan: null, intent: null, next: null, usage: emptyUsage });
+  if (connectAction) return pack(connectReply(connectAction), { live: false, mode, steps: [], plan: null, intent: null, next: null, usage: emptyUsage });
   const intent = parseActionIntent(question);
   if (intent) {
     const said = intentReply(intent, args.snapshot.business.name);
@@ -107,16 +117,16 @@ export async function answerChat(args: {
       services: intent.services,
       note: 'Building actions arrives in the next update. Nothing was created or spent.',
     } : null;
-    return { text: await ground(said.text, false), live: false, mode, steps: [], plan, intent: said.ready ? intent : null, next: null, usage: emptyUsage };
+    return pack(await ground(said.text, false), { live: false, mode, steps: [], plan, intent: said.ready ? intent : null, next: null, usage: emptyUsage });
   }
-  if (asksMode(question)) return { text: await ground(modeAnswer(args.snapshot), false), live: false, mode, steps: [], plan: null, intent: null, next: null, usage: emptyUsage };
+  if (asksMode(question)) return pack(await ground(modeAnswer(args.snapshot), false), { live: false, mode, steps: [], plan: null, intent: null, next: null, usage: emptyUsage });
   const adsQuestion = asksAdsPerformance(question);
   if (asksSpendOrLeads(question) && args.readers.liveSpend) {
     let read: LiveSpendRead | null = null;
     try { read = await args.readers.liveSpend(); } catch { read = null; }
     if (read && read.connected && !read.sample) {
       toolTexts.push(JSON.stringify(read));
-      return { text: await ground(spendLeadAnswer(read), false), live: false, mode, steps: ['Checking the numbers...'], plan: null, intent: null, next: null, usage: emptyUsage };
+      return pack(await ground(spendLeadAnswer(read), false), { live: false, mode, steps: ['Checking the numbers...'], plan: null, intent: null, next: null, usage: emptyUsage });
     }
   }
   let modelRan = false;
@@ -132,7 +142,7 @@ export async function answerChat(args: {
     modelRan = true;
     usage = addUsage(usage, turn.usage);
     if (turn.toolCalls.length && round < MAX_STEPS - 1) {
-      wire.push({ role: 'assistant', content: turn.text || '', toolCalls: turn.toolCalls });
+      wire.push({ role: 'assistant', content: scrubConnectSecrets(turn.text || ''), toolCalls: turn.toolCalls });
       for (const call of turn.toolCalls.slice(0, 4)) {
         steps.push(toolStepLabel(call.name));
         let content = '';
@@ -141,6 +151,9 @@ export async function answerChat(args: {
         } catch {
           content = JSON.stringify({ ok: false, error: 'That read took too long. Nothing was changed.' });
         }
+        content = scrubConnectSecrets(content);
+        const found = readConnectAction(content);
+        if (found) connectAction = found;
         toolTexts.push(content);
         wire.push({ role: 'tool', content, toolCallId: call.id });
       }
@@ -150,14 +163,14 @@ export async function answerChat(args: {
     const accepted = acceptReply(args.snapshot, question, turn.text);
     const next = accepted.fromModel ? null : (adsQuestion ? adsPerformanceAnswer(args.snapshot).next : null);
     const raw = accepted.fromModel ? accepted.text : (adsQuestion ? adsPerformanceAnswer(args.snapshot).text : accepted.text);
-    const text = await ground(raw, accepted.fromModel);
-    return { text, live: accepted.fromModel, mode, steps, plan: null, intent: null, next, usage };
+    const text = await ground(scrubAssistantText(raw), accepted.fromModel);
+    return pack(text, { live: accepted.fromModel, mode, steps, plan: null, intent: null, next, usage });
   }
 
   if (!modelRan && adsQuestion) {
     const ads = adsPerformanceAnswer(args.snapshot);
-    return { text: await ground(ads.text, false), live: false, mode, steps: ['Checking campaigns...'], plan: null, intent: null, next: ads.next, usage };
+    return pack(await ground(ads.text, false), { live: false, mode, steps: ['Checking campaigns...'], plan: null, intent: null, next: ads.next, usage });
   }
   const fallback = modelRan ? 'I could not finish that read. Nothing was changed.' : fallbackAnswer(args.snapshot, question);
-  return { text: await ground(fallback, false), live: false, mode, steps, plan: null, intent: null, next: null, usage };
+  return pack(await ground(fallback, false), { live: false, mode, steps, plan: null, intent: null, next: null, usage });
 }
