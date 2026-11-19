@@ -73,6 +73,18 @@ describe('phone navigation', () => {
     await page.locator('#nav a[data-page="integrations"]').evaluate((el) => (el as unknown as { click(): void }).click());
     await expect.poll(() => page.locator('.page.on').first().getAttribute('id')).toMatch(/^page-int/);
 
+    // Tapping a group heading opens the group and leaves the menu open, so a
+    // page inside it can be tapped next. Tapping that page closes the menu.
+    await page.locator('#navtoggle').tap();
+    await expect.poll(() => page.locator('.side.open').count()).toBe(1);
+    const reports = page.locator('#nav a[data-page="reports"]');
+    await reports.locator('xpath=ancestor::div[contains(@class,"navgroup")][1]/button[contains(@class,"navhead")]').tap();
+    await expect.poll(() => page.locator('.side.open').count()).toBe(1);
+    await expect.poll(() => reports.isVisible()).toBe(true);
+    await reports.tap();
+    await expect.poll(() => page.locator('.page.on').first().getAttribute('id')).toBe('page-reports');
+    await expect.poll(() => page.locator('.side.open').count()).toBe(0);
+
     await page.locator('#header-logout').tap();
     await page.waitForURL(/\/login/);
     await app.close();
