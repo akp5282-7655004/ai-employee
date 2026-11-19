@@ -355,10 +355,13 @@ export function buildReportCharts(args: {
   const clicksLine = realClicks.length
     ? line('Clicks', false, 'Clicks from connected ad accounts only.', 'count', realClicks, 2)
     : line('Clicks', true, 'No connected ad account returned daily clicks.', 'count', plan.days.map((day) => ({ label: day.date, value: day.clicks })), 2, String(plan.totalClicks));
+  const adsConnected = args.googleConnected || args.metaConnected;
   const leadsLine = args.hasLedger
     ? line('Leads', false, 'Tracked leads from your CRM ledger, including missed calls.', 'count', realLeads, 3)
-    : line('Leads', true, 'No leads are saved yet.', 'count', plan.days.map((day) => ({ label: day.date, value: day.leads })), 3, String(plan.totalLeads));
-  const spendConnected = args.googleConnected || args.metaConnected;
+    : adsConnected
+      ? { kind: 'line' as const, title: 'Leads', sample: false, badge: 'none' as const, note: 'No leads are saved yet. Tracked leads replace this when your CRM sends events.', unit: 'count' as const, span: 3 as const, headline: 'Not tracked yet', points: [] }
+      : line('Leads', true, 'No leads are saved yet.', 'count', plan.days.map((day) => ({ label: day.date, value: day.leads })), 3, String(plan.totalLeads));
+  const spendConnected = adsConnected;
   const cplReal = args.hasLedger && (googleDated || metaDated) ? cplPoints(mergePoints([realGoogleSpend, realMetaSpend]), realLeads) : [];
   const cplLine = cplReal.length
     ? line('Cost per lead', false, 'Connected spend that day divided by tracked leads that day.', 'money', cplReal, 3)
@@ -383,7 +386,7 @@ export function buildReportCharts(args: {
     : donut('Lead source', true, 'Lead events do not name a channel yet. The slices add up to the sample lead total.', parts(plan.totalLeads, ['Google', 'Facebook', 'Phone'], [55, 30, 15]), 2);
   const device = donut('Device mix', true, 'The ad read does not include device, so this mix stays a sample. The slices add up to the sample impressions.', parts(plan.totalImpressions, ['Mobile', 'Desktop', 'Tablet'], [68, 24, 8]), 2);
   const impressions = (args.googleConnected ? args.googleRows : []).concat(args.metaConnected ? args.metaRows : []).filter((row) => row.level === 'campaign');
-  const funnelReal = args.hasLedger && (args.googleConnected || args.metaConnected);
+  const funnelReal = args.hasLedger && adsConnected;
   const funnel = funnelReal
     ? {
       kind: 'funnel' as const,
@@ -397,6 +400,22 @@ export function buildReportCharts(args: {
         { label: 'Clicks', value: impressions.reduce((sum, row) => sum + row.clicks, 0) },
         { label: 'Leads', value: args.leads },
         { label: 'Booked jobs', value: args.won },
+      ],
+    }
+    : adsConnected
+    ? {
+      kind: 'funnel' as const,
+      title: 'Impressions to booked jobs',
+      sample: false,
+      badge: 'none' as const,
+      note: 'Impressions and clicks are from the connected ad account. Leads and booked jobs are not tracked yet.',
+      unit: 'count' as const,
+      span: 4 as const,
+      points: [
+        { label: 'Impressions', value: impressions.reduce((sum, row) => sum + row.impressions, 0) },
+        { label: 'Clicks', value: impressions.reduce((sum, row) => sum + row.clicks, 0) },
+        { label: 'Leads', value: null },
+        { label: 'Booked jobs', value: null },
       ],
     }
     : {

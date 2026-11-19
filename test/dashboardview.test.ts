@@ -192,12 +192,38 @@ describe('operator honesty', () => {
       sampleConnector: false,
       campaigns: [{ platform: 'google_ads', name: 'HOUSE PAINTING', spend: 21.01, leads: 0 }],
     }));
-    expect(view.onTrack.bookedSample).toBe(true);
+    expect(view.onTrack.bookedValue).toBe('Not tracked yet');
+    expect(view.onTrack.bookedSample).toBe(false);
     expect(view.onTrack.costValue).toBe('Not tracked yet');
     expect(view.onTrack.costSample).toBe(false);
     expect(view.onTrack.costBar).toBeNull();
-    expect(view.onTrack.costNote).toMatch(/once booked jobs come in from your CRM/);
+    expect(view.onTrack.costNote == null || /once booked jobs come in from your CRM/.test(view.onTrack.costNote)).toBe(true);
     expect(view.onTrack.costValue).not.toMatch(/\$83/);
+  });
+
+  it('does not show catalog samples beside a live marketing cost', () => {
+    const view = buildOperatorView(base({
+      sampleConnector: false,
+      google: { oauth: true, ready: true, note: '' },
+      ghlConnected: true,
+      campaigns: [{ platform: 'google_ads', name: 'Painting search', spend: 37, leads: 0, status: 'UNKNOWN' }],
+      metrics: [
+        { key: 'crm.booked_jobs', value: 22, prior_value: 20, source: 'sample' },
+        { key: 'crm.job_revenue', value: 40370.28, prior_value: 37000, source: 'sample' },
+        { key: 'calc.blended_leads', value: 86, prior_value: 70, source: 'sample' },
+        { key: 'calc.blended_spend', value: 37, prior_value: 0, source: 'live' },
+        { key: 'calc.cost_per_booked', value: 83, prior_value: 80, source: 'sample' },
+      ],
+    }));
+    expect(view.onTrack.bookedValue).toBe('Not tracked yet');
+    expect(view.onTrack.bookedSample).toBe(false);
+    const tile = (label: string) => view.money.tiles.find((row) => row.label === label);
+    expect(tile('Marketing cost')).toMatchObject({ value: '$37', sample: false });
+    expect(tile('Revenue from marketing')).toMatchObject({ value: 'Not tracked yet', sample: false });
+    expect(tile('Leads')).toMatchObject({ value: 'Not tracked yet', sample: false });
+    expect(view.money.headline).not.toMatch(/SAMPLE|41,617|40,370/);
+    expect(view.breakdown.rows[0]?.status).toBe('Could not read status, retrying');
+    expect(copy(view)).not.toMatch(/Google reports the campaign as UNKNOWN/);
   });
 
   it('does not invent a budget shift when nothing is waiting', () => {

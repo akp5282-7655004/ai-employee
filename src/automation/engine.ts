@@ -138,7 +138,9 @@ export function planActions(findings: Finding[], guard: GuardInput, now: string)
 export function revertChange(log: ChangeEntry[], id: string): { ok: boolean; log: ChangeEntry[]; restored: string | null; reason: string } {
   const hit = log.find((row) => row.id === id);
   if (!hit) return { ok: false, log, restored: null, reason: 'That change is not on the log.' };
-  if (hit.effect !== 'applied') return { ok: false, log, restored: null, reason: 'Only an applied change can be reverted.' };
+  if (hit.effect !== 'applied' && hit.effect !== 'queued' && hit.effect !== 'suggested') {
+    return { ok: false, log, restored: null, reason: 'That row is already reverted or it cannot be undone.' };
+  }
   const reason = 'Marked as reverted on this log. Google Ads was not changed.';
   const next = log.map((row) => row.id === id ? { ...row, effect: 'reverted' as const, reason } : row);
   return { ok: true, log: next, restored: hit.before, reason };

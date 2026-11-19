@@ -31,7 +31,7 @@ import { buildMetaAssets, buildSearchAssets, checkMetaPack, checkSearchPack } fr
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, claimsFromText, validateCampaignSpec, campaignSummary, normalizeSiteUrl, repairCampaignUrls, type CampaignSpec } from './agents/campaign.js';
-import { googleResourceMissing, judgeEnableReadback } from './agents/enablecheck.js';
+import { googleResourceMissing, judgeEnableReadback, scrubStatusText } from './agents/enablecheck.js';
 import { housekeepingProposals } from './agents/rulebook.js';
 import { acceptApprovedPlan, applyPlanAnswer, areaGuess, buildSearchPlan, type PlanProfile } from './agents/campaignplan.js';
 import { choiceById, goalCheck, LAUNCH_LINE, MONTH_DAYS, type BudgetPeriod, type GoalChannel, type GoalChoiceId, type GoalCheck, type LeadPeriod } from './agents/goalcheck.js';
@@ -2940,7 +2940,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       bundle: miles.bundle,
       audits: miles.bundle?.audits?.length ? miles.bundle.audits : miles.audits,
       activation: miles.activation,
-      goNote: miles.goNote || '',
+      goNote: scrubStatusText(miles.goNote || ''),
       planApproved: miles.planApproved === true && (miles.bundle?.setup.mode || miles.pendingMode) === 'automate',
       inbox: miles.inbox.slice(0, 20),
       events: miles.events.slice(0, 12),
@@ -3490,13 +3490,29 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     };
   };
 
-  const liveReadersFor = async (uid: string, data: Record<string, unknown>, days: number) => {
+  const liveReadersFor = async (uid: string, data: Record<string, unknown>, days: number, range?: string) => {
     const snap = await getSnapshot(uid, data);
-    // Snapshot spend is the trailing 30 days. Use it only for a 30-day range, so
-    // cost per lead and cost per job never divide 30-day spend by 7-day leads.
-    const adSpend = days === 30 ? snap?.adSpend : undefined;
+    const preset = range && ['LAST_7_DAYS', 'LAST_14_DAYS', 'LAST_30_DAYS', 'THIS_MONTH', 'LAST_MONTH'].includes(range)
+      ? range
+      : days <= 7 ? 'LAST_7_DAYS' : days <= 14 ? 'LAST_14_DAYS' : 'LAST_30_DAYS';
+    // The stored snapshot is trailing 30 days. A 7-day dashboard has to read
+    // that window itself, or Marketing cost says "Not tracked yet" while Ads
+    // Manager, which calls getAdSpend for the same range, shows the spend.
+    let rangedSpend: number | undefined;
+    if (connector.name !== 'mock' && connector.getAdSpend) {
+      try {
+        const rows = await withTimeout(connector.getAdSpend(uid, preset), 8_000);
+        if (rows.length) rangedSpend = Math.round(rows.reduce((sum, row) => sum + (row.spend || 0), 0) * 100) / 100;
+      } catch { /* the snapshot remains the 30-day fallback */ }
+    }
+    const adSpend = rangedSpend !== undefined ? rangedSpend : (preset === 'LAST_30_DAYS' ? snap?.adSpend : undefined);
     const listedNow = await accountsOf(uid);
-    const liveSource = connector.name !== 'mock' && (splitByHealth(listedNow.accounts).connectedApps.length > 0 || typeof adSpend === 'number' || (snap?.campaigns ?? []).some((row) => (row.spend || 0) > 0));
+    const liveSource = connector.name !== 'mock' && (
+      splitByHealth(listedNow.accounts).connectedApps.length > 0
+      || typeof adSpend === 'number'
+      || typeof snap?.adSpend === 'number'
+      || (snap?.campaigns ?? []).some((row) => (row.spend || 0) > 0)
+    );
     const ledger = crmLiveValues(data, days);
     const jobs = Array.isArray(data.jobMarks) ? (data.jobMarks as JobMark[]) : [];
     const fromJobs: Record<string, number> = {};
@@ -3635,7 +3651,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const range = RANGES.has(String((req.query as { range?: string } | undefined)?.range)) ? String((req.query as { range?: string }).range) : 'LAST_30_DAYS';
     const days = range === 'LAST_7_DAYS' ? 7 : range === 'LAST_14_DAYS' ? 14 : range === 'THIS_MONTH' ? new Date().getDate() : range === 'LAST_MONTH' ? new Date(new Date().getFullYear(), new Date().getMonth(), 0).getDate() : 30;
     const [{ snap, live }, google, ghlNow, listed] = await Promise.all([
-      liveReadersFor(u.id, d, days),
+      liveReadersFor(u.id, d, days, range),
       googleReadiness(u.id),
       ghlLink(u.id),
       accountsOf(u.id),
@@ -5073,7 +5089,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    return { entries: approvalLog(data).slice(0, 200), autonomy: normalizeAutonomy(data.autonomy) };
+    return {
+      entries: approvalLog(data).slice(0, 200).map((entry) => ({
+        ...entry,
+        title: scrubStatusText(entry.title),
+        detail: entry.detail ? scrubStatusText(entry.detail) : entry.detail,
+      })),
+      autonomy: normalizeAutonomy(data.autonomy),
+    };
   });
   app.post<{ Body: { autonomy?: unknown } }>('/api/autonomy', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -6316,7 +6339,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const seenKey = seenConnectedApps.get(u.id);
     seenConnectedApps.set(u.id, appsKey);
     if (seenKey !== undefined && seenKey !== appsKey) void rebuildSnapshotNow(u.id);
-    return { connector: connector.name, hub: { ready: pdReady, env: cfg.pipedream.environment }, connectedApps, needsReconnect, demo: isDemoAccount(u.email) };
+    const stored = await authStore.getUserData(u.id);
+    const profile = (stored.profile ?? {}) as Record<string, string>;
+    const milesBox = (stored.miles ?? {}) as { bundle?: { setup?: { website?: string } } };
+    const website = String(profile.website || milesBox.bundle?.setup?.website || '').trim();
+    return { connector: connector.name, hub: { ready: pdReady, env: cfg.pipedream.environment }, connectedApps, needsReconnect, website, demo: isDemoAccount(u.email) };
   });
   const seenConnectedApps = new Map<string, string>();
   /**
