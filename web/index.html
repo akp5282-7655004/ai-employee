@@ -4121,6 +4121,8 @@ async function dashQueue(wrap, label){
 }
 
 function mdSample(){ return el('span','md-sample','SAMPLE'); }
+// True where a SAMPLE badge can appear at all: the preview connector, or an account with no ad account connected.
+function sampleLegendWanted(){ return !CONN || CONN.connector==='mock' || !(CONN.connectedApps||[]).includes('google_ads'); }
 function mdLive(){ return el('span','md-live','\u2713 Live'); }
 function mdBadge(sample, skip){ if(skip) return null; return sample?mdSample():mdLive(); }
 function repBadge(sample, badge){ const kind=badge||(sample?'sample':'live'); if(kind==='none') return null; return el('span', kind==='sample'?'rep-sample':'rep-live', kind==='sample'?'Sample data':'\u2713 Live'); }
@@ -4558,7 +4560,8 @@ function renderOverview(d, miles, op, setup){
   renderLeadsCard(leads);
 
   const money=op&&op.money;
-  const anySample=!!(money&&(money.tone==='sample'||money.tone==='unknown'||(money.tiles||[]).some(t=>t.sample)));
+  // Only a real example number earns the SAMPLE badge. "Not tracked yet" on a connected account is not a sample.
+  const anySample=!!(money&&(money.tone==='sample'||(money.tiles||[]).some(t=>t.sample)));
   const numExtra=el('span');
   numExtra.append(document.createTextNode(mktRangeLabel(MKT_RANGE)));
   if(anySample){ numExtra.append(document.createTextNode(' ')); numExtra.append(mdSample()); }
@@ -4569,7 +4572,7 @@ function renderOverview(d, miles, op, setup){
   const gh=el('div','md-money-h'); gh.append(el('h3',null,'Booked revenue'));
   const revTile=(money&&money.tiles||[]).find(t=>/revenue from marketing/i.test(t.label));
   if(revTile&&revTile.sample) gh.append(mdSample());
-  else if(revTile) gh.append(mdLive());
+  else if(revTile&&revTile.value!=='Not tracked yet') gh.append(mdLive());
   gauge.append(gh);
   const gsvg=document.createElementNS('http://www.w3.org/2000/svg','svg');
   gsvg.classList.add('dv2-gauge');
@@ -4601,13 +4604,15 @@ function renderOverview(d, miles, op, setup){
   numbers.append(hero);
   numbers.append(dv2Note(money&&money.headline?money.headline:'Not enough live revenue and spend to say if you are making money.'));
 
-  numbers.append(dv2Head('Am I making money?', anySample?mdSample():mdLive()));
+  const anyLiveTile=!!(money&&(money.tiles||[]).some(t=>!t.sample&&t.value!=='Not tracked yet'));
+  numbers.append(dv2Head('Am I making money?', anySample?mdSample():(anyLiveTile?mdLive():el('span','md-legend','Not tracked yet'))));
   const kpis=el('div','dv2-kpis');
   const tiles=(money&&money.tiles)||[];
   const tileOf=(re)=>tiles.find(t=>re.test(t.label));
   const showTile=(label, tile, hint)=>{
     const c=el('div','dv2-kpi');
-    const k=el('div','k'); k.append(document.createTextNode(label+' ')); if(tile) k.append(mdBadge(!!tile.sample));
+    // A tile with no number yet gets no badge: "Live" beside "Not tracked yet" says two things at once.
+    const k=el('div','k'); k.append(document.createTextNode(label+' ')); if(tile&&tile.value!=='Not tracked yet') k.append(mdBadge(!!tile.sample));
     c.append(k, el('div','v', tile?tile.value:'Not tracked yet'));
     if(tile&&tile.delta) c.append(el('div','s', tile.delta));
     else if(hint) c.append(el('div','s', hint));
@@ -5448,6 +5453,7 @@ function renderLaunchPage(){
   if(L.savedCap) setupBits.push('$'+Math.round(L.savedCap)+'/day');
   line.append(document.createTextNode(setupBits.length>1?('Setup: '+setupBits.join(' · ')):'Setup: Google Search only. Add a trade, market, and daily budget in Profile.'));
   const legend=el('span','md-legend'); legend.append(mdSample(), document.createTextNode(' = example numbers until that source connects'));
+  legend.hidden=!sampleLegendWanted();
   meta.append(line, legend);
   const band=el('div','ln-setup-actions');
   const acts=el('div','md-actions');
@@ -10738,6 +10744,7 @@ function renderBusiness(box, view, miles){
   const line=el('div'); line.append(document.createTextNode('Setup: '+(view.setupLine||'')));
   setup.append(line);
   const legend=el('span','md-legend'); legend.append(mdSample(), document.createTextNode(' = example numbers until that source connects'));
+  legend.hidden=!sampleLegendWanted();
   setup.append(legend);
   const acts=el('div','md-actions');
   const paused=!!((miles.caps&&miles.caps.paused)||view.paused);

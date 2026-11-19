@@ -72,8 +72,8 @@ describe('sample chart series', () => {
   });
 });
 
-describe('real data replaces sample one widget at a time', () => {
-  it('keeps Google real and Facebook sample, and never mixes them in one chart', () => {
+describe('a live account never shows a sample number', () => {
+  it('keeps Google real, and says not tracked where nothing real exists', () => {
     const report = buildMarketingReport(input({
       events: [
         { type: 'lead', ts: '2026-11-08T12:00:00.000Z' },
@@ -105,9 +105,11 @@ describe('real data replaces sample one widget at a time', () => {
     const calls = report.charts.leads.find((widget) => widget.title === 'Missed and answered calls')!;
     expect(googleSpend.sample).toBe(false);
     expect(googleSpend.points).toEqual([{ label: '2026-11-02', value: 40 }]);
-    expect(metaSpend.sample).toBe(true);
-    expect(metaSpend.note.startsWith('Sample data')).toBe(true);
-    expect(metaSpend.points.some((point) => point.value === 40)).toBe(false);
+    // Facebook is not connected. On a live account that is an empty widget, not an example.
+    expect(metaSpend.sample).toBe(false);
+    expect(metaSpend.headline).toBe('Not tracked yet');
+    expect(metaSpend.points).toEqual([]);
+    expect(metaSpend.note).not.toMatch(/sample/i);
     expect(keywords.sample).toBe(false);
     expect(keywords.points[0]!.label).toBe('painters philadelphia');
     expect(terms.sample).toBe(false);
@@ -118,17 +120,24 @@ describe('real data replaces sample one widget at a time', () => {
     expect(gauge.caption).toMatch(/1\.5 to 2\.4/);
     expect(source.sample).toBe(false);
     expect(source.points).toEqual([{ label: 'Website', value: 1 }]);
-    expect(device.sample).toBe(true);
-    expect(device.note.startsWith('Sample data')).toBe(true);
-    expect(calls.sample).toBe(true);
-    expect(report.sampleBanner).toMatch(/Sample data/);
-    expect(report.sampleBanner).toMatch(/saved projection/);
+    for (const empty of [device, calls]) {
+      expect(empty.sample).toBe(false);
+      expect(empty.badge).toBe('none');
+      expect(empty.headline).toBe('Not tracked yet');
+      expect(empty.points).toEqual([]);
+      expect(empty.note).not.toMatch(/sample/i);
+    }
+    expect(report.sampleBanner).toBeNull();
+    // Nothing on the whole report is a sample once one source is live.
+    const widgets = [...report.charts.overview, ...report.charts.google, ...report.charts.meta, ...report.charts.leads];
+    expect(widgets.filter((widget) => widget.sample).map((widget) => widget.title)).toEqual([]);
+    expect([...report.overview.tiles, ...report.leads.tiles].filter((tile) => tile.sample).map((tile) => tile.label)).toEqual([]);
     expect(report.overview.tiles.find((tile) => tile.label === 'Spend')!.sample).toBe(false);
     expect(report.overview.tiles.find((tile) => tile.label === 'Spend')!.delta).toBe('up');
     expect(report.overview.tiles.find((tile) => tile.label === 'Leads')!.sample).toBe(false);
   });
 
-  it('uses sample keywords until keyword rows exist, without touching the real campaign', () => {
+  it('leaves keywords and pacing empty until real rows exist, without touching the real campaign', () => {
     const report = buildMarketingReport(input({
       google: channel({
         connected: true,
@@ -141,12 +150,22 @@ describe('real data replaces sample one widget at a time', () => {
     const keywords = report.charts.google.find((widget) => widget.title === 'Top keywords')!;
     expect(campaigns.sample).toBe(false);
     expect(campaigns.points.map((point) => point.label)).toEqual(['HOUSE PAINTING']);
-    expect(keywords.sample).toBe(true);
-    expect(keywords.points.some((point) => point.label === 'HOUSE PAINTING')).toBe(false);
-    expect(keywords.note.startsWith('Sample data')).toBe(true);
+    expect(keywords.sample).toBe(false);
+    expect(keywords.headline).toBe('Not tracked yet');
+    expect(keywords.points).toEqual([]);
+    expect(keywords.note).toBe('No keyword rows.');
     const gauge = report.charts.overview.find((widget) => widget.title === 'Goal pacing')!;
-    expect(gauge.sample).toBe(true);
-    expect(gauge.caption).toBe('Sample pacing for this budget.');
-    expect(gauge.caption).not.toMatch(/1\.5/);
+    expect(gauge.sample).toBe(false);
+    expect(gauge.headline).toBe('Not tracked yet');
+    expect(gauge.note).toMatch(/budget projection/);
+    // With live spend and no CRM, the lead and booked-job tiles are empty, not examples.
+    for (const label of ['Leads', 'Booked jobs']) {
+      const tile = report.overview.tiles.find((item) => item.label === label)!;
+      expect(tile.sample, label).toBe(false);
+      expect(tile.value, label).toBe('Not tracked yet');
+      expect(tile.badge, label).toBe('none');
+    }
+    expect(report.leads.tiles.map((tile) => tile.value)).toEqual(['Not tracked yet', 'Not tracked yet', 'Not tracked yet']);
+    expect(JSON.stringify(report)).not.toMatch(/sample data/i);
   });
 });

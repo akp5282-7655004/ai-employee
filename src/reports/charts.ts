@@ -486,11 +486,35 @@ export function buildReportCharts(args: {
     ], 3),
     source,
   ];
+  // An account with any live source never shows an example number beside its
+  // own. A widget that has nothing real to draw says so and says what it needs.
+  const liveAccount = args.googleConnected || args.metaConnected || args.hasLedger;
+  if (liveAccount) {
+    return { banner: null, overview: overview.map(untracked), google: google.map(untracked), meta: meta.map(untracked), leads: leads.map(untracked) };
+  }
   const all = [...overview, ...google, ...meta, ...leads];
   const banner = all.length
-    ? 'Live is this account. Sample data is an example, not your account, and it is not used for your saved projection or the Am I on track check.'
+    ? 'Sample data is an example, not your account. It is replaced by your own numbers when a source is connected, and it is not used for your saved projection or the Am I on track check.'
     : null;
   return { banner, overview, google, meta, leads };
+}
+
+/** What each widget needs before it can draw, in the owner's words. */
+const NEEDS: Record<string, string> = {
+  'Leads': 'No leads are tracked yet. Connect your CRM or call tracking to see them here.',
+  'Lead source': 'Lead events do not name a channel yet.',
+  'Device mix': 'The ad read does not include a device breakdown.',
+  'Impressions to booked jobs': 'This needs a connected ad account and tracked leads.',
+  'Goal pacing': 'Save a budget projection on the campaign plan and track won jobs to see pacing.',
+  'Missed and answered calls': 'Answered calls are not tracked. Connect call tracking to see them.',
+};
+
+/** A sample widget on a live account becomes an empty one with the reason. Real widgets pass through. */
+export function untracked(widget: ChartWidget): ChartWidget {
+  if (!widget.sample) return widget;
+  const kept = widget.note.replace(SAMPLE_NOTE, '').split(/(?<=\.)\s+/).filter((sentence) => sentence.trim() && !/sample/i.test(sentence)).join(' ').trim();
+  const note = NEEDS[widget.title] ?? (kept || 'Nothing came back for this period.');
+  return { kind: 'line', title: widget.title, sample: false, badge: 'none', note, unit: widget.unit, span: widget.span, headline: 'Not tracked yet', points: [] };
 }
 
 const UNTRACKED_CPL = 'Cost per lead appears once leads come in from your CRM or call tracking.';

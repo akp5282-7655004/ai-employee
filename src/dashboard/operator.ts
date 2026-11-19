@@ -363,8 +363,10 @@ function moneyBlock(input: OperatorInput): OperatorView['money'] {
   const spend = metricOf(input.metrics, 'calc.blended_spend');
   const leads = metricOf(input.metrics, 'calc.blended_leads');
   const booked = metricOf(input.metrics, 'crm.booked_jobs');
-  const livePair = !!(rev && spend && rev.source === 'live' && spend.source === 'live' && spend.value > 0);
-  const samplePair = !!(rev && spend && rev.source !== 'live' && spend.source !== 'live' && spend.value > 0);
+  // "Not tracked" is not zero. Revenue nobody recorded must not read as a loss.
+  const tracked = (m: OperatorMetric | undefined): m is OperatorMetric => !!m && !m.noValue;
+  const livePair = !!(tracked(rev) && tracked(spend) && rev.source === 'live' && spend.source === 'live' && spend.value > 0);
+  const samplePair = !!(tracked(rev) && tracked(spend) && rev.source !== 'live' && spend.source !== 'live' && spend.value > 0);
   const per = livePair && rev && spend ? rev.value / spend.value : (samplePair && rev && spend ? rev.value / spend.value : null);
   const perText = per == null ? null : (per >= 100 ? money(per) : `$${per.toFixed(2).replace(/\.00$/, '')}`);
   let tone: OperatorView['money']['tone'] = 'unknown';
@@ -385,8 +387,8 @@ function moneyBlock(input: OperatorInput): OperatorView['money'] {
     delta: m && m.source === 'live' ? null : deltaOf(m),
     sample: !!m && m.source !== 'live' && !m.noValue,
   });
-  const netSample = !rev || !spend || rev.source !== 'live' || spend.source !== 'live';
-  const net = rev && spend ? rev.value - spend.value : null;
+  const net = tracked(rev) && tracked(spend) ? rev.value - spend.value : null;
+  const netSample = net != null && (rev!.source !== 'live' || spend!.source !== 'live');
   return {
     tone,
     headline: plain(headline),
@@ -396,7 +398,7 @@ function moneyBlock(input: OperatorInput): OperatorView['money'] {
       tile('Marketing cost', spend, 'Ad spend only. A Miles fee is not added here.', money),
       {
         label: 'Revenue minus cost',
-        value: net == null ? 'n/a' : `${net >= 0 ? '+' : '-'}${money(Math.abs(net))}`,
+        value: net == null ? 'Not tracked yet' : `${net >= 0 ? '+' : '-'}${money(Math.abs(net))}`,
         sub: 'Before job costs',
         delta: null,
         sample: netSample,
