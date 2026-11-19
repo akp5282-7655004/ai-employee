@@ -67,7 +67,7 @@ import {
 import { itemEconomics, PRICES_STAMPED, rollup, TARGET_MARGIN, THIN_MARGIN, unpricedWork } from './billing/cogs.js';
 import { bandForSpend, creditState, chargeCredits, billingEnforced, BANDS, WORK_COSTS, canAfford, setAutoTopUp, bandOf, UNLIMITED_ITEMS, writeCredits, LAUNCH_GRANT, settleTopUp, nextBandName, outOfCreditsReason, paidWorkBlock } from './billing/credits.js';
 import { setupProgress } from './onboarding/tools.js';
-import { approveChange, CREDIT_PAUSE, dailyDue, planActions, revertChange, runDailyRead } from './automation/engine.js';
+import { activityFeed, approveChange, CREDIT_PAUSE, dailyDue, planActions, revertChange, runDailyRead } from './automation/engine.js';
 import { buildOrgChart } from './automation/org.js';
 import type { DailyInput } from './automation/skills.js';
 import { DEFAULT_CAPS, type MilesMode } from './agents/policy.js';
@@ -3499,13 +3499,20 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     // that window itself, or Marketing cost says "Not tracked yet" while Ads
     // Manager, which calls getAdSpend for the same range, shows the spend.
     let rangedSpend: number | undefined;
+    let spendRows: import('./revenue/attribution.js').CampaignSpend[] = [];
     if (connector.name !== 'mock' && connector.getAdSpend) {
-      try {
-        const rows = await withTimeout(connector.getAdSpend(uid, preset), 8_000);
-        if (rows.length) rangedSpend = Math.round(rows.reduce((sum, row) => sum + (row.spend || 0), 0) * 100) / 100;
-      } catch { /* the snapshot remains the 30-day fallback */ }
+      const hit = await reads.read(
+        `spend:${uid}:${preset}`,
+        () => connector.getAdSpend!(uid, preset),
+        { freshMs: 60_000, staleMs: 5 * 60_000, waitMs: 8_000, errorBackoffMs: 8_000 },
+      );
+      spendRows = hit.value ?? [];
+      if (spendRows.length) rangedSpend = Math.round(spendRows.reduce((sum, row) => sum + (row.spend || 0), 0) * 100) / 100;
     }
-    const adSpend = rangedSpend !== undefined ? rangedSpend : (preset === 'LAST_30_DAYS' ? snap?.adSpend : undefined);
+    const snapSpend = typeof snap?.adSpend === 'number'
+      ? snap.adSpend
+      : (snap?.campaigns?.length ? Math.round(snap.campaigns.reduce((sum, row) => sum + (row.spend || 0), 0) * 100) / 100 : undefined);
+    const adSpend = rangedSpend !== undefined ? rangedSpend : (preset === 'LAST_30_DAYS' ? snapSpend : undefined);
     const listedNow = await accountsOf(uid);
     const liveSource = connector.name !== 'mock' && (
       splitByHealth(listedNow.accounts).connectedApps.length > 0
@@ -3530,7 +3537,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       suppressSample: liveSource,
       values: { ...crm, ...calcLiveValues(crm, adSpend), ...gbpScore, ...(adSpend !== undefined ? { 'google_ads.cost': Math.round(adSpend * 100) / 100 } : {}) },
     };
-    return { snap, live };
+    return { snap, live, spendRows };
   };
 
   // Overview dashboard — everything at a glance, from real workspace data. Numbers
@@ -3650,7 +3657,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const RANGES = new Set(['LAST_7_DAYS', 'LAST_14_DAYS', 'LAST_30_DAYS', 'THIS_MONTH', 'LAST_MONTH']);
     const range = RANGES.has(String((req.query as { range?: string } | undefined)?.range)) ? String((req.query as { range?: string }).range) : 'LAST_30_DAYS';
     const days = range === 'LAST_7_DAYS' ? 7 : range === 'LAST_14_DAYS' ? 14 : range === 'THIS_MONTH' ? new Date().getDate() : range === 'LAST_MONTH' ? new Date(new Date().getFullYear(), new Date().getMonth(), 0).getDate() : 30;
-    const [{ snap, live }, google, ghlNow, listed] = await Promise.all([
+    const [{ snap, live, spendRows }, google, ghlNow, listed] = await Promise.all([
       liveReadersFor(u.id, d, days, range),
       googleReadiness(u.id),
       ghlLink(u.id),
@@ -3745,7 +3752,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       reviewOn: !!((d.reviewRequest as { enabled?: boolean } | undefined)?.enabled),
       speedOn: stlOn,
       metrics: metricRows.map((m) => ({ key: m.key, value: m.value, prior_value: m.prior_value, source: m.source, ...(m.noValue ? { noValue: true } : {}) })),
-      campaigns: (snap?.campaigns ?? []).map((c) => ({ platform: c.platform, name: c.campaign, spend: c.spend || 0, leads: c.conversions || 0, impressions: c.impressions || 0, clicks: c.clicks || 0, status: c.status })),
+      campaigns: (spendRows.length ? spendRows : (snap?.campaigns ?? [])).map((c) => ({ platform: c.platform, name: c.campaign, spend: c.spend || 0, leads: c.conversions || 0, impressions: c.impressions || 0, clicks: c.clicks || 0, status: c.status })),
       recommendations: openRecs,
       inbox: miles.inbox.filter((row) => row.status === 'queued').map((row) => ({ id: row.id, title: row.title, reason: row.reason })),
       expectation,
@@ -4019,7 +4026,13 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const state = automationState(data);
-    return { log: state.log.slice(0, 20), findings: state.findings.slice(0, 12), lastRunAt: state.lastRunAt };
+    const runs = ((data.agentRuns as { id?: string; title?: string; ts?: string }[]) ?? []);
+    return {
+      log: state.log.slice(0, 20),
+      activity: activityFeed(state.log, runs),
+      findings: state.findings.slice(0, 12),
+      lastRunAt: state.lastRunAt,
+    };
   });
 
   app.post('/api/automation/read', async (req, reply) => {
@@ -4065,6 +4078,27 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }
     await authStore.setUserData(u.id, data);
     return publicSafe({ ran: true, findings: result.findings, log: entries.slice(0, 40), rules: result.rules, upgrade, paused: state.kill || caps.paused });
+  });
+
+  app.post<{ Body: { id?: string; source?: string } }>('/api/activity/undo', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const id = String(req.body?.id || '');
+    const source = req.body?.source === 'run' ? 'run' : 'automation';
+    const data = await authStore.getUserData(u.id);
+    if (source === 'run') {
+      const runs = ((data.agentRuns as { id?: string }[]) ?? []);
+      if (!runs.some((run) => run.id === id)) return reply.code(400).send({ ok: false, error: 'That activity is not on this account.' });
+      data.agentRuns = runs.filter((run) => run.id !== id);
+      await authStore.setUserData(u.id, data);
+      return { ok: true, reason: 'Removed from this list. Google Ads was not changed.' };
+    }
+    const state = automationState(data);
+    const result = revertChange(state.log, id);
+    if (!result.ok) return reply.code(400).send({ ok: false, error: result.reason });
+    data.automation = { ...state, log: result.log };
+    await authStore.setUserData(u.id, data);
+    return { ok: true, restored: result.restored, reason: result.reason };
   });
 
   app.post<{ Body: { id?: string } }>('/api/automation/revert', async (req, reply) => {
@@ -5489,8 +5523,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       }
     };
     const [nowAds, prevAds] = await Promise.all([
-      read(current),
-      read({ googleRange: 'CUSTOM_DATE', start: current.previousStart, end: current.previousEnd, metaPreset: 'time_range' }),
+      reads.read(`report:${u.id}:${range}`, () => read(current), { freshMs: 60_000, staleMs: 5 * 60_000, waitMs: 8_000, errorBackoffMs: 8_000 }).then((hit) => hit.value ?? { google: blank, meta: blank }),
+      reads.read(`report:${u.id}:${range}:prev`, () => read({ googleRange: 'CUSTOM_DATE', start: current.previousStart, end: current.previousEnd, metaPreset: 'time_range' }), { freshMs: 60_000, staleMs: 5 * 60_000, waitMs: 8_000, errorBackoffMs: 8_000 }).then((hit) => hit.value ?? { google: blank, meta: blank }),
     ]);
     const savedTicket = Number(profile.averageJobValue);
     const bookTicket = playbookTicket(profile.industry);

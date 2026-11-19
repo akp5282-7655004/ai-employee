@@ -1034,23 +1034,49 @@ export class PipedreamConnector implements Connector {
     };
   }
 
+  private spendCache = new Map<string, { at: number; rows: import('../revenue/attribution.js').CampaignSpend[] }>();
+  private spendFlight = new Map<string, Promise<import('../revenue/attribution.js').CampaignSpend[]>>();
+
   async getAdSpend(externalUserId: string, range = 'LAST_30_DAYS'): Promise<import('../revenue/attribution.js').CampaignSpend[]> {
+    const key = `${externalUserId}:${range}`;
+    const hit = this.spendCache.get(key);
+    if (hit && Date.now() - hit.at < 60_000) return hit.rows;
+    const running = this.spendFlight.get(key);
+    if (running) return running;
+    const flight = this.loadAdSpend(externalUserId, range).then((rows) => {
+      if (rows.length) this.spendCache.set(key, { at: Date.now(), rows });
+      this.spendFlight.delete(key);
+      return rows;
+    }, (err: unknown) => {
+      this.spendFlight.delete(key);
+      throw err;
+    });
+    this.spendFlight.set(key, flight);
+    return flight;
+  }
+
+  private async loadAdSpend(externalUserId: string, range: string): Promise<import('../revenue/attribution.js').CampaignSpend[]> {
     const out: import('../revenue/attribution.js').CampaignSpend[] = [];
-    try {
-      out.push(...(await this.googleAdsSpend(externalUserId, range)));
-    } catch (err) {
+    const google = this.googleAdsSpend(externalUserId, range).catch((err: unknown) => {
       const text = publicGoogleError((err as Error).message || 'Google Ads could not be read.');
       if (text) this.gadsReadError.set(externalUserId, text.startsWith('Google Ads could not be read') ? text : `Google Ads could not be read. ${text}`);
-    }
-    try {
-      const f = await this.runRead('facebook', 'insights campaign spend', externalUserId, {});
-      for (const r of asRows(f)) {
-        const spend = num(r.spend ?? r.amount_spent);
-        if (spend) out.push({ platform: 'facebook', campaign: r.campaign_name ?? r.name ?? 'Meta campaign', utm: '', spend: Math.round(spend), clicks: num(r.clicks), conversions: num(r.conversions ?? r.actions) });
-      }
-    } catch {
-      /* Meta not connected */
-    }
+      return [] as import('../revenue/attribution.js').CampaignSpend[];
+    });
+    // Facebook insights must not hold the Google total. A hung Meta read was
+    // timing out the whole 30-day spend, so the dashboard said it was not tracked.
+    const facebook = Promise.race([
+      this.runRead('facebook', 'insights campaign spend', externalUserId, {}).then((f) => {
+        const rows: import('../revenue/attribution.js').CampaignSpend[] = [];
+        for (const r of asRows(f)) {
+          const spend = num(r.spend ?? r.amount_spent);
+          if (spend) rows.push({ platform: 'facebook', campaign: r.campaign_name ?? r.name ?? 'Meta campaign', utm: '', spend: Math.round(spend), clicks: num(r.clicks), conversions: num(r.conversions ?? r.actions) });
+        }
+        return rows;
+      }).catch(() => [] as import('../revenue/attribution.js').CampaignSpend[]),
+      new Promise<import('../revenue/attribution.js').CampaignSpend[]>((resolve) => setTimeout(() => resolve([]), 2_000)),
+    ]);
+    const [googleRows, facebookRows] = await Promise.all([google, facebook]);
+    out.push(...googleRows, ...facebookRows);
     return out;
   }
 

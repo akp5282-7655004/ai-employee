@@ -625,6 +625,7 @@
   img,table,pre,.mcard{max-width:100%}
   @media (max-width:760px){#header-logout{display:inline-flex;align-items:center}}
   body.on-dash .pagehead{display:none;}
+  body.on-launch .pagehead{display:flex;flex-wrap:wrap;align-items:center;}
   body.on-chat .askbtn{display:none;}
   body.on-chat .main{display:flex;flex-direction:column;overflow:hidden;height:100dvh;padding-bottom:18px;}
   .askbar{position:fixed;right:0;bottom:0;left:0;z-index:35;display:flex;gap:8px;align-items:center;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #e4e4e8;}
@@ -1070,7 +1071,7 @@
   .ln-side{display:flex;flex-direction:column;gap:14px;}
   .ln-head{display:flex;flex-direction:column;gap:12px;margin:0 0 4px;}
   .ln-head-row{display:flex;align-items:center;justify-content:space-between;gap:16px 20px;flex-wrap:wrap;}
-  .ln-head-row .md-controls{flex:0 0 auto;justify-content:flex-end;gap:10px;max-width:100%;}
+  .ln-head-row .md-controls{flex:1 1 280px;justify-content:flex-end;gap:10px;max-width:100%;min-width:0;flex-wrap:wrap;}
   .md-pills{flex:none;}
   .md-pills button{white-space:nowrap;flex:none;}
   .ln-head-row .md-pills,.ln-head-row .md-range,.ln-head-row .md-ask,.ln-head-row .md-theme{box-sizing:border-box;}
@@ -2356,6 +2357,7 @@ function renderSubTabs(id){
 }
 function setPage(id){
   document.body.classList.toggle('on-dash', id==='overview' || id==='launch' || id==='library' || id==='reports');
+  document.body.classList.toggle('on-launch', id==='launch' || id==='playbook' || id==='fblaunch' || id==='adstudio');
   document.body.classList.toggle('on-admin', id==='owneradmin');
   const adminSub=document.getElementById('admin-sub'); if(adminSub) adminSub.hidden=id!=='owneradmin';
   document.body.classList.toggle('on-biz', id==='profile');
@@ -3561,6 +3563,11 @@ function goResultText(r){
 function scrubStatusText(raw){
   return String(raw||'').replace(/Google reports the campaign as UNKNOWN\.?/gi, 'Could not read status, retrying.');
 }
+function oneStatus(raw){
+  const text=scrubStatusText(raw);
+  if(/could not read|not marked enabled|\bUNKNOWN\b/i.test(text)) return 'Could not read the campaign status.';
+  return text;
+}
 function milesGoLabel(miles){
   const raw=milesGoNote || (miles&&miles.goNote) || '';
   return scrubStatusText(raw);
@@ -4186,7 +4193,7 @@ function runPlaybook(card, miles){
     btn.dataset.milesGo='1';
     if(milesGoBusy){ btn.disabled=true; btn.textContent='Starting...'; }
     const wrap=el('div');
-    const note=el('div','appsub md-go-note', milesGoLabel(miles));
+    const note=el('div','appsub md-go-note', (OPERATOR&&OPERATOR.googleRunNote)||oneStatus(milesGoLabel(miles)));
     note.dataset.role='miles-go-note';
     btn.onclick=async()=>{
       const r=await startMilesGo(btn, note);
@@ -4293,21 +4300,18 @@ async function renderLeadsCard(host){
 async function openOverview(){
   const box=$('#overview-body'); if(!box) return;
   const gen=++overviewGen;
-  if(!box.querySelector('.md-top')) box.innerHTML='<p class="appsub">Loading your dashboard…</p>';
   let d=ANDASH||{}, miles=MILES_HOME||{}, op=OPERATOR;
   let setup=null;
+  if(op||d.kpis) renderOverview(d, miles, op, setup);
+  else if(!box.querySelector('.md-top')) box.innerHTML='<p class="appsub">Loading your dashboard…</p>';
   if(REMOTE){
-    const [dash, home, oper, prog]=await Promise.all([
-      fetchJson('/api/dashboard?range='+encodeURIComponent(MKT_RANGE), null, 20000),
-      fetchJson('/api/miles/home', null, 20000),
-      fetchJson('/api/dashboard/operator?range='+encodeURIComponent(MKT_RANGE), null, 20000),
-      fetchJson('/api/setup/tools', null, 20000),
+    const paint=()=>{ if(gen!==overviewGen) return; renderOverview(d, miles, op, setup); };
+    await Promise.all([
+      fetchJson('/api/dashboard?range='+encodeURIComponent(MKT_RANGE), null, 8000).then(dash=>{ if(dash.data&&dash.data.kpis){ d=dash.data; ANDASH=dash.data; } else if(!dash.ok) d=Object.assign({}, d, {_loadError:true}); paint(); }),
+      fetchJson('/api/miles/home', null, 8000).then(home=>{ if(home.data&&typeof home.data==='object'){ miles=home.data; MILES_HOME=home.data; } paint(); }),
+      fetchJson('/api/dashboard/operator?range='+encodeURIComponent(MKT_RANGE), null, 8000).then(oper=>{ if(oper.data&&oper.data.operator){ op=oper.data.operator; if(oper.data.range) op.range=oper.data.range; OPERATOR=op; } paint(); }),
+      fetchJson('/api/setup/tools', null, 8000).then(prog=>{ if(prog.data) setup=prog.data; paint(); }),
     ]);
-    if(dash.data&&dash.data.kpis){ d=dash.data; ANDASH=dash.data; }
-    if(home.data&&typeof home.data==='object'){ miles=home.data; MILES_HOME=home.data; }
-    if(oper.data&&oper.data.operator){ op=oper.data.operator; if(oper.data.range) op.range=oper.data.range; OPERATOR=op; }
-    if(!dash.ok && !home.ok && !oper.ok) d=Object.assign({}, d, {_loadError:true});
-    if(prog.data) setup=prog.data;
   }
   if(gen!==overviewGen) return;
   renderOverview(d, miles, op, setup);
@@ -4525,40 +4529,27 @@ function renderOverview(d, miles, op, setup){
   (async()=>{
     const res=await fetchJson('/api/automation/log', null, 20000);
     if(!res.ok){ act.innerHTML=''; act.append(el('p','md-explain','Activity did not load. Refresh to try again.')); return; }
-    const log=(res.data&&res.data.log)||[];
-    const runs=d.recentRuns||[];
+    const shown=((res.data&&res.data.activity)||[]).slice(0,6);
     act.innerHTML='';
-    const shown=log.slice(0,6);
-    if(!shown.length && !runs.length){
+    if(!shown.length){
       act.append(el('p','md-explain','Nothing yet. Skill runs and approvals show up here.'));
     }
     shown.forEach(entry=>{
       const row=el('div','md-crow');
       if(entry.effect==='reverted') row.style.opacity='.55';
       row.append(el('span',null, noDash(entry.title||'Change')), el('span','md-legend', fmtWhen(entry.ts)));
-      // No verified write to Google Ads exists for these changes yet, so an
-      // "applied" entry is logged only. Say that instead of offering an Undo.
-      if(entry.effect==='applied' || entry.effect==='suggested' || entry.effect==='queued') row.append(el('span','md-legend','Logged only. Google Ads was not changed.'));
-      else row.append(el('span','md-legend', entry.effect||''));
-      if(entry.id && (entry.effect==='applied' || entry.effect==='suggested' || entry.effect==='queued')){
+      if(entry.undo) row.append(el('span','md-legend','Logged only. Google Ads was not changed.'));
+      if(entry.undo && entry.id){
         const undo=el('button','md-link','Undo'); undo.type='button';
-        undo.onclick=async()=>{ undo.disabled=true; try{ await fetch('/api/automation/revert',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:entry.id})}); }catch(e){} openOverview(); };
+        undo.onclick=async()=>{ undo.disabled=true; try{ await fetch('/api/activity/undo',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:entry.id,source:entry.source||'automation'})}); }catch(e){} openOverview(); };
         row.append(undo);
       }
       act.append(row);
     });
-    if(!shown.length){
-      runs.slice(0,4).forEach(run=>{
-        const row=el('div','md-crow');
-        row.append(el('span',null, noDash(run.title||'').slice(0,80)), el('span','md-legend', fmtWhen(run.ts)));
-        act.append(row);
-      });
-    }
     const more=el('button','md-link','See all activity');
     more.onclick=()=>setPage('approvals');
     act.append(more);
-    const count=shown.length||runs.length;
-    if(count) actHead.append(el('span','md-legend', count+' on this list'));
+    if(shown.length) actHead.append(el('span','md-legend', shown.length+' on this list'));
   })();
 
   const featured=(track&&track.action&&topDec)?topDec:null;
@@ -4684,8 +4675,8 @@ function renderOverview(d, miles, op, setup){
   showTile('Cost per booked', costPer, track&&track.costNote?track.costNote:'');
   const cpl=el('div','dv2-kpi');
   cpl.append(el('div','k','Cost per lead'));
-  cpl.append(el('div','v', 'See channels'));
-  cpl.append(el('div','s', 'Shown per channel below when that source has spend and leads.'));
+  cpl.append(el('div','v', (money&&money.costPerLead)||'Not tracked yet'));
+  cpl.append(el('div','s', 'Spend divided by tracked leads. The same spend Ads Manager and Reports use.'));
   kpis.append(cpl);
   numbers.append(kpis);
   numbers.append(dv2Note(anySample?'These money figures are examples until the source for each one connects.':'These money figures are from the sources that are connected.'));
@@ -6295,7 +6286,7 @@ async function openApprovals(){
     try{ await fetch('/api/autonomy',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({autonomy:au})}); toast('✓ Autonomy settings saved'); }catch(e){ toast('Could not save.'); }
     save.disabled=false; save.textContent=o; openApprovals(); };
   ac.append(save); box.append(ac);
-  const actLog=((activity.data&&activity.data.log)||[]);
+  const actLog=((activity.data&&activity.data.activity)||[]);
   const actCard=el('div','mcard'); actCard.style.marginTop='12px';
   actCard.append(el('div','sect-label','WHAT MILES DID'));
   actCard.append(el('p','appsub','Suggested, queued, and applied rows can be undone here. Undo marks the row reverted. It does not change Google Ads.'));
@@ -6306,9 +6297,9 @@ async function openApprovals(){
     t.append(el('b',null, scrubStatusText(entry.title||'Change')));
     t.append(el('div','appsub', (entry.effect||'')+' · '+fmtWhen(entry.ts)));
     row.append(t);
-    if(entry.id && (entry.effect==='applied'||entry.effect==='suggested'||entry.effect==='queued')){
+    if(entry.undo && entry.id){
       const undo=el('button','md-link','Undo'); undo.type='button';
-      undo.onclick=async()=>{ undo.disabled=true; try{ await fetch('/api/automation/revert',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:entry.id})}); }catch(e){} openApprovals(); };
+      undo.onclick=async()=>{ undo.disabled=true; try{ await fetch('/api/activity/undo',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:entry.id,source:entry.source||'automation'})}); }catch(e){} openApprovals(); };
       row.append(undo);
     }
     actCard.append(row);
@@ -6665,8 +6656,16 @@ async function openPlaybook(){
     const groups=(spec&&spec.adGroups)||[];
     if(groups.length){
       groups.forEach(g=>{
-        const words=(g.keywords||[]).slice(0,8).map(k=>typeof k==='string'?k:(k&&k.text)||'').filter(Boolean);
-        card.append(el('p',null,(g.name||'Ad group')+': '+(words.join(', ')||'No keywords saved')));
+        const seen={};
+        const words=[];
+        (g.keywords||[]).forEach(k=>{
+          const text=String(typeof k==='string'?k:(k&&k.text)||'').replace(/\s+/g,' ').trim();
+          const key=text.toLowerCase();
+          if(!text||seen[key]) return;
+          seen[key]=1;
+          words.push(text);
+        });
+        card.append(el('p',null,(g.name||'Ad group')+': '+(words.slice(0,8).join(', ')||'No keywords saved')));
       });
     } else card.append(el('p','mdesc','Keywords, negatives, and ad copy are reviewed on the Google Ads tab.'));
     const go=el('button','go','Open Google Ads review'); go.type='button'; go.onclick=()=>setPage('launch');
@@ -10901,7 +10900,7 @@ $('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=r
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') setOpen(false); });
   // Any navigation choice closes the drawer.
   // A page link closes the menu. A group heading does not: it opens the group, and the owner still has to pick a page from it.
-  side.addEventListener('click',e=>{ if(e.target.closest('.navhead')) return; if(e.target.closest('a[data-page],a[data-pages],button,.pill,.ws')) setOpen(false); });
+  side.addEventListener('click',e=>{ if(e.target.closest('.navhead')) return; if(e.target.closest('[data-ask],.newtask,a[data-page],a[data-pages],button,.pill,.ws')) setOpen(false); });
   // Returning to desktop width must never leave the drawer state stuck on.
   window.addEventListener('resize',()=>{ if(window.innerWidth>760) setOpen(false); });
 })();

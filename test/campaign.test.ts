@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { buildCampaignSpec, validateCampaignSpec, SNIPPET_HEADERS } from '../src/agents/campaign.js';
+import { buildCampaignSpec, keywordLabels, validateCampaignSpec, SNIPPET_HEADERS } from '../src/agents/campaign.js';
 
 const ctx = { business: 'Smoky Mtn Yellow Labs', trade: 'Dog Breeder', city: 'Sevierville', services: 'English Labrador puppies, health-tested litters', offers: 'Reserve a 2026 puppy' };
+
+describe('keyword list', () => {
+  it('drops a repeated keyword in the same ad group, ignoring case', () => {
+    expect(keywordLabels([
+      { text: 'commercial painting philadelphia' },
+      { text: 'Commercial Painting Philadelphia' },
+      { text: 'interior painting' },
+    ])).toEqual(['commercial painting philadelphia', 'interior painting']);
+  });
+});
 
 describe('buildCampaignSpec — full Search assets', () => {
   const spec = buildCampaignSpec({ finalUrl: 'https://smokymtnyellowlabs.com', dailyBudget: 20 }, ctx);

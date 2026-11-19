@@ -308,6 +308,20 @@ function keywordAllowed(text: string, negatives: string[]): boolean {
   return !negatives.some((neg) => lower.includes(neg.toLowerCase()));
 }
 
+/** One line per keyword text. Phrase and exact of the same words are not two list items. */
+export function keywordLabels(keywords: { text?: string }[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const row of keywords) {
+    const text = String(row.text || '').replace(/\s+/g, ' ').trim();
+    const key = text.toLowerCase();
+    if (!text || seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+  }
+  return out;
+}
+
 function keywordsFor(theme: string, ctx: CampaignCtx, negatives: string[]): KeywordSpec[] {
   const t = theme.toLowerCase();
   const city = (ctx.city || '').split(',')[0]?.trim().toLowerCase() || '';
