@@ -1286,6 +1286,11 @@
   :root[data-theme="dark"] .md-track{color:#D8D8DC;}
   :root[data-theme="dark"] .askbar{background:#1A1A1C;border-top-color:#2E2E32;}
   :root[data-theme="dark"] .askbar input{background:#111112;border-color:#2E2E32;color:#fff;}
+  /* Inside the cards that stay light, headings, notes and links are dark again.
+     The theme-wide dark rules above would otherwise paint them light on white. */
+  :root[data-theme="dark"] :is(.rep-widget,.md-play,.yb-slot,.yb-logo) :is(h1,h2,h3,h4,b,strong){color:#111112;}
+  :root[data-theme="dark"] :is(.rep-widget,.md-play,.yb-slot,.yb-logo) :is(.appsub,.mdesc,.md-legend,.md-explain){color:#6E6E76;}
+  :root[data-theme="dark"] :is(.rep-widget,.md-play,.yb-slot,.yb-logo) a{color:#2B6FCB;}
   /* Buttons and links with no color of their own used the browser's black and
      blue. :where() keeps this at the weight of a bare tag, so any class wins. */
   :where(:root[data-theme="dark"]) button{color:var(--ink);}
