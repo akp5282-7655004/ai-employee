@@ -10900,7 +10900,8 @@ $('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=r
   scrim.onclick=()=>setOpen(false);
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') setOpen(false); });
   // Any navigation choice closes the drawer.
-  side.addEventListener('click',e=>{ if(e.target.closest('a[data-page],a[data-pages],button,.pill,.ws')) setOpen(false); });
+  // A page link closes the menu. A group heading does not: it opens the group, and the owner still has to pick a page from it.
+  side.addEventListener('click',e=>{ if(e.target.closest('.navhead')) return; if(e.target.closest('a[data-page],a[data-pages],button,.pill,.ws')) setOpen(false); });
   // Returning to desktop width must never leave the drawer state stuck on.
   window.addEventListener('resize',()=>{ if(window.innerWidth>760) setOpen(false); });
 })();
