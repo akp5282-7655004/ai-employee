@@ -330,7 +330,11 @@ function onTrack(input: OperatorInput, decisions: OperatorDecision[]): OperatorV
 
   let headline = 'These numbers are an example.';
   let explain = 'Set a budget and connect your CRM to see your own booked jobs.';
-  if (liveJobs && booked) {
+  if (liveJobs && booked && booked.noValue) {
+    // Connected, with no CRM recording jobs. "0 booked jobs" would state a count nobody has.
+    headline = 'Booked jobs are not tracked yet.';
+    explain = 'Connect your CRM, or mark jobs as won, and your booked jobs show here.';
+  } else if (liveJobs && booked) {
     headline = `${Math.round(booked.value)} booked jobs`;
     const bits: string[] = [];
     if (target) bits.push(`Your saved cost goal is ${money(target)} per booked job.`);

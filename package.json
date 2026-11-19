@@ -14,7 +14,7 @@
     "demo": "tsx scripts/demo.ts",
     "demo:connect": "tsx scripts/demo-connect.ts",
     "demo:agent": "tsx scripts/demo-agent.ts",
-    "test": "vitest run",
+    "test": "TEST_GROUP=unit vitest run && TEST_GROUP=browser vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "reset-password": "tsx scripts/reset-password.ts"

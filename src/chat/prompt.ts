@@ -2,6 +2,7 @@
  * Miles answers as the marketing employee for this one business.
  * The account snapshot is the source of truth for numbers and statuses.
  */
+import { STATUS_NOT_READ } from '../agents/enablecheck.js';
 import type { AccountSnapshot } from './snapshot.js';
 import { renderSnapshot } from './snapshot.js';
 
@@ -51,7 +52,7 @@ function campaignAnswer(snapshot: AccountSnapshot): string {
   const name = snapshot.business.name || 'this business';
   const campaign = snapshot.campaigns[0];
   const status = campaign
-    ? `${campaign.name || 'The campaign'} is ${campaign.status} on file${campaign.resource ? ` (${campaign.resource})` : ', with no Google resource yet'}. ${campaign.lastReadback ? `Last read-back: ${campaign.lastReadback}` : 'No live read-back is stored yet.'}`
+    ? `${campaign.name || 'The campaign'} is on file${campaign.resource ? ` (${campaign.resource})` : ', with no Google resource yet'}. ${campaign.status === STATUS_NOT_READ ? 'Its status has not been read from Google yet.' : `Its status is ${campaign.status}.`} ${campaign.lastReadback ? `Last read-back: ${campaign.lastReadback}` : 'No live read-back is stored yet.'}`
     : `No campaign is on file for ${name}. I have not read a status back from Google, so I will not guess one.`;
   const perf = snapshot.performance;
   const spend = perf.spend.value == null

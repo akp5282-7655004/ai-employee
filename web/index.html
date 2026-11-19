@@ -696,6 +696,11 @@
   .md-tilebox .s{font-size:12.5px;color:#6e6e76;margin-top:4px;}
   .dv2-gate{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff6e0;border:1px solid #f0dfaa;border-radius:12px;padding:10px 14px;margin:0 0 18px;}
   .dv2-gate p{flex:1;min-width:200px;margin:0;font-size:13.5px;color:#3d320e;}
+  .dv2-credit{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;background:#e9f6ee;border:1px solid #bfe3cd;border-radius:12px;padding:8px 14px;margin:0 0 18px;}
+  .dv2-credit p{flex:1;min-width:200px;margin:0;font-size:13.5px;color:#14532d;}
+  .dv2-credit strong{color:inherit;}
+  .dv2-credit .md-link{color:#14532d;}
+  .credit-status{margin-bottom:14px;}
   .dv2-sec{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:22px 0 10px;}
   .dv2-sec h2{margin:0;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#111;}
   .dv2-recs{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
@@ -1268,6 +1273,9 @@
   }
   :root[data-theme="dark"] .dv2-gate{background:#2A2418;border-color:#4A3F22;}
   :root[data-theme="dark"] .dv2-gate p{color:#EADDB5;}
+  :root[data-theme="dark"] .dv2-credit{background:#1C2A22;border-color:#2F4A3A;}
+  :root[data-theme="dark"] .dv2-credit p,
+  :root[data-theme="dark"] .dv2-credit .md-link{color:#BFE3CD;}
   :root[data-theme="dark"] .dv2-sec h2,
   :root[data-theme="dark"] .md-h,
   :root[data-theme="dark"] .md-link,
@@ -4180,6 +4188,36 @@ async function dashQueue(wrap, label){
 }
 
 function mdSample(){ return el('span','md-sample','SAMPLE'); }
+// The $100 launch credit in one sentence, with a way to see the balance.
+function creditStatusLine(setup){
+  const line=el('div','dv2-credit'); line.id='credit-status-line';
+  const p=el('p');
+  p.append(el('strong',null,(setup.headline||'3 of 3 connected')+'. '));
+  p.append(document.createTextNode(setup.creditMessage||'$100 in credits is unlocked.'));
+  const see=el('button','md-link','See your credits'); see.type='button';
+  see.onclick=()=>{ if(typeof setPage==='function') setPage('billing'); };
+  line.append(p, see);
+  return line;
+}
+// The same status with the working shown: which tools count toward the three, and which do not.
+function creditStatusCard(setup, connectedSlugs){
+  const card=el('div','mcard credit-status'); card.id='credit-status-card';
+  card.append(el('div','sect-label','$100 LAUNCH CREDIT'));
+  const counted=(setup.items||[]).filter(i=>i.connected).map(i=>i.label);
+  const missing=(setup.items||[]).filter(i=>!i.connected).map(i=>i.label);
+  const head=el('p'); head.style.margin='4px 0';
+  head.append(el('b',null,(setup.headline||'0 of 3 connected')+'. '));
+  head.append(document.createTextNode(setup.ready ? (setup.creditMessage||'$100 in credits is unlocked.') : 'The $100 unlocks when 3 of these are connected.'));
+  card.append(head);
+  card.append(el('p','appsub','Counted: '+(counted.length?counted.join(', '):'none yet')+'.'));
+  if(!setup.ready && missing.length) card.append(el('p','appsub','Still open: '+missing.join(', ')+'.'));
+  // Apps that are connected and useful, and still do not count toward the three.
+  const COUNTS=['google_ads','google_my_business','gmb','facebook_pages','facebook','instagram','facebook_graph_api','gohighlevel','highlevel_oauth','highlevel','leadconnector'];
+  const extra=(connectedSlugs||[]).filter(slug=>!COUNTS.includes(slug)).map(slug=>(typeof reconnectName==='function'?reconnectName(slug):slug));
+  if(extra.length) card.append(el('p','appsub','Connected, and not counted toward the 3: '+extra.join(', ')+'.'));
+  if(setup.ready){ const see=el('button','md-link','See your credits'); see.type='button'; see.onclick=()=>setPage('billing'); card.append(see); }
+  return card;
+}
 // True where a SAMPLE badge can appear at all: the preview connector, or an account with no ad account connected.
 function sampleLegendWanted(){ return !CONN || CONN.connector==='mock' || !(CONN.connectedApps||[]).includes('google_ads'); }
 function mdLive(){ return el('span','md-live','\u2713 Live'); }
@@ -4220,8 +4258,8 @@ async function actDecision(dec, kind){
   if(kind==='skip'){
     if(!dec.canSkip) return;
     if(dec.kind==='inbox') await post('/api/miles/reject',{id:dec.id});
-    else await post('/api/recommendations/dismiss',{id:dec.id});
-    toast('Skipped. Nothing was changed.');
+    else await post('/api/recommendations/dismiss',{id:dec.id, title:dec.title||''});
+    toast(dec.kind==='inbox' ? 'Skipped. Nothing was changed.' : 'Skipped. Nothing was changed. Undo is under What Miles did for you.');
     return;
   }
   let res=null;
@@ -4463,6 +4501,10 @@ function renderOverview(d, miles, op, setup){
     go.onclick=()=>{ if(typeof setPage==='function') setPage('integrations'); };
     gate.append(p, go);
     box.append(gate);
+  } else if(setup && setup.ready){
+    // Once the three are connected the banner used to vanish, and nothing on
+    // the dashboard said whether the $100 had arrived.
+    box.append(creditStatusLine(setup));
   }
 
   const track=op&&op.onTrack;
@@ -4530,8 +4572,10 @@ function renderOverview(d, miles, op, setup){
     const res=await fetchJson('/api/automation/log', null, 20000);
     if(!res.ok){ act.innerHTML=''; act.append(el('p','md-explain','Activity did not load. Refresh to try again.')); return; }
     const shown=((res.data&&res.data.activity)||[]).slice(0,6);
+    const recent=await fetchJson('/api/recommendations/recent', null, 12000);
+    const decisions=((recent.data&&recent.data.decisions)||[]).slice(0,6);
     act.innerHTML='';
-    if(!shown.length){
+    if(!shown.length && !decisions.length){
       act.append(el('p','md-explain','Nothing yet. Skill runs and approvals show up here.'));
     }
     shown.forEach(entry=>{
@@ -4542,6 +4586,27 @@ function renderOverview(d, miles, op, setup){
       if(entry.undo && entry.id){
         const undo=el('button','md-link','Undo'); undo.type='button';
         undo.onclick=async()=>{ undo.disabled=true; try{ await fetch('/api/activity/undo',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:entry.id,source:entry.source||'automation'})}); }catch(e){} openOverview(); };
+        row.append(undo);
+      }
+      act.append(row);
+    });
+    // Approvals and skips made on this page. Each can be taken back here.
+    decisions.forEach(dec=>{
+      const row=el('div','md-crow'); row.dataset.decision=dec.id;
+      if(dec.kind==='undone') row.style.opacity='.55';
+      const word=dec.kind==='approved'?'Approved':dec.kind==='skipped'?'Skipped':'Undone';
+      row.append(el('span',null, word+': '+noDash(dec.title||'Recommendation')), el('span','md-legend', fmtWhen(dec.ts)));
+      if(dec.kind==='approved'||dec.kind==='skipped'){
+        const undo=el('button','md-link','Undo'); undo.type='button';
+        undo.onclick=async()=>{
+          undo.disabled=true; undo.textContent='Undoing...';
+          try{
+            const r=await fetch('/api/recommendations/undo',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:dec.id})});
+            const out=await r.json().catch(()=>({}));
+            toast(out.note||out.error||(r.ok?'Undone.':'Could not undo that. Nothing was changed.'));
+          }catch(e){ toast('Could not undo that. Check your connection and try again.'); }
+          await openOverview();
+        };
         row.append(undo);
       }
       act.append(row);
@@ -6080,7 +6145,7 @@ function billingNotice(d){
   return card;
 }
 async function openBilling(){
-  const box=$('#bill-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading...</p>';
+  let box=$('#bill-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading...</p>';
   const res=await fetchJson('/api/billing', null, 8000);
   const d=res.data||{};
   if(!res.ok || !d.bands){
@@ -6089,7 +6154,19 @@ async function openBilling(){
       : 'Plan and credits did not load. Nothing was charged. The prices below are the plans on file.');
     return;
   }
-  box.innerHTML='';
+  // Draw into a detached box and swap it in at the end. One missing value on
+  // one account used to throw after the page was cleared, leaving it blank.
+  const page=box; box=el('div');
+  try{ await drawBilling(box, d); }
+  catch(err){
+    try{ console.error('Plan and credits could not be drawn', err); }catch(e){}
+    renderBillingFallback(page, 'Plan and credits loaded, but part of this page could not be shown. Nothing was charged. The prices below are the plans on file. Refresh to try again.');
+    return;
+  }
+  page.innerHTML=''; page.append(...box.childNodes);
+}
+async function drawBilling(box, d){
+  d.credits=d.credits||{granted:0,spent:0,remaining:0};
   // Payment grace, paused work, cancellation, and low credits, said plainly first.
   const bn=billingNotice(d);
   if(bn) box.append(bn);
@@ -9857,6 +9934,9 @@ function renderInts(){
     for(const d of details){ grid.append(connDetailCard(d)); }
     cwrap.append(grid);
   }
+  // Where the $100 stands, at the top, with which tools were counted.
+  const creditSlot=el('div'); creditSlot.id='credit-status-slot'; cwrap.prepend(creditSlot);
+  fetchJson('/api/setup/tools', null, 12000).then(res=>{ if(res&&res.data&&Array.isArray(res.data.items)&&creditSlot.isConnected){ creditSlot.innerHTML=''; creditSlot.append(creditStatusCard(res.data, [...connected])); } }).catch(()=>{});
   const connList=[...connected];
   const site=String((CONN&&CONN.website)||(PROFILE&&PROFILE.website)||'').trim();
   const shownNames=connList.map(slug=>nameFor(slug).name);
