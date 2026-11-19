@@ -197,8 +197,7 @@ describe('marketing report', () => {
     expect(googleCpl.badge).toBe('none');
     expect(googleCpl.sample).toBe(false);
     expect(googleCpl.headline).toBe('Not tracked yet');
-    expect(report.sampleBanner).toMatch(/Live is this account/);
-    expect(report.sampleBanner).toMatch(/Sample data/);
+    expect(report.sampleBanner).toBeNull();
     expect(report.google.tiles.find((tile) => tile.label === 'Spend')!.sample).toBe(false);
     expect(report.google.tiles.find((tile) => tile.label === 'Conversions')!.value).toBe('4');
     expect(report.charts.overview.find((widget) => widget.title === 'Impressions to booked jobs')!.sample).toBe(false);

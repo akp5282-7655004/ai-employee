@@ -349,7 +349,7 @@ function channel(title: string, read: ChannelRead, sample: boolean, kind: 'googl
   if (kind === 'google' && !read.rows.some((row) => row.level === 'search_term')) emptyBits.push('no search term rows');
   const failed = /could not be read/i.test(read.note);
   const note = !failed && emptyBits.length
-    ? `${read.note} Missing for this period: ${emptyBits.join(', ')}. Those tables stay empty instead of using a sample.`
+    ? `${read.note} Missing for this period: ${emptyBits.join(', ')}. Those tables stay empty.`
     : read.note;
   return {
     title,
@@ -396,12 +396,16 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
   const realSpendSpark = adsConnected ? sparkFrom(google.trend, meta.trend, 'spend') : [];
   const tiles: ReportKpi[] = [];
   if (adsConnected) tiles.push(kpi('Spend', money(adSpend), compare(adSpend, adSpendPrev), adSpend, adSpendPrev, realSpendSpark, false));
+  else if (hasLedger) tiles.push(kpi('Spend', 'Not tracked yet', 'Connect Google Ads to see what you spent.', null, null, [], false, 'none'));
   else tiles.push(kpi('Spend', money(plan.totalSpend), 'Sample data. This is not your ad account.', null, null, plan.days.map((day) => day.spend), true));
+  // Any live source at all, and the account stops showing example numbers.
+  const liveAccount = adsConnected || hasLedger;
+  const notTracked = (label: string, why: string) => kpi(label, 'Not tracked yet', why, null, null, [], false, 'none');
   if (hasLedger) tiles.push(kpi('Leads', count(leadsNow), compare(leadsNow, leadsPrev), leadsNow, leadsPrev, [], false));
   else if (adsConnected) tiles.push(kpi('Leads', 'Not tracked yet', 'Tracked leads replace this when your CRM sends events. Ad conversions are not used.', null, null, [], false, 'none'));
   else tiles.push(kpi('Leads', count(plan.totalLeads), 'Sample data. Tracked leads replace this when your CRM sends events.', null, null, plan.days.map((day) => day.leads), true));
   if (adsConnected && hasLedger && leadsNow > 0) tiles.push(kpi('Cost per lead', money(adSpend / leadsNow), 'Spend divided by tracked leads. Ad conversions are not used.', null, null, [], false));
-  else if (adsConnected) tiles.push(kpi('Cost per lead', 'Not tracked yet', 'Cost per lead appears once leads come in from your CRM or call tracking.', null, null, [], false, 'none'));
+  else if (adsConnected || hasLedger) tiles.push(kpi('Cost per lead', 'Not tracked yet', adsConnected ? 'Cost per lead appears once leads come in from your CRM or call tracking.' : 'Cost per lead needs ad spend. Connect Google Ads to see it.', null, null, [], false, 'none'));
   else tiles.push(kpi('Cost per lead', money(plan.cpl), 'Sample data. This is not your cost per lead.', null, null, [], true));
   const factor = window.days / 30;
   let projection = 'No budget projection is saved yet. Save one on the campaign plan before this can compare booked jobs with the plan.';
@@ -463,10 +467,14 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
   nextParts.push('Scheduled email of this report is not set up. Print or save as PDF to share it.');
   const googleNote = input.sample
     ? 'Google Ads is not connected, so the charts on this tab are sample data.'
-    : input.google.connected ? input.google.note : 'Google Ads is not connected. Connect it under Integrations. The charts on this tab are sample data until a real read comes back.';
+    : input.google.connected ? input.google.note
+      : liveAccount ? 'Google Ads is not connected. Connect it under Integrations to see campaigns here.'
+        : 'Google Ads is not connected. Connect it under Integrations. The charts on this tab are sample data until a real read comes back.';
   const metaNote = input.sample
     ? 'Facebook is not connected, so the charts on this tab are sample data.'
-    : input.meta.connected ? input.meta.note : (input.meta.note || 'No Facebook ad account is connected. A Page by itself is not an ad account. The charts on this tab are sample data until a real read comes back.');
+    : input.meta.connected ? input.meta.note
+      : liveAccount ? 'No Facebook ad account is connected. Facebook and Instagram ads are coming later, so nothing is shown on this tab.'
+        : (input.meta.note || 'No Facebook ad account is connected. A Page by itself is not an ad account. The charts on this tab are sample data until a real read comes back.');
   const charts = buildReportCharts({
     trade: input.trade,
     dailyBudget: input.dailyBudget ?? null,
@@ -517,7 +525,7 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
       happened: plain(`${window.label}, ${window.start} to ${window.end}. ${happenedParts.join(' ')}`),
       next: plain(nextParts.join(' ')),
     },
-    shareNote: 'Print or save as PDF to share this report. Charts are included. Sample cards stay marked Sample data on the printed page. Scheduled email is the next step. Miles can send other email when a key is set, but this report is not on a schedule.',
+    shareNote: `Print or save as PDF to share this report. Charts are included.${liveAccount ? '' : ' Sample cards stay marked Sample data on the printed page.'} Emailing it is not on a schedule yet.`,
     sampleBanner: charts.banner,
     charts,
   };
