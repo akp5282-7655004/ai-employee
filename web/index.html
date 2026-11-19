@@ -71,7 +71,7 @@
   /* Dashboard page (product UI), Apple design language on the brand system
      (docs/BRAND.md "Dashboard page"). Same color + hierarchy rules. */
   :root{ --ui:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,sans-serif; }
-  .layer-label{font-family:var(--ui);font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#AEAEB2;margin:26px 0 12px;}
+  .layer-label{font-family:var(--ui);font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8A8A92;margin:26px 0 12px;}
   .dcard{text-align:left;background:rgba(255,255,255,.72);backdrop-filter:blur(26px) saturate(1.6);-webkit-backdrop-filter:blur(26px) saturate(1.6);border:1px solid rgba(0,0,0,.06);border-radius:18px;box-shadow:0 1px 2px rgba(0,0,0,.04);}
   .dcard.dhero{border-radius:22px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.04);}
   .well{text-align:left;background:rgba(0,0,0,.03);border-radius:14px;padding:14px 16px;}
@@ -92,6 +92,8 @@
   html,body{height:100%;}
   body{margin:0;background:linear-gradient(180deg,#f5f5f7,#eef0f4);background-attachment:fixed;color:var(--graphite);font-family:var(--sans);font-weight:400;-webkit-font-smoothing:antialiased;}
   h1,h2,h3,h4,b,strong{color:var(--ink);}
+  /* Bold text on a surface with its own fixed colors keeps that surface's text color, in either theme. */
+  .org-head b,.yb-ad b,.an-notice b,.dv2-gate strong{color:inherit;}
   h1,h2,h3{letter-spacing:-.02em;}
   .app{display:grid;grid-template-columns:250px 1fr;height:100dvh;}
   svg{display:block;}
@@ -168,7 +170,7 @@
   .an-notice p{margin:0;font-size:13px;color:var(--an-accent-ink);max-width:62ch;}
   .an-notice b{font-weight:800;}
   .an-notice button{flex:none;font-family:var(--sans);font-size:12.5px;font-weight:700;padding:8px 15px;
-    border-radius:6px;border:0;background:var(--ink);color:#fff;cursor:pointer;}
+    border-radius:6px;border:0;background:#111112;color:#fff;cursor:pointer;}
   /* Metric cards + the trade-range bar, the signature element. */
   .an-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:0;
     border:1px solid var(--an-rule);border-radius:6px;overflow:hidden;margin-bottom:16px;background:var(--card);}
@@ -616,6 +618,7 @@
   #help-mail,#help-site{min-height:24px;display:inline-flex;align-items:center;font-size:12px;font-weight:700;margin-left:8px;color:var(--ink);text-decoration:none}
   #help-addr{margin-left:8px;padding-left:8px;border-left:1px solid var(--line);font-size:12px;color:var(--muted);display:inline-flex;align-items:center}
   #help-addr[hidden]{display:none !important}
+  #help-mail,#help-site{color:var(--ink)}
   button,.go,.md-ask,.md-ghost,a{min-height:24px}
   :focus-visible{outline:2px solid #111;outline-offset:2px}
   html,body{overflow-x:hidden}
@@ -977,6 +980,7 @@
   .rep-widget.span-6{grid-column:span 6;}
   .rep-whead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;}
   .rep-whead b{font-size:14px;letter-spacing:-.01em;}
+  .rep-empty{font-size:20px;font-weight:800;letter-spacing:-.02em;color:#111112;margin:10px 0 2px;}
   .rep-sample{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;background:#fff4d6;color:#8a5a00;border-radius:999px;padding:3px 8px;white-space:nowrap;}
   .rep-live{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;background:#e7f6ee;color:#1b8552;border-radius:999px;padding:3px 8px;white-space:nowrap;}
   .rep-chartbox{position:relative;width:100%;height:240px;min-height:240px;}
@@ -1243,6 +1247,49 @@
   :root[data-theme="dark"] .appsub,
   :root[data-theme="dark"] .mdesc,
   :root[data-theme="dark"] .md-legend{color:#C8C8D0;}
+  /* Dark mode, second pass. Surfaces that stayed white become dark panels, and
+     text with a hard-coded dark color takes the theme's ink. test/darkmode.test.ts
+     measures every page: no text under 3:1 against what is behind it. */
+  :root[data-theme="dark"] .dv2-rec,
+  :root[data-theme="dark"] body.on-dash .mcard,
+  :root[data-theme="dark"] .org-dept,
+  :root[data-theme="dark"] .yb-check,
+  :root[data-theme="dark"] .yb-social{background:#1A1A1C;border-color:#2E2E32;}
+  /* Cards that draw charts or carry their own fixed colors stay light. Inside
+     them the theme colors go back to their light values, so every piece of
+     text is dark on white, whether it uses a theme color or a fixed one. */
+  :root[data-theme="dark"] .rep-widget,
+  :root[data-theme="dark"] .md-play{
+    --panel:#FFFFFF; --panel-2:#F4F4F5; --panel2:#F4F4F5; --card:#FFFFFF; --line:#E6E6EA; --line-soft:#EFEFF2;
+    --ink:#111112; --graphite:#3F3F46; --muted:#8A8A92; --faint:#8A8A92; --primary:#111112; --primary-ink:#FFFFFF;
+    --good:#1B8552; --accent:#2B6FCB; --warn:#86651C; --bad:#A45359; --brand:#111112;
+    color:#111112;
+  }
+  :root[data-theme="dark"] .dv2-gate{background:#2A2418;border-color:#4A3F22;}
+  :root[data-theme="dark"] .dv2-gate p{color:#EADDB5;}
+  :root[data-theme="dark"] .dv2-sec h2,
+  :root[data-theme="dark"] .md-h,
+  :root[data-theme="dark"] .md-link,
+  :root[data-theme="dark"] .yb-edit,
+  :root[data-theme="dark"] .yb-v,
+  :root[data-theme="dark"] .yb-inline{color:#fff;}
+  :root[data-theme="dark"] .dv2-note,
+  :root[data-theme="dark"] .md-setup{color:#D8D8DC;}
+  :root[data-theme="dark"] .an-switch button.on{background:#fff;color:#111112;}
+  :root[data-theme="dark"] .an-conn .go{background:none;padding:0;}
+  :root[data-theme="dark"] .dv2-tabs button,
+  :root[data-theme="dark"] .rep-bar button,
+  :root[data-theme="dark"] .rep-secs button{background:#1A1A1C;border-color:#2E2E32;color:#fff;}
+  :root[data-theme="dark"] .dv2-tabs button.on,
+  :root[data-theme="dark"] .rep-bar button.on,
+  :root[data-theme="dark"] .rep-secs button.on{background:#fff;border-color:#fff;color:#111112;}
+  :root[data-theme="dark"] .md-track{color:#D8D8DC;}
+  :root[data-theme="dark"] .askbar{background:#1A1A1C;border-top-color:#2E2E32;}
+  :root[data-theme="dark"] .askbar input{background:#111112;border-color:#2E2E32;color:#fff;}
+  /* Buttons and links with no color of their own used the browser's black and
+     blue. :where() keeps this at the weight of a bare tag, so any class wins. */
+  :where(:root[data-theme="dark"]) button{color:var(--ink);}
+  :where(:root[data-theme="dark"]) a{color:#9CC2F5;}
   .pagehead{align-items:center;gap:12px;margin-bottom:16px;}
   .pagehead h2{margin:0;font-size:28px;font-weight:800;letter-spacing:-.03em;line-height:1.05;}
   .askbtn,.tbtn{box-sizing:border-box;height:36px;border-radius:999px;font-family:inherit;}
@@ -11081,6 +11128,14 @@ function renderReport(report){
       head.append(el('b',null,widget.title));
       const chartBadge=repBadge(!!widget.sample, widget.headline==='Not tracked yet'||widget.badge==='none'?'none':''); if(chartBadge) head.append(chartBadge);
       card.append(head);
+      // Nothing to draw: say so in words. An empty set of axes reads as a broken chart.
+      if(widget.headline==='Not tracked yet'&&!(widget.points||[]).length){
+        const none=el('div','rep-empty','Not tracked yet');
+        card.append(none);
+        if(widget.note) card.append(el('p','appsub',widget.note));
+        grid.append(card);
+        return;
+      }
       const box=el('div','rep-chartbox');
       if(widget.kind==='bar') box.style.height=Math.max(220, ((widget.points||[]).length*36)+48)+'px';
       const canvas=document.createElement('canvas');
