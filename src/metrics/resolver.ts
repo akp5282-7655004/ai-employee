@@ -55,6 +55,8 @@ export interface LiveReaders {
    *  Any key present here is REAL data and overrides the sample. NaN means
    *  live with no value (a real denominator is 0). */
   values?: Record<string, number | undefined>;
+  /** A live source exists for this account. Missing metrics stay blank, not sample. */
+  suppressSample?: boolean;
 }
 
 export async function getMetric(key: string, days: number, live: LiveReaders = {}): Promise<MetricResult | undefined> {
@@ -77,6 +79,9 @@ export async function getMetric(key: string, days: number, live: LiveReaders = {
         return { ...base, value: Math.round(real * 100) / 100, prior_value: base.prior_value, source: 'live' };
       }
     } catch { /* fall through to sample */ }
+  }
+  if (live.suppressSample) {
+    return { ...base, value: 0, prior_value: 0, series: [], source: 'live', noValue: true };
   }
   return base;
 }

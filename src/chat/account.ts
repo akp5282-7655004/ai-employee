@@ -50,6 +50,14 @@ export function ownerStatusAnswer(snapshot: AccountSnapshot, question: string): 
   return connectionAnswer(facts);
 }
 
+function countRule(facts: AccountFacts): string {
+  const line = unlockLine(facts);
+  const extra = facts.connectedNames.filter((name) => !facts.unlockNames.includes(name));
+  if (!extra.length) return line;
+  const verb = extra.length === 1 ? 'is connected and does not count' : 'are connected and do not count';
+  return `${line} ${extra.join(' and ')} ${verb} toward the ${facts.unlockRequired}.`;
+}
+
 function connectionAnswer(facts: AccountFacts): string {
   const names = facts.connectedNames;
   const head = names.length === 0
@@ -57,7 +65,7 @@ function connectionAnswer(facts: AccountFacts): string {
     : names.length === 1
       ? `${names[0]} is connected.`
       : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} are connected.`;
-  return `${head} ${unlockLine(facts)}`.trim();
+  return `${head} ${countRule(facts)}`.trim();
 }
 
 function has(facts: AccountFacts, label: string): boolean {
@@ -71,26 +79,26 @@ function googleStatus(snapshot: AccountSnapshot, q: string): string {
   const gbp = has(facts, 'Google Business Profile');
   const analytics = has(facts, 'Google Analytics');
   if (/analytics|\bga4\b/.test(q)) {
-    return `${analytics ? 'Google Analytics is connected.' : 'Google Analytics is not connected.'} ${unlockLine(facts)}`.trim();
+    return `${analytics ? 'Google Analytics is connected.' : 'Google Analytics is not connected.'} ${countRule(facts)}`.trim();
   }
   if (/business profile|\bgbp\b|\bgmb\b/.test(q)) {
-    return `${gbp ? 'Google Business Profile is connected.' : 'Google Business Profile is not connected.'} ${unlockLine(facts)}`.trim();
+    return `${gbp ? 'Google Business Profile is connected.' : 'Google Business Profile is not connected.'} ${countRule(facts)}`.trim();
   }
   if (/\bads\b/.test(q)) {
-    return `${ads ? 'Google Ads is connected.' : 'Google Ads is not connected.'} ${unlockLine(facts)}`.trim();
+    return `${ads ? 'Google Ads is connected.' : 'Google Ads is not connected.'} ${countRule(facts)}`.trim();
   }
   const lines = [
     ads ? 'Google Ads is connected.' : 'Google Ads is not connected.',
     gbp ? 'Google Business Profile is connected.' : 'Google Business Profile is not connected.',
     analytics ? 'Google Analytics is connected.' : 'Google Analytics is not connected.',
   ];
-  return `${lines.join(' ')} ${unlockLine(facts)}`.trim();
+  return `${lines.join(' ')} ${countRule(facts)}`.trim();
 }
 
 function namedToolStatus(snapshot: AccountSnapshot, q: string): string {
   const facts = snapshot.account;
   const known = facts.connectedNames.find((name) => q.includes(name.toLowerCase()));
-  if (known) return `${known} is connected. ${unlockLine(facts)}`.trim();
+  if (known) return `${known} is connected. ${countRule(facts)}`.trim();
   return connectionAnswer(facts);
 }
 

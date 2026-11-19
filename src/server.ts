@@ -3495,6 +3495,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     // Snapshot spend is the trailing 30 days. Use it only for a 30-day range, so
     // cost per lead and cost per job never divide 30-day spend by 7-day leads.
     const adSpend = days === 30 ? snap?.adSpend : undefined;
+    const listedNow = await accountsOf(uid);
+    const liveSource = connector.name !== 'mock' && (splitByHealth(listedNow.accounts).connectedApps.length > 0 || typeof adSpend === 'number' || (snap?.campaigns ?? []).some((row) => (row.spend || 0) > 0));
     const ledger = crmLiveValues(data, days);
     const jobs = Array.isArray(data.jobMarks) ? (data.jobMarks as JobMark[]) : [];
     const fromJobs: Record<string, number> = {};
@@ -3509,6 +3511,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const lpAnswers = (data.localPresence as Record<string, AuditAnswer>) ?? undefined;
     const gbpScore = lpAnswers ? { 'gbp.completeness_score': gbpCompletenessScore(buildLocalPresenceAudit(lpAnswers, (data.profile ?? {}) as Record<string, string>)) } : {};
     const live: import('./metrics/resolver.js').LiveReaders = {
+      suppressSample: liveSource,
       values: { ...crm, ...calcLiveValues(crm, adSpend), ...gbpScore, ...(adSpend !== undefined ? { 'google_ads.cost': Math.round(adSpend * 100) / 100 } : {}) },
     };
     return { snap, live };
@@ -3628,8 +3631,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const p = (d.profile ?? {}) as Record<string, string>;
     const miles = milesOf(d);
     const caps = miles.bundle?.setup.caps ?? null;
+    const RANGES = new Set(['LAST_7_DAYS', 'LAST_14_DAYS', 'LAST_30_DAYS', 'THIS_MONTH', 'LAST_MONTH']);
+    const range = RANGES.has(String((req.query as { range?: string } | undefined)?.range)) ? String((req.query as { range?: string }).range) : 'LAST_30_DAYS';
+    const days = range === 'LAST_7_DAYS' ? 7 : range === 'LAST_14_DAYS' ? 14 : range === 'THIS_MONTH' ? new Date().getDate() : range === 'LAST_MONTH' ? new Date(new Date().getFullYear(), new Date().getMonth(), 0).getDate() : 30;
     const [{ snap, live }, google, ghlNow, listed] = await Promise.all([
-      liveReadersFor(u.id, d, 30),
+      liveReadersFor(u.id, d, days),
       googleReadiness(u.id),
       ghlLink(u.id),
       accountsOf(u.id),
@@ -3637,7 +3643,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const metricRows = await getMetrics([
       'calc.blended_leads', 'calc.blended_spend', 'calc.cost_per_booked',
       'crm.booked_jobs', 'crm.job_revenue',
-    ], 30, live);
+    ], days, live);
     const linked = new Set(listed.accounts.map((a) => a.app));
     const gmbLinked = ['google_my_business', 'gmb'].some((a) => linked.has(a));
     const socialLinked = ['facebook_pages', 'instagram', 'linkedin'].some((a) => linked.has(a));
@@ -3661,11 +3667,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const sampleConnector = connector.name === 'mock';
     const googleRows = (snap?.campaigns ?? []).filter((row) => row.platform === 'google_ads');
     const campaignLive = !sampleConnector && (miles.activation === 'enabled' || googleRows.some((row) => row.status === 'ENABLED'));
-    const crm = crmLiveValues(d, 30);
+    const crm = crmLiveValues(d, days);
     const trackedFromSnap = (() => {
       const rows = Array.isArray(snap?.leads) ? snap.leads : [];
       if (!rows.length) return null;
-      const cutoff = Date.now() - 30 * 86_400_000;
+      const cutoff = Date.now() - days * 86_400_000;
       let n = 0;
       for (const row of rows) {
         if (!row || typeof row !== 'object') continue;
@@ -3728,7 +3734,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       inbox: miles.inbox.filter((row) => row.status === 'queued').map((row) => ({ id: row.id, title: row.title, reason: row.reason })),
       expectation,
     });
-    return { operator };
+    return { operator, range, days };
   });
 
   // Diagnostic — confirm a connected app actually returns live data (and expose the
@@ -3758,9 +3764,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     // The snapshot holds the trailing 30 days — the default view. Any other
     // window is a deliberate drill-down and reads the platform directly.
     const snap = await getSnapshot(u.id);
-    const spend = range === 'LAST_30_DAYS'
+    let spend = range === 'LAST_30_DAYS'
       ? (snap?.campaigns ?? [])
       : await safeConn(connector.getAdSpend ? () => connector.getAdSpend!(u.id, range) : undefined, [] as import('./revenue/attribution.js').CampaignSpend[]);
+    if (!spend.length && connector.getAdSpend) {
+      spend = await safeConn(() => connector.getAdSpend!(u.id, range), [] as import('./revenue/attribution.js').CampaignSpend[]);
+    }
     const deals = (snap?.deals ?? []) as import('./revenue/attribution.js').Deal[];
     const google = await googleReadiness(u.id);
     const revFor = (utm: string, name: string) => { const k = (utm || name || '').toLowerCase(); return deals.filter((d) => d.won && (d.value || 0) > 0 && String(d.utmCampaign || '').toLowerCase() === k).reduce((s, d) => s + (d.value || 0), 0); };
@@ -6536,8 +6545,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   app.get<{ Querystring: { zip?: string } }>('/api/research', async (req, reply) => {
     const zip = req.query?.zip;
     if (!zip) return reply.code(400).send({ error: 'zip required' });
+    const u = await getUser(req);
+    const trade = u ? String(((await authStore.getUserData(u.id)).profile as { industry?: string } | undefined)?.industry || '') : '';
     try {
-      const d = await fetchDemographics(zip);
+      const d = await fetchDemographics(zip, trade);
       if (!d) return reply.code(404).send({ error: 'No Census data for that ZIP — try a 5-digit US ZIP.' });
       return d;
     } catch (err) {

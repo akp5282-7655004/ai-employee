@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{var t=localStorage.getItem('miles-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <title>Miles, Workspace</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <!-- Wordmark per brand spec: Archivo Bold. Loads on Render; falls back to the
@@ -613,6 +614,7 @@
   .side #logout{color:#c8c8ce;}
   #header-logout{display:none;min-height:24px;min-width:24px;border:1px solid var(--line);border-radius:8px;background:#fff;font:700 12px inherit;padding:6px 10px;cursor:pointer}
   #help-mail,#help-site{min-height:24px;display:inline-flex;align-items:center;font-size:12px;font-weight:700;margin-left:8px}
+  #help-addr{margin-left:8px;padding-left:8px;border-left:1px solid var(--line);font-size:12px;color:var(--muted);display:inline-flex;align-items:center}
   button,.go,.md-ask,.md-ghost,a{min-height:24px}
   :focus-visible{outline:2px solid #111;outline-offset:2px}
   html,body{overflow-x:hidden}
@@ -1205,7 +1207,9 @@
   /* Shared signed-in chrome. Taken from the Your Business profile and the
      operator dashboard: one canvas, one pill, one button height, one card. */
   .main{background:#f3f3f5;padding:22px 28px 72px;}
+  :root[data-theme="dark"] body{background:#111112;color:var(--graphite);}
   :root[data-theme="dark"] .main{background:#111112;}
+  :root[data-theme="dark"] .tbtn{background:#1A1A1C;border-color:#2E2E32;color:#fff;}
   .pagehead{align-items:center;gap:12px;margin-bottom:16px;}
   .pagehead h2{margin:0;font-size:28px;font-weight:800;letter-spacing:-.03em;line-height:1.05;}
   .askbtn,.tbtn{box-sizing:border-box;height:36px;border-radius:999px;font-family:inherit;}
@@ -1355,6 +1359,7 @@
       <button class="askbtn" data-ask><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 1.9 4.8L19 9l-4 3.5L16 18l-4-2.4L8 18l1-5.5L5 9l5.1-1.2Z"/></svg> Ask Miles</button>
       <button id="header-logout" type="button" aria-label="Log out">Log out</button>
       <a id="help-mail" href="mailto:support@miles.ai">Help</a>
+      <span id="help-addr" class="help-addr" hidden></span>
       <a id="help-site" href="https://sites.pathhackers.com/home/site/de09bf3e">FAQ</a>
       <button class="tbtn" id="theme" title="Theme">◑</button>
     </div>
@@ -2193,7 +2198,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled',wireframe:'Agent Wireframe',autopilot:'Autonomy',skills:'Playbooks',library:'Skills & Playbooks',meters:'Benchmarks',analytics:'Analytics',recs:'Recommendations',cads:'Competitors',research:'Demographics',weather:'Weather',adstudio:'Ad Copy',playbook:'Plan',playdetail:'Playbook',launch:'Launch',localpresence:'Local Presence',approvals:'Approvals',billing:'Plan & Credits',fblaunch:'Facebook',reports:'Reports',autohub:'Automations',health:'System Health',ghl:'CRM workflows',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Edit',studio:'Studio',hub:'Projects',brand:'Brand',assets:'Assets',audit:'Audits',calendar:'Schedule',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',owneradmin:'ADMIN',market:'Marketplace',chat:'Chat with Miles'};
+const TITLES={home:'Home',overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled',wireframe:'Agent Wireframe',autopilot:'Autonomy',skills:'Playbooks',library:'Skills & Playbooks',meters:'Benchmarks',analytics:'Analytics',recs:'Recommendations',cads:'Competitors',research:'Demographics',weather:'Weather',adstudio:'Ad Copy',playbook:'Plan',playdetail:'Playbook',launch:'Launch',localpresence:'Local Presence',approvals:'Approvals',billing:'Plan & Credits',fblaunch:'Facebook',reports:'Reports',autohub:'Automations',health:'System Health',ghl:'CRM workflows',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Edit',studio:'Studio',hub:'Projects',brand:'Brand',assets:'Assets',audit:'Audits',calendar:'Schedule',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',owneradmin:'ADMIN',market:'Marketplace',chat:'Chat with Miles','business-profile':'Business Profile'};
 // A destination can own several pages, Launch owns the plan, both channel
 // launchers and the ad-copy writer. The nav lists the destination; its pages
 // become a tab strip, so a four-step job stops looking like four unrelated
@@ -2282,7 +2287,7 @@ function setPage(id){
   // The first page of a visit fills in the bare address. Every later move adds a
   // history entry, so Back returns to the page before it instead of leaving the app.
   if (location.hash !== '#'+id) { if (location.hash) history.pushState({ page: id }, '', '#'+id); else history.replaceState({ page: id }, '', '#'+id); }
-  const homeIds=['agents'];
+  const homeIds=['home','agents'];
   $('#page-home').classList.toggle('on',homeIds.includes(id));
   $('#page-overview').classList.toggle('on',id==='overview');
   $('#page-autopilot').classList.toggle('on',id==='autopilot');
@@ -2381,12 +2386,18 @@ function updateConnStat(){
 // True when live AND in production (customers can connect their own accounts).
 function connLiveForCustomers(){ return !!(CONN.hub && CONN.hub.ready && CONN.hub.env==='production'); }
 document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>{ if(typeof closeOnboard==='function') closeOnboard(); setPage(a.dataset.page); });
-window.addEventListener('hashchange', () => { const id = location.hash.replace('#',''); if (id && TITLES[id]) setPage(id); });
+function pageFromHash(raw){
+  const id=String(raw||'').replace(/^#/,'');
+  if(id==='business-profile'||id==='businessprofile') return 'profile';
+  if(id==='home') return 'home';
+  return id;
+}
+window.addEventListener('hashchange', () => { const id = pageFromHash(location.hash); if (id && TITLES[id]) setPage(id); });
 // The page to open on load: the one named in the address, so Refresh stays put.
 function startPage(){
   if(location.pathname==='/admin' && IS_ADMIN) return 'owneradmin';
-  const id=location.hash.replace('#','');
-  if(id && TITLES[id] && (id!=='owneradmin' || IS_ADMIN)) return id;
+  const id=pageFromHash(location.hash);
+  if(id && (TITLES[id] || id==='profile') && (id!=='owneradmin' || IS_ADMIN)) return id==='business-profile'?'profile':id;
   return 'overview';
 }
 // Collapsible nav groups: expand the group holding the active page; a header click
@@ -3461,7 +3472,8 @@ function goResultText(r){
   return 'Waiting on you. Nothing was spent.';
 }
 function milesGoLabel(miles){
-  return milesGoNote || (miles&&miles.goNote) || '';
+  const raw=milesGoNote || (miles&&miles.goNote) || '';
+  return String(raw).replace(/Google reports the campaign as UNKNOWN\.?/gi, 'Could not read status, retrying.');
 }
 async function milesPost(btn, statusEl, working, url, payload){
   if(btn){ btn.disabled=true; btn.dataset.prev=btn.textContent; btn.textContent=working; }
@@ -4194,10 +4206,10 @@ async function openOverview(){
   let setup=null;
   if(REMOTE){
     const [dash, home, oper, prog]=await Promise.all([
-      fetchJson('/api/dashboard?range='+encodeURIComponent(MKT_RANGE), null, 8000),
-      fetchJson('/api/miles/home', null, 8000),
-      fetchJson('/api/dashboard/operator', null, 8000),
-      fetchJson('/api/setup/tools', null, 8000),
+      fetchJson('/api/dashboard?range='+encodeURIComponent(MKT_RANGE), null, 20000),
+      fetchJson('/api/miles/home', null, 20000),
+      fetchJson('/api/dashboard/operator?range='+encodeURIComponent(MKT_RANGE), null, 20000),
+      fetchJson('/api/setup/tools', null, 20000),
     ]);
     if(dash.data&&dash.data.kpis){ d=dash.data; ANDASH=dash.data; }
     if(home.data&&typeof home.data==='object'){ miles=home.data; MILES_HOME=home.data; }
@@ -4334,7 +4346,7 @@ function renderOverview(d, miles, op, setup){
   });
   const gsel=el('select','md-range'); gsel.setAttribute('aria-label','Date range');
   for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===MKT_RANGE) o.selected=true; gsel.append(o); }
-  gsel.title='Changes live leads, booked revenue, and agent runs. Sample figures and ad spend stay on the last 30 days.';
+  gsel.title='Refetches the dashboard numbers and labels for this range.';
   gsel.onchange=async()=>{ MKT_RANGE=gsel.value; if(typeof ADS_RANGE!=='undefined') ADS_RANGE=gsel.value; if(typeof GROWTH_RANGE!=='undefined') GROWTH_RANGE=gsel.value; await openOverview(); if(typeof openAdsManager==='function' && document.getElementById('page-adsmgr')&&document.getElementById('page-adsmgr').classList.contains('on')) openAdsManager(); };
   const ask=el('button','md-ask','Ask Miles');
   ask.onclick=()=>{ if(typeof enterChat==='function') enterChat(); };
@@ -4418,7 +4430,8 @@ function renderOverview(d, miles, op, setup){
   act.append(el('p','appsub','Loading activity...'));
   box.append(act);
   (async()=>{
-    const res=await fetchJson('/api/automation/log', null, 8000);
+    const res=await fetchJson('/api/automation/log', null, 20000);
+    if(!res.ok){ act.innerHTML=''; act.append(el('p','md-explain','Activity did not load. Refresh to try again.')); return; }
     const log=(res.data&&res.data.log)||[];
     const runs=d.recentRuns||[];
     act.innerHTML='';
@@ -4434,6 +4447,11 @@ function renderOverview(d, miles, op, setup){
       // "applied" entry is logged only. Say that instead of offering an Undo.
       if(entry.effect==='applied') row.append(el('span','md-legend','Logged only. Google Ads was not changed.'));
       else row.append(el('span','md-legend', entry.effect||''));
+      if(entry.id && entry.effect==='applied'){
+        const undo=el('button','md-link','Undo'); undo.type='button';
+        undo.onclick=async()=>{ undo.disabled=true; try{ await fetch('/api/automation/revert',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:entry.id})}); }catch(e){} openOverview(); };
+        row.append(undo);
+      }
       act.append(row);
     });
     if(!shown.length){
@@ -4503,7 +4521,7 @@ function renderOverview(d, miles, op, setup){
   const money=op&&op.money;
   const anySample=!!(money&&(money.tone==='sample'||money.tone==='unknown'||(money.tiles||[]).some(t=>t.sample)));
   const numExtra=el('span');
-  numExtra.append(document.createTextNode('Last 30 days'));
+  numExtra.append(document.createTextNode(mktRangeLabel(MKT_RANGE)));
   if(anySample){ numExtra.append(document.createTextNode(' ')); numExtra.append(mdSample()); }
   const numbers=el('div','dv2-numbers');
   numbers.append(dv2Head('5 · Your numbers', numExtra));
@@ -6056,7 +6074,8 @@ async function openBilling(){
   if (d.zeroBalance) pc.append(el('p','verdict tight', d.zeroMessage || 'Your credit balance is $0. Reports stay available.'));
   pc.append(el('div','appsub',
     (leftUnits!==null ? leftUnits+' videos left this month' : 'Media allowance')
-    + (IS_ADMIN ? ' · $'+c.remaining.toFixed(2)+' of $'+c.granted.toFixed(2)+' in media credits' : '')));
+    + ' · $'+Number(c.remaining||0).toFixed(2)+' of $'+Number(c.granted||0).toFixed(2)+' remaining'
+    + (d.launchCredit==='granted' ? ' · $'+(d.launchGrant||100)+' launch credit is unlocked.' : d.launchCredit==='pending' ? ' · Launch credit is still locked until 3 tools are connected.' : '')));
   if(d.usage){
     pc.append(el('div','appsub', (d.usage.credits||0).toLocaleString()+' / '+(d.usage.allowance||1000).toLocaleString()+' credits this month'));
   }
@@ -6501,8 +6520,37 @@ async function doFbLaunch(spec, go){
   if(go){ go.textContent=r.ok?'Created paused':'Try again'; if(!r.ok) go.disabled=false; }
   if(r.ok) toast('Paused Facebook campaign created. Nothing is spending.');
 }
-function openPlaybook(){
-  const box=$('#playbook-body'); if(!box) return; box.innerHTML='';
+async function openPlaybook(){
+  const box=$('#playbook-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading the saved plan...</p>';
+  let miles={}, pack=null;
+  if(REMOTE){
+    try{ miles=await(await fetch('/api/miles/home')).json(); }catch(e){}
+    try{ pack=await(await fetch('/api/launch/home')).json(); }catch(e){}
+  }
+  const spec=miles&&miles.bundle&&miles.bundle.spec;
+  const launch=pack&&pack.launch;
+  if(spec || (launch&&(launch.selectedDaily||launch.trade||launch.location))){
+    box.innerHTML='';
+    const card=el('div','mcard');
+    card.append(el('h3',null,'Saved campaign plan'));
+    const bits=[];
+    if(launch&&launch.trade) bits.push(launch.trade);
+    if(launch&&launch.location) bits.push(launch.location);
+    bits.push('Google Search');
+    const daily=(spec&&spec.dailyBudget)||(launch&&launch.selectedDaily);
+    if(daily) bits.push('$'+daily+'/day');
+    card.append(el('p','mdesc', bits.join(' · ')));
+    const groups=(spec&&spec.adGroups)||[];
+    if(groups.length){
+      groups.forEach(g=>card.append(el('p',null,(g.name||'Ad group')+': '+((g.keywords||[]).slice(0,8).join(', ')||'No keywords saved'))));
+    } else card.append(el('p','mdesc','Keywords, negatives, and ad copy are reviewed on the Google Ads tab.'));
+    const go=el('button','go','Open Google Ads review'); go.type='button'; go.onclick=()=>setPage('launch');
+    card.append(go);
+    box.append(card);
+    return;
+  }
+  box.innerHTML='';
+  box.append(el('p','mdesc','No saved Google plan yet. Add a trade, a city, and a daily budget, or build a draft below.'));
   const h=el('div','mcard'); h.innerHTML='<h3 style="margin:0">📋 Campaign Playbook</h3><p class="mdesc" style="margin:6px 0 0;max-width:640px">A planning draft: unit economics, an offer, and a creative list for your trade. Google Ads can be created paused from Launch. Meta is coming later, so a Meta playbook is a draft only and is not launched.</p>';
   box.append(h);
   const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','TELL MILES THE BASICS'));
@@ -8290,7 +8338,10 @@ async function saveModel(){ if(!REMOTE) return; try{ await fetch('/api/model',{m
 function renderSettings(){
   const bar=$('#set-subtabs'); if(bar){ bar.innerHTML=''; bar.hidden=true; }
   const body=$('#settings-body'); body.innerHTML='';
-  ({account:setAccount,model:setModel,team:setTeam,keys:setKeys,usage:setUsage,billing:setBilling,admin:setAdmin,feedback:setFeedback}[setTab]||setAccount)(body);
+  const pages={account:setAccount,model:setModel,team:setTeam,keys:setKeys,usage:setUsage,billing:setBilling,admin:setAdmin,feedback:setFeedback,users:setTeam};
+  const draw=pages[setTab]||setAccount;
+  draw(body);
+  if(!body.childNodes.length) body.append(el('p','mdesc','Nothing to show on this tab.'));
 }
 function savedAccountName(account){
   const name=String((account&&account.name)||'').trim();
@@ -9042,7 +9093,7 @@ function guardToggle(title,desc,on,cb){
 function guardrailsCard(){
   const g=AUTOPILOT.guardrails||(AUTOPILOT.guardrails={maxBudgetChangePct:10,protectProven:true,approveHighImpact:true});
   const card=el('div','mcard'); card.style.maxWidth='860px';
-  const p=el('p','mdesc'); p.style.margin='0 0 16px'; p.textContent='These limits apply to growth proposals. This dial does not change a live Google Ads budget.'; card.append(p);
+  const p=el('p','mdesc'); p.style.margin='0 0 16px'; p.textContent='The mode that can spend is Ask me first, Hybrid, or Do everything on the dashboard. This percent dial does not change that mode or the saved daily cap.'; card.append(p);
   card.append(el('div','sect-label','MAX BUDGET CHANGE PER ADJUSTMENT'));
   const sub=el('div','mdesc'); sub.style.margin='-6px 0 10px'; sub.textContent='A proposal will not suggest a budget step larger than this. Nothing is changed until you approve it.'; card.append(sub);
   const capRow=el('div','subtabs'); capRow.style.marginBottom='4px';
@@ -9665,7 +9716,8 @@ function renderInts(){
     const inApps=APPS.find(x=>x.slug===slug); if(inApps) return inApps;
     for(const gr of STACK){ const f=gr.apps.find(a=>a.slug===slug); if(f) return f; }
     if(APP_LABEL[slug]) return {slug,name:APP_LABEL[slug]};
-    return {slug,name:slug};
+    const pretty=String(slug||'').split('_').filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+    return {slug,name:({google_analytics:'Google Analytics',google_ads:'Google Ads',google_my_business:'Google Business Profile',gohighlevel:'GoHighLevel'})[slug]||pretty||slug};
   };
   const cwrap=$('#int-connected'); cwrap.innerHTML='';
   // Revoked or expired connections. Not counted as connected; say so plainly.
@@ -9686,6 +9738,13 @@ function renderInts(){
     for(const slug of connList){ g.append(appCard(nameFor(slug),true)); }
     cwrap.append(g);
   }
+  const site=PROFILE&&PROFILE.website?String(PROFILE.website).trim():'';
+  if(site){
+    const card=el('div','mcard');
+    card.append(el('b',null,'Website'));
+    card.append(el('p','appsub','Saved on the business profile: '+site+'. A saved website counts toward the 3. Google Analytics can be connected and does not count toward the 3.'));
+    cwrap.append(card);
+  }
   // Catalogue
   $('#cat-label').textContent = $('#app-search').value.trim() ? 'RESULTS' : 'POPULAR';
   const cat=$('#int-catalog'); cat.innerHTML='';
@@ -9693,7 +9752,7 @@ function renderInts(){
   if(!APPS.length) cat.append(el('div','appsub','No apps found.'));
 }
 // One plain "Reconnect Google Ads" card per revoked or expired connection.
-function reconnectName(slug){ return ({google_ads:'Google Ads',google_my_business:'Google Business Profile',facebook:'Meta',facebook_pages:'Facebook Pages',facebook_graph_api:'Meta',gohighlevel:'GoHighLevel',highlevel_oauth:'GoHighLevel',gmail:'Gmail',tiktok_ads_manager:'TikTok Ads'})[slug] || (APP_LABEL[slug]) || connectLabel(slug); }
+function reconnectName(slug){ return ({google_ads:'Google Ads',google_analytics:'Google Analytics',google_my_business:'Google Business Profile',facebook:'Meta',facebook_pages:'Facebook Pages',facebook_graph_api:'Meta',gohighlevel:'GoHighLevel',highlevel_oauth:'GoHighLevel',gmail:'Gmail',tiktok_ads_manager:'TikTok Ads'})[slug] || (APP_LABEL[slug]) || connectLabel(slug); }
 function reconnectNotice(slugs){
   const list=(slugs||[]).filter(Boolean); if(!list.length) return null;
   const wrap=el('div'); wrap.className='reconnect-notice'; wrap.style.cssText='display:grid;gap:10px;margin-bottom:16px';
@@ -9720,7 +9779,7 @@ document.querySelector('.main').addEventListener('scroll', async (e)=>{
 
 // ═══ chat ═══
 const chat=$('#chat'), cinput=$('#cinput');
-const APP_LABEL={google_ads:'Google Ads',google_my_business:'Business Profile',google_lsa:'Local Services Ads',facebook_ads:'Meta Ads',gohighlevel:'GoHighLevel'};
+const APP_LABEL={google_ads:'Google Ads',google_analytics:'Google Analytics',google_my_business:'Business Profile',google_lsa:'Local Services Ads',facebook_ads:'Meta Ads',gohighlevel:'GoHighLevel'};
 function addRow(role){const r=el('div','row '+(role==='user'?'user':'emp'));const a=el('div','av '+(role==='user'?'you':'emp'),role==='user'?'A':'M');const b=el('div','bubble');r.append(a,b);chat.append(r);chat.scrollTop=chat.scrollHeight;return b;}
 function say(role,text){ const shown=role==='user'?text:scrubConnectText(text); const b=addRow(role); b.textContent=shown; chat.scrollTop=chat.scrollHeight; logChat(role,shown); return b; }
 function renderPlan(reply){
@@ -9982,7 +10041,8 @@ document.addEventListener('click',(e)=>{ if(!e.target.closest('.cplus-wrap')) cl
 $('#chat-file').onchange=async(e)=>{ const f=e.target.files[0]; if(!f) return; if(!ASSETS_LOADED) await loadAssets(); try{ const url=await downscaleImage(f,1024,'image/jpeg'); ASSETS.photos=ASSETS.photos||[]; ASSETS.photos.push({id:newId(),url,caption:'Added from chat'}); await saveAssets(); say('emp','📎 Saved that photo to your Assets, you can drop it into ads from Creative Studio or Ad Studio.'); }catch(err){ say('emp',(err&&err.message)||IMAGE_UNREADABLE); } e.target.value=''; };
 cinput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
 cinput.addEventListener('input',()=>{cinput.style.height='auto';cinput.style.height=Math.min(cinput.scrollHeight,120)+'px';});
-$('#theme').onclick=()=>{const c=document.documentElement.getAttribute('data-theme');document.documentElement.setAttribute('data-theme',c==='dark'?'light':'dark');};
+function applyTheme(next){ document.documentElement.setAttribute('data-theme', next); try{ localStorage.setItem('miles-theme', next); }catch(e){} }
+$('#theme').onclick=()=>{ const c=document.documentElement.getAttribute('data-theme'); applyTheme(c==='dark'?'light':'dark'); };
 
 // ═══ auth + customer profile ═══
 // A full marketing intake, grouped by discipline. Most fields auto-fill from the
@@ -10707,7 +10767,7 @@ $('#onboard-save').onclick=async()=>{ const btn=$('#onboard-save'); const vals=r
   scrim.onclick=()=>setOpen(false);
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') setOpen(false); });
   // Any navigation choice closes the drawer.
-  side.addEventListener('click',e=>{ if(e.target.closest('a[data-page],.pill,.ws')) setOpen(false); });
+  side.addEventListener('click',e=>{ if(e.target.closest('a[data-page],a[data-pages],button,.pill,.ws')) setOpen(false); });
   // Returning to desktop width must never leave the drawer state stuck on.
   window.addEventListener('resize',()=>{ if(window.innerWidth>760) setOpen(false); });
 })();
@@ -10723,7 +10783,7 @@ document.addEventListener('input',(e)=>{ const t=e.target; if(!t||!t.closest||!t
 window.addEventListener('beforeunload',(e)=>{ if(!formDirty||window.__signingOut) return; e.preventDefault(); e.returnValue=''; });
 (function(){ const sent=window.fetch; window.fetch=async function(input,init){ const r=await sent.apply(this,arguments); try{ const m=String((init&&init.method)||(input&&input.method)||'GET').toUpperCase(); if(m!=='GET'&&r.ok) formDirty=false; }catch(e){} return r; }; })();
 window.__formDirty=()=>formDirty;
-fetch('/api/support').then(r=>r.json()).then(d=>{ if(d.email){ const a=$('#help-mail'); if(a){ a.href='mailto:'+d.email; a.textContent='Help'; const addr=el('span','help-addr',' '+d.email); a.append(addr); } } }).catch(()=>{});
+fetch('/api/support').then(r=>r.json()).then(d=>{ if(d.email){ const a=$('#help-mail'); if(a) a.href='mailto:'+d.email; const addr=$('#help-addr'); if(addr){ addr.hidden=false; addr.textContent=d.email; } } }).catch(()=>{});
 async function authInit(){
   if(!REMOTE) return;
   try{
@@ -11137,7 +11197,7 @@ async function loadActivePlaybooks(){
   }
   ACTIVE_PLAYS.forEach(p=>{
     const b=el('div','pill playbook', p.title);
-    b.onclick=()=>{ LIBRARY_FOCUS=p.id; setPage('library'); };
+    b.onclick=()=>{ PLAY_DETAIL=p.id; setPage('playdetail'); };
     host.append(b);
   });
 }
@@ -11155,6 +11215,7 @@ function openPlayDetail(){
     return;
   }
   PLAY_DETAIL=p.id;
+  const back=el('button','md-link','Back'); back.type='button'; back.onclick=()=>setPage('library'); card.append(back);
   card.append(el('h3',null,p.title));
   card.append(el('p','mdesc','Status: '+p.status));
   card.append(el('div','sect-label','WHAT MILES RUNS'));
