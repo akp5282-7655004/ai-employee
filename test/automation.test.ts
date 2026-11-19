@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { rulesForTrade, rulesFromPlaybook } from '../src/automation/rules.js';
 import { playbookTrades } from '../src/agents/playbook.js';
 import { negativeKeywords, runSkills, wastedSpend, type DailyInput } from '../src/automation/skills.js';
-import { approveChange, dailyDue, planActions, revertChange, runDailyRead, CREDIT_PAUSE } from '../src/automation/engine.js';
+import { activityFeed, approveChange, dailyDue, planActions, revertChange, runDailyRead, CREDIT_PAUSE } from '../src/automation/engine.js';
 import { buildOrgChart } from '../src/automation/org.js';
 import { buildAdminBusiness } from '../src/admin/business.js';
 import { chargeCredits } from '../src/billing/credits.js';
@@ -85,6 +85,8 @@ describe('daily manager', () => {
     const suggested = planActions(runDailyRead(input()).findings, { ...guard, mode: 'manual' }, input().now)[0]!;
     expect(suggested.effect).toBe('suggested');
     expect(revertChange([suggested], suggested.id).ok).toBe(true);
+    const feed = activityFeed([], [{ id: 'run-1', title: 'Morning brief', ts: '2026-11-18T12:00:00.000Z' }]);
+    expect(feed).toEqual([{ id: 'run-1', title: 'Morning brief', ts: '2026-11-18T12:00:00.000Z', source: 'run', effect: 'logged', undo: true }]);
     const waiting = planActions(runDailyRead(input({ spentMonth: 40, dayOfMonth: 20 })).findings, guard, input().now);
     const raise = waiting.find((row) => row.id === 'budget-pacing-behind')!;
     const approved = approveChange(waiting, raise.id);

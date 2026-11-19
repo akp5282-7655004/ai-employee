@@ -135,6 +135,42 @@ export function planActions(findings: Finding[], guard: GuardInput, now: string)
   return entries;
 }
 
+export interface ActivityRow {
+  id: string;
+  title: string;
+  ts: string;
+  source: 'automation' | 'run';
+  effect: string;
+  undo: boolean;
+}
+
+/**
+ * One list for the dashboard and the Approvals page.
+ * Agent runs are what the dashboard showed when the automation log was empty:
+ * they have an id and a title, and no `effect`, so an effect check never offered Undo.
+ */
+export function activityFeed(
+  log: ChangeEntry[],
+  runs: { id?: string; title?: string; ts?: string }[],
+): ActivityRow[] {
+  const fromLog: ActivityRow[] = log.filter((row) => row.id && row.title).map((row) => ({
+    id: row.id,
+    title: row.title,
+    ts: row.ts,
+    source: 'automation',
+    effect: row.effect,
+    undo: row.effect === 'applied' || row.effect === 'suggested' || row.effect === 'queued',
+  }));
+  const seen = new Set(fromLog.map((row) => row.id));
+  const fromRuns: ActivityRow[] = [];
+  for (const run of runs) {
+    if (!run.id || !run.title || !run.ts || seen.has(run.id)) continue;
+    seen.add(run.id);
+    fromRuns.push({ id: run.id, title: run.title, ts: run.ts, source: 'run', effect: 'logged', undo: true });
+  }
+  return [...fromLog, ...fromRuns].sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts)).slice(0, 30);
+}
+
 export function revertChange(log: ChangeEntry[], id: string): { ok: boolean; log: ChangeEntry[]; restored: string | null; reason: string } {
   const hit = log.find((row) => row.id === id);
   if (!hit) return { ok: false, log, restored: null, reason: 'That change is not on the log.' };

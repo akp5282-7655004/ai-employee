@@ -139,7 +139,11 @@ export interface OperatorView {
     headline: string;
     vs: string;
     tiles: { label: string; value: string; sub: string; delta: string | null; sample: boolean }[];
+    /** Spend divided by tracked leads, or a plain not-tracked line. Never a pointer to another page. */
+    costPerLead: string;
   };
+  /** Status of the saved Google Search campaigns, from the same rows Ads Manager lists. */
+  googleRunNote: string;
   compare: {
     headline: string;
     badge: string;
@@ -182,6 +186,24 @@ function plain(s: string): string {
 
 function money(n: number): string {
   return `$${Math.round(n).toLocaleString('en-US')}`;
+}
+
+/** Keep cents on ad spend so $36.84 is not rounded into a different number. */
+export function moneySpend(n: number): string {
+  const cents = Math.round(n * 100) / 100;
+  if (Math.abs(cents - Math.round(cents)) < 0.001) return `$${Math.round(cents).toLocaleString('en-US')}`;
+  return `$${cents.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** One status line for the Google Search run card. Ads Manager uses these campaign rows. */
+export function googleRunNote(campaigns: OperatorCampaign[]): string {
+  const google = campaigns.filter((row) => row.platform === 'google_ads');
+  const known = google.filter((row) => row.status === 'ENABLED' || row.status === 'PAUSED');
+  if (known.length) {
+    return known.map((row) => `${row.name} is ${row.status === 'ENABLED' ? 'enabled' : 'paused'}.`).join(' ');
+  }
+  if (google.length) return 'Could not read the campaign status.';
+  return '';
 }
 
 function metricOf(metrics: OperatorMetric[], key: string): OperatorMetric | undefined {
@@ -389,13 +411,22 @@ function moneyBlock(input: OperatorInput): OperatorView['money'] {
   });
   const net = tracked(rev) && tracked(spend) ? rev.value - spend.value : null;
   const netSample = net != null && (rev!.source !== 'live' || spend!.source !== 'live');
+  const google = input.campaigns.filter((row) => row.platform === 'google_ads');
+  const googleSpend = google.reduce((sum, row) => sum + (row.spend || 0), 0);
+  const googleLeads = google.reduce((sum, row) => sum + (row.leads || 0), 0);
+  const costPerLead = !input.sampleConnector && tracked(spend) && spend.source === 'live' && tracked(leads) && leads.source === 'live' && leads.value > 0
+    ? moneySpend(spend.value / leads.value)
+    : !input.sampleConnector && googleSpend > 0 && googleLeads > 0
+      ? moneySpend(googleSpend / googleLeads)
+      : 'Not tracked yet';
   return {
     tone,
     headline: plain(headline),
     vs: 'vs. prior period',
+    costPerLead,
     tiles: [
       tile('Revenue from marketing', rev, booked && booked.source === 'live' ? `${Math.round(booked.value)} booked jobs in your CRM` : 'Booked-job count is not live', money),
-      tile('Marketing cost', spend, 'Ad spend only. A Miles fee is not added here.', money),
+      tile('Marketing cost', spend, 'Ad spend only. A Miles fee is not added here.', moneySpend),
       {
         label: 'Revenue minus cost',
         value: net == null ? 'Not tracked yet' : `${net >= 0 ? '+' : '-'}${money(Math.abs(net))}`,
@@ -692,6 +723,7 @@ export function buildOperatorView(input: OperatorInput): OperatorView {
     channels: channelsOf(shown),
     breakdown: breakdownOf(shown),
     connections: connectionsOf(shown),
+    googleRunNote: googleRunNote(shown.campaigns),
     expectation: shown.expectation ?? {
       state: 'empty',
       headline: 'No budget projection is saved yet.',

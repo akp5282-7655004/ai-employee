@@ -5,6 +5,7 @@ import type { Connector } from '../src/connectors/types.js';
 import {
   MODE_PILLS,
   buildOperatorView,
+  googleRunNote,
   modeFromPill,
   operatorCopy,
   type OperatorInput,
@@ -223,6 +224,8 @@ describe('operator honesty', () => {
     expect(tile('Leads')).toMatchObject({ value: 'Not tracked yet', sample: false });
     expect(view.money.headline).not.toMatch(/SAMPLE|41,617|40,370/);
     expect(view.breakdown.rows[0]?.status).toBe('Could not read status, retrying');
+    expect(googleRunNote([{ platform: 'google_ads', name: 'Painting', spend: 36.84, leads: 0, status: 'UNKNOWN' }])).toBe('Could not read the campaign status.');
+    expect(googleRunNote([{ platform: 'google_ads', name: 'Painting', spend: 36.84, leads: 0, status: 'PAUSED' }])).toBe('Painting is paused.');
     expect(copy(view)).not.toMatch(/Google reports the campaign as UNKNOWN/);
   });
 
@@ -284,8 +287,40 @@ describe('operator route', () => {
     expect(view.connections.find((c) => c.name === 'Google Ads')!.state).toBe('off');
     expect(view.connections.find((c) => c.name === 'GoHighLevel')!.detail).toMatch(/not connected/i);
     expect(view.money.tone).toBe('sample');
+    expect(view.money.costPerLead).toBe('Not tracked yet');
     expect(copy(view)).not.toMatch(/\u2014|searchlight/i);
     expect(copy(view)).not.toMatch(/\$100 goal|25 goal/);
+    await app.close();
+  });
+
+  it('uses getAdSpend for the 30-day marketing cost and keeps a warm read', async () => {
+    let calls = 0;
+    const connector = {
+      name: 'pipedream',
+      async createConnectToken() { return { token: 't', expiresAt: '2099-01-01', connectUrl: 'https://connect.example' }; },
+      async listAccounts() { return [{ id: '1', app: 'google_ads', name: 'Ads', healthy: true }]; },
+      async runAction() { return { ok: false, actionId: 'x', app: 'google_ads', output: null }; },
+      async getAdSpend(_id: string, range?: string) {
+        calls += 1;
+        if (range === 'LAST_7_DAYS') return [{ platform: 'google_ads', campaign: 'Painting', spend: 16, conversions: 2, clicks: 4, impressions: 10, status: 'PAUSED' as const }];
+        return [{ platform: 'google_ads', campaign: 'Painting', spend: 36.84, conversions: 0, clicks: 9, impressions: 40, status: 'PAUSED' as const }];
+      },
+    } as unknown as Connector;
+    const app = buildServer({ authStore: new MemoryStore(), connector });
+    const signed = await app.inject({ method: 'POST', url: '/auth/signup', payload: { email: 'spend@example.com', password: 'password1', tos: true, name: 'Paul' } });
+    const headers = { cookie: String(signed.headers['set-cookie']).split(';')[0] };
+    const month = await app.inject({ method: 'GET', url: '/api/dashboard/operator?range=LAST_30_DAYS', headers });
+    const monthCost = month.json().operator.money.tiles.find((row: { label: string }) => row.label === 'Marketing cost');
+    expect(monthCost).toMatchObject({ value: '$36.84', sample: false });
+    expect(month.json().operator.money.costPerLead).toBe('Not tracked yet');
+    expect(month.json().operator.googleRunNote).toBe('Painting is paused.');
+    const warmed = calls;
+    const again = await app.inject({ method: 'GET', url: '/api/dashboard/operator?range=LAST_30_DAYS', headers });
+    expect(again.json().operator.money.tiles.find((row: { label: string }) => row.label === 'Marketing cost').value).toBe('$36.84');
+    expect(calls).toBe(warmed);
+    const week = await app.inject({ method: 'GET', url: '/api/dashboard/operator?range=LAST_7_DAYS', headers });
+    expect(week.json().operator.money.tiles.find((row: { label: string }) => row.label === 'Marketing cost').value).toBe('$16');
+    expect(calls).toBe(warmed + 1);
     await app.close();
   });
 });
