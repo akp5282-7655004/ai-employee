@@ -41,9 +41,11 @@ describe('phone navigation', () => {
 
     // The dashboard's lead inputs are tall enough to tap.
     await page.evaluate(() => (globalThis as unknown as { setPage: (x: string) => void }).setPage('overview'));
-    await page.waitForSelector('#lead-search');
-    const inputs = await page.$$eval('#lead-search, #lead-name, #lead-phone', (els) =>
+    // The dashboard redraws itself after its data arrives, so read the inputs until all three are there.
+    const leadHeights = () => page.$$eval('#lead-search, #lead-name, #lead-phone', (els) =>
       els.map((e) => (e as { getBoundingClientRect(): { height: number } }).getBoundingClientRect().height));
+    await expect.poll(async () => (await leadHeights()).length, { timeout: 15_000 }).toBe(3);
+    const inputs = await leadHeights();
     expect(inputs.length).toBe(3);
     for (const h of inputs) expect(h).toBeGreaterThanOrEqual(24);
 
