@@ -613,8 +613,9 @@
   .side .acct{background:#121214;box-shadow:none;border-color:#2a2a30;}
   .side #logout{color:#c8c8ce;}
   #header-logout{display:none;min-height:24px;min-width:24px;border:1px solid var(--line);border-radius:8px;background:#fff;font:700 12px inherit;padding:6px 10px;cursor:pointer}
-  #help-mail,#help-site{min-height:24px;display:inline-flex;align-items:center;font-size:12px;font-weight:700;margin-left:8px}
+  #help-mail,#help-site{min-height:24px;display:inline-flex;align-items:center;font-size:12px;font-weight:700;margin-left:8px;color:var(--ink);text-decoration:none}
   #help-addr{margin-left:8px;padding-left:8px;border-left:1px solid var(--line);font-size:12px;color:var(--muted);display:inline-flex;align-items:center}
+  #help-addr[hidden]{display:none !important}
   button,.go,.md-ask,.md-ghost,a{min-height:24px}
   :focus-visible{outline:2px solid #111;outline-offset:2px}
   html,body{overflow-x:hidden}
@@ -1208,8 +1209,40 @@
      operator dashboard: one canvas, one pill, one button height, one card. */
   .main{background:#f3f3f5;padding:22px 28px 72px;}
   :root[data-theme="dark"] body{background:#111112;color:var(--graphite);}
-  :root[data-theme="dark"] .main{background:#111112;}
+  :root[data-theme="dark"] .main,
+  :root[data-theme="dark"] body.on-dash .main{background:#111112;color:#F4F4F5;}
   :root[data-theme="dark"] .tbtn{background:#1A1A1C;border-color:#2E2E32;color:#fff;}
+  :root[data-theme="dark"] .mcard,
+  :root[data-theme="dark"] body.on-dash .mcard,
+  :root[data-theme="dark"] .md-card,
+  :root[data-theme="dark"] .acard,
+  :root[data-theme="dark"] .appcard,
+  :root[data-theme="dark"] .dcard,
+  :root[data-theme="dark"] .rep-tile,
+  :root[data-theme="dark"] .askbar,
+  :root[data-theme="dark"] .ln-card,
+  :root[data-theme="dark"] .dv2-kpi,
+  :root[data-theme="dark"] .dv2-rec{
+    background:#1A1A1C;color:#F4F4F5;border-color:#2E2E32;
+  }
+  :root[data-theme="dark"] .askbar input,
+  :root[data-theme="dark"] input,
+  :root[data-theme="dark"] textarea,
+  :root[data-theme="dark"] select{background:#232326;color:#F4F4F5;border-color:#2E2E32;}
+  :root[data-theme="dark"] h1,
+  :root[data-theme="dark"] h2,
+  :root[data-theme="dark"] h3,
+  :root[data-theme="dark"] .md-h,
+  :root[data-theme="dark"] .md-greet,
+  :root[data-theme="dark"] .md-num,
+  :root[data-theme="dark"] .ln-title,
+  :root[data-theme="dark"] .pagehead h2,
+  :root[data-theme="dark"] a{color:#F4F4F5;}
+  :root[data-theme="dark"] a.md-link,
+  :root[data-theme="dark"] .md-link{color:#8EB7F0;}
+  :root[data-theme="dark"] .appsub,
+  :root[data-theme="dark"] .mdesc,
+  :root[data-theme="dark"] .md-legend{color:#C8C8D0;}
   .pagehead{align-items:center;gap:12px;margin-bottom:16px;}
   .pagehead h2{margin:0;font-size:28px;font-weight:800;letter-spacing:-.03em;line-height:1.05;}
   .askbtn,.tbtn{box-sizing:border-box;height:36px;border-radius:999px;font-family:inherit;}
@@ -1298,7 +1331,7 @@
     body.on-dash .pagehead #ptitle,body.on-biz .pagehead #ptitle{display:none;}
     .pagehead{gap:6px;}
     .pagehead .askbtn{display:none;}
-    .pagehead .help-addr{display:none;}
+    .pagehead .help-addr{display:inline-flex;}
     .pagehead #header-logout{white-space:nowrap;flex:none;}
     .pagehead #help-mail,.pagehead #help-site{flex:none;margin-left:4px;}
     .pagehead .tbtn{flex:none;}
@@ -3436,8 +3469,10 @@ let aTab='overview';
 // ═══ Overview dashboard, everything at a glance ═══
 // Marketing date window, a Google-Ads-style preset that drives the spend numbers.
 let MKT_RANGE='LAST_30_DAYS';
+try{ const savedRange=localStorage.getItem('miles-range'); if(savedRange) MKT_RANGE=savedRange; }catch(e){}
 const MKT_RANGES=[['LAST_7_DAYS','Last 7 days'],['LAST_14_DAYS','Last 14 days'],['LAST_30_DAYS','Last 30 days'],['THIS_MONTH','This month'],['LAST_MONTH','Last month']];
-const mktRangeLabel=(r)=>{ const f=MKT_RANGES.find(x=>x[0]===(r||MKT_RANGE)); return f?f[1].toLowerCase():'the last 30 days'; };
+const mktRangeLabel=(r)=>{ const f=MKT_RANGES.find(x=>x[0]===(r||MKT_RANGE)); return f?f[1]:'Last 30 days'; };
+function rememberRange(next){ if(!MKT_RANGES.some(x=>x[0]===next)) return; MKT_RANGE=next; try{ localStorage.setItem('miles-range', next); }catch(e){} }
 async function refreshMilesSurface(){
   const onProfile=$('#page-profile')&&$('#page-profile').classList.contains('on');
   if(onProfile){ await loadProfile(); return; }
@@ -3471,9 +3506,12 @@ function goResultText(r){
   if(r.created) return 'Created paused.';
   return 'Waiting on you. Nothing was spent.';
 }
+function scrubStatusText(raw){
+  return String(raw||'').replace(/Google reports the campaign as UNKNOWN\.?/gi, 'Could not read status, retrying.');
+}
 function milesGoLabel(miles){
   const raw=milesGoNote || (miles&&miles.goNote) || '';
-  return String(raw).replace(/Google reports the campaign as UNKNOWN\.?/gi, 'Could not read status, retrying.');
+  return scrubStatusText(raw);
 }
 async function milesPost(btn, statusEl, working, url, payload){
   if(btn){ btn.disabled=true; btn.dataset.prev=btn.textContent; btn.textContent=working; }
@@ -4213,7 +4251,7 @@ async function openOverview(){
     ]);
     if(dash.data&&dash.data.kpis){ d=dash.data; ANDASH=dash.data; }
     if(home.data&&typeof home.data==='object'){ miles=home.data; MILES_HOME=home.data; }
-    if(oper.data&&oper.data.operator){ op=oper.data.operator; OPERATOR=oper.data.operator; }
+    if(oper.data&&oper.data.operator){ op=oper.data.operator; if(oper.data.range) op.range=oper.data.range; OPERATOR=op; }
     if(!dash.ok && !home.ok && !oper.ok) d=Object.assign({}, d, {_loadError:true});
     if(prog.data) setup=prog.data;
   }
@@ -4321,7 +4359,8 @@ function renderOverview(d, miles, op, setup){
   if(window.__dashCharts){ window.__dashCharts.forEach(c=>{ try{ c.destroy(); }catch(e){} }); window.__dashCharts=[]; }
   miles=miles||{}; op=op||null; d=d||{}; setup=setup||null;
   if(d._loadError) box.append(el('p','md-explain','Some dashboard numbers did not load. What is here is saved on this account.'));
-  if(d.range) MKT_RANGE=d.range;
+  if(d.range && MKT_RANGES.some(x=>x[0]===d.range)) rememberRange(d.range);
+  if(op && op.range && MKT_RANGES.some(x=>x[0]===op.range)) rememberRange(op.range);
   const hr=new Date().getHours();
   const greet=hr<12?'Good morning':(hr<18?'Good afternoon':'Good evening');
   const first=(typeof ME!=='undefined'&&ME&&ME.name?String(ME.name).split(' ')[0]:(typeof ME!=='undefined'&&ME&&ME.email?String(ME.email).split('@')[0]:''))||'there';
@@ -4347,7 +4386,7 @@ function renderOverview(d, miles, op, setup){
   const gsel=el('select','md-range'); gsel.setAttribute('aria-label','Date range');
   for(const [v,lab] of MKT_RANGES){ const o=el('option',null,lab); o.value=v; if(v===MKT_RANGE) o.selected=true; gsel.append(o); }
   gsel.title='Refetches the dashboard numbers and labels for this range.';
-  gsel.onchange=async()=>{ MKT_RANGE=gsel.value; if(typeof ADS_RANGE!=='undefined') ADS_RANGE=gsel.value; if(typeof GROWTH_RANGE!=='undefined') GROWTH_RANGE=gsel.value; await openOverview(); if(typeof openAdsManager==='function' && document.getElementById('page-adsmgr')&&document.getElementById('page-adsmgr').classList.contains('on')) openAdsManager(); };
+  gsel.onchange=async()=>{ rememberRange(gsel.value); if(typeof ADS_RANGE!=='undefined') ADS_RANGE=gsel.value; if(typeof GROWTH_RANGE!=='undefined') GROWTH_RANGE=gsel.value; await openOverview(); if(typeof openAdsManager==='function' && document.getElementById('page-adsmgr')&&document.getElementById('page-adsmgr').classList.contains('on')) openAdsManager(); };
   const ask=el('button','md-ask','Ask Miles');
   ask.onclick=()=>{ if(typeof enterChat==='function') enterChat(); };
   const theme=el('button','md-theme','◑'); theme.title='Theme'; theme.onclick=()=>{ const t=$('#theme'); if(t) t.click(); };
@@ -4445,9 +4484,9 @@ function renderOverview(d, miles, op, setup){
       row.append(el('span',null, noDash(entry.title||'Change')), el('span','md-legend', fmtWhen(entry.ts)));
       // No verified write to Google Ads exists for these changes yet, so an
       // "applied" entry is logged only. Say that instead of offering an Undo.
-      if(entry.effect==='applied') row.append(el('span','md-legend','Logged only. Google Ads was not changed.'));
+      if(entry.effect==='applied' || entry.effect==='suggested' || entry.effect==='queued') row.append(el('span','md-legend','Logged only. Google Ads was not changed.'));
       else row.append(el('span','md-legend', entry.effect||''));
-      if(entry.id && entry.effect==='applied'){
+      if(entry.id && (entry.effect==='applied' || entry.effect==='suggested' || entry.effect==='queued')){
         const undo=el('button','md-link','Undo'); undo.type='button';
         undo.onclick=async()=>{ undo.disabled=true; try{ await fetch('/api/automation/revert',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:entry.id})}); }catch(e){} openOverview(); };
         row.append(undo);
@@ -4763,12 +4802,15 @@ function renderOverview(d, miles, op, setup){
     const r=await fetchJson('/api/metrics/resolve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({keys:['calc.blended_leads','calc.blended_spend','crm.booked_jobs','crm.job_revenue'], days:365})}, 8000);
     const rows=(r.data&&r.data.results)||[];
     const by={}; rows.forEach(m=>{ by[m.key]=m; });
-    const sample=rows.some(m=>m.source!=='live');
+    const liveAccount=(money&&money.tiles||[]).some(t=>t&&t.sample===false&&t.value&&t.value!=='Not tracked yet'&&t.value!=='n/a');
+    const usable=(m)=>m&&!m.noValue&&(m.source==='live'||!liveAccount)?m:null;
+    const sample=!liveAccount&&rows.some(m=>m.source!=='live');
     if(sample){ th.append(document.createTextNode(' ')); th.append(mdSample()); }
+    const seriesOf=(key)=>{ const m=usable(by[key]); return (m&&m.series)||[]; };
     const pack={
-      leads:(by['calc.blended_leads']&&by['calc.blended_leads'].series)||[],
-      spend:(by['calc.blended_spend']&&by['calc.blended_spend'].series)||[],
-      booked:(by['crm.booked_jobs']&&by['crm.booked_jobs'].series)||[]
+      leads:seriesOf('calc.blended_leads'),
+      spend:seriesOf('calc.blended_spend'),
+      booked:seriesOf('crm.booked_jobs')
     };
     let metric='leads';
     const draw=()=>{
@@ -4781,8 +4823,8 @@ function renderOverview(d, miles, op, setup){
       tnote.textContent=sample?'Example monthly bars from the preview series. Not your account.':'Monthly bars from the connected source.';
     };
     seg.querySelectorAll('button').forEach(b=>b.onclick=()=>{ metric=b.dataset.metric; seg.querySelectorAll('button').forEach(x=>{ x.className=x===b?'on':''; x.setAttribute('aria-pressed', x===b?'true':'false'); }); draw(); });
-    const rev=by['crm.job_revenue'];
-    const booked=rev?rev.value:moneyNum(revTile&&revTile.value);
+    const rev=usable(by['crm.job_revenue']);
+    const booked=rev?rev.value:(liveAccount?null:moneyNum(revTile&&revTile.value));
     const goal=null;
     const missed=null;
     drawRevenueGauge(gsvg, booked, goal);
@@ -5658,14 +5700,12 @@ async function ccSaveLayout(){ try{ await fetch('/api/dashboard2/layout',{method
 function ccPanel(title){ const c=el('div','mcard'); c.append(el('div','sect-label',title)); return c; }
 
 function ccKpiCard(key){
-  const m=CC.metrics[key], entry=ccEntry(key);
+  let m=CC.metrics[key]; const entry=ccEntry(key);
+  if(m && m.source!=='live' && (CC.connected||[]).length) m={...m, source:'live', noValue:true, value:0};
   const c=el('div','md-tile'); c.style.cssText='display:flex;flex-direction:column;gap:4px;min-width:0';
   const lab=el('div','appsub',(entry?entry.label:key)); lab.style.whiteSpace='nowrap'; lab.style.overflow='hidden'; lab.style.textOverflow='ellipsis'; c.append(lab);
-  const v=el('div',null,m&&!m.noValue?ccFmt(m.format,m.value):'-'); v.style.cssText='font-size:22px;font-weight:800;letter-spacing:-.02em'; c.append(v);
-  if(m){ c.append(ccDelta(m)); c.append(ccSpark(m.series));
-    // Every card says what it is, LIVE (real account/CRM data) or SAMPLE.
-    c.append(ccSourceTag(m.source));
-  }
+  const v=el('div',null,m&&!m.noValue?ccFmt(m.format,m.value):'Not tracked yet'); v.style.cssText='font-size:22px;font-weight:800;letter-spacing:-.02em'; c.append(v);
+  if(m && !m.noValue){ c.append(ccDelta(m)); c.append(ccSpark(m.series)); c.append(ccSourceTag(m.source)); }
   return c; }
 function ccSourceTag(source){
   const tag=el('span',null,source==='live'?'LIVE':'SAMPLE');
@@ -5675,9 +5715,11 @@ function ccSourceTag(source){
 function ccFunnelPanel(){
   const c=ccPanel('FUNNEL BY STAGE');
   const keys=['google_ads.impressions','google_ads.clicks','calc.blended_leads','crm.qualified_leads','crm.booked_jobs','crm.completed_jobs','crm.job_revenue'];
-  const sample=keys.some(k=>CC.metrics[k]&&CC.metrics[k].source!=='live');
+  const liveHere=(CC.connected||[]).length>0;
+  const sample=!liveHere&&keys.some(k=>CC.metrics[k]&&CC.metrics[k].source!=='live');
   if(sample) c.append(el('div','appsub','SAMPLE. Example stage counts until those sources connect. Meta is not included.'));
-  const g=k=>{ const m=CC.metrics[k]; return m?m.value:0; };
+  if(liveHere && keys.some(k=>CC.metrics[k]&&CC.metrics[k].source!=='live')) c.append(el('div','appsub','Leads and booked jobs are not tracked yet. Connected ad spend is live. Sample figures are not mixed in.'));
+  const g=k=>{ const m=CC.metrics[k]; if(!m||m.noValue) return 0; if(liveHere&&m.source!=='live') return 0; return m.value; };
   const stages=[['Impressions',g('google_ads.impressions')],['Clicks',g('google_ads.clicks')],['Leads',g('calc.blended_leads')],['Qualified',g('crm.qualified_leads')],['Booked jobs',g('crm.booked_jobs')],['Completed',g('crm.completed_jobs')]];
   const first=stages[0][1]||1; let worst={drop:0,idx:-1};
   stages.forEach(([name,v],i)=>{
@@ -6074,8 +6116,8 @@ async function openBilling(){
   if (d.zeroBalance) pc.append(el('p','verdict tight', d.zeroMessage || 'Your credit balance is $0. Reports stay available.'));
   pc.append(el('div','appsub',
     (leftUnits!==null ? leftUnits+' videos left this month' : 'Media allowance')
-    + ' · $'+Number(c.remaining||0).toFixed(2)+' of $'+Number(c.granted||0).toFixed(2)+' remaining'
-    + (d.launchCredit==='granted' ? ' · $'+(d.launchGrant||100)+' launch credit is unlocked.' : d.launchCredit==='pending' ? ' · Launch credit is still locked until 3 tools are connected.' : '')));
+    + ' · Credit balance $'+Number(c.remaining||0).toFixed(2)+' of $'+Number(c.granted||0).toFixed(2)+' remaining. '
+    + (d.launchMessage || (d.launchCredit==='granted' ? '$'+(d.launchGrant||100)+' launch credit is unlocked.' : d.launchCredit==='pending' ? 'Launch credit is still locked until 3 tools are connected.' : 'Launch credit status was not returned.'))));
   if(d.usage){
     pc.append(el('div','appsub', (d.usage.credits||0).toLocaleString()+' / '+(d.usage.allowance||1000).toLocaleString()+' credits this month'));
   }
@@ -6164,6 +6206,7 @@ async function openApprovals(){
   const box=$('#ap-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading...</p>';
   const approvals=await fetchJson('/api/approvals', null, 8000);
   const skills=await fetchJson('/api/skills7', null, 8000);
+  const activity=await fetchJson('/api/automation/log', null, 8000);
   const d=approvals.data||{};
   const sk=skills.data||{skills:[]};
   box.innerHTML='';
@@ -6194,6 +6237,25 @@ async function openApprovals(){
     try{ await fetch('/api/autonomy',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({autonomy:au})}); toast('✓ Autonomy settings saved'); }catch(e){ toast('Could not save.'); }
     save.disabled=false; save.textContent=o; openApprovals(); };
   ac.append(save); box.append(ac);
+  const actLog=((activity.data&&activity.data.log)||[]);
+  const actCard=el('div','mcard'); actCard.style.marginTop='12px';
+  actCard.append(el('div','sect-label','WHAT MILES DID'));
+  actCard.append(el('p','appsub','Suggested, queued, and applied rows can be undone here. Undo marks the row reverted. It does not change Google Ads.'));
+  if(!actLog.length) actCard.append(el('p','appsub','Nothing on the activity log yet.'));
+  actLog.forEach(entry=>{
+    const row=el('div'); row.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)';
+    const t=el('div'); t.style.flex='1';
+    t.append(el('b',null, scrubStatusText(entry.title||'Change')));
+    t.append(el('div','appsub', (entry.effect||'')+' · '+fmtWhen(entry.ts)));
+    row.append(t);
+    if(entry.id && (entry.effect==='applied'||entry.effect==='suggested'||entry.effect==='queued')){
+      const undo=el('button','md-link','Undo'); undo.type='button';
+      undo.onclick=async()=>{ undo.disabled=true; try{ await fetch('/api/automation/revert',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:entry.id})}); }catch(e){} openApprovals(); };
+      row.append(undo);
+    }
+    actCard.append(row);
+  });
+  box.append(actCard);
   // ── Approval Log ──
   const lc=el('div','mcard'); lc.style.marginTop='12px';
   const head=el('div'); head.style.cssText='display:flex;align-items:center;gap:10px';
@@ -6210,8 +6272,8 @@ async function openApprovals(){
     const row=el('div'); row.style.cssText='display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-top:1px solid var(--line,var(--panel-2))';
     row.append(apKindChip(e.kind));
     const t=el('div'); t.style.flex='1';
-    const l1=el('div',null,e.title); l1.style.cssText='font-size:13px;font-weight:600'; t.append(l1);
-    if(e.detail) t.append(el('div','appsub',e.detail));
+    const l1=el('div',null,scrubStatusText(e.title)); l1.style.cssText='font-size:13px;font-weight:600'; t.append(l1);
+    if(e.detail) t.append(el('div','appsub',scrubStatusText(e.detail)));
     t.append(el('div','appsub',new Date(e.ts).toLocaleString()+' · '+e.actor+' · '+e.source));
     row.append(t); lc.append(row);
   });
@@ -6527,22 +6589,27 @@ async function openPlaybook(){
     try{ miles=await(await fetch('/api/miles/home')).json(); }catch(e){}
     try{ pack=await(await fetch('/api/launch/home')).json(); }catch(e){}
   }
-  const spec=miles&&miles.bundle&&miles.bundle.spec;
+  const spec=(pack&&pack.spec)||(miles&&miles.bundle&&miles.bundle.spec);
   const launch=pack&&pack.launch;
-  if(spec || (launch&&(launch.selectedDaily||launch.trade||launch.location))){
+  const trade=launch&&(launch.tradeLabel&&launch.tradeLabel!=='your trade'?launch.tradeLabel:launch.trade);
+  const place=launch&&(launch.area&&launch.area!=='Not saved'?launch.area:launch.location);
+  const daily=(spec&&spec.dailyBudget)||(launch&&launch.selectedDaily);
+  if(spec || trade || place || daily){
     box.innerHTML='';
     const card=el('div','mcard');
     card.append(el('h3',null,'Saved campaign plan'));
     const bits=[];
-    if(launch&&launch.trade) bits.push(launch.trade);
-    if(launch&&launch.location) bits.push(launch.location);
+    if(trade) bits.push(trade);
+    if(place) bits.push(place);
     bits.push('Google Search');
-    const daily=(spec&&spec.dailyBudget)||(launch&&launch.selectedDaily);
     if(daily) bits.push('$'+daily+'/day');
     card.append(el('p','mdesc', bits.join(' · ')));
     const groups=(spec&&spec.adGroups)||[];
     if(groups.length){
-      groups.forEach(g=>card.append(el('p',null,(g.name||'Ad group')+': '+((g.keywords||[]).slice(0,8).join(', ')||'No keywords saved'))));
+      groups.forEach(g=>{
+        const words=(g.keywords||[]).slice(0,8).map(k=>typeof k==='string'?k:(k&&k.text)||'').filter(Boolean);
+        card.append(el('p',null,(g.name||'Ad group')+': '+(words.join(', ')||'No keywords saved')));
+      });
     } else card.append(el('p','mdesc','Keywords, negatives, and ad copy are reviewed on the Google Ads tab.'));
     const go=el('button','go','Open Google Ads review'); go.type='button'; go.onclick=()=>setPage('launch');
     card.append(go);
@@ -9124,10 +9191,11 @@ function renderAutopilot(){
   const h=el('div'); h.innerHTML='<h3 style="margin:0">Autopilot</h3><p class="mdesc" style="margin:4px 0 0;max-width:740px">The three modes on the dashboard decide what Miles may do. This older dial does not spend, create, or enable anything by itself.</p>'; box.append(h);
   box.append(el('div','sect-label','AGENT AUTONOMY'));
   const ac=el('div','mcard'); ac.style.maxWidth='860px';
-  const p=el('p','mdesc'); p.style.margin='0 0 14px'; p.textContent='This dial is a reminder of the dashboard modes. Picking a percent here does not create a campaign or turn spend on.'; ac.append(p);
+  const modeName={manual:'Ask me first',hybrid:'Hybrid',automate:'Do everything'}[(MILES_HOME&&MILES_HOME.mode)||'']||'Not saved yet';
+  const p=el('p','mdesc'); p.style.margin='0 0 14px'; p.textContent='Current mode: '+modeName+'. That is the same mode as the dashboard. This percent dial does not mark a current mode and does not spend.'; ac.append(p);
   const opts=el('div'); opts.style.cssText='display:flex;flex-direction:column;gap:10px';
-  for(const o of AUTONOMY){ const sel=AUTOPILOT.autonomy===o.v; const row=el('button','acard'); row.style.cssText='text-align:left;cursor:pointer;margin:0;width:100%;border:'+(sel?'2px solid var(--accent)':'1px solid var(--line)');
-    row.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>'+o.label+'</b>'+(sel?'<span class="apill active">CURRENT</span>':'<span class="appsub">Select</span>')+'</div><div class="mdesc" style="margin:5px 0 0">'+o.desc+'</div>';
+  for(const o of AUTONOMY){ const row=el('button','acard'); row.style.cssText='text-align:left;cursor:pointer;margin:0;width:100%;border:1px solid var(--line)';
+    row.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>'+o.label+'</b><span class="appsub">Select</span></div><div class="mdesc" style="margin:5px 0 0">'+o.desc+'</div>';
     row.onclick=()=>{ AUTOPILOT.autonomy=o.v; saveAutopilot(); queueChange('autonomy','Autonomy set to '+o.v+'%'); renderAutopilot(); toast('Autonomy set to '+o.v+'%'); };
     opts.append(row); }
   ac.append(opts); box.append(ac);
@@ -9668,7 +9736,7 @@ function connDetailCard(d){
   const head=el('div'); head.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:8px';
   if(d.logo){ const im=el('img'); im.src=d.logo; im.style.cssText='width:34px;height:34px;border-radius:8px;object-fit:cover'; im.onerror=()=>{im.remove();}; head.append(im); }
   else { const av=el('div',null,CONN_EMOJI[d.app]||'🔌'); av.style.cssText='width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--panel2,var(--panel-2));font-size:18px'; head.append(av); }
-  const ht=el('div'); ht.style.flex='1'; ht.append(el('b',null,d.label)); const status=signedInOnly?'Signed in, not ready to read or create':(d.connected?'✓ Connected':'Not connected'); const st=el('div',null,status); st.style.cssText='font-size:12px;font-weight:600;color:'+((d.connected&&!signedInOnly)?'var(--good,var(--good))':'#b45309'); ht.append(st); head.append(ht);
+  const ht=el('div'); ht.style.flex='1'; ht.append(el('b',null,appPretty(d.app, d.label))); const status=signedInOnly?'Signed in, not ready to read or create':(d.connected?'✓ Connected':'Not connected'); const st=el('div',null,status); st.style.cssText='font-size:12px;font-weight:600;color:'+((d.connected&&!signedInOnly)?'var(--good,var(--good))':'#b45309'); ht.append(st); head.append(ht);
   c.append(head);
   if(d.connected){
     if(d.accountName){ const an=el('div',null,d.accountName); an.style.fontWeight='600'; c.append(an); }
@@ -9712,12 +9780,13 @@ function renderInts(){
   banner.append(b);
 
   // Connected section, always pinned to the top, each with a ✓.
+  const APP_PRETTY={google_analytics:'Google Analytics',google_ads:'Google Ads',google_my_business:'Google Business Profile',gohighlevel:'GoHighLevel',highlevel_oauth:'GoHighLevel',highlevel:'GoHighLevel',leadconnector:'GoHighLevel'};
   const nameFor=(slug)=>{
-    const inApps=APPS.find(x=>x.slug===slug); if(inApps) return inApps;
+    if(APP_PRETTY[slug]||APP_LABEL[slug]) return {slug,name:APP_PRETTY[slug]||APP_LABEL[slug]};
+    const inApps=APPS.find(x=>x.slug===slug); if(inApps&&inApps.name&&inApps.name!==slug) return inApps;
     for(const gr of STACK){ const f=gr.apps.find(a=>a.slug===slug); if(f) return f; }
-    if(APP_LABEL[slug]) return {slug,name:APP_LABEL[slug]};
     const pretty=String(slug||'').split('_').filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
-    return {slug,name:({google_analytics:'Google Analytics',google_ads:'Google Ads',google_my_business:'Google Business Profile',gohighlevel:'GoHighLevel'})[slug]||pretty||slug};
+    return {slug,name:pretty||slug};
   };
   const cwrap=$('#int-connected'); cwrap.innerHTML='';
   // Revoked or expired connections. Not counted as connected; say so plainly.
@@ -9732,17 +9801,21 @@ function renderInts(){
     cwrap.append(grid);
   }
   const connList=[...connected];
-  if(connList.length){
-    cwrap.append(el('div','sect-label','CONNECTED APPS · '+connList.length));
+  const site=String((CONN&&CONN.website)||(PROFILE&&PROFILE.website)||'').trim();
+  const shownNames=connList.map(slug=>nameFor(slug).name);
+  if(site) shownNames.push('Website');
+  if(connList.length||site){
+    cwrap.append(el('div','sect-label','CONNECTED APPS · '+shownNames.length+': '+shownNames.join(', ')));
     const g=el('div','appgrid');
     for(const slug of connList){ g.append(appCard(nameFor(slug),true)); }
+    if(site) g.append(appCard({slug:'website',name:'Website'},true));
     cwrap.append(g);
   }
-  const site=PROFILE&&PROFILE.website?String(PROFILE.website).trim():'';
-  if(site){
+  const siteNote=site;
+  if(siteNote){
     const card=el('div','mcard');
     card.append(el('b',null,'Website'));
-    card.append(el('p','appsub','Saved on the business profile: '+site+'. A saved website counts toward the 3. Google Analytics can be connected and does not count toward the 3.'));
+    card.append(el('p','appsub','Saved website: '+siteNote+'. A saved website counts toward the 3. Google Analytics can be connected and does not count toward the 3.'));
     cwrap.append(card);
   }
   // Catalogue
@@ -9779,7 +9852,8 @@ document.querySelector('.main').addEventListener('scroll', async (e)=>{
 
 // ═══ chat ═══
 const chat=$('#chat'), cinput=$('#cinput');
-const APP_LABEL={google_ads:'Google Ads',google_analytics:'Google Analytics',google_my_business:'Business Profile',google_lsa:'Local Services Ads',facebook_ads:'Meta Ads',gohighlevel:'GoHighLevel'};
+const APP_LABEL={google_ads:'Google Ads',google_analytics:'Google Analytics',google_my_business:'Google Business Profile',google_lsa:'Local Services Ads',facebook_ads:'Meta Ads',gohighlevel:'GoHighLevel',highlevel_oauth:'GoHighLevel',highlevel:'GoHighLevel',leadconnector:'GoHighLevel'};
+function appPretty(slug, fallback){ return APP_LABEL[slug]||(fallback&&fallback!==slug?fallback:'')||String(slug||'').split('_').filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' '); }
 function addRow(role){const r=el('div','row '+(role==='user'?'user':'emp'));const a=el('div','av '+(role==='user'?'you':'emp'),role==='user'?'A':'M');const b=el('div','bubble');r.append(a,b);chat.append(r);chat.scrollTop=chat.scrollHeight;return b;}
 function say(role,text){ const shown=role==='user'?text:scrubConnectText(text); const b=addRow(role); b.textContent=shown; chat.scrollTop=chat.scrollHeight; logChat(role,shown); return b; }
 function renderPlan(reply){

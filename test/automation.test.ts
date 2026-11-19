@@ -82,6 +82,9 @@ describe('daily manager', () => {
     expect(reverted.ok).toBe(true);
     expect(reverted.restored).toMatch(/enabled/);
     expect(reverted.log.find((row) => row.id === pause.id)!.effect).toBe('reverted');
+    const suggested = planActions(runDailyRead(input()).findings, { ...guard, mode: 'manual' }, input().now)[0]!;
+    expect(suggested.effect).toBe('suggested');
+    expect(revertChange([suggested], suggested.id).ok).toBe(true);
     const waiting = planActions(runDailyRead(input({ spentMonth: 40, dayOfMonth: 20 })).findings, guard, input().now);
     const raise = waiting.find((row) => row.id === 'budget-pacing-behind')!;
     const approved = approveChange(waiting, raise.id);

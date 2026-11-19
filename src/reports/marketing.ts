@@ -398,6 +398,7 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
   if (adsConnected) tiles.push(kpi('Spend', money(adSpend), compare(adSpend, adSpendPrev), adSpend, adSpendPrev, realSpendSpark, false));
   else tiles.push(kpi('Spend', money(plan.totalSpend), 'Sample data. This is not your ad account.', null, null, plan.days.map((day) => day.spend), true));
   if (hasLedger) tiles.push(kpi('Leads', count(leadsNow), compare(leadsNow, leadsPrev), leadsNow, leadsPrev, [], false));
+  else if (adsConnected) tiles.push(kpi('Leads', 'Not tracked yet', 'Tracked leads replace this when your CRM sends events. Ad conversions are not used.', null, null, [], false, 'none'));
   else tiles.push(kpi('Leads', count(plan.totalLeads), 'Sample data. Tracked leads replace this when your CRM sends events.', null, null, plan.days.map((day) => day.leads), true));
   if (adsConnected && hasLedger && leadsNow > 0) tiles.push(kpi('Cost per lead', money(adSpend / leadsNow), 'Spend divided by tracked leads. Ad conversions are not used.', null, null, [], false));
   else if (adsConnected) tiles.push(kpi('Cost per lead', 'Not tracked yet', 'Cost per lead appears once leads come in from your CRM or call tracking.', null, null, [], false, 'none'));
@@ -414,7 +415,9 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
   }
   tiles.push(hasLedger
     ? kpi('Booked jobs', count(wonNow), input.expectation ? `Projected ${projectedJobsLow} to ${projectedJobsHigh} for this period.` : compare(wonNow, wonPrev), wonNow, wonPrev, [], false)
-    : kpi('Booked jobs', jobsLabel(plan.totalJobs), 'Sample data. Won jobs replace this when your CRM records them. This is not your saved projection.', null, null, [], true));
+    : adsConnected
+      ? kpi('Booked jobs', 'Not tracked yet', 'Won jobs replace this when your CRM records them. This is not your saved projection.', null, null, [], false, 'none')
+      : kpi('Booked jobs', jobsLabel(plan.totalJobs), 'Sample data. Won jobs replace this when your CRM records them. This is not your saved projection.', null, null, [], true));
   const ticketBit = input.ticket != null ? `${input.ticketSource} of ${money(input.ticket)}` : 'no job value is saved';
   let revenue = `No revenue estimate yet, because ${ticketBit === 'no job value is saved' ? 'no job value is saved' : 'there is no saved projection'}.`;
   if (input.expectation && input.ticket != null && projectedJobsLow != null && projectedJobsHigh != null) {
@@ -436,6 +439,10 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
     kpi('Leads', count(leadsNow), compare(leadsNow, leadsPrev), leadsNow, leadsPrev, [], false),
     kpi('Missed calls', count(missedNow), compare(missedNow, missedPrev), missedNow, missedPrev, [], false),
     kpi('Won jobs', count(wonNow), compare(wonNow, wonPrev), wonNow, wonPrev, [], false),
+  ] : adsConnected ? [
+    kpi('Leads', 'Not tracked yet', 'Tracked leads replace this when your CRM sends events.', null, null, [], false, 'none'),
+    kpi('Missed calls', 'Not tracked yet', 'Missed calls show up after lead tracking saves them. Answered calls are not tracked.', null, null, [], false, 'none'),
+    kpi('Won jobs', 'Not tracked yet', 'Won jobs replace this when your CRM records them.', null, null, [], false, 'none'),
   ] : [
     kpi('Leads', count(plan.totalLeads), 'Sample data. Tracked leads replace this when your CRM sends events.', null, null, [], true),
     kpi('Missed calls', count(plan.missed), 'Sample data. Answered calls are not tracked.', null, null, [], true),

@@ -652,24 +652,45 @@ function connectionsOf(input: OperatorInput): OperatorView['connections'] {
   ];
 }
 
+/**
+ * A connected account must not sit sample catalog numbers beside a live spend.
+ * The live page did that: Marketing cost came back live, and Booked jobs 22,
+ * Leads 86, and Job revenue stayed the 30-day sample series.
+ */
+export function presentMetrics(input: OperatorInput): OperatorMetric[] {
+  const liveAccount = !input.sampleConnector && (
+    input.metrics.some((m) => m.source === 'live' && !m.noValue)
+    || input.campaigns.some((row) => (row.spend || 0) > 0)
+    || input.google.oauth
+    || input.ghlConnected
+  );
+  if (!liveAccount) return input.metrics;
+  return input.metrics.map((m) => (
+    m.source === 'live'
+      ? m
+      : { ...m, source: 'live' as const, noValue: true, value: 0, prior_value: 0 }
+  ));
+}
+
 export function buildOperatorView(input: OperatorInput): OperatorView {
-  const decisions = decisionsOf(input);
+  const shown: OperatorInput = { ...input, metrics: presentMetrics(input) };
+  const decisions = decisionsOf(shown);
   return {
-    mode: input.mode,
+    mode: shown.mode,
     modes: MODE_PILLS,
-    paused: input.paused,
-    setupLine: plain(setupLine(input)),
+    paused: shown.paused,
+    setupLine: plain(setupLine(shown)),
     sampleLegend: 'SAMPLE = example numbers until that source connects',
-    onTrack: onTrack(input, decisions),
-    money: moneyBlock(input),
+    onTrack: onTrack(shown, decisions),
+    money: moneyBlock(shown),
     compare: compareBlock(),
     decisions,
-    playbooks: playbooksOf(input),
+    playbooks: playbooksOf(shown),
     playbookNote: 'Run builds or queues the saved Google Search plan and still follows your mode. In Hybrid, Miles asks before it spends. Meta and Local Services Ads are not launched from here.',
-    channels: channelsOf(input),
-    breakdown: breakdownOf(input),
-    connections: connectionsOf(input),
-    expectation: input.expectation ?? {
+    channels: channelsOf(shown),
+    breakdown: breakdownOf(shown),
+    connections: connectionsOf(shown),
+    expectation: shown.expectation ?? {
       state: 'empty',
       headline: 'No budget projection is saved yet.',
       detail: 'Set a budget on the launch page before Miles builds anything. Miles will show what that budget should bring.',

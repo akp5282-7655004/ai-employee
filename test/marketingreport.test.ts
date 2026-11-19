@@ -177,8 +177,12 @@ describe('marketing report', () => {
       }),
     }));
     const leadTile = report.overview.tiles.find((tile) => tile.label === 'Leads')!;
-    expect(leadTile.sample).toBe(true);
-    expect(leadTile.compare).toMatch(/Sample data/);
+    expect(leadTile.sample).toBe(false);
+    expect(leadTile.value).toBe('Not tracked yet');
+    expect(leadTile.compare).toMatch(/CRM sends events/);
+    const bookedTile = report.overview.tiles.find((tile) => tile.label === 'Booked jobs')!;
+    expect(bookedTile.sample).toBe(false);
+    expect(bookedTile.value).toBe('Not tracked yet');
     const cplTile = report.overview.tiles.find((tile) => tile.label === 'Cost per lead')!;
     expect(cplTile.sample).toBe(false);
     expect(cplTile.badge).toBe('none');
@@ -197,7 +201,8 @@ describe('marketing report', () => {
     expect(report.sampleBanner).toMatch(/Sample data/);
     expect(report.google.tiles.find((tile) => tile.label === 'Spend')!.sample).toBe(false);
     expect(report.google.tiles.find((tile) => tile.label === 'Conversions')!.value).toBe('4');
-    expect(report.charts.overview.find((widget) => widget.title === 'Impressions to booked jobs')!.sample).toBe(true);
+    expect(report.charts.overview.find((widget) => widget.title === 'Impressions to booked jobs')!.sample).toBe(false);
+    expect(report.charts.overview.find((widget) => widget.title === 'Leads')!.headline).toBe('Not tracked yet');
     expect(report.charts.google.find((widget) => widget.title === 'Spend by campaign')!.sample).toBe(false);
     expect(report.charts.google.find((widget) => widget.title === 'Spend by campaign')!.points[0]!.label).toBe('HOUSE PAINTING');
     expect(report.google.tiles.find((tile) => tile.label === 'Spend')!.compare).toBe('No earlier period to compare.');

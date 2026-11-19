@@ -12,6 +12,13 @@ export interface EnableReadback {
   note: string;
 }
 
+/** Old logs stored "Google reports the campaign as UNKNOWN". Say the read failed. */
+export function scrubStatusText(text: string): string {
+  return String(text || '')
+    .replace(/Google reports the campaign as UNKNOWN\.?/gi, 'Could not read status, retrying.')
+    .replace(/Left paused\.\s*Could not read status, retrying\./gi, 'Could not read status, retrying.');
+}
+
 export function judgeEnableReadback(read: EnableReadback): { enabled: boolean; reason: string } {
   if (read.campaign === 'UNKNOWN') {
     return { enabled: false, reason: `Miles could not read the campaign status from Google. It was not marked enabled. ${read.note}`.trim() };
