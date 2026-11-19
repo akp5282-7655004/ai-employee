@@ -8,6 +8,7 @@
  * Sample numbers stay labeled SAMPLE and are never marked live.
  */
 import type { MilesMode } from '../agents/policy.js';
+import { statusWords } from '../agents/enablecheck.js';
 import { accountFacts, type AccountFacts } from './facts.js';
 
 export interface SnapshotCaps {
@@ -202,7 +203,7 @@ export function buildAccountSnapshot(sources: ChatSources): AccountSnapshot {
       source: miles.resource ? 'miles' : 'plan',
       resource: clean(miles.resource, 120) || null,
       name: clean(miles.name, 120) || null,
-      status: clean(miles.status, 40) || 'unknown',
+      status: statusWords(clean(miles.status, 40)),
       lastReadback: clean(miles.lastReadback, 240) || null,
     });
   } else if (sources.plan) {
@@ -210,7 +211,7 @@ export function buildAccountSnapshot(sources: ChatSources): AccountSnapshot {
       source: 'plan',
       resource: null,
       name: sources.plan.name || null,
-      status: sources.plan.status || 'unknown',
+      status: statusWords(sources.plan.status),
       lastReadback: null,
     });
   }
@@ -224,7 +225,7 @@ export function buildAccountSnapshot(sources: ChatSources): AccountSnapshot {
         source: 'journey',
         resource,
         name: clean(row.name, 120) || null,
-        status: clean(row.status, 40) || 'unknown',
+        status: statusWords(clean(row.status, 40)),
         lastReadback: null,
       });
     }

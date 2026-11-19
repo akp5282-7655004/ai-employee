@@ -12,6 +12,23 @@ export interface EnableReadback {
   note: string;
 }
 
+/** Shown wherever a campaign's status has not come back from Google. */
+export const STATUS_NOT_READ = 'not read from Google yet';
+
+/**
+ * A campaign status in words an owner reads. UNKNOWN is how the code marks a
+ * read that did not come back; printed as is, it looks like a Google status.
+ */
+export function statusWords(raw: unknown): string {
+  const value = String(raw ?? '').trim();
+  const upper = value.toUpperCase();
+  if (!value || upper === 'UNKNOWN' || upper === 'UNSPECIFIED') return STATUS_NOT_READ;
+  if (upper === 'ENABLED') return 'enabled';
+  if (upper === 'PAUSED') return 'paused';
+  if (upper === 'REMOVED') return 'removed';
+  return value.toLowerCase().replace(/_/g, ' ');
+}
+
 /** Old logs stored "Google reports the campaign as UNKNOWN". Say the read failed. */
 export function scrubStatusText(text: string): string {
   return String(text || '')

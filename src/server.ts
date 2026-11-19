@@ -31,7 +31,7 @@ import { buildMetaAssets, buildSearchAssets, checkMetaPack, checkSearchPack } fr
 import { CMO_AREAS, AREA_TITLE, strategistPrompt, contentPrompt, socialPrompt, adsPrompt, fallbackStrategist, fallbackContribution, type TeamCtx } from './agents/team.js';
 import { classifyRequest, titleFor, emailPrompt, socialPrompt as dwSocialPrompt, adsPrompt as dwAdsPrompt, fallbackWork } from './agents/dowork.js';
 import { buildCampaignSpec, claimsFromText, validateCampaignSpec, campaignSummary, normalizeSiteUrl, repairCampaignUrls, type CampaignSpec } from './agents/campaign.js';
-import { googleResourceMissing, judgeEnableReadback, scrubStatusText } from './agents/enablecheck.js';
+import { googleResourceMissing, judgeEnableReadback, scrubStatusText, statusWords } from './agents/enablecheck.js';
 import { housekeepingProposals } from './agents/rulebook.js';
 import { acceptApprovedPlan, applyPlanAnswer, areaGuess, buildSearchPlan, type PlanProfile } from './agents/campaignplan.js';
 import { choiceById, goalCheck, LAUNCH_LINE, MONTH_DAYS, type BudgetPeriod, type GoalChannel, type GoalChoiceId, type GoalCheck, type LeadPeriod } from './agents/goalcheck.js';
@@ -574,21 +574,26 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   const refreshLaunchCredit = async (userId: string) => {
     const data = await authStore.getUserData(userId);
     const profile = (data.profile ?? {}) as Record<string, string>;
+    // The shared account read: one live call for the whole page, and this
+    // request waits at most a few seconds for it. A raw read here had no bound,
+    // and Plan & Credits sat on Loading until the browser gave up.
     let apps: string[] = [];
     try {
-      const listed = await connector.listAccounts(userId);
-      apps = (listed || []).map((account) => account.app);
+      apps = (await accountsForCredit(userId)).map((account) => account.app);
     } catch { apps = []; }
     const progress = setupProgress({ apps, website: profile.website });
-    const users = await authStore.listUsers();
+    // Other accounts matter only when a credit could be granted now. Reading
+    // every account on every page view grew with the customer list.
     const others = [];
-    for (const user of users) {
-      if (user.id === userId) continue;
-      const id = grantedIdentity(await authStore.getUserData(user.id));
-      if (id) others.push(id);
+    if (progress.ready && launchCreditStatus(data) === 'pending') {
+      for (const user of await authStore.listUsers()) {
+        if (user.id === userId) continue;
+        const id = grantedIdentity(await authStore.getUserData(user.id));
+        if (id) others.push(id);
+      }
     }
     // Once per email, kept outside the account so deleting it and signing up again earns nothing.
-    const email = launchEmailKey(users.find((user) => user.id === userId)?.email || '');
+    const email = launchEmailKey((await authStore.getUserById(userId))?.email || '');
     const claimEmail = async () => !!email && authStore.claimLaunchCredit(email, userId);
     if (needsEmailRecord(data) && email) {
       await authStore.claimLaunchCredit(email, userId);
@@ -644,6 +649,20 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
     const key = `accounts:${uid}:${[...extras].sort().join(',')}`;
     const hit = await reads.read(key, () => connector.listAccounts(uid), ACCOUNT_READ);
     return { accounts: hit.value ?? [], confirmed: hit.confirmed };
+  };
+
+  /**
+   * The account list for the launch credit. A fresh read every time, because a
+   * stale count there costs the owner $100, but one that gives up after a few
+   * seconds: with no bound, Plan & Credits sat on Loading until the browser
+   * gave up. If the fresh read is slow or fails, the last confirmed list is used.
+   */
+  const accountsForCredit = async (uid: string): Promise<ConnectedAccount[]> => {
+    try {
+      return (await withTimeout(connector.listAccounts(uid), 4_000)) ?? [];
+    } catch {
+      return accountsList(uid);
+    }
   };
 
   const accountsList = async (uid: string, app?: string): Promise<ConnectedAccount[]> => {
@@ -6187,8 +6206,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   // Reviews the shop's live marketing data daily and proposes specific, approvable
   // optimizations. Approving one queues the change into the Deploy pipeline (or
   // applies a direct toggle like Speed-to-Lead) — the same gate every change uses.
+  type RecDecision = { id: string; title: string; kind: 'approved' | 'skipped' | 'undone'; ts: string; applyKind?: string };
   const recState = (data: Record<string, unknown>) =>
-    (data.recState as { applied?: Record<string, string>; dismissed?: Record<string, string> }) ?? { applied: {}, dismissed: {} };
+    (data.recState as { applied?: Record<string, string>; dismissed?: Record<string, string>; recent?: RecDecision[] }) ?? { applied: {}, dismissed: {} };
+  /** The last few approvals and skips, newest first, so the dashboard can list them and offer Undo. */
+  const rememberDecision = (st: ReturnType<typeof recState>, decision: RecDecision) => {
+    const rest = (Array.isArray(st.recent) ? st.recent : []).filter((row) => row && row.id !== decision.id);
+    st.recent = [decision, ...rest].slice(0, 20);
+  };
 
   app.get('/api/recommendations', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -6263,6 +6288,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     data.deploy = deploy;
     const st = recState(data);
     st.applied = { ...(st.applied ?? {}), [rec.id]: new Date().toISOString() };
+    rememberDecision(st, { id: rec.id, title: plainOwner(String(rec.apply?.label || rec.title || 'Recommendation')).slice(0, 140), kind: 'approved', ts: new Date().toISOString(), applyKind: rec.apply?.kind });
     data.recState = st;
     await authStore.setUserData(u.id, data);
     // Honest: approval records the change. Only the Speed-to-Lead toggle is
@@ -6284,9 +6310,67 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     // saved value is the reason it was shown: a new reason shows it again.
     const why = String((req.body as { why?: string })?.why || '').trim();
     st.dismissed = { ...(st.dismissed ?? {}), [stableRecId(id)]: why || new Date().toISOString() };
+    const title = plainOwner(String((req.body as { title?: string })?.title || '').trim()).slice(0, 140);
+    rememberDecision(st, { id, title: title || 'Recommendation', kind: 'skipped', ts: new Date().toISOString() });
     data.recState = st;
     await authStore.setUserData(u.id, data);
     return { ok: true };
+  });
+
+  // The approvals and skips made on the dashboard, newest first.
+  app.get('/api/recommendations/recent', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const st = recState(await authStore.getUserData(u.id));
+    return { decisions: (Array.isArray(st.recent) ? st.recent : []).slice(0, 6) };
+  });
+
+  /**
+   * Undo an approval or a skip. An approval only ever recorded the change and,
+   * for one recommendation, switched Speed-to-Lead on inside Miles; nothing was
+   * pushed to an ad account. So undoing it is complete: the record is marked
+   * reverted in the Change Log, that switch goes back off, and the
+   * recommendation is open again. A skip is simply forgotten.
+   */
+  app.post<{ Body: { id?: string } }>('/api/recommendations/undo', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const id = (req.body?.id ?? '').toString();
+    if (!id) return reply.code(400).send({ error: 'id is required' });
+    const data = await authStore.getUserData(u.id);
+    const st = recState(data);
+    const decision = (Array.isArray(st.recent) ? st.recent : []).find((row) => row && row.id === id);
+    const wasApplied = !!st.applied?.[id];
+    const wasSkipped = !!st.dismissed?.[stableRecId(id)];
+    if (!wasApplied && !wasSkipped) {
+      return reply.code(404).send({ error: 'There is nothing to undo for that recommendation. Nothing was changed.' });
+    }
+    let note = 'Undone. The recommendation is open again.';
+    if (wasApplied) {
+      const applied = { ...(st.applied ?? {}) };
+      delete applied[id];
+      st.applied = applied;
+      const deploy = (data.deploy as { queue?: Array<Record<string, unknown>> }) ?? {};
+      const row = Array.isArray(deploy.queue) ? deploy.queue.find((item) => item?.id === id) : undefined;
+      if (row) Object.assign(row, { status: 'reverted', revertedAt: new Date().toISOString(), revertedBy: u.email });
+      if (decision?.applyKind === 'enable_speed_to_lead') {
+        const speed = (data.speedToLead as Record<string, unknown>) ?? {};
+        speed.enabled = false;
+        data.speedToLead = speed;
+        note = 'Undone. Speed-to-Lead is off again and the recommendation is open.';
+      } else {
+        note = 'Undone. The approval is marked reverted in your Change Log. Nothing had been changed in Google Ads or Meta.';
+      }
+    }
+    if (wasSkipped) {
+      const dismissed = { ...(st.dismissed ?? {}) };
+      delete dismissed[stableRecId(id)];
+      st.dismissed = dismissed;
+    }
+    rememberDecision(st, { id, title: decision?.title || 'Recommendation', kind: 'undone', ts: new Date().toISOString() });
+    data.recState = st;
+    await authStore.setUserData(u.id, data);
+    return { ok: true, note };
   });
 
   // Version snapshots — point-in-time restore points for undo / rollback.
@@ -8263,7 +8347,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const stats = responderStats(st, new Date().toISOString());
     const autos = (data.automations as AutomationsState) ?? emptyAutomationsState();
     const spec = miles.bundle?.spec;
-    const lastReadback = miles.events.find((event) => /google reports|read-back|read back|created paused|reverted to paused/i.test(event.text))?.text;
+    const storedReadback = miles.events.find((event) => /google reports|read-back|read back|created paused|reverted to paused/i.test(event.text))?.text;
+    // Older events stored the raw word. Chat quotes this line, so it is cleaned here too.
+    const lastReadback = storedReadback ? scrubStatusText(storedReadback).replace(/\bUNKNOWN\b/g, 'not read yet') : undefined;
     return buildAccountSnapshot({
       tenantId: uid,
       sampleConnector: connector.name === 'mock',
@@ -8334,7 +8420,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         const liveRead = connector.readGoogleCampaignStatus
           ? await connector.readGoogleCampaignStatus(uid, resource)
           : { live: false, called: false, sample: connector.name === 'mock', note: 'This connector cannot read Google campaign status.', campaigns: [] };
-        return { onFile: snapshot.campaigns, performance: snapshot.performance, liveRead };
+        // The model repeats what it is handed. A status that did not come back is said in words, never as UNKNOWN.
+        const read = { ...liveRead, campaigns: (liveRead.campaigns ?? []).map((campaign) => ({ ...campaign, status: statusWords(campaign.status) })) };
+        return { onFile: snapshot.campaigns, performance: snapshot.performance, liveRead: read };
       },
       integrations: async () => (await chatSnapshotFor(uid)).integrations,
       leads: async () => {
