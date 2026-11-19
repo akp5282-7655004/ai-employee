@@ -71,7 +71,7 @@ const num = (s: string | undefined): number => {
   return Number.isFinite(n) && n > -1_000_000 ? Math.max(0, Math.round(n)) : 0;
 };
 
-export async function fetchDemographics(zipInput: string): Promise<Demographics | null> {
+export async function fetchDemographics(zipInput: string, trade?: string): Promise<Demographics | null> {
   const zip = (zipInput || '').replace(/\D/g, '').slice(0, 5);
   if (zip.length !== 5) return null;
 
@@ -129,7 +129,7 @@ export async function fetchDemographics(zipInput: string): Promise<Demographics 
     pctOlderHomes,
     competition,
     insight: insightFor(income, homeValue, occ ? Math.round((owner / occ) * 100) : 0),
-    marketFit: marketFitFor(income, occ ? Math.round((owner / occ) * 100) : 0, pctOlderHomes, medianYearBuilt, competition),
+    marketFit: marketFitFor(income, occ ? Math.round((owner / occ) * 100) : 0, pctOlderHomes, medianYearBuilt, competition, trade),
   };
 }
 
@@ -150,11 +150,12 @@ async function fetchCompetition(zip: string): Promise<number | undefined> {
   }
 }
 
-function marketFitFor(income: number, ownership: number, pctOlder: number, medianYearBuilt: number, competition?: number): string {
+function marketFitFor(income: number, ownership: number, pctOlder: number, medianYearBuilt: number, competition?: number, trade?: string): string {
   const parts: string[] = [];
   const age = medianYearBuilt ? new Date().getFullYear() - medianYearBuilt : 0;
   if (pctOlder >= 55 || (age && age >= 45)) {
-    parts.push(`Aging housing stock (${pctOlder}% built before 1980${medianYearBuilt ? `, median built ${medianYearBuilt}` : ''}) — strong, steady demand for roofing, HVAC replacement, and plumbing repair.`);
+    const work = /paint/i.test(trade || '') ? 'repainting and exterior refresh' : 'repairs and replacements for this trade';
+    parts.push(`Aging housing stock (${pctOlder}% built before 1980${medianYearBuilt ? `, median built ${medianYearBuilt}` : ''}) — steady demand for ${work}.`);
   } else if (pctOlder <= 25) {
     parts.push(`Newer housing here (${pctOlder}% pre-1980) — lean toward installs, upgrades, and maintenance plans over emergency repair.`);
   } else {

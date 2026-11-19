@@ -4,6 +4,7 @@ import { buildServer } from '../src/server.js';
 import { MemoryStore } from '../src/db/index.js';
 import { MockConnector } from '../src/connectors/mock.js';
 import { ownerStatusAnswer } from '../src/chat/account.js';
+import { milesSystemPrompt } from '../src/chat/prompt.js';
 import { scrubAssistantText } from '../src/chat/connect.js';
 import { buildAccountSnapshot, type ChatSources } from '../src/chat/snapshot.js';
 
@@ -55,11 +56,15 @@ describe('one connection list', () => {
     expect(countLine(listed)).toBe('You have 3 of 3 tools connected: Google Ads, GoHighLevel, Website.');
     expect(countLine(google)).toBe(countLine(listed));
     expect(listed).toMatch(/Google Analytics, Google Ads, GoHighLevel and Website are connected/);
+    expect(listed).toMatch(/Google Analytics is connected and does not count toward the 3/);
+    expect(google).toMatch(/Google Analytics is connected and does not count toward the 3/);
     expect(google).toMatch(/Google Ads is connected/);
     expect(google).toMatch(/Google Analytics is connected/);
     expect(google).toMatch(/Google Business Profile is not connected/);
     expect(listed).not.toMatch(/unlock/);
     expect(google).not.toMatch(/unlock/);
+    expect(milesSystemPrompt(snapshot)).toMatch(/no limit of five tools/);
+    expect(milesSystemPrompt(snapshot)).not.toMatch(/connect up to five tools/i);
   });
 });
 

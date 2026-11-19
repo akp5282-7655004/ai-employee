@@ -208,6 +208,7 @@ function impactOf(text: string): string | null {
 function googleStatus(status: OperatorCampaign['status']): string | null {
   if (status === 'ENABLED') return 'Enabled';
   if (status === 'PAUSED') return 'Paused';
+  if (status === 'UNKNOWN') return 'Could not read status, retrying';
   return null;
 }
 
@@ -300,8 +301,8 @@ function onTrack(input: OperatorInput, decisions: OperatorDecision[]): OperatorV
   const costSample = !cost || cost.source !== 'live';
   const spendLive = !input.sampleConnector && input.campaigns.some((row) => (row.spend || 0) > 0);
   const costUntracked = spendLive && bookedSample;
-  const bookedValue = booked ? String(Math.round(booked.value)) : 'n/a';
-  const costValue = costUntracked ? 'Not tracked yet' : (cost && !cost.noValue ? money(cost.value) : 'n/a');
+  const bookedValue = !booked || booked.noValue ? 'Not tracked yet' : String(Math.round(booked.value));
+  const costValue = costUntracked || !cost || cost.noValue ? 'Not tracked yet' : money(cost.value);
   const pace = leadPaceOf(input);
   const liveJobs = !!(booked && !bookedSample);
 
@@ -323,7 +324,7 @@ function onTrack(input: OperatorInput, decisions: OperatorDecision[]): OperatorV
     bookedLabel: 'Booked jobs',
     bookedValue,
     bookedGoal: null,
-    bookedSample,
+    bookedSample: bookedSample && !booked?.noValue,
     bookedBar: null,
     costLabel: 'Cost per booked job',
     costValue,
@@ -379,10 +380,10 @@ function moneyBlock(input: OperatorInput): OperatorView['money'] {
   }
   const tile = (label: string, m: OperatorMetric | undefined, sub: string, format: (n: number) => string) => ({
     label,
-    value: m ? format(m.value) : 'n/a',
+    value: !m || m.noValue ? 'Not tracked yet' : format(m.value),
     sub,
     delta: m && m.source === 'live' ? null : deltaOf(m),
-    sample: !m || m.source !== 'live',
+    sample: !!m && m.source !== 'live' && !m.noValue,
   });
   const netSample = !rev || !spend || rev.source !== 'live' || spend.source !== 'live';
   const net = rev && spend ? rev.value - spend.value : null;
