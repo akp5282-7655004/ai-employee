@@ -83,6 +83,32 @@ describe('dismissed recommendations stay dismissed across days (row 47)', () => 
     await app.close();
   });
 
+  it('approving then undoing a recommendation changes nothing in Google Ads', async () => {
+    let writes = 0;
+    const store = new MemoryStore();
+    const connector = new MockConnector();
+    const live = connector as unknown as { setGoogleCampaignStatus?: (...args: unknown[]) => Promise<unknown> };
+    live.setGoogleCampaignStatus = async () => { writes += 1; return { ok: true, note: 'should not run' }; };
+    const app = buildServer({ authStore: store, connector });
+    const signed = await app.inject({ method: 'POST', url: '/auth/signup', payload: { email: 'undo-rec@example.com', password: 'password1', tos: true } });
+    const cookie = String(signed.headers['set-cookie']).split(';')[0] ?? '';
+    const rec = { id: 'ads:dead:google_ads:2026-11-19', category: 'ads', severity: 'high', title: 'Pause dead spend', why: 'No leads.', action: 'Pause it.', apply: { kind: 'queue_change', label: 'Pause' } };
+    const applied = await post(app, cookie, '/api/recommendations/apply', { rec });
+    expect(applied.statusCode).toBe(200);
+    expect(applied.json()).toMatchObject({ pushed: false });
+    expect(applied.json().note).toMatch(/not changed/i);
+    const undone = await post(app, cookie, '/api/recommendations/undo', { id: rec.id });
+    expect(undone.statusCode).toBe(200);
+    expect(undone.json().note).toMatch(/Nothing had been changed in Google Ads or Meta/);
+    const data = await store.getUserData(signed.json().user.id);
+    const st = data.recState as { applied?: Record<string, string> };
+    expect(st.applied?.[rec.id]).toBeUndefined();
+    const queue = (data.deploy as { queue?: { id: string; status: string }[] }).queue || [];
+    expect(queue.find((row) => row.id === rec.id)?.status).toBe('reverted');
+    expect(writes).toBe(0);
+    await app.close();
+  });
+
   it('approving a recommendation says it was recorded, not pushed (row 46)', async () => {
     const { app, cookie } = await setup('rec-honest@example.com');
     const rec = { id: 'ads:dead:google_ads:2026-11-17', category: 'ads', severity: 'high', title: 'Pause dead spend', why: 'No leads.', action: 'Pause it.', apply: { kind: 'queue_change', label: 'Pause' } };

@@ -177,7 +177,7 @@ describe('chat turn', () => {
     };
     const out = await answerChat({
       snapshot,
-      messages: [{ role: 'user', text: 'which one of my integrations are connected' }],
+      messages: [{ role: 'user', text: 'What should the homepage headline say?' }],
       model,
       readers,
     });
@@ -204,7 +204,7 @@ describe('chat turn', () => {
     };
     const out = await answerChat({
       snapshot,
-      messages: [{ role: 'user', text: 'which one of my integrations are connected' }],
+      messages: [{ role: 'user', text: 'What should the homepage headline say?' }],
       model,
       readers,
     });
