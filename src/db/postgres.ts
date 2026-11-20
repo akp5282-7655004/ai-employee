@@ -97,6 +97,8 @@ export class PostgresStore implements Store {
     return this.mutateUserData(userId, (current) => {
       const merged = mergeCredits(current.credits, incoming.credits, current.billing, incoming.billing);
       const next = { ...current, ...incoming, credits: merged.credits, billing: merged.billing };
+      // Chat routes own this transcript once the owner has reset it.
+      if (current.chatRevision) Object.assign(next, { chat: current.chat, chatRevision: current.chatRevision });
       stripCreditBase(next);
       for (const k of Object.keys(current)) delete current[k];
       Object.assign(current, next);

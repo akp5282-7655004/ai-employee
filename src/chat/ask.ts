@@ -120,7 +120,9 @@ export async function answerChat(args: {
       locations: intent.locations,
       dailyBudget: intent.dailyBudget,
       services: intent.services,
-      note: 'Building actions arrives in the next update. Nothing was created or spent.',
+      note: intent.channel === 'google_ads'
+        ? 'Review the draft before creating a paused campaign in Google Ads.'
+        : 'Review the setup in the Facebook campaign builder.',
     } : null;
     return pack(await ground(said.text, false), { live: false, mode, steps: [], plan, intent: said.ready ? intent : null, next: null, usage: emptyUsage });
   }

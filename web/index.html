@@ -1841,6 +1841,9 @@
     <!-- CHAT -->
     <section class="page" id="page-chat">
       <div class="chatview on">
+        <div style="display:flex;justify-content:flex-end">
+          <button class="ghost" id="clear-chat" type="button" hidden>Clear chat history</button>
+        </div>
         <div class="chat" id="chat" aria-live="polite"></div>
         <div class="chat-empty" id="chat-empty" hidden>
           <div class="chat-empty-card">
@@ -2368,7 +2371,7 @@ function renderSubTabs(id){
     strip.append(b);
   });
 }
-function setPage(id){
+function setPage(id, campaignDraft){
   document.body.classList.toggle('on-dash', id==='overview' || id==='launch' || id==='library' || id==='reports');
   document.body.classList.toggle('on-launch', id==='launch' || id==='playbook' || id==='fblaunch' || id==='adstudio');
   document.body.classList.toggle('on-admin', id==='owneradmin');
@@ -2447,7 +2450,10 @@ function setPage(id){
   if(id==='analytics') renderAnalytics();
   if(id==='weather') openWeather();
   if(id==='adstudio') openAdStudio();
-  if(id==='launch') openLaunch();
+  if(id==='launch'){
+    if(campaignDraft){ LAUNCH=campaignDraft; renderLaunchReview(); }
+    else openLaunch();
+  }
   if(id==='fblaunch') openFbLaunch();
   if(id==='autohub') openAutoHub();
   if(id==='health') openHealth();
@@ -9762,7 +9768,7 @@ function showConnectCard(slot, opts){
   }
   slot.append(card);
 }
-function connectLabel(slug){ return String(slug||'this app').replace(/_/g,' '); }
+function connectLabel(slug){ return slug==='google_my_business'?'Google Business Profile':String(slug||'this app').replace(/_/g,' '); }
 function beginConnect(slug){
   const popup=window.open('about:blank','miles_connect','width=520,height=760');
   connectApp(slug, popup);
@@ -9809,7 +9815,7 @@ async function connectApp(slug, popup){
   }
 }
 function awaitConnection(slug, w, slot){
-  const before=(CONN.connectedApps||[]).slice(); const started=Date.now(); let busy=false;
+  const before=(CONN.connectedApps||[]).slice(); const started=Date.now(); let busy=false, closedAt=0;
   const name=connectLabel(slug);
   showConnectCard(slot,{ title:'Connect '+name, body:'Finish the window, then Miles will update the status here.' });
   const timer=setInterval(async()=>{
@@ -9817,12 +9823,14 @@ function awaitConnection(slug, w, slot){
     try{
       await fetchConnections();
       const nowConnected=(CONN.connectedApps||[]).includes(slug) && !before.includes(slug);
-      const popupClosed=!!(w&&w.closed); const timedOut=Date.now()-started>180000;
+      const now=Date.now();
+      if(w&&w.closed&&!closedAt) closedAt=now;
+      const timedOut=now-started>180000;
       if(nowConnected){
         clearInterval(timer);
         showConnectCard(slot,{ title:'Connected ✓', body:name+' is connected.' });
         if(typeof loadIntegrations==='function') await loadIntegrations();
-      } else if((popupClosed && Date.now()-started>2500) || timedOut){
+      } else if((closedAt && now-closedAt>=12000) || timedOut){
         clearInterval(timer);
         if(typeof loadIntegrations==='function') await loadIntegrations();
         const connected=(CONN.connectedApps||[]).includes(slug);
@@ -9841,7 +9849,7 @@ function appCard(a, connected){
   const wired=CONNECTABLE.has(a.slug);
   if(connected) mid.append(el('div','appsub','Connected'));
   else if(!wired) mid.append(el('div','appsub','Coming soon'));
-  else mid.append(el('div','appsub','Not connected. Try again'));
+  else mid.append(el('div','appsub',(CONN.needsReconnect||[]).includes(a.slug)?'Reconnect required':'Not connected'));
   c.append(appLogo(a), mid);
   if(connected) c.append(el('div','cdot','✓'));
   c.onclick=()=>{ if(!wired && !connected){ toast(a.name+' is coming soon. Nothing was connected.'); return; } beginConnect(a.slug); };
@@ -10121,6 +10129,7 @@ function chatConnectClick(slug, label, body){
   connectApp(slug, popup);
 }
 async function send(text,silent){
+  if(chatResetting) return;
   const msg=(text!=null?text:cinput.value).trim(); if(!msg) return;
   if(!silent) say('user',msg);
   else logChat('user',msg);
@@ -10131,9 +10140,10 @@ async function send(text,silent){
   const b=addRow('emp'); const typ=el('div','typing'); typ.innerHTML='<span></span><span></span><span></span>'; b.append(typ);
   try{
     const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(),30000);
-    const r=await fetch('/api/chat/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-16),mode:chatMode}),signal:ctrl.signal});
+    const r=await fetch('/api/chat/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-16),mode:chatMode,revision:chatRevision}),signal:ctrl.signal});
     clearTimeout(timer);
     const d=await r.json();
+    if(!b.isConnected) return;
     b.className='bubble md'; b.innerHTML='';
     (d.steps||[]).forEach(step=>{ const line=el('div','appsub', step); line.style.margin='0 0 4px'; b.append(line); });
     if(d.plan){
@@ -10142,7 +10152,18 @@ async function send(text,silent){
       card.append(el('div',null,(d.plan.channel||'')+(d.plan.locations&&d.plan.locations.length?' · '+d.plan.locations.join(', '):'')));
       if(d.plan.dailyBudget!=null) card.append(el('div',null,'$'+d.plan.dailyBudget+' a day'));
       if(d.plan.services&&d.plan.services.length) card.append(el('div',null,d.plan.services.join(', ')));
-      card.append(el('div','appsub', d.plan.note||'Building actions arrives in the next update.'));
+      if(d.plan.note) card.append(el('div','appsub',d.plan.note));
+      if(d.plan.channel==='Google Ads'){
+        const review=el('button','go','Review Google Ads draft');
+        review.type='button';
+        review.onclick=()=>reviewChatCampaign(d.plan,review);
+        card.append(review);
+      }else if(d.plan.channel==='Meta'){
+        const review=el('button','go','Open Facebook campaign builder');
+        review.type='button';
+        review.onclick=()=>setPage('fblaunch');
+        card.append(review);
+      }
       b.append(card);
     }
     const said=scrubConnectText(d.text||d.error||'I could not answer that. Nothing was changed.');
@@ -10151,6 +10172,19 @@ async function send(text,silent){
     if(d.action&&d.action.kind==='connect') appendConnectButton(b, body, d.action);
     logChat('emp', said, d.action); chat.scrollTop=chat.scrollHeight;
   }catch(e){ b.textContent=e&&e.name==='AbortError'?'That took too long. Try again in a moment. Nothing was changed.':'I could not reach the server just now. Try again.'; }
+}
+async function reviewChatCampaign(plan,button){
+  button.disabled=true;
+  try{
+    const r=await fetch('/api/campaign/draft',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
+      dailyBudget:plan.dailyBudget, locations:plan.locations, services:plan.services,
+    })});
+    const draft=await r.json();
+    if(!button.isConnected || location.hash!=='#chat') return;
+    if(!r.ok || !draft.spec){ toast(draft.error||'Could not build the draft. Try again.'); return; }
+    setPage('launch',{spec:draft.spec,connected:!!draft.gadsConnected});
+  }catch(e){ toast('Could not build the draft. Try again.'); }
+  finally{ button.disabled=false; }
 }
 // Miles takes the request, picks the workflow, builds it on-brand, and leaves it
 // in the dashboard review queue.
@@ -10184,6 +10218,7 @@ async function milesEmailFlow(msg){
   const to=extractEmail(msg);
   const b=addRow('emp'); b.className='bubble md'; b.innerHTML='<div class="appsub">Drafting your email…</div>';
   let d; try{ d=await(await fetch('/api/email/compose',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({request:msg,to})})).json(); }catch(e){ b.textContent='Could not draft, try again.'; return; }
+  if(!b.isConnected) return;
   b.innerHTML='';
   const card=el('div'); card.style.cssText='border:1px solid var(--line,#e5e7eb);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px';
   card.append(el('b',null,'✉️ Ready to send, review & edit, then Send'));
@@ -10198,7 +10233,9 @@ async function milesEmailFlow(msg){
   b.append(card); logChat('emp','Drafted an email to '+(d.to||'')); chat.scrollTop=chat.scrollHeight;
 }
 async function resetSession(){ if(REMOTE){ try{ await fetch('/api/reset',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}); }catch(e){} } else { connector.reset&&connector.reset(); agent=makeAgent(connector,USER); } }
-let CHAT_LOG=[], CHAT_LOADED=false, chatLoadOk=false, chatSaveT;
+let CHAT_LOG=[], CHAT_LOADED=false, chatLoadOk=false, chatSaveT, chatRevision=null, chatResetting=false;
+const clearChatButton=$('#clear-chat');
+function updateClearChatButton(){ clearChatButton.hidden=!chatLoadOk || !CHAT_LOG.length; }
 function logChat(role,text,action){
   const clean=scrubConnectText(text||'');
   let act=null;
@@ -10211,10 +10248,34 @@ function logChat(role,text,action){
   const row={role, text:clean};
   if(act) row.action=act;
   CHAT_LOG.push(row);
+  updateClearChatButton();
   if(REMOTE){ clearTimeout(chatSaveT); chatSaveT=setTimeout(saveChat,600); }
 }
-function saveChat(){ if(!REMOTE || !chatLoadOk) return; try{ fetch('/api/chat',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-200)})}); }catch(e){} }
-async function loadChat(){ if(!REMOTE){ CHAT_LOADED=true; chatLoadOk=true; await paintChatEmpty(); return; } try{ const r=await fetch('/api/chat'); const d=await r.json(); if(!r.ok) return; const rows=(d.messages||[]).filter(m=>m&&(m.text||(m.action&&m.action.app))).map(m=>{ const action=m.action&&m.action.kind==='connect'?{kind:'connect', app:String(m.action.app).replace(/[^a-z0-9_]/gi,''), label:scrubConnectText(m.action.label||'Connect')}:null; const row={role:m.role, text:scrubConnectText(m.text||'')}; if(action&&action.app) row.action=action; return row; }).filter(m=>m.text||m.action); const deduped=[]; for(const row of rows){ const prev=deduped[deduped.length-1]; if(prev&&prev.role===row.role&&prev.text===row.text) continue; deduped.push(row); } CHAT_LOG=deduped; chatLoadOk=true; CHAT_LOADED=true; chat.innerHTML=''; for(const m of CHAT_LOG){ const b=addRow(m.role==='user'?'user':'emp'); if(m.role==='user') b.textContent=m.text; else { b.className='bubble md'; const body=el('div'); body.innerHTML=mdToHtml(m.text); b.append(body); if(m.action&&m.action.kind==='connect') appendConnectButton(b, body, m.action); } } chat.scrollTop=chat.scrollHeight; }catch(e){} await paintChatEmpty(); }
+function saveChat(){
+  if(!REMOTE || !chatLoadOk || chatResetting) return;
+  fetch('/api/chat',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-200),revision:chatRevision})}).catch(()=>{});
+}
+clearChatButton.onclick=async()=>{
+  if(chatResetting || !window.confirm('Clear all saved messages in this chat?')) return;
+  chatResetting=true;
+  clearChatButton.disabled=true;
+  clearTimeout(chatSaveT);
+  try{
+    const r=await fetch('/api/chat',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({revision:chatRevision})});
+    const result=await r.json();
+    if(!r.ok){ toast(result.error||'Could not clear chat history. Try again.'); return; }
+    chatRevision=result.revision;
+    CHAT_LOG=[];
+    chat.replaceChildren();
+    cinput.value='';
+    cinput.style.height='auto';
+    updateClearChatButton();
+    await paintChatEmpty();
+    cinput.focus();
+  }catch(e){ toast('Could not clear chat history. Try again.'); }
+  finally{ chatResetting=false; clearChatButton.disabled=false; }
+};
+async function loadChat(){ if(!REMOTE){ CHAT_LOADED=true; chatLoadOk=true; await paintChatEmpty(); return; } try{ const r=await fetch('/api/chat'); const d=await r.json(); if(!r.ok) return; const rows=(d.messages||[]).filter(m=>m&&(m.text||(m.action&&m.action.app))).map(m=>{ const action=m.action&&m.action.kind==='connect'?{kind:'connect', app:String(m.action.app).replace(/[^a-z0-9_]/gi,''), label:scrubConnectText(m.action.label||'Connect')}:null; const row={role:m.role, text:scrubConnectText(m.text||'')}; if(action&&action.app) row.action=action; return row; }).filter(m=>m.text||m.action); const deduped=[]; for(const row of rows){ const prev=deduped[deduped.length-1]; if(prev&&prev.role===row.role&&prev.text===row.text) continue; deduped.push(row); } CHAT_LOG=deduped; chatRevision=d.revision??null; chatLoadOk=true; CHAT_LOADED=true; updateClearChatButton(); chat.innerHTML=''; for(const m of CHAT_LOG){ const b=addRow(m.role==='user'?'user':'emp'); if(m.role==='user') b.textContent=m.text; else { b.className='bubble md'; const body=el('div'); body.innerHTML=mdToHtml(m.text); b.append(body); if(m.action&&m.action.kind==='connect') appendConnectButton(b, body, m.action); } } chat.scrollTop=chat.scrollHeight; }catch(e){} await paintChatEmpty(); }
 async function paintChatEmpty(){
   const box=$('#chat-empty'); if(!box) return;
   const has=!!(chat&&chat.children.length);

@@ -150,7 +150,7 @@ Customers upgrade from Plan and Credits (Stripe Checkout) and manage or cancel f
 
 ## Chat with Miles
 
-Chat is a read-only agent for the signed-in account. It can look up the profile, playbook, connections, campaigns, metrics, leads, approvals, the change log, daily findings, and benchmarks. It cannot spend, launch, pause, send, or change settings. A request to set up ads is saved as a plan for a later update and is not run.
+Chat is a read-only agent for the signed-in account. It can look up the profile, playbook, connections, campaigns, metrics, leads, approvals, the change log, daily findings, and benchmarks. It cannot spend, launch, pause, send, or change settings. A complete Google Ads setup request can open a draft in Launch for review. Creating the paused campaign requires a separate approval there. Use **Clear chat history** to start over.
 
 Set these on the host when you want live answers (see `.env.example`):
 

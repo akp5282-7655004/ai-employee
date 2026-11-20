@@ -33,9 +33,50 @@ describe('action intent', () => {
     expect(intent?.missing).toBe('budget');
     expect(intent?.suggestion).toMatch(/\$30/);
   });
+
+  it('does not use a monthly or negative amount as a daily budget', () => {
+    for (const amount of ['$300 per month', '-$30/day', '$0/day']) {
+      const intent = parseActionIntent(`Set up Google Ads for Fishtown at ${amount} for interior painting`);
+      expect(intent?.missing).toBe('budget');
+    }
+  });
 });
 
 describe('read-only agent', () => {
+  it('clears chat without letting an older tab or workspace save bring it back', async () => {
+    const store = new MemoryStore();
+    const app = buildServer({ authStore: store });
+    const signup = await app.inject({
+      method: 'POST', url: '/auth/signup',
+      payload: { email: 'fresh-chat@example.com', password: 'password1', tos: true },
+    });
+    const headers = { cookie: String(signup.headers['set-cookie']).split(';')[0] };
+    const id = signup.json().user.id as string;
+    const messages = [{ role: 'emp', text: 'An old reply' }];
+    await store.setUserData(id, { chat: messages });
+    const staleWorkspace = await store.getUserData(id);
+
+    const reset = await app.inject({ method: 'DELETE', url: '/api/chat', headers, payload: { revision: null } });
+    expect(reset.statusCode).toBe(200);
+    const revision = reset.json().revision as string;
+    await app.inject({ method: 'PUT', url: '/api/chat', headers, payload: { messages } });
+    await store.setUserData(id, { ...staleWorkspace, profile: { businessName: 'Fresh Paint' } });
+    const staleAsk = await app.inject({
+      method: 'POST', url: '/api/chat/ask', headers, payload: { messages: [{ role: 'user', text: 'Hello' }] },
+    });
+    expect(staleAsk.statusCode).toBe(409);
+    const fresh = await app.inject({ method: 'GET', url: '/api/chat', headers });
+    expect(fresh.json()).toEqual({ messages: [], revision });
+    const next = await app.inject({
+      method: 'POST', url: '/api/chat/ask', headers,
+      payload: { revision, messages: [{ role: 'user', text: 'Connect Google Ads' }] },
+    });
+    expect(next.statusCode).toBe(200);
+    const restored = await app.inject({ method: 'GET', url: '/api/chat', headers });
+    expect(restored.json().messages[0]).toEqual({ role: 'user', text: 'Connect Google Ads' });
+    await app.close();
+  });
+
   it('refuses a write tool and bills a live turn at four times the serve cost', async () => {
     expect(await runChatTool('launch_campaign', readers)).toMatch(/read-only/i);
     expect(await runChatTool('pause_campaign', readers)).toMatch(/Nothing was spent/);
@@ -86,8 +127,20 @@ describe('read-only agent', () => {
     });
     expect(plan.json().plan.dailyBudget).toBe(30);
     expect(plan.json().plan.locations).toEqual(['Fishtown']);
-    expect(plan.json().text).toMatch(/Building actions arrives in the next update/);
+    expect(plan.json().text).toMatch(/Open the campaign draft/);
     expect(plan.json().text).toMatch(/Nothing was created/);
+    const draft = await app.inject({
+      method: 'POST', url: '/api/campaign/draft', headers: { cookie: a.cookie },
+      payload: plan.json().plan,
+    });
+    expect(draft.statusCode).toBe(200);
+    expect(draft.json().spec).toMatchObject({
+      dailyBudget: 30, locations: ['Fishtown'], status: 'PAUSED',
+      adGroups: expect.arrayContaining([
+        expect.objectContaining({ name: expect.stringMatching(/interior painting/i) }),
+        expect.objectContaining({ name: expect.stringMatching(/cabinet painting/i) }),
+      ]),
+    });
     const saved = await store.getUserData(a.id);
     expect((saved.agentIntents as { dailyBudget: number }[])[0]?.dailyBudget).toBe(30);
     expect(saved.miles).toBeUndefined();

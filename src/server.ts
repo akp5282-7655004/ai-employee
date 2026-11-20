@@ -4453,17 +4453,20 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
 
   // ── Launch a Campaign — build a complete Google Ads Search campaign, review
   // every setting, then (only on explicit approve) run the live write-chain. ──
-  app.post<{ Body: { goal?: string; dailyBudget?: number; finalUrl?: string; locations?: string[] } }>('/api/campaign/draft', async (req, reply) => {
+  app.post<{ Body: { goal?: string; dailyBudget?: number; finalUrl?: string; locations?: string[]; services?: string[] } }>('/api/campaign/draft', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
     const p = (data.profile ?? {}) as Record<string, string>;
     const typedBudget = parseBudget(req.body?.dailyBudget, { allowZero: true });
     if (!typedBudget.ok) return reply.code(400).send({ error: typedBudget.error, field: 'dailyBudget' });
-    const ctx = { business: p.businessName, trade: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), services: p.services, offers: p.currentOffers, radiusMiles: Number(p.radiusMiles) || undefined, hours: { startHour: hourOf(p.openHour), endHour: hourOf(p.closeHour) } };
+    const services = Array.isArray(req.body?.services)
+      ? req.body.services.filter((service) => typeof service === 'string').slice(0, 12).map((service) => service.trim().slice(0, 100)).filter(Boolean)
+      : [];
+    const ctx = { business: p.businessName, trade: p.industry, city: (p.serviceAreas || '').split(',')[0]?.trim(), services: services.join(', ') || p.services, offers: p.currentOffers, radiusMiles: Number(p.radiusMiles) || undefined, hours: { startHour: hourOf(p.openHour), endHour: hourOf(p.closeHour) } };
     const spec = buildCampaignSpec({ goal: req.body?.goal, dailyBudget: typedBudget.value > 0 ? typedBudget.value : undefined, finalUrl: req.body?.finalUrl || p.website, locations: req.body?.locations }, ctx);
     let gadsConnected = false;
-    try { gadsConnected = (await accountsList(u.id)).some((a) => a.app === 'google_ads'); } catch { /* none */ }
+    try { gadsConnected = (await accountsList(u.id)).some((a) => a.app === 'google_ads' && a.healthy); } catch { /* none */ }
     const warnings = financingWarnings(spec.adGroups.flatMap((g) => [...g.rsa.headlines, ...g.rsa.descriptions]).join(' \n '));
     return { ok: true, spec, summary: campaignSummary(spec), gadsConnected, warnings };
   });
@@ -6410,26 +6413,40 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   app.get('/api/chat', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    const data = await authStore.getUserData(u.id);
-    const cleaned = scrubStoredMessages(data.chat);
-    if (cleaned.changed) {
-      data.chat = cleaned.messages;
-      await authStore.setUserData(u.id, data);
+    let data = await authStore.getUserData(u.id);
+    if (scrubStoredMessages(data.chat).changed) {
+      data = await authStore.mutateUserData(u.id, (current) => {
+        current.chat = scrubStoredMessages(current.chat).messages;
+      });
     }
-    return { messages: cleaned.messages };
+    return { messages: scrubStoredMessages(data.chat).messages, revision: data.chatRevision ?? null };
   });
-  app.put('/api/chat', async (req, reply) => {
+  app.put<{ Body: { messages?: unknown[]; revision?: string | null } }>('/api/chat', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
-    const data = await authStore.getUserData(u.id);
-    const msgs = (req.body as { messages?: unknown[] })?.messages ?? [];
+    const msgs = req.body?.messages;
     const cleaned = scrubStoredMessages(Array.isArray(msgs) ? msgs : []).messages;
-    const existing = scrubStoredMessages(data.chat).messages;
-    // A refresh used to PUT an empty or not-yet-finished log and erase the thread.
-    if ((cleaned.length === 0 || isStoredPrefix(cleaned, existing)) && existing.length > 0) return { ok: true, kept: true };
-    data.chat = cleaned;
-    await authStore.setUserData(u.id, data);
-    return { ok: true };
+    let kept = false;
+    await authStore.mutateUserData(u.id, (data) => {
+      const existing = scrubStoredMessages(data.chat).messages;
+      // Old tabs and refreshes may still try to write a partial or obsolete log.
+      kept = (req.body?.revision ?? null) !== (data.chatRevision ?? null)
+        || (existing.length > 0 && (cleaned.length === 0 || isStoredPrefix(cleaned, existing)));
+      if (!kept) data.chat = cleaned;
+    });
+    return kept ? { ok: true, kept } : { ok: true };
+  });
+  app.delete<{ Body: { revision?: string | null } }>('/api/chat', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const revision = newToken();
+    const saved = await authStore.mutateUserData(u.id, (data) => {
+      if ((req.body?.revision ?? null) !== (data.chatRevision ?? null)) return;
+      data.chat = [];
+      data.chatRevision = revision;
+    });
+    if (saved.chatRevision !== revision) return reply.code(409).send({ error: 'Chat history changed. Reload chat and try again.' });
+    return { ok: true, revision };
   });
 
   // Honest integration status — the Integrations page reads this instead of
@@ -8574,7 +8591,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   });
 
   // Chat with Miles. Every turn gets this tenant's current account snapshot.
-  app.post<{ Body: { messages?: Array<{ role?: string; text?: string }>; mode?: string } }>('/api/chat/ask', async (req, reply) => {
+  app.post<{ Body: { messages?: Array<{ role?: string; text?: string }>; mode?: string; revision?: string | null } }>('/api/chat/ask', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
     const pace = chatByUser.check(u.id);
@@ -8583,24 +8600,26 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const messages = req.body?.messages ?? [];
     const question = [...messages].reverse().find((message) => message?.role === 'user' && message.text?.trim())?.text?.trim() || '';
     const before = await authStore.getUserData(u.id);
+    const revision = before.chatRevision ?? null;
+    if ((req.body?.revision ?? null) !== revision) return reply.code(409).send({ error: 'Chat history changed. Reload chat and try again.' });
     const afford = canAfford(before, 'chat');
     // A charge happens only after a model turn reports a serve cost. Reads and
     // the connect button never call the model, so an empty balance does not
     // replace them with the no-credits notice.
     const remember = async (text: string, action: unknown) => {
-      const saved = await authStore.getUserData(u.id);
-      const prior = scrubStoredMessages(saved.chat).messages;
       const user = scrubAssistantText(question);
       const reply = scrubAssistantText(text);
       const act = sanitizeConnectAction(action);
-      const next: StoredChatMessage[] = [...prior];
-      const last = next[next.length - 1];
-      if (user && !(last && last.role === 'user' && last.text === user)) next.push({ role: 'user', text: user });
-      const row: StoredChatMessage = { role: 'emp', text: reply };
-      if (act) row.action = act;
-      if (row.text || act) next.push(row);
-      saved.chat = next.slice(-200);
-      await authStore.setUserData(u.id, saved);
+      await authStore.mutateUserData(u.id, (saved) => {
+        if ((saved.chatRevision ?? null) !== revision) return;
+        const next = scrubStoredMessages(saved.chat).messages;
+        const last = next[next.length - 1];
+        if (user && !(last && last.role === 'user' && last.text === user)) next.push({ role: 'user', text: user });
+        const row: StoredChatMessage = { role: 'emp', text: reply };
+        if (act) row.action = act;
+        if (row.text || act) next.push(row);
+        saved.chat = next.slice(-200);
+      });
     };
     if (!afford.ok && !answersWithoutModel(question)) {
       // A paused or ended plan keeps the payment message. A new account with
@@ -8623,13 +8642,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       readers: chatReadersFor(u.id),
       allowModel: afford.ok,
     });
-    const saved = await authStore.getUserData(u.id);
-    if (out.intent) {
-      const prior = Array.isArray(saved.agentIntents) ? saved.agentIntents as unknown[] : [];
-      saved.agentIntents = [{ ...out.intent, at: new Date().toISOString(), text: question }, ...prior].slice(0, 20);
+    const usage = afford.ok && out.usage.serveUsd > 0 ? out.usage : null;
+    if (out.intent || usage) {
+      await authStore.mutateUserData(u.id, (saved) => {
+        if (out.intent && (saved.chatRevision ?? null) === revision) {
+          const prior = Array.isArray(saved.agentIntents) ? saved.agentIntents as unknown[] : [];
+          saved.agentIntents = [{ ...out.intent, at: new Date().toISOString(), text: question }, ...prior].slice(0, 20);
+        }
+        if (usage) chargeCredits(saved, 'chat', 'Miles agent', new Date(), usage);
+      });
     }
-    if (afford.ok && out.usage && out.usage.serveUsd > 0) chargeCredits(saved, 'chat', 'Miles agent', new Date(), out.usage);
-    if (out.intent || (afford.ok && out.usage && out.usage.serveUsd > 0)) await authStore.setUserData(u.id, saved);
     if (out.live) await meterUser(u.id, 'text');
     const text = scrubAssistantText(out.text);
     const action = sanitizeConnectAction(out.action);

@@ -1,6 +1,5 @@
 /**
- * Pull a campaign request out of plain speech. This does not create,
- * launch, or spend. Phase 2 is what would run a saved intent.
+ * Pull a campaign request out of plain speech for the owner to review.
  */
 
 export interface AgentIntent {
@@ -32,8 +31,9 @@ export function parseActionIntent(text: string): AgentIntent | null {
   const raw = text.trim();
   if (!ACTION.test(raw) || !ADS.test(raw)) return null;
   const channel = /\bmeta\b|\bfacebook\b/i.test(raw) && !/\bgoogle\b/i.test(raw) ? 'meta' : (/\bgoogle\b/i.test(raw) ? 'google_ads' : null);
-  const money = raw.match(/\$(\d+(?:\.\d+)?)/) || raw.match(/\b(\d+(?:\.\d+)?)\s*(?:dollars?\s*)?(?:a|per)\s*day\b/i);
-  const dailyBudget = money ? Number(money[1]) : null;
+  const money = raw.match(/(?:^|[\s(])\$?(\d+(?:\.\d+)?)\s*(?:dollars?\s*)?(?:(?:a|per)\s+|\/\s*)day\b/i);
+  const amount = money ? Number(money[1]) : 0;
+  const dailyBudget = Number.isFinite(amount) && amount > 0 ? amount : null;
   const place = raw.match(/\b(?:for|in)\s+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)(?:\s+at\b|\s+for\b|,|\.)/);
   const locations = place?.[1] ? [place[1].trim()] : [];
   const services = servicesFrom(raw);
@@ -63,7 +63,9 @@ export function intentReply(intent: AgentIntent, business: string): { text: stri
   const text = [
     `Here is the plan I heard for ${name}. Nothing was created and nothing was spent.`,
     `${channel} for ${intent.locations.join(', ')}, $${intent.dailyBudget} a day, covering ${services}.`,
-    'Building actions arrives in the next update.',
+    intent.channel === 'google_ads'
+      ? 'Open the campaign draft to review the settings before approving a paused build.'
+      : 'Open the Facebook campaign builder to review what you can create.',
   ].join(' ');
   return { ready: true, text };
 }
