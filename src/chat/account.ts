@@ -18,6 +18,8 @@ function dollars(n: number): string {
 export function asksOwnerStatus(text: string): boolean {
   const q = text.trim().toLowerCase();
   if (/^(what'?s|whats|what is|what are) (currently )?(connected|hooked up)\b/.test(q)) return true;
+  if (/\b(which|what)( one)? of (my )?(integrations|tools|apps|accounts)\b/.test(q) && /\bconnected\b/.test(q)) return true;
+  if (/\b(integrations|tools|apps) (that are |are )?connected\b/.test(q)) return true;
   if (/^is [\w\s]+ connected\??$/.test(q)) return true;
   if (/\b(how many credits|credit balance|credits do i have|my credits)\b/.test(q)) return true;
   if (/\b(daily cap|monthly ceiling|my caps|spend cap)\b/.test(q)) return true;
@@ -52,10 +54,13 @@ export function ownerStatusAnswer(snapshot: AccountSnapshot, question: string): 
 
 function countRule(facts: AccountFacts): string {
   const line = unlockLine(facts);
+  const unlocked = facts.launchGranted || facts.unlockConnected >= facts.unlockRequired
+    ? ' $100 in credits is unlocked.'
+    : '';
   const extra = facts.connectedNames.filter((name) => !facts.unlockNames.includes(name));
-  if (!extra.length) return line;
+  if (!extra.length) return `${line}${unlocked}`.trim();
   const verb = extra.length === 1 ? 'is connected and does not count' : 'are connected and do not count';
-  return `${line} ${extra.join(' and ')} ${verb} toward the ${facts.unlockRequired}.`;
+  return `${line}${unlocked} ${extra.join(' and ')} ${verb} toward the ${facts.unlockRequired}.`.trim();
 }
 
 function connectionAnswer(facts: AccountFacts): string {

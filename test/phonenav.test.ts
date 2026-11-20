@@ -82,6 +82,7 @@ describe('phone navigation', () => {
     const reports = page.locator('#nav a[data-page="reports"]');
     await reports.locator('xpath=ancestor::div[contains(@class,"navgroup")][1]/button[contains(@class,"navhead")]').tap();
     await expect.poll(() => page.locator('.side.open').count()).toBe(1);
+    await expect.poll(() => page.locator('.page.on').first().getAttribute('id')).toBe('page-int');
     await expect.poll(() => reports.isVisible()).toBe(true);
     await reports.tap();
     await expect.poll(() => page.locator('.page.on').first().getAttribute('id')).toBe('page-reports');

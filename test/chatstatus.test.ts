@@ -61,8 +61,12 @@ describe('one connection list', () => {
     expect(google).toMatch(/Google Ads is connected/);
     expect(google).toMatch(/Google Analytics is connected/);
     expect(google).toMatch(/Google Business Profile is not connected/);
-    expect(listed).not.toMatch(/unlock/);
-    expect(google).not.toMatch(/unlock/);
+    expect(listed).toMatch(/\$100 in credits is unlocked/);
+    expect(listed).not.toMatch(/connect \d+ more to unlock/);
+    const which = ownerStatusAnswer(snapshot, 'Which of my integrations are connected?');
+    expect(which).toBe(listed);
+    expect(which).toMatch(/Google Analytics, Google Ads, GoHighLevel and Website are connected/);
+    expect(which).toMatch(/You have 3 of 3 tools connected: Google Ads, GoHighLevel, Website/);
     expect(milesSystemPrompt(snapshot)).toMatch(/no limit of five tools/);
     expect(milesSystemPrompt(snapshot)).not.toMatch(/connect up to five tools/i);
   });

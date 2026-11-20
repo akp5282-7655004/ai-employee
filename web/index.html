@@ -232,6 +232,11 @@
      bottom so it stays reachable however long the list above it gets. */
   .side .acct{position:sticky;bottom:0;z-index:2;margin:6px 0 0;background:var(--card);
     box-shadow:0 -10px 14px -10px rgba(0,0,0,.14);}
+  @media (max-width:760px){
+    .side{overflow:hidden;}
+    .side .nav{flex:1;min-height:0;overflow-y:auto;padding-bottom:12px;}
+    .side .acct{position:static;flex:none;}
+  }
   .pill{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;color:var(--muted);font-size:13px;cursor:pointer;}
   .pill:hover{background:var(--panel-2);color:var(--ink);}
   .playbook .em{font-size:15px;}
@@ -2509,6 +2514,13 @@ function openNavGroupFor(id){
 // changes on the first click (no need to then click the first child separately).
 document.querySelectorAll('#nav .navhead').forEach(h=>h.onclick=()=>{
   const g=h.closest('.navgroup');
+  // On a phone the heading only opens the group. Navigating on that tap hid the page the owner still had to pick.
+  if(window.innerWidth<=760){
+    const open=g.classList.contains('open');
+    document.querySelectorAll('#nav .navgroup').forEach(other=>{ if(other!==g) other.classList.remove('open'); });
+    g.classList.toggle('open', !open);
+    return;
+  }
   const first=g.querySelector('.navkids a[data-page]');
   if(first) setPage(first.dataset.page);
 });
@@ -3836,6 +3848,14 @@ function trackingMethodLabel(method){
   if(method==='purchase') return 'purchase';
   return method ? String(method).replace(/_/g,' ') : '';
 }
+function campaignIsEnabled(miles){ return !!(miles && miles.activation==='enabled'); }
+function revertToPausedButton(miles, note, refresh){
+  if(!campaignIsEnabled(miles)) return null;
+  const back=el('button','md-ghost','Revert to paused');
+  back.type='button';
+  back.onclick=async()=>{ const r=await milesPost(back, note, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r && typeof refresh==='function') await refresh(); };
+  return back;
+}
 function trackingProofRow(miles, refresh){
   const row=el('div','md-track');
   const proof=miles&&miles.trackingProof;
@@ -3873,11 +3893,11 @@ function renderMilesCompact(box, d){
   const status=el('span','appsub',(spec.name||'Google plan')+' · $'+(spec.dailyBudget||0)+'/day · '+(d.activation||'not created'));
   bar.append(status);
   const kill=el('button',null, d.caps&&d.caps.paused?'Resume':'Pause all'); kill.style.cssText='border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;background:var(--panel)';
-  const back=el('button',null,'Revert to paused'); back.style.cssText=kill.style.cssText;
+  const back=revertToPausedButton(d, note, refreshMilesSurface); if(back) back.style.cssText=kill.style.cssText;
   const edit=el('a',null,'Edit setup in Profile'); edit.href='#'; edit.style.cssText='font-size:13px;font-weight:700'; edit.onclick=(e)=>{ e.preventDefault(); setPage('profile'); };
-  bar.append(kill, back, edit);
+  bar.append(kill); if(back) bar.append(back); bar.append(edit);
+  if(d.activation==='paused') bar.append(el('span','appsub','Campaign is paused.'));
   kill.onclick=async()=>{ const r=await milesPost(kill, note, 'Pausing...', '/api/miles/kill', {paused:!(d.caps&&d.caps.paused)}); if(r) await refreshMilesSurface(); };
-  back.onclick=async()=>{ const r=await milesPost(back, note, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) await refreshMilesSurface(); };
   wrap.append(bar, note);
   box.append(wrap);
 }
@@ -3975,10 +3995,9 @@ function renderMilesHome(box, d, place, opts){
     const kill=el('button','md-ghost', d.caps&&d.caps.paused?'Resume':'Pause all');
     kill.type='button';
     kill.onclick=async()=>{ const r=await milesPost(kill, planNote, 'Pausing...', '/api/miles/kill', {paused:!(d.caps&&d.caps.paused)}); if(r) await refreshMilesSurface(); };
-    const back=el('button','md-ghost','Revert to paused');
-    back.type='button';
-    back.onclick=async()=>{ const r=await milesPost(back, planNote, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) await refreshMilesSurface(); };
-    row.append(start, kill, back, trackingProofRow(d, refreshMilesSurface));
+    const back=revertToPausedButton(d, planNote, refreshMilesSurface);
+    row.append(start, kill); if(back) row.append(back); row.append(trackingProofRow(d, refreshMilesSurface));
+    if(d.activation==='paused') plan.append(el('p','appsub','This campaign is paused. Nothing is spending.'));
     plan.append(row, planNote);
     box.append(plan);
   }
@@ -4393,7 +4412,7 @@ function moneyNum(value){
   return Number.isFinite(n)?n:null;
 }
 function moneyLabel(n){
-  if(n==null) return 'Not tracked';
+  if(n==null) return 'Not tracked yet';
   return '$'+Math.round(n).toLocaleString('en-US');
 }
 function drawRevenueGauge(svg, booked, goal){
@@ -4754,27 +4773,27 @@ function renderOverview(d, miles, op, setup){
     const block=el('div'); block.style.marginTop='10px';
     const head=el('div','md-row');
     const val=el('span','md-num', value); val.style.whiteSpace='nowrap';
-    if(value==='Not tracked'){ val.classList.add('muted'); val.style.cssText='white-space:nowrap;font-size:14px;font-weight:650;letter-spacing:0;text-transform:none'; }
+    if(value==='Not tracked yet'){ val.classList.add('muted'); val.style.cssText='white-space:nowrap;font-size:14px;font-weight:650;letter-spacing:0;text-transform:none'; }
     head.append(el('span',null,label), val);
     block.append(head);
     if(typeof value==='string' && /%$/.test(value)){ const b=el('div','md-bar'); const i=el('i'); i.style.width=value; b.append(i); block.append(b); }
     return block;
   };
-  rateCard.append(rateRow('Lead answer rate', leadAnswer==null?'Not tracked':leadAnswer+'%'));
-  rateCard.append(rateRow('Booking rate', 'Not tracked'));
-  rateCard.append(rateRow('Close rate', 'Not tracked'));
+  rateCard.append(rateRow('Lead answer rate', leadAnswer==null?'Not tracked yet':leadAnswer+'%'));
+  rateCard.append(rateRow('Booking rate', 'Not tracked yet'));
+  rateCard.append(rateRow('Close rate', 'Not tracked yet'));
   rates.append(rateCard);
   const mini=el('div','dv2-kpis dv2-mini');
   const miniTile=(label, value, live)=>{
     const c=el('div','dv2-kpi');
     const k=el('div','k'); k.append(document.createTextNode(label+' ')); if(live) k.append(mdLive());
-    const v=el('div', value==='Not tracked'?'v muted':'v', value);
+    const v=el('div', value==='Not tracked yet'?'v muted':'v', value);
     c.append(k, v);
     mini.append(c);
   };
-  miniTile('Response time', (d.speedToLead&&d.speedToLead.avgResponse)||'Not tracked', !!(d.speedToLead&&d.speedToLead.avgResponse));
-  miniTile('Reviews', (d.reviews&&d.reviews.hasData)?String(d.reviews.count):'Not tracked', !!(d.reviews&&d.reviews.hasData));
-  miniTile('Avg rating', (d.reviews&&d.reviews.avg!=null)?String(d.reviews.avg):'Not tracked', !!(d.reviews&&d.reviews.hasData));
+  miniTile('Response time', (d.speedToLead&&d.speedToLead.avgResponse)||'Not tracked yet', !!(d.speedToLead&&d.speedToLead.avgResponse));
+  miniTile('Reviews', (d.reviews&&d.reviews.hasData)?String(d.reviews.count):'Not tracked yet', !!(d.reviews&&d.reviews.hasData));
+  miniTile('Avg rating', (d.reviews&&d.reviews.avg!=null)?String(d.reviews.avg):'Not tracked yet', !!(d.reviews&&d.reviews.hasData));
   rates.append(mini);
   numbers.append(rates);
   const unanswered=(d.leads&&d.leads.hasData)?(d.leads.uncontacted||0)+' of '+d.leads.count+' leads in this window were not marked contacted.':'Answer rate, booking rate, and close rate appear when those counts are live.';
@@ -5055,12 +5074,12 @@ function renderAccountOps(miles, connections){
   const acts=el('div'); acts.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px';
   const note=el('div','appsub','');
   const kill=el('button','md-ghost', miles&&miles.caps&&miles.caps.paused?'Resume':'Pause all');
-  const back=el('button','md-ghost','Revert to paused');
+  const back=revertToPausedButton(miles, note, loadProfile);
   const edit=el('button','md-link','Edit setup');
   kill.onclick=async()=>{ const r=await milesPost(kill, note, 'Pausing...', '/api/miles/kill', {paused:!(miles&&miles.caps&&miles.caps.paused)}); if(r) loadProfile(); };
-  back.onclick=async()=>{ const r=await milesPost(back, note, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) loadProfile(); };
   edit.onclick=()=>{ const form=$('#profile-form'); if(form) form.scrollIntoView({behavior:'smooth', block:'start'}); };
-  acts.append(kill, back, edit);
+  acts.append(kill); if(back) acts.append(back); acts.append(edit);
+  if(miles&&miles.activation==='paused') card.append(el('p','appsub','This campaign is paused. Nothing is spending.'));
   card.append(acts, note);
   card.append(el('div','sect-label','CONNECTIONS'));
   (connections||[]).forEach(c=>{
@@ -5566,13 +5585,13 @@ function renderLaunchPage(){
   const band=el('div','ln-setup-actions');
   const acts=el('div','md-actions');
   const kill=el('button','md-ghost', miles.caps&&miles.caps.paused?'Resume':'Pause all');
-  const back=el('button','md-ghost','Revert to paused');
+  const back=revertToPausedButton(miles, note, openLaunch);
   const edit=el('button','md-ghost','Edit setup');
-  kill.type='button'; back.type='button'; edit.type='button';
+  kill.type='button'; edit.type='button';
   kill.onclick=async()=>{ const r=await milesPost(kill, note, 'Pausing...', '/api/miles/kill', {paused:!(miles.caps&&miles.caps.paused)}); if(r) openLaunch(); };
-  back.onclick=async()=>{ const r=await milesPost(back, note, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) openLaunch(); };
   edit.onclick=()=>setPage('profile');
-  acts.append(kill, back, edit);
+  acts.append(kill); if(back) acts.append(back); acts.append(edit);
+  if(miles.activation==='paused') meta.append(el('span','md-legend',' Campaign is paused.'));
   band.append(trackingProofRow(miles, openLaunch), acts);
   setup.append(meta, band);
   box.append(setup);
@@ -9978,7 +9997,15 @@ function reconnectNotice(slugs){
 }
 let CONN_DETAIL={details:[]};
 async function fetchConnDetail(){ if(REMOTE){ try{ CONN_DETAIL = await fetch('/api/connections/detail').then(r=>r.json()); }catch(e){ CONN_DETAIL={details:[]}; } } }
-async function loadIntegrations(){ await fetchConnections(); await fetchConnDetail(); await fetchApps($('#app-search').value); renderInts(); updateConnStat(); }
+async function loadIntegrations(){
+  await fetchConnections();
+  renderInts();
+  updateConnStat();
+  await Promise.all([
+    fetchConnDetail().then(()=>{ renderInts(); updateConnStat(); }),
+    fetchApps($('#app-search').value).then(()=>{ renderInts(); }),
+  ]);
+}
 let searchT; $('#app-search').addEventListener('input',()=>{ clearTimeout(searchT); searchT=setTimeout(async()=>{ await fetchApps($('#app-search').value); renderInts(); }, 250); });
 // Infinite scroll: load more apps as you reach the bottom of the Integrations catalog.
 document.querySelector('.main').addEventListener('scroll', async (e)=>{
@@ -10880,12 +10907,12 @@ function renderBusiness(box, view, miles){
   const acts=el('div','md-actions');
   const paused=!!((miles.caps&&miles.caps.paused)||view.paused);
   const kill=el('button','md-ghost', paused?'Resume':'Pause all'); kill.type='button';
-  const back=el('button','md-ghost','Revert to paused'); back.type='button';
+  const back=revertToPausedButton(miles, note, loadProfile);
   const edit=el('button','md-link','Edit setup'); edit.type='button';
   kill.onclick=async()=>{ const r=await milesPost(kill, note, paused?'Resuming...':'Pausing...', '/api/miles/kill', {paused:!paused}); if(r) await loadProfile(); };
-  back.onclick=async()=>{ const r=await milesPost(back, note, 'Reverting...', '/api/miles/revert', {confirm:true}); if(r) await loadProfile(); };
   edit.onclick=()=>openBizEdit('goals','goal');
-  acts.append(kill, back, edit);
+  acts.append(kill); if(back) acts.append(back); acts.append(edit);
+  if(miles&&miles.activation==='paused') setup.append(el('p','appsub','This campaign is paused. Nothing is spending.'));
   setup.append(acts);
   box.append(setup, renderHero(view));
   const cols=el('div','yb-cols');
