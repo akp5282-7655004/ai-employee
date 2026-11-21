@@ -14,6 +14,24 @@ export const TIKTOK_CAMPAIGN_MIN = 50;
 export const TIKTOK_ADGROUP_MIN = 20;
 export const AGE_CONTROL = 25;
 
+export type AbPlan = 'starter' | 'growth' | 'scale';
+
+/** A/B variations allowed on top of the primary ad. No plan on the account defaults to 1. */
+export function abVariationLimit(plan?: AbPlan | null): number {
+  if (plan === 'starter') return 0;
+  if (plan === 'scale') return 3;
+  return 1;
+}
+
+/** The paid plan only counts when Starter, Growth, or Scale is actually on the account. */
+export function abPlanFromBilling(billing?: { band?: string; status?: string } | null): AbPlan | null {
+  const status = billing?.status;
+  const live = status === 'active' || status === 'trialing' || status === 'past_due';
+  if (!live) return null;
+  if (billing?.band === 'starter' || billing?.band === 'growth' || billing?.band === 'scale') return billing.band;
+  return null;
+}
+
 export type ReviewState = 'pass' | 'warn' | 'block';
 
 export interface ReviewItem {
@@ -142,6 +160,8 @@ export interface PaidPlanInput {
   claims?: VerifiedClaims;
   /** Names the owner already saved. Empty means the plan says so and does not invent any. */
   competitors?: string[];
+  /** Paid plan when one is on the account. Unset defaults the A/B allowance to 1 variation. */
+  abPlan?: AbPlan | null;
 }
 
 const SERVICE_QUESTION: Record<string, FormQuestion> = {
@@ -338,6 +358,25 @@ function rankedSegments(trade?: string): Ranked[] {
     .sort((a, b) => demandWeight(b.segment.demand) - demandWeight(a.segment.demand));
 }
 
+function keepAd(angle: PaidAd['angle'], setIndex: number, box: { slots: number; variationsLeft: number; limit: number; plan: AbPlan | null }): { keep: boolean; heldReason?: string } {
+  if (angle === 'offer') {
+    if (box.slots <= 0) return { keep: false, heldReason: 'The daily budget cannot feed the primary ad on this ad set.' };
+    box.slots -= 1;
+    return { keep: true };
+  }
+  if (box.variationsLeft <= 0) {
+    const reason = box.plan === 'starter'
+      ? 'Starter does not include an A/B variation. This message is listed and not created.'
+      : `This plan allows up to ${box.limit} A/B variation${box.limit === 1 ? '' : 's'}. This message is past that.`;
+    return { keep: false, heldReason: reason };
+  }
+  if (setIndex > 0) return { keep: false, heldReason: 'The A/B variation is on the first ad set, so the test changes the message and not the audience.' };
+  if (box.slots <= 0) return { keep: false, heldReason: 'The daily budget cannot feed another ad.' };
+  box.slots -= 1;
+  box.variationsLeft -= 1;
+  return { keep: true };
+}
+
 function buildSets(args: {
   channel: 'meta' | 'tiktok';
   input: PaidPlanInput;
@@ -358,8 +397,8 @@ function buildSets(args: {
   const weights = chosen.map((row) => demandWeight(row.segment.demand));
   const shares = args.daily > 0 ? allocate(args.daily, weights) : chosen.map(() => 0);
   const cpl = playbookCplBand(args.input.trade)?.high ?? 80;
-  const ceiling = adCeiling(args.daily, cpl);
-  const perSet = Math.max(1, Math.floor(ceiling / chosen.length) || 1);
+  const variationLimit = abVariationLimit(args.input.abPlan);
+  const allowance = { slots: adCeiling(args.daily, cpl), variationsLeft: variationLimit, limit: variationLimit, plan: args.input.abPlan ?? null };
   const trade = tradeLabel(args.input.trade);
   const business = plain(args.input.business || trade);
   const offer = plain(args.input.offer || '');
@@ -372,7 +411,6 @@ function buildSets(args: {
 
   const included: PaidAdSet[] = chosen.map((row, index) => {
     const angles: PaidAd['angle'][] = ['offer', 'problem', 'crew'];
-    const running = Math.min(angles.length, perSet);
     const ads: PaidAd[] = angles.map((angle) => {
       const copy = angleCopy({
         angle,
@@ -383,7 +421,7 @@ function buildSets(args: {
         offer,
         financing: !!args.input.financing,
       });
-      const keep = angles.indexOf(angle) < running;
+      const decision = keepAd(angle, index, allowance);
       return {
         name: clip(`${row.segment.name} | ${angle}`, 100),
         angle,
@@ -393,8 +431,8 @@ function buildSets(args: {
         cta: ctaFor(row.segment, args.channel),
         imageUrl: args.image || undefined,
         videoUrl: args.video || undefined,
-        included: keep,
-        heldReason: keep ? undefined : 'This angle stays off the create. The daily budget cannot feed another ad.',
+        included: decision.keep,
+        heldReason: decision.heldReason,
       };
     });
     return {
@@ -459,11 +497,20 @@ function buildElements(args: {
   sets: PaidAdSet[];
   competitors?: string[];
   cpl: number;
+  abPlan?: AbPlan | null;
 }): BuildElement[] {
   const included = args.sets.filter((set) => set.included);
   const ads = included.flatMap((set) => set.ads.filter((ad) => ad.included));
+  const variations = ads.filter((ad) => ad.angle !== 'offer').length;
   const names = (args.competitors || []).map((name) => plain(name)).filter(Boolean).slice(0, 8);
-  const ceiling = adCeiling(args.daily, args.cpl);
+  const limit = abVariationLimit(args.abPlan);
+  const tierLine = args.abPlan === 'starter'
+    ? 'Starter includes no A/B variations.'
+    : args.abPlan === 'growth'
+      ? 'Growth allows up to 1 A/B variation.'
+      : args.abPlan === 'scale'
+        ? 'Scale allows up to 3 A/B variations.'
+        : 'No Starter, Growth, or Scale plan is on this account, so the allowance is 1 variation.';
   const where = args.city || 'the service area';
   const competitorDetail = names.length
     ? `Saved competitor names: ${names.join(', ')}. The messages come from the trade playbook. Miles did not copy their ads and did not invent claims from their names.`
@@ -475,12 +522,12 @@ function buildElements(args: {
     { id: 'creatives', label: 'Creatives', detail: ads.length
       ? `${ads.length} ad${ads.length === 1 ? '' : 's'} in this create. The only difference between them is the message.`
       : 'No ad is included yet. Add the creative the channel requires.' },
-    { id: 'geography', label: 'Geography', detail: included[0]?.locationNote || 'No service area is saved.' },
+    { id: 'geography', label: 'Geography targeting', detail: included[0]?.locationNote || 'No service area is saved.' },
     { id: 'budget', label: 'Budget management', detail: `${args.budgetNote} A later budget change has to stay inside the daily cap and the max percent change. Undo puts the previous amount back. Status is not changed by a budget edit.` },
-    { id: 'ab_test', label: 'A/B test', detail: `One variable at a time: the message (offer, the job itself, or the local crew). Image, audience, and destination stay the same inside an ad set. The learning ceiling at this budget is ${ceiling} ad${ceiling === 1 ? '' : 's'}. This create runs ${ads.length}. That count comes from the ceiling and the three messages the playbook can write. It is not a package size.` },
+    { id: 'ab_test', label: 'A/B test', detail: `${tierLine} This plan creates ${variations} of ${limit}. One variable: the message. Image, audience, and destination stay the same.` },
     { id: 'retargeting', label: 'Retargeting', detail: 'Retargeting is part of this build: site visitors, video viewers, and people who opened the form, with past customers excluded once a list is connected. No list is connected, so no retargeting ad set is created and no audience is invented.' },
     { id: 'form', label: 'Landing page and lead form', detail: args.destinationNote },
-    { id: 'report', label: 'Reporting', detail: 'Weekly check after a campaign is turned on: leave it alone for the first three days, then read cost per lead. Monthly: the marketing report on Reports, with spend and leads for this channel. Those reads do not change the budget. A change still needs your approval.' },
+    { id: 'report', label: 'Monthly performance report', detail: 'The monthly marketing report on Reports shows spend and leads for this channel. After the campaign is turned on, the weekly check leaves it alone for three days, then reads cost per lead. Those reads do not change the budget.' },
   ];
 }
 
@@ -545,6 +592,7 @@ export function buildMetaPlan(input: PaidPlanInput): { plan: MetaPlan; checklist
       sets,
       competitors: input.competitors,
       cpl: playbookCplBand(input.trade)?.high ?? 80,
+      abPlan: input.abPlan,
     }),
   };
   if (wantSite && !pixel) {
@@ -599,6 +647,7 @@ export function buildTikTokPlan(input: PaidPlanInput): { plan: TikTokPlan; check
       sets,
       competitors: input.competitors,
       cpl: playbookCplBand(input.trade)?.high ?? 80,
+      abPlan: input.abPlan,
     }),
   };
   return { plan, checklist: reviewTikTokPlan(plan, { dailyCap: input.dailyCap, monthlyCap: input.monthlyCap, financing: input.financing, cpl: playbookCplBand(input.trade)?.high ?? 80 }) };

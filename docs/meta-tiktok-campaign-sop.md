@@ -78,7 +78,7 @@ Names:
 - Meta ad set / TikTok ad group: `{Trade} | {Segment} | {ZIPs or radius}`
 - Ad: `{Segment} | {Angle}`
 
-The test changes one variable: the message. The three messages the playbook can write are the offer, the job itself, and the local crew. Image, audience, and destination stay the same inside an ad set. How many of those messages are created is the learning ceiling `(daily budget × 14) / (2 × the playbook's high cost per lead)`, split across the ad sets the budget can feed. A small budget may create one message. A larger budget may create all three. That count is not a package size, and Miles does not offer a none / 1 / 3 variation menu. Extra messages past the ceiling are listed and not created. The two-campaign testing and scaling split in the decision system needs a much larger budget, so Miles does not use it here.
+The primary message is always created. Extra messages are A/B variations, and the allowance comes from the account plan: Starter none, Growth up to 1, Scale up to 3. If no Starter, Growth, or Scale plan is on the account, the allowance is 1 variation. "Up to" also stops at the learning ceiling `(daily budget × 14) / (2 × the playbook's high cost per lead)`. The test changes one variable, the message. Image, audience, and destination stay the same. The variation sits on the first ad set so a second ad set does not also change the audience. The playbook can write two alternate messages, so Scale's allowance of 3 includes those two and says the third is not available.
 
 **Meta creative.** One https image can be reused. The review warns when every ad shares it. Primary text, headline, and description come from the trade and the offer. No "best", no star rating, no "licensed and insured" unless the profile says so. CTA is Get Quote, or Call Now on an emergency segment that is actually included.
 
@@ -90,18 +90,18 @@ The test changes one variable: the message. The three messages the playbook can 
 
 ## What every build includes
 
-These ten elements are on every Meta plan and every TikTok plan. None of them is turned on or off by Starter, Growth, Scale, or any other package.
+Every Meta plan and every TikTok plan states these items. A/B testing is the one item that follows the paid plan.
 
 1. Strategy summary. Who the campaign is for, the leads objective, the budget, and where the click goes.
-2. Competitor research input. Names the owner already saved. If none are saved, the plan says so and does not invent competitors or copy their ads.
-3. Campaign creation. The paused campaign, ad sets or ad groups, and ads.
-4. Creatives. The messages above. One variable at a time.
-5. Geography. Service-area ZIPs, or the city plus 15 miles.
-6. Budget management. Where the daily amount sits, the cap, and that a later change is a separate approval with undo.
-7. A/B testing. Message only. The variant count follows the learning ceiling and the playbook, not a tier.
-8. Retargeting. Named in the plan (visitors, video viewers, form opens, past customers excluded). Not created until a real list is connected. Miles does not invent the audience.
-9. Landing page or lead form. Meta creates the higher-intent form. TikTok sends people to the website and prints the same questions for that page.
-10. Reporting. A weekly read after the campaign is turned on, and the monthly marketing report. Neither read changes spend by itself.
+2. Competitor research. Names the owner already saved. If none are saved, the plan says so and does not invent competitors or copy their ads.
+3. Monthly performance report. Reports shows spend and leads for the channel. A weekly check, after the campaign is turned on, does not change the budget by itself.
+4. Campaign creation. The paused campaign, ad sets or ad groups, and ads.
+5. Creatives. The primary message, plus any A/B messages the allowance includes.
+6. Geography targeting. Service-area ZIPs, or the city plus 15 miles.
+7. Budget management. Where the daily amount sits, the cap, and that a later change is a separate approval with undo.
+8. A/B testing. Starter: no variations. Growth: up to 1. Scale: up to 3. No plan on the account: 1 variation. One variable, the message.
+
+The lead form or landing page, and retargeting, stay on the plan as well. Retargeting is named and is not created until a real list is connected.
 
 ## 4. Pre-launch review
 
