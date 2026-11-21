@@ -98,6 +98,7 @@ import { buildMarketingReport, reportRangeId, reportWindow } from './reports/mar
 import { activePlaybooks } from './agents/activeplaybooks.js';
 import { generateText, textLlmReady } from './llm/text.js';
 import { answerChat } from './chat/ask.js';
+import { confirmsLead, draftChatAction, type ActAccount, type ChatApproval } from './chat/act.js';
 import { answersWithoutModel, asksSpendWork, spendWorkReply } from './chat/account.js';
 import { isStoredPrefix, sanitizeConnectAction, scrubAssistantText, scrubStoredMessages, type StoredChatMessage } from './chat/connect.js';
 import { fallbackAnswer } from './chat/prompt.js';
@@ -4105,6 +4106,35 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const id = String(req.body?.id || '');
     const source = req.body?.source === 'run' ? 'run' : 'automation';
     const data = await authStore.getUserData(u.id);
+    const chatUndo = (Array.isArray(data.chatUndos) ? data.chatUndos : []).find((row) => (row as { id?: string }).id === id) as { id: string; kind?: string; previousDaily?: number; keywords?: string[]; previousStatus?: 'PAUSED' | 'ENABLED'; campaignResource?: string } | undefined;
+    if (chatUndo && source !== 'run') {
+      const miles = milesOf(data);
+      const resource = chatUndo.campaignResource || miles.campaignResource || '';
+      let note = 'Marked as reverted. Google Ads was not changed.';
+      if (connector.name !== 'mock' && resource) {
+        if ((chatUndo.kind === 'pause_campaign' || chatUndo.kind === 'resume_campaign') && chatUndo.previousStatus && connector.setGoogleCampaignStatus) {
+          const gate = runSopGate(chatUndo.previousStatus === 'ENABLED' ? 'campaign_enable' : 'campaign_pause', { mode: miles.bundle?.setup.mode || 'hybrid', tracking: data.trackingProof as { leadConversion?: boolean } | undefined });
+          if (gate.disposition !== 'block') {
+            const turned = await connector.setGoogleCampaignStatus(u.id, { campaignResource: resource, status: chatUndo.previousStatus, adGroupResources: miles.adGroupResources, adResources: miles.adResources });
+            note = turned.note;
+            miles.activation = chatUndo.previousStatus === 'ENABLED' ? 'enabled' : 'paused';
+          } else note = gate.blocks.join(' ');
+        } else if (chatUndo.kind === 'set_budget' && connector.updateGoogleDailyBudget && (chatUndo.previousDaily || 0) > 0) {
+          const wrote = await connector.updateGoogleDailyBudget(u.id, { campaignResource: resource, dailyBudget: chatUndo.previousDaily! });
+          note = wrote.note;
+          if (wrote.ok && miles.bundle?.spec) miles.bundle.spec.dailyBudget = chatUndo.previousDaily!;
+        } else if (chatUndo.kind === 'add_negatives' && connector.addGoogleNegativeKeywords && chatUndo.keywords?.length) {
+          const wrote = await connector.addGoogleNegativeKeywords(u.id, { campaignResource: resource, keywords: chatUndo.keywords, remove: true });
+          note = wrote.note;
+        }
+      }
+      data.miles = miles;
+      data.chatUndos = (data.chatUndos as { id?: string }[]).filter((row) => row.id !== id);
+      const state = automationState(data);
+      data.automation = { ...state, log: state.log.map((row) => row.id === id ? { ...row, effect: 'reverted' as const, reason: note } : row) };
+      await authStore.setUserData(u.id, data);
+      return { ok: true, reason: note };
+    }
     if (source === 'run') {
       const runs = ((data.agentRuns as { id?: string }[]) ?? []);
       if (!runs.some((run) => run.id === id)) return reply.code(400).send({ ok: false, error: 'That activity is not on this account.' });
@@ -8590,6 +8620,38 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     };
   });
 
+  const chatActAccount = (data: Record<string, unknown>): ActAccount => {
+    const profile = (data.profile ?? {}) as Record<string, string>;
+    const miles = milesOf(data);
+    const setup = miles.bundle?.setup;
+    const caps = setup?.caps;
+    const spec = miles.bundle?.spec;
+    const channelDaily = miles.bundle?.channels?.find((row) => row.id === 'google')?.daily || 0;
+    const currentDaily = Number(spec?.dailyBudget) || channelDaily || Number(profile.dailyBudget) || 0;
+    const proof = (data.trackingProof ?? {}) as { leadConversion?: boolean };
+    const mode = setup?.mode === 'automate' || setup?.mode === 'manual' || setup?.mode === 'hybrid' ? setup.mode : 'hybrid';
+    return {
+      business: profile.businessName || setup?.businessName || 'this account',
+      trade: profile.industry || miles.bundle?.profile?.industry || '',
+      services: profile.services || miles.bundle?.profile?.services || '',
+      serviceAreas: profile.serviceAreas || setup?.location || '',
+      website: profile.website || setup?.website || miles.bundle?.profile?.website || '',
+      phone: profile.phone || miles.bundle?.profile?.phone || '',
+      hours: profile.hours || miles.bundle?.hours || '',
+      mode,
+      kill: caps?.paused === true,
+      dailyCap: caps?.dailyBudget || 0,
+      monthlyCeiling: caps?.monthlyCeiling || 0,
+      maxChangePct: caps?.maxChangePct || 0,
+      currentDaily: currentDaily > 0 ? currentDaily : 0,
+      campaignName: spec?.name || '',
+      campaignResource: miles.campaignResource || '',
+      activation: miles.activation,
+      trackingLead: proof.leadConversion === true,
+      protectTerms: (spec?.adGroups ?? []).flatMap((group) => (group.keywords ?? []).map((keyword) => keyword.text)),
+    };
+  };
+
   // Chat with Miles. Every turn gets this tenant's current account snapshot.
   app.post<{ Body: { messages?: Array<{ role?: string; text?: string }>; mode?: string; revision?: string | null } }>('/api/chat/ask', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -8621,6 +8683,45 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         saved.chat = next.slice(-200);
       });
     };
+    const actAccount = chatActAccount(before);
+    const drafted = draftChatAction(question, actAccount, messages);
+    if (drafted.kind !== 'none') {
+      if (confirmsLead(question)) {
+        const prior = [...messages].reverse().find((message) => message?.role !== 'user' && typeof message?.text === 'string' && message.text.includes('SOP 147 holds the approval card'));
+        if (prior) {
+          await authStore.mutateUserData(u.id, (saved) => {
+            const proof = (saved.trackingProof ?? {}) as { leadConversion?: boolean; ga4Linked?: boolean; method?: string };
+            saved.trackingProof = { ...proof, leadConversion: true, method: proof.method || 'call_or_form' };
+          });
+        }
+      }
+      let approval: ChatApproval | null = null;
+      if (drafted.kind === 'card') {
+        approval = { ...drafted.approval, id: newToken().slice(0, 12) };
+        await authStore.mutateUserData(u.id, (saved) => {
+          const pending = Array.isArray(saved.chatPending) ? saved.chatPending as ChatApproval[] : [];
+          saved.chatPending = [{ ...approval, status: 'pending' }, ...pending].slice(0, 20);
+        });
+      }
+      const plan = drafted.plan ?? null;
+      if (plan) {
+        await authStore.mutateUserData(u.id, (saved) => {
+          const prior = Array.isArray(saved.agentIntents) ? saved.agentIntents as unknown[] : [];
+          saved.agentIntents = [{ channel: 'google_ads', locations: plan.locations, dailyBudget: plan.dailyBudget, services: plan.services, at: new Date().toISOString(), text: question }, ...prior].slice(0, 20);
+        });
+      }
+      await remember(drafted.text, null);
+      return {
+        text: drafted.text,
+        live: false,
+        mode,
+        steps: [],
+        plan,
+        next: null,
+        action: null,
+        approval: approval ? { id: approval.id, title: approval.title, before: approval.before, after: approval.after, dailyCost: approval.dailyCost, lines: approval.lines } : null,
+      };
+    }
     if (!afford.ok && !answersWithoutModel(question)) {
       // A paused or ended plan keeps the payment message. A new account with
       // no credits still gets a snapshot answer, and a tailored note only when
@@ -8665,6 +8766,130 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       next: out.next,
       action,
     };
+  });
+
+  app.post<{ Body: { id?: string; decision?: string } }>('/api/chat/act', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    const id = String(req.body?.id || '');
+    const decision = req.body?.decision === 'approve' ? 'approve' : req.body?.decision === 'cancel' ? 'cancel' : '';
+    if (!id || !decision) return reply.code(400).send({ error: 'Choose Approve or Cancel. Nothing was changed.' });
+    const data = await authStore.getUserData(u.id);
+    const pending = (Array.isArray(data.chatPending) ? data.chatPending : []) as Array<ChatApproval & { status?: string }>;
+    const hit = pending.find((row) => row.id === id);
+    if (!hit || hit.status !== 'pending') return reply.code(400).send({ error: 'That approval is not waiting. Nothing was changed.' });
+    const finish = async (note: string, undo?: { kind: ChatApproval['kind']; previousDaily?: number; keywords?: string[]; previousStatus?: 'PAUSED' | 'ENABLED' }) => {
+      hit.status = decision === 'approve' ? 'done' : 'cancelled';
+      data.chatPending = pending;
+      if (decision === 'approve') {
+        const state = automationState(data);
+        const entry = {
+          id,
+          ts: new Date().toISOString(),
+          skill: 'chat',
+          title: hit.title,
+          effect: 'applied' as const,
+          before: hit.before,
+          after: hit.after,
+          reason: note,
+          suggestedBy: 'Miles',
+        };
+        data.automation = { ...state, log: [entry, ...state.log].slice(0, 200) };
+        appendApproval(data, { id: newToken().slice(0, 10), ts: entry.ts, kind: 'action', actor: u.email, source: 'chat', title: `${hit.title}. ${note}`.slice(0, 180) });
+        if (undo) {
+          const undos = Array.isArray(data.chatUndos) ? data.chatUndos as unknown[] : [];
+          data.chatUndos = [{ id, ...undo, campaignResource: milesOf(data).campaignResource || '' }, ...undos].slice(0, 40);
+        }
+      }
+      await authStore.setUserData(u.id, data);
+      return { ok: decision === 'approve', note };
+    };
+    if (decision === 'cancel') return finish('Cancelled. Nothing was changed.');
+    const miles = milesOf(data);
+    const mode = miles.bundle?.setup.mode || 'hybrid';
+    if (hit.kind === 'create_campaign' && hit.payload.spec) {
+      const spec = hit.payload.spec;
+      const gate = runSopGate('campaign_create', { mode, spec, trade: (data.profile as { industry?: string } | undefined)?.industry, city: spec.locations?.[0], tracking: data.trackingProof as { leadConversion?: boolean } | undefined });
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: u.email, source: 'sop-gate', title: 'campaign_create', detail: formatSopLog(gate) });
+      if (gate.disposition === 'block') return reply.code(400).send({ error: gate.blocks.join(' '), note: 'Nothing was created.' });
+      if (!connector.launchCampaign || connector.name === 'mock') {
+        if (!miles.bundle) return finish('Preview connector. There is no saved Miles plan to attach this to. Nothing was created in Google Ads.');
+        miles.bundle.spec = gate.subject.spec || spec;
+        miles.planApproved = true;
+        miles.approvedPlan = miles.bundle.spec;
+        data.miles = miles;
+        return finish('Preview connector. The paused plan is saved. Nothing was created in Google Ads.');
+      }
+      const targets = connector.listAdTargets ? await connector.listAdTargets(u.id).catch(() => []) : [];
+      if (!targets.length) return finish('Google Ads is not connected. Nothing was created.');
+      const result = await connector.launchCampaign(u.id, gate.subject.spec || spec, targets[0]!.id);
+      if (!result.campaignResource) return finish(result.note || 'Google did not create the campaign. It was not enabled.');
+      miles.campaignResource = result.campaignResource;
+      miles.activation = 'paused';
+      if (miles.bundle) miles.bundle.spec = gate.subject.spec || spec;
+      data.miles = miles;
+      if (hit.payload.goLive && connector.setGoogleCampaignStatus) {
+        const enable = runSopGate('campaign_enable', { mode, spec, tracking: data.trackingProof as { leadConversion?: boolean } | undefined });
+        appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: enable.disposition === 'block' ? 'dismissal' : 'action', actor: u.email, source: 'sop-gate', title: 'campaign_enable', detail: formatSopLog(enable) });
+        if (enable.disposition === 'block') return finish(`Created paused. ${enable.blocks.join(' ')}`);
+        const turned = await connector.setGoogleCampaignStatus(u.id, { campaignResource: result.campaignResource, status: 'ENABLED' });
+        miles.activation = turned.ok ? 'enabled' : 'paused';
+        data.miles = miles;
+        return finish(turned.ok ? `Created, then enabled. ${turned.note}` : `Created paused. ${turned.note}`, { kind: 'resume_campaign', previousStatus: 'PAUSED' });
+      }
+      return finish(result.note || 'Created paused. Nothing is spending.');
+    }
+    if (hit.kind === 'pause_campaign' || hit.kind === 'resume_campaign') {
+      const status = hit.kind === 'pause_campaign' ? 'PAUSED' : 'ENABLED';
+      const gate = runSopGate(status === 'PAUSED' ? 'campaign_pause' : 'campaign_enable', { mode, spec: miles.bundle?.spec, tracking: data.trackingProof as { leadConversion?: boolean } | undefined });
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: u.email, source: 'sop-gate', title: status === 'PAUSED' ? 'campaign_pause' : 'campaign_enable', detail: formatSopLog(gate) });
+      if (gate.disposition === 'block') return reply.code(400).send({ error: gate.blocks.join(' '), note: 'Nothing was changed.' });
+      if (!miles.campaignResource || !connector.setGoogleCampaignStatus || connector.name === 'mock') {
+        return finish('Preview connector. Google Ads was not changed.');
+      }
+      const turned = await connector.setGoogleCampaignStatus(u.id, { campaignResource: miles.campaignResource, status, adGroupResources: miles.adGroupResources, adResources: miles.adResources });
+      if (!turned.ok) return finish(turned.note || 'Google did not change the campaign.');
+      miles.activation = status === 'PAUSED' ? 'paused' : 'enabled';
+      data.miles = miles;
+      return finish(turned.note, { kind: hit.kind, previousStatus: status === 'PAUSED' ? 'ENABLED' : 'PAUSED' });
+    }
+    if (hit.kind === 'set_budget' && hit.payload.dailyBudget) {
+      const daily = hit.payload.dailyBudget;
+      const gate = runSopGate('budget_change', { mode, budget: { daily, approvedDaily: miles.bundle?.setup.caps.dailyBudget || daily } });
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: u.email, source: 'sop-gate', title: 'budget_change', detail: formatSopLog(gate) });
+      if (gate.disposition === 'block') return reply.code(400).send({ error: gate.blocks.join(' '), note: 'Nothing was changed.' });
+      const previous = hit.payload.previousDaily || 0;
+      if (miles.bundle?.spec) miles.bundle.spec.dailyBudget = daily;
+      const google = miles.bundle?.channels?.find((row) => row.id === 'google');
+      if (google) google.daily = daily;
+      const profile = (data.profile ?? {}) as Record<string, string>;
+      profile.dailyBudget = String(daily);
+      data.profile = profile;
+      data.miles = miles;
+      if (miles.campaignResource && connector.updateGoogleDailyBudget && connector.name !== 'mock') {
+        const wrote = await connector.updateGoogleDailyBudget(u.id, { campaignResource: miles.campaignResource, dailyBudget: daily });
+        if (!wrote.ok) return finish(wrote.note);
+        return finish(wrote.note, { kind: 'set_budget', previousDaily: previous });
+      }
+      return finish(miles.campaignResource ? 'Preview connector. The saved budget changed. Google Ads was not changed.' : `Saved $${daily}/day on the plan. There is no Google campaign yet, so Google Ads was not changed.`, { kind: 'set_budget', previousDaily: previous });
+    }
+    if (hit.kind === 'add_negatives' && hit.payload.keywords?.length) {
+      const words = hit.payload.keywords;
+      for (const word of words) {
+        const gate = runSopGate('negative_add', { mode, negative: word, protectTerms: chatActAccount(data).protectTerms });
+        appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: u.email, source: 'sop-gate', title: 'negative_add', detail: formatSopLog(gate) });
+        if (gate.disposition === 'block') return reply.code(400).send({ error: gate.blocks.join(' '), note: 'Nothing was changed.' });
+      }
+      if (miles.bundle?.spec) miles.bundle.spec.negatives = [...new Set([...(miles.bundle.spec.negatives || []), ...words])];
+      data.miles = miles;
+      if (miles.campaignResource && connector.addGoogleNegativeKeywords && connector.name !== 'mock') {
+        const wrote = await connector.addGoogleNegativeKeywords(u.id, { campaignResource: miles.campaignResource, keywords: words });
+        if (!wrote.ok) return finish(wrote.note);
+        return finish(wrote.note, { kind: 'add_negatives', keywords: words });
+      }
+      return finish('Preview connector. The words were saved on the plan. Google Ads was not changed.', { kind: 'add_negatives', keywords: words });
+    }
+    return reply.code(400).send({ error: 'That action is not available. Nothing was changed.' });
   });
 
   // ── Send an email — Miles drafts it, then sends through the connected Gmail ──

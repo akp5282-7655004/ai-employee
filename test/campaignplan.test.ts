@@ -28,16 +28,18 @@ describe('campaign plan generation', () => {
     expect(plan.spec.targeting?.presence).toBe('PRESENCE');
     expect(plan.spec.targeting?.schedule).toMatchObject({ startHour: 8, endHour: 17 });
     expect(plan.spec.dailyBudget).toBe(20);
-    expect(plan.spec.biddingStrategy).toBe('MAXIMIZE_CLICKS');
-    expect(plan.spec.bidPlan?.maxCpc).toBe(4);
+    expect(plan.spec.biddingStrategy).toBe('MAXIMIZE_CONVERSIONS');
+    expect(plan.spec.bidPlan?.stage).toBe('MAXIMIZE_CONVERSIONS');
+    expect(plan.spec.bidPlan?.targetCpa).toBeUndefined();
     expect(plan.spec.locations.join(' ')).toMatch(/Philadelphia/);
     const names = plan.spec.adGroups.map((group) => group.name);
     expect(names).toEqual(expect.arrayContaining(['Interior Painting', 'Exterior Painting', 'Cabinet Painting', 'Commercial Painting']));
     for (const group of plan.spec.adGroups) {
       expect(group.keywords.length).toBeGreaterThan(0);
       expect(group.keywords.every((row) => row.match === 'phrase' || row.match === 'exact')).toBe(true);
-      expect(group.keywords.some((row) => row.match === 'phrase' && row.text.includes('philadelphia'))).toBe(true);
-      expect(group.keywords.some((row) => row.match === 'exact')).toBe(true);
+      expect(group.keywords.some((row) => row.match === 'exact' && row.text.includes('philadelphia'))).toBe(true);
+      expect(group.keywords.some((row) => row.match === 'phrase' && !row.text.includes('philadelphia'))).toBe(true);
+      expect(new Set(group.keywords.map((row) => row.text)).size).toBe(group.keywords.length);
       for (const line of [...group.rsa.headlines, ...group.rsa.descriptions]) {
         expect(line).toBe(line.replace(/\b[A-Z]{4,}\b/g, ''));
       }
@@ -49,6 +51,18 @@ describe('campaign plan generation', () => {
     expect(negatives).toMatch(/home depot|supplies|salary|school/);
     expect(plan.spec.status).toBe('PAUSED');
     expect(plan.sections.map((section) => section.title)).toEqual(['Locations', 'Keywords', 'Negative keywords', 'Ads', 'Assets', 'Budget and bidding']);
+    const five = buildSearchPlan({
+      businessName: 'Painters In Philly',
+      trade: 'Painting',
+      services: 'Interior painting, exterior painting, cabinet painting, commercial painting, house painting',
+      serviceAreas: 'Philadelphia, PA',
+      website: 'https://paintersinphilly.com',
+      dailyBudget: 30,
+    });
+    expect(five.spec.adGroups.map((group) => group.name)).toEqual([
+      'Interior Painting', 'Exterior Painting', 'Cabinet Painting', 'Commercial Painting', 'House Painting',
+    ]);
+    expect(JSON.stringify(five.spec)).not.toMatch(/starter|growth|scale/i);
     expect(plan.sections.every((section) => section.reason && !section.reason.includes('\u2014'))).toBe(true);
   });
 

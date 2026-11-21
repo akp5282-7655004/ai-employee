@@ -18,6 +18,8 @@ export interface KeywordSpec {
 export interface RsaSpec {
   headlines: string[];
   descriptions: string[];
+  /** SOP 130. True only when description 1 is compulsory wording the owner required. */
+  pinDescription1?: boolean;
 }
 export interface AdGroupSpec {
   name: string;
@@ -42,6 +44,8 @@ export interface CampaignSpec {
   name: string;
   dailyBudget: number; // USD/day
   biddingStrategy: 'MAXIMIZE_CLICKS' | 'MAXIMIZE_CONVERSIONS';
+  /** SOP 146. Maximize clicks is used only when the owner asked for a traffic test. */
+  trafficTest?: boolean;
   networks: string[];
   locations: string[];
   language: string;
@@ -49,6 +53,10 @@ export interface CampaignSpec {
   adGroups: AdGroupSpec[];
   negatives: string[];
   status: 'PAUSED' | 'ENABLED';
+  /** SOP 130. Off so Google does not rewrite the ad or send the click to another page. */
+  copyControls?: { aiMax: boolean; textCustomization: boolean; finalUrlExpansion: boolean };
+  /** Exact line the owner said must appear. Empty means SOP 130's "No pins". */
+  requiredWording?: string;
   // ── campaign assets (Search checklist) — recommended, not required to serve ──
   businessName?: string; // ≤25, must match domain/brand
   displayPaths?: string[]; // up to 2, ≤15 each
@@ -190,11 +198,12 @@ export function deriveServiceLines(services: string | undefined, trade: string |
   const book = SERVICE_BOOK[key];
   if (book) {
     const found = book.filter((row) => row.test.test(blob)).map((row) => row.label);
-    if (found.length) return found.slice(0, 4);
+    // Every service the owner named. Subscription tiers do not cap this list.
+    if (found.length) return found;
     return book.slice(0, 3).map((row) => row.label);
   }
   const parts = (services || '').split(/[,;/|]/).map((part) => stripOfferWords(part)).filter((part) => part.length > 2 && !JUNK_LINE.test(part));
-  if (parts.length) return parts.slice(0, 3);
+  if (parts.length) return parts;
   const cleaned = stripOfferWords(trade || '');
   return [cleaned || 'Local service'];
 }
@@ -325,11 +334,11 @@ export function keywordLabels(keywords: { text?: string }[]): string[] {
 function keywordsFor(theme: string, ctx: CampaignCtx, negatives: string[]): KeywordSpec[] {
   const t = theme.toLowerCase();
   const city = (ctx.city || '').split(',')[0]?.trim().toLowerCase() || '';
+  // SOP 145: Exact for one specific buyer task. Phrase when the page can answer
+  // added words. The same phrase is not saved as both match types.
   const drafts: KeywordSpec[] = [
-    { text: city ? `${t} ${city}` : t, match: 'phrase' },
-    { text: city ? `${t} ${city}` : t, match: 'exact' },
+    ...(city ? [{ text: `${t} ${city}`, match: 'exact' as const }] : []),
     { text: t, match: 'phrase' },
-    { text: t, match: 'exact' },
     { text: `${t} near me`, match: 'phrase' },
   ];
   const seen = new Set<string>();
@@ -364,11 +373,6 @@ function rsaFor(theme: string, ctx: CampaignCtx, brand: string): RsaSpec {
     'Request A Visit',
     'Talk To The Crew',
   ].map((line) => normalizeAdCase(line)).filter((line, i, all) => line && line.length <= 30 && all.indexOf(line) === i);
-  while (headlines.length < 15) {
-    const extra = fitCopy([`${themeTitle} ${headlines.length + 1}`], 30);
-    if (!extra || headlines.includes(extra)) break;
-    headlines.push(extra);
-  }
   const descriptions = [
     fitCopy([
       cityTitle ? `${themeTitle} in ${cityTitle}. Call to schedule a visit.` : `${themeTitle}. Call to schedule a visit.`,
@@ -383,7 +387,7 @@ function rsaFor(theme: string, ctx: CampaignCtx, brand: string): RsaSpec {
     fitCopy([`Schedule ${themeTitle.toLowerCase()} with a local crew.`, 'Schedule a visit with a local crew.'], 90),
     'Honest pricing. Call to schedule.',
   ].filter((line, i, all) => line && line.length <= 90 && all.indexOf(line) === i);
-  return { headlines: headlines.slice(0, 15), descriptions: descriptions.slice(0, 4) };
+  return { headlines: headlines.slice(0, 10), descriptions: descriptions.slice(0, 4), pinDescription1: false };
 }
 
 /** Negative keywords that stop wasted spend for local-service search. */

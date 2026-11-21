@@ -15,9 +15,17 @@ describe('campaign rulebook', () => {
     const text = spec.adGroups.flatMap((group) => [group.name, ...group.keywords.map((keyword) => keyword.text), ...group.rsa.headlines]).join(' ');
     expect(text).not.toMatch(/FREE CUSTOM QUOTE|HOUSE PAINTING|best house painting|house painting quote/);
     expect(spec.adGroups.every((group) => group.keywords.every((keyword) => keyword.match !== 'broad'))).toBe(true);
-    expect(spec.adGroups.every((group) => group.rsa.headlines.length === 15 && group.rsa.descriptions.length === 4)).toBe(true);
+    expect(spec.adGroups.every((group) => group.rsa.headlines.length === 10 && group.rsa.descriptions.length === 4)).toBe(true);
+    expect(spec.adGroups.every((group) => group.rsa.headlines.length <= 10 && group.rsa.headlines.length >= 8)).toBe(true);
+    expect(spec.copyControls).toEqual({ aiMax: false, textCustomization: false, finalUrlExpansion: false });
+    for (const group of spec.adGroups) {
+      const texts = group.keywords.map((keyword) => keyword.text);
+      expect(new Set(texts).size).toBe(texts.length);
+    }
     expect(spec.networks).toEqual(['Google Search']);
-    expect(spec.bidPlan).toMatchObject({ stage: 'MAXIMIZE_CLICKS', maxCpc: RULEBOOK_DEFAULTS.maxCpc });
+    expect(spec.biddingStrategy).toBe('MAXIMIZE_CONVERSIONS');
+    expect(spec.bidPlan).toMatchObject({ stage: 'MAXIMIZE_CONVERSIONS', maxCpc: RULEBOOK_DEFAULTS.maxCpc });
+    expect(spec.bidPlan?.targetCpa).toBeUndefined();
     expect(spec.targeting).toMatchObject({ presence: 'PRESENCE', radiusMiles: 15, searchPartners: false, display: false });
     expect(spec.callAsset?.phone).toBe('2155550199');
     expect(spec.locationAsset?.gbpUrl).toMatch(/^https:/);
@@ -49,7 +57,7 @@ describe('campaign rulebook', () => {
     expect(headlines).toContain('Free Estimate Today');
     expect(headlines).toContain('HVAC Tune Up LLC');
     expect(headlines.join(' ')).not.toMatch(/\bFREE\b|\bESTIMATE\b|\bTODAY\b/);
-    expect(headlines).toHaveLength(15);
+    expect(headlines).toHaveLength(10);
     expect(fixAdCapitalization('FREE CUSTOM QUOTE')).toBe('Free Custom Quote');
     expect(fixAdCapitalization('hvac repair llc')).toBe('HVAC Repair LLC');
   });

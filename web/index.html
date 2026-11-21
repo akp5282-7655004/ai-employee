@@ -10107,6 +10107,33 @@ function scrubConnectText(text){
     .replace(/[ \t]{2,}/g,' ')
     .trim();
 }
+function appendApprovalCard(bubble, approval){
+  const card=el('div');
+  card.className='chat-approval';
+  card.style.cssText='border:1px solid var(--line);border-radius:12px;padding:12px;margin:8px 0;display:flex;flex-direction:column;gap:6px';
+  card.append(el('b',null, approval.title||'Review this change'));
+  card.append(el('div',null,'Before: '+(approval.before||'')));
+  card.append(el('div',null,'After: '+(approval.after||'')));
+  card.append(el('div',null,'Daily cost: '+(approval.dailyCost||'')));
+  (approval.lines||[]).forEach((line)=>{ card.append(el('div','appsub', line)); });
+  const bar=el('div'); bar.style.cssText='display:flex;gap:8px;margin-top:4px';
+  const approve=el('button','go','Approve');
+  const cancel=el('button','ghost','Cancel');
+  approve.type='button'; cancel.type='button';
+  const decide=async(decision, button)=>{
+    approve.disabled=true; cancel.disabled=true; button.textContent=decision==='approve'?'Approving…':'Cancelling…';
+    try{
+      const res=await fetch('/api/chat/act',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:approval.id, decision})});
+      const body=await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error((body&&body.error)||'Could not save that.');
+      bar.remove();
+      card.append(el('div','verdict ok', body.note|| (decision==='approve'?'Approved.':'Cancelled. Nothing was changed.')));
+    }catch(e){ approve.disabled=false; cancel.disabled=false; approve.textContent='Approve'; cancel.textContent='Cancel'; toast(e.message||'Could not save that.'); }
+  };
+  approve.onclick=()=>decide('approve', approve);
+  cancel.onclick=()=>decide('cancel', cancel);
+  bar.append(approve, cancel); card.append(bar); bubble.append(card);
+}
 function appendConnectButton(bubble, body, action){
   const label=String((action&&action.label)||'Connect');
   const slug=String((action&&action.app)||'').replace(/[^a-z0-9_]/gi,'').slice(0,40);
@@ -10170,6 +10197,7 @@ async function send(text,silent){
     const body=el('div'); body.innerHTML=mdToHtml(said); b.append(body);
     if(d.next&&d.next.label){ const go=el('button','go', d.next.label); go.type='button'; go.style.marginTop='8px'; go.onclick=()=>setPage(d.next.page||'integrations'); b.append(go); }
     if(d.action&&d.action.kind==='connect') appendConnectButton(b, body, d.action);
+    if(d.approval&&d.approval.id) appendApprovalCard(b, d.approval);
     logChat('emp', said, d.action); chat.scrollTop=chat.scrollHeight;
   }catch(e){ b.textContent=e&&e.name==='AbortError'?'That took too long. Try again in a moment. Nothing was changed.':'I could not reach the server just now. Try again.'; }
 }
