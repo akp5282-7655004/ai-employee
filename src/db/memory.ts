@@ -1,3 +1,4 @@
+import type { AggregateRow, DailyRow, Membership } from '../benchmarks/types.js';
 import { mergeCredits, stripCreditBase } from '../billing/merge.js';
 import type { AuthSession, Store, User } from './store.js';
 
@@ -13,6 +14,9 @@ export class MemoryStore implements Store {
   private launchSlots: string[] = [];
   /** Normalized email -> the account that got the launch credit. Kept after deleteUser. */
   private launchCreditClaims = new Map<string, string>();
+  private benchmarkDaily: DailyRow[] = [];
+  private benchmarkMembership = new Map<string, Membership>();
+  private benchmarkAggregates: AggregateRow[] = [];
 
   async init(): Promise<void> {}
 
@@ -118,5 +122,36 @@ export class MemoryStore implements Store {
     this.users.delete(id);
     this.data.delete(id);
     for (const [token, s] of this.sessions) if (s.userId === id) this.sessions.delete(token);
+    await this.deleteBenchmarkAccount(id);
+  }
+
+  private async deleteBenchmarkAccount(id: string): Promise<void> {
+    this.benchmarkDaily = this.benchmarkDaily.filter((row) => row.accountId !== id);
+    this.benchmarkMembership.delete(id);
+  }
+
+  async upsertBenchmarkDaily(rows: DailyRow[]): Promise<void> {
+    for (const row of rows) {
+      this.benchmarkDaily = this.benchmarkDaily.filter((have) => !(have.accountId === row.accountId && have.day === row.day && have.platform === row.platform && have.campaignType === row.campaignType));
+      this.benchmarkDaily.push({ ...row });
+    }
+  }
+  async deleteBenchmarkDaily(accountId: string): Promise<void> {
+    this.benchmarkDaily = this.benchmarkDaily.filter((row) => row.accountId !== accountId);
+  }
+  async listBenchmarkDaily(): Promise<DailyRow[]> {
+    return this.benchmarkDaily.map((row) => ({ ...row }));
+  }
+  async upsertBenchmarkMembership(row: Membership): Promise<void> {
+    this.benchmarkMembership.set(row.accountId, { ...row, platforms: [...row.platforms] });
+  }
+  async listBenchmarkMembership(): Promise<Membership[]> {
+    return [...this.benchmarkMembership.values()].map((row) => ({ ...row, platforms: [...row.platforms] }));
+  }
+  async replaceBenchmarkAggregates(rows: AggregateRow[]): Promise<void> {
+    this.benchmarkAggregates = rows.map((row) => ({ ...row }));
+  }
+  async listBenchmarkAggregates(): Promise<AggregateRow[]> {
+    return this.benchmarkAggregates.map((row) => ({ ...row }));
   }
 }

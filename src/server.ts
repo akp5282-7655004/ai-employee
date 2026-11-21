@@ -16,6 +16,14 @@ import { buildSnapshot, monthSpendOf, readSnapshot, snapshotAgeMs, spendRowsOf, 
 import { loadConfig, pipedreamReady } from './config.js';
 import { financingWarnings, getPack, listPacks, validateIntake } from './packs/index.js';
 import { LSA_TRADES, LSA_BLENDED, LSA_VS_GOOGLE, BENCHMARK_META, BENCHMARK_HUB, hubCoverage } from './packs/benchmarks.js';
+import { adminCohorts, cohortFromAggregate, cohortsForTrade } from './benchmarks/adminView.js';
+import { aggregateBenchmarks } from './benchmarks/aggregate.js';
+import { collectAccount } from './benchmarks/collect.js';
+import { crmDayFromLedger } from './benchmarks/crm.js';
+import { benchmarkLines, resolveBenchmark } from './benchmarks/resolve.js';
+import { platformOf, tradeKey as benchmarkTradeKey } from './benchmarks/trades.js';
+import { publicAggregate, publicResolution } from './benchmarks/privacy.js';
+import type { Platform as BenchmarkPlatform } from './benchmarks/types.js';
 import { generateAdCopy, type CreativeRequest } from './creative/creative.js';
 import { falReady, falGenerateImage, falGenerateVideo, falGenerateAudio, type Aspect } from './creative/fal.js';
 import { ASSET_TYPES, specFor, buildVisualPrompt, buildTextPrompt, fallbackText, optimizerSystem, type BrandContext } from './creative/studio.js';
@@ -259,7 +267,7 @@ async function cachedRead<T>(key: string, fn: () => Promise<T>, empty: T): Promi
  * never named and never linked (docs/business/pricing-model-v1.md §2.9).
  * Provenance stays server-side for checking sales claims.
  */
-const PROVIDER_RE = /searchlight\s*digital|searchlight/gi;
+const PROVIDER_URL_RE = /https?:\/\/(www\.)?searchlightdigital\.io\S*/gi;
 /** Owner-facing tracking proof. Null until a successful /api/miles/tracking save. */
 export function trackingProofView(raw: unknown): { leadConversion: boolean; ga4Linked: boolean; method: string | null } | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -274,8 +282,8 @@ export function trackingProofView(raw: unknown): { leadConversion: boolean; ga4L
 
 function publicSafe<T>(value: T): T {
   if (typeof value === 'string') {
-    return (PROVIDER_RE.test(value) || value.includes('searchlightdigital.io')
-      ? value.replace(/https?:\/\/(www\.)?searchlightdigital\.io\S*/gi, '').replace(PROVIDER_RE, 'the published study').replace(/\s{2,}/g, ' ').trim()
+    return (value.includes('searchlightdigital.io')
+      ? value.replace(PROVIDER_URL_RE, '').replace(/\s{2,}/g, ' ').trim()
       : value) as unknown as T;
   }
   if (Array.isArray(value)) return value.map(publicSafe) as unknown as T;
@@ -559,11 +567,20 @@ export function buildServer(deps: ServerDeps = {}): FastifyInstance {
   // Wrapped in a short-TTL write-through cache: one page load fires ~14 API
   // calls that each read the same per-user blob.
   const authStore = withUserDataCache(deps.authStore ?? new MemoryStore());
+  const reaggregateBenchmarks = async () => {
+    const asOf = new Date().toISOString().slice(0, 10);
+    const [daily, membership] = await Promise.all([
+      authStore.listBenchmarkDaily(),
+      authStore.listBenchmarkMembership(),
+    ]);
+    await authStore.replaceBenchmarkAggregates(aggregateBenchmarks({ asOf, daily, membership }));
+  };
 
   const seedAccountPlan = async (userId: string, extra: Record<string, unknown>) => {
     await authStore.claimLaunchSlot(userId);
     const data = await authStore.getUserData(userId);
     Object.assign(data, extra);
+    if (data.benchmarkShare !== false) data.benchmarkShare = true;
     // $100 waits until 3 sources are connected, and only once per business.
     writeCredits(data, { granted: 0, launchOffer: true, spent: 0 });
     data.launchCredit = { status: 'pending' };
@@ -1726,6 +1743,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (!id) return reply.code(400).send({ error: 'id required' });
     if (id === (await adminUserId())) return reply.code(400).send({ error: "You can't remove the owner account." });
     await authStore.deleteUser(id);
+    await reaggregateBenchmarks();
     return { ok: true };
   });
   // Owner-only: generate a reset link for a locked-out customer (works with no email provider).
@@ -2568,9 +2586,16 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (fromCap + 0.001 < statedMonthly) return fromCap;
     return statedMonthly;
   };
-  const attachProjection = (check: GoalCheck, trade: string, city: string, channel: GoalChannel) => {
+  const cohortFor = async (trade: string, channel: GoalChannel) => {
+    const key = benchmarkTradeKey(trade);
+    const platform = channel === 'lsa' ? 'google_lsa' : 'google_ads';
+    const rows = await authStore.listBenchmarkAggregates();
+    return cohortFromAggregate(rows.find((row) => row.trade === key && row.platform === platform && row.metric === 'cpl'));
+  };
+  const attachProjection = async (check: GoalCheck, trade: string, city: string, channel: GoalChannel) => {
     const monthly = monthlyFrom(check.budgetAmount, check.budgetPeriod);
-    const projection = monthly > 0 ? projectBudget({ trade, city, monthlyBudget: monthly, channel }) : null;
+    const cohort = await cohortFor(trade, channel);
+    const projection = monthly > 0 ? projectBudget({ trade, city, monthlyBudget: monthly, channel, cohort }) : null;
     return { ...check, projection };
   };
   const goalSaved = (data: Record<string, unknown>, miles: MilesFile) => {
@@ -2601,11 +2626,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       },
     };
   };
-  const goalPayload = (data: Record<string, unknown>, miles: MilesFile) => {
+  const goalPayload = async (data: Record<string, unknown>, miles: MilesFile) => {
     const saved = goalSaved(data, miles);
     const channel = tenantChannel(data);
+    const cohort = await cohortFor(saved.trade, channel);
     const check = saved.budgetAmount > 0 && saved.leadGoal > 0
-      ? attachProjection(goalCheck({
+      ? await attachProjection(goalCheck({
         trade: saved.trade,
         city: saved.city,
         budgetAmount: saved.budgetAmount,
@@ -2614,6 +2640,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         leadPeriod: saved.leadPeriod,
         caps: saved.caps,
         channel,
+        cohort,
       }), saved.trade, saved.city, channel)
       : null;
     return { ...saved, check, expectation: readExpectation(data), confirmation: LAUNCH_LINE };
@@ -2630,7 +2657,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const miles = milesOf(data);
     if (!miles.bundle) return reply.code(400).send({ error: 'Save the three questions first. Nothing was created.' });
     const plan = searchPlanFor(data, miles);
-    return publicSafe({ ok: true, ...plan, planApproved: miles.planApproved === true, goal: goalPayload(data, miles), confirmation: LAUNCH_LINE });
+    return publicSafe({ ok: true, ...plan, planApproved: miles.planApproved === true, goal: await goalPayload(data, miles), confirmation: LAUNCH_LINE });
   });
   app.post<{ Body: { id?: string; value?: string } }>('/api/miles/plan/answer', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -2669,14 +2696,14 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     data.miles = miles;
     await authStore.setUserData(u.id, data);
     const plan = searchPlanFor(data, miles);
-    return publicSafe({ ok: true, ...plan, goal: goalPayload(data, miles), confirmation: LAUNCH_LINE });
+    return publicSafe({ ok: true, ...plan, goal: await goalPayload(data, miles), confirmation: LAUNCH_LINE });
   });
 
   app.get('/api/miles/goal', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
     const data = await authStore.getUserData(u.id);
-    return publicSafe({ ok: true, ...goalPayload(data, milesOf(data)) });
+    return publicSafe({ ok: true, ...(await goalPayload(data, milesOf(data))) });
   });
 
   app.post<{ Body: { budgetAmount?: number; budgetPeriod?: BudgetPeriod; leadGoal?: number; leadPeriod?: LeadPeriod } }>('/api/miles/goal', async (req, reply) => {
@@ -2687,7 +2714,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const saved = goalSaved(data, miles);
     const body = req.body ?? {};
     const channel = tenantChannel(data);
-    const check = attachProjection(goalCheck({
+    const goalCohort = await cohortFor(saved.trade, channel);
+    const check = await attachProjection(goalCheck({
       trade: saved.trade,
       city: saved.city,
       budgetAmount: Number(body.budgetAmount) || 0,
@@ -2696,6 +2724,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       leadPeriod: body.leadPeriod === 'week' ? 'week' : 'month',
       caps: saved.caps,
       channel,
+      cohort: goalCohort,
     }), saved.trade, saved.city, channel);
     if (check.projection) {
       const stored = storeExpectation(data, check.projection, expectationLocked(miles));
@@ -2719,6 +2748,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const saved = goalSaved(data, miles);
     const body = req.body ?? {};
     const channel = tenantChannel(data);
+    const confirmCohort = await cohortFor(saved.trade, channel);
     const check = goalCheck({
       trade: saved.trade,
       city: saved.city,
@@ -2727,6 +2757,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       leadGoal: Number(body.leadGoal) || 0,
       leadPeriod: body.leadPeriod === 'week' ? 'week' : 'month',
       caps: saved.caps,
+      cohort: confirmCohort,
       channel,
     });
     const picked = choiceById(check, choice);
@@ -2787,10 +2818,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     miles.events = [{ ts: new Date().toISOString(), text: title }, ...miles.events].slice(0, 40);
     data.miles = miles;
     appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'goal-check', title, detail: `${picked.label} ${check.assumption}` });
-    const confirmedProjection = projectBudget({ trade: saved.trade, city: saved.city, monthlyBudget: keptMonthly, channel });
+    const confirmedProjection = projectBudget({ trade: saved.trade, city: saved.city, monthlyBudget: keptMonthly, channel, cohort: confirmCohort });
     if (confirmedProjection) storeExpectation(data, confirmedProjection, expectationLocked(miles));
     await authStore.setUserData(u.id, data);
-    return publicSafe({ ok: true, dailyCap: picked.daily, raisedCap: picked.raisesCap, choice: picked.id, ...plan, goal: goalPayload(data, miles), confirmation: LAUNCH_LINE });
+    return publicSafe({ ok: true, dailyCap: picked.daily, raisedCap: picked.raisesCap, choice: picked.id, ...plan, goal: await goalPayload(data, miles), confirmation: LAUNCH_LINE });
   });
 
   app.post<{ Body: { confirm?: boolean; plan?: CampaignSpec } }>('/api/miles/go', async (req, reply) => {
@@ -3092,7 +3123,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     }));
     const team = (data.team as any[]) ?? [{ email: u.email, role: 'Owner', status: 'active' }];
     const notify = (data.notify ?? {}) as { leads?: boolean; decisions?: boolean; weekly?: boolean; billing?: boolean };
-    return { account: { name: u.name ?? '', email: u.email }, keys, team, notify: { leads: notify.leads !== false, decisions: notify.decisions !== false, weekly: notify.weekly !== false, billing: notify.billing !== false } };
+    return { account: { name: u.name ?? '', email: u.email }, keys, team, benchmarkShare: data.benchmarkShare !== false, notify: { leads: notify.leads !== false, decisions: notify.decisions !== false, weekly: notify.weekly !== false, billing: notify.billing !== false } };
   });
   app.put<{ Body: { name?: string } }>('/api/account', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -3224,6 +3255,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     if (deliveryStatus().email) await sendEmail(u.email, 'Your Miles account was deleted', 'Your Miles account, connected integrations, and workspace data were deleted.');
     await authStore.deleteSessionsForUser(u.id);
     await authStore.deleteUser(u.id);
+    await reaggregateBenchmarks();
     reply.header('set-cookie', cookie('', 0));
     return { ok: true };
   });
@@ -3735,9 +3767,12 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       leads: trackedLeads,
       liveDays: campaignLive ? liveDaysFromEvents(miles.events, miles.activation) : null,
     });
+    const lsaKey = benchmarkTradeKey(p.industry || '');
+    const lsaRows = await authStore.listBenchmarkAggregates();
     const operator = buildOperatorView({
       mode: miles.bundle?.setup.mode || miles.pendingMode || null,
       trade: (p.industry || '').trim(),
+      lsaCohort: cohortFromAggregate(lsaRows.find((row) => row.trade === lsaKey && row.platform === 'google_lsa' && row.metric === 'cpl')),
       market,
       dailyBudget: caps ? caps.dailyBudget : null,
       maxChangePct: caps ? caps.maxChangePct : null,
@@ -3936,8 +3971,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const ghlNow = await ghlLink(u.id);
     const presence = data.localPresence && typeof data.localPresence === 'object' ? Object.keys(data.localPresence as object).length > 0 : false;
     const autoFile = (data.automation ?? {}) as { log?: { skill: string; title: string; ts: string; effect?: string }[]; kill?: boolean; findings?: { id?: string; skill: string; title?: string; detail?: string }[]; lastRunAt?: string | null };
+    const boardAggregates = await authStore.listBenchmarkAggregates();
     const board = buildSkillsBoard({
       trade: p.industry,
+      cohortRows: boardAggregates,
       installed: Array.isArray(data.skills) ? data.skills as string[] : [],
       deployed: normalizeDeployed(data.deployedSkills).map((row) => row.key),
       speedOn: !!((data.speedToLead as { enabled?: boolean } | undefined)?.enabled),
@@ -8201,6 +8238,52 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         /* one user's failure never stops the rest */
       }
     }
+    if (!process.env.VITEST && connector.name !== 'mock') {
+      try { await runLivingPlaybook(); } catch { /* benchmark collection never blocks the tick */ }
+    }
+  };
+
+  const runLivingPlaybook = async () => {
+    const day = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    let ids: string[] = [];
+    try { ids = await authStore.listUserIds(); } catch { return; }
+    for (const id of ids) {
+      try {
+        const data = await authStore.getUserData(id);
+        const profile = (data.profile ?? {}) as Record<string, string>;
+        const trade = benchmarkTradeKey(profile.industry || profile.trade || '');
+        if (!trade) continue;
+        const proof = trackingProofView(data.trackingProof);
+        const trackingVerified = !!(proof && (proof.leadConversion || proof.ga4Linked));
+        const consent = data.benchmarkShare !== false;
+        const active = data.accountPaused !== true;
+        let spend: import('./revenue/attribution.js').CampaignSpend[] = [];
+        if (connector.getAdSpend) {
+          try { spend = await connector.getAdSpend(id, 'YESTERDAY'); } catch { spend = []; }
+        }
+        const events = Array.isArray(data.crmEvents) ? data.crmEvents as import('./metrics/crmledger.js').CrmEvent[] : [];
+        const connected = new Set<BenchmarkPlatform>();
+        for (const row of spend) {
+          const platform = platformOf(row.platform);
+          if (platform) connected.add(platform);
+        }
+        const collected = collectAccount({
+          accountId: id,
+          day,
+          trade,
+          active,
+          consent,
+          trackingVerified,
+          connectedPlatforms: [...connected],
+          spend,
+          crm: crmDayFromLedger(events, [], day),
+        });
+        await authStore.upsertBenchmarkMembership(collected.membership);
+        if (!consent) await authStore.deleteBenchmarkDaily(id);
+        else if (collected.daily.length) await authStore.upsertBenchmarkDaily(collected.daily);
+      } catch { /* one account never stops the job */ }
+    }
+    await reaggregateBenchmarks();
   };
 
   // Real observed LSA economics (public-source benchmark) + the breakeven math.
@@ -8218,6 +8301,46 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     })),
     coverage: hubCoverage(),
   }));
+
+  app.get<{ Querystring: { trade?: string; platform?: string; metric?: string } }>('/api/benchmarks/living', async (req) => {
+    const rows = await authStore.listBenchmarkAggregates();
+    const trade = benchmarkTradeKey(req.query?.trade || '');
+    const platform = (req.query?.platform || '') as BenchmarkPlatform;
+    const metric = req.query?.metric;
+    const filtered = rows.filter((row) => (!trade || row.trade === trade) && (!platform || row.platform === platform) && (!metric || row.metric === metric));
+    return {
+      aggregates: filtered.map(publicAggregate),
+      note: 'Aggregate only. This response has no account, name, phone, email, or address.',
+    };
+  });
+
+  app.post<{ Body: { share?: boolean } }>('/api/benchmarks/sharing', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (typeof req.body?.share !== 'boolean') return reply.code(400).send({ error: 'Send share true or false. Nothing was changed.' });
+    const data = await authStore.getUserData(u.id);
+    data.benchmarkShare = req.body.share;
+    await authStore.setUserData(u.id, data);
+    if (!req.body.share) {
+      await authStore.deleteBenchmarkDaily(u.id);
+      const members = await authStore.listBenchmarkMembership();
+      const mine = members.find((row) => row.accountId === u.id);
+      if (mine) await authStore.upsertBenchmarkMembership({ ...mine, consent: false });
+      await reaggregateBenchmarks();
+    }
+    return { ok: true, benchmarkShare: req.body.share === true };
+  });
+
+  app.get('/api/admin/benchmarks', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (!(await isAdmin(u))) return reply.code(403).send({ error: 'owner only' });
+    const [rows, membership] = await Promise.all([
+      authStore.listBenchmarkAggregates(),
+      authStore.listBenchmarkMembership(),
+    ]);
+    return { cohorts: adminCohorts(rows, membership) };
+  });
 
   // Weather-triggered marketing — live conditions for a ZIP + the campaign
   // actions Miles recommends when weather fires (native, no third-party platform).
@@ -8367,6 +8490,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const storedReadback = miles.events.find((event) => /google reports|read-back|read back|created paused|reverted to paused/i.test(event.text))?.text;
     // Older events stored the raw word. Chat quotes this line, so it is cleaned here too.
     const lastReadback = storedReadback ? scrubStatusText(storedReadback).replace(/\bUNKNOWN\b/g, 'not read yet') : undefined;
+    const benchTrade = benchmarkTradeKey(String((data.profile as { industry?: string } | undefined)?.industry || ''));
+    const benchRows = benchTrade ? await authStore.listBenchmarkAggregates() : [];
     return buildAccountSnapshot({
       tenantId: uid,
       sampleConnector: connector.name === 'mock',
@@ -8426,6 +8551,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       connectedApps: [...linked],
       creditsRemaining: creditState(data).remaining,
       launchGranted: launchCreditStatus(data) === 'granted',
+      benchmarkLines: benchTrade ? benchmarkLines(benchTrade, cohortsForTrade(benchRows, benchTrade)) : [],
     });
   }
 
@@ -8482,9 +8608,11 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       playbook: async () => {
         const snapshot = await chatSnapshotFor(uid);
         const band = playbookCplBand(snapshot.business.trade);
+        const key = benchmarkTradeKey(snapshot.business.trade);
+        const lines = key ? (await chatSnapshotFor(uid)).benchmarkLines ?? [] : [];
         return band
-          ? { trade: snapshot.business.trade, costPerLeadLow: band.low, costPerLeadHigh: band.high, note: 'Loaded trade playbook range. Not this account live result.' }
-          : { trade: snapshot.business.trade || null, note: 'No trade playbook is loaded. Miles will not invent a target.' };
+          ? { trade: snapshot.business.trade, planningRangeLow: band.low, planningRangeHigh: band.high, benchmarks: lines, note: 'The planning range is the Meta playbook band. The benchmark lines are the resolved trade figures. Neither is this account live result.' }
+          : { trade: snapshot.business.trade || null, benchmarks: lines, note: lines.length ? 'Resolved trade benchmarks. Not this account.' : 'No trade playbook is loaded. Miles will not invent a target.' };
       },
       campaigns: async () => {
         const snapshot = await chatSnapshotFor(uid);
@@ -8518,10 +8646,17 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       },
       benchmarks: async () => {
         const snapshot = await chatSnapshotFor(uid);
-        const band = playbookCplBand(snapshot.business.trade);
-        return band
-          ? { trade: snapshot.business.trade, googleAdsCostPerLead: { low: band.low, high: band.high }, note: 'Published trade playbook. Not this account.' }
-          : { trade: snapshot.business.trade || null, note: 'No benchmark is loaded for this trade. Miles will not invent one.' };
+        const key = benchmarkTradeKey(snapshot.business.trade);
+        if (!key) return { trade: snapshot.business.trade || null, note: 'No benchmark is loaded for this trade. Miles will not invent one.', lines: [] };
+        const rows = await authStore.listBenchmarkAggregates();
+        const lines = benchmarkLines(key, cohortsForTrade(rows, key));
+        const cpl = resolveBenchmark({
+          trade: key,
+          platform: 'google_ads',
+          metric: 'cpl',
+          cohort: cohortFromAggregate(rows.find((row) => row.trade === key && row.platform === 'google_ads' && row.metric === 'cpl')),
+        });
+        return { trade: snapshot.business.trade, lines, googleAdsCostPerLead: publicResolution(cpl), note: 'Trade benchmark. Not this account, and not another business.' };
       },
       liveSpend: async () => {
         const period = 'the last 30 days';

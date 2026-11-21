@@ -85,6 +85,8 @@ This is the section that matters most for the "Miles broke my account" scenario.
 
 **5.2 Aggregated Data and benchmarks.** 🤖 You grant Miles a perpetual, irrevocable, royalty-free right to create, use, and commercialize Aggregated Data (including industry benchmarks, model training and evaluation, and product improvement), provided it does not identify you, your customers, or any individual. This right survives termination.
 
+**5.2a Benchmark sharing (placeholder, needs a lawyer).** ⚖️ New accounts are included in anonymous trade benchmarks unless the owner turns sharing off in Settings. Miles publishes only group figures (for example a median cost per lead) once a minimum number of accounts is met. Those figures do not include a business name, phone, email, address, or account identifier. Turning sharing off, or deleting the account, removes that account from future benchmarks. This paragraph is a product disclosure, not finished legal language. A lawyer must confirm it against the privacy policy and against Google Ads API and Meta Platform terms before it is treated as binding. See `docs/specs/living-playbook.md`.
+
 **5.3 Confidentiality.** Miles will not disclose your non-aggregated account data except to sub-processors needed to run the Service, or as required by law.
 
 **5.4 Sub-processors and AI providers.** The Service uses third-party model providers and infrastructure (listed at [URL]). Prompts and account data may be sent to these providers to perform the Service. Miles selects providers with contractual no-training commitments where available. ⚖️ (privacy policy + DPA to match)

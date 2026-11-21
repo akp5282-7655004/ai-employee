@@ -8,6 +8,9 @@
  */
 import { BENCHMARK_META } from '../packs/benchmarks.js';
 import { listPacks } from '../packs/index.js';
+import { cohortFromAggregate } from '../benchmarks/adminView.js';
+import { tradeKey as benchmarkTradeKey } from '../benchmarks/trades.js';
+import type { AggregateRow } from '../benchmarks/types.js';
 import { cplBandForGoal, type CplBand } from '../agents/goalcheck.js';
 import { playbookCplBand, playbookTrades } from '../agents/playbook.js';
 import { tradeKey } from '../agents/feasibility.js';
@@ -54,6 +57,8 @@ export interface SkillsBoardInput {
   weatherRulesOn?: number;
   noShowOn?: boolean;
   onboardingOn?: boolean;
+  /** Published aggregates. Omitted means an empty Miles cohort. */
+  cohortRows?: AggregateRow[];
 }
 
 function plain(s: string): string {
@@ -61,14 +66,14 @@ function plain(s: string): string {
     .replace(/\u2014/g, ', ')
     .replace(/\u2013/g, '-')
     .replace(/→/g, ' to ')
-    .replace(/searchlight\s*digital/gi, 'the published study')
-    .replace(/searchlight/gi, 'the published study')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
 
 function money(n: number): string {
-  return `$${Math.round(n).toLocaleString('en-US')}`;
+  const rounded = Math.round(n * 100) / 100;
+  if (Number.isInteger(rounded)) return `$${rounded.toLocaleString('en-US')}`;
+  return `$${rounded.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function cplText(band: CplBand): string {
@@ -79,14 +84,21 @@ function cplText(band: CplBand): string {
   return `${money(low)} to ${money(high)}.${middle}`;
 }
 
-function studyLine(trade: string): string {
-  const band = cplBandForGoal(trade, 'google_ads');
-  if (!band) return `Miles will not guess a Google Ads cost per lead. Source: ${BENCHMARK_META.source}.`;
+function studyLine(trade: string, rows?: AggregateRow[]): string {
+  const key = benchmarkTradeKey(trade);
+  const found = rows?.find((row) => row.trade === key && row.platform === 'google_ads' && row.metric === 'cpl');
+  const band = cplBandForGoal(trade, 'google_ads', found ? cohortFromAggregate(found) : null);
+  const short = band?.milesShortfall ? ` ${band.milesShortfall}.` : ' Not enough Miles data yet (0 of 5 accounts).';
+  if (!band) return `Miles will not guess a Google Ads cost per lead. Source: ${BENCHMARK_META.source}.${short}`;
   const figures = cplText(band);
+  const source = band.sourceLabel || BENCHMARK_META.source;
   if (band.source === 'similar') {
-    return plain(`${figures} ${band.label} has no Google Ads row, so this is an estimate from similar home-services trades. ${money(Math.min(band.low, band.high))} includes people who search a company by name. ${money(Math.max(band.low, band.high))} is for everyone else. Miles uses this same range for the budget check. Source: ${BENCHMARK_META.source}.`);
+    return plain(`${figures} ${band.label} has no Google Ads row, so this is an estimate from similar home-services trades. ${money(Math.min(band.low, band.high))} includes people who search a company by name. ${money(Math.max(band.low, band.high))} is for everyone else. Miles uses this same range for the budget check. Source: ${source}.${short}`);
   }
-  return plain(`${figures} These are the published Google Ads figures for people who are not searching a company by name. Miles uses this same range for the budget check. Source: ${BENCHMARK_META.source}.`);
+  if (band.source === 'external' || band.source === 'playbook' || band.source === 'miles') {
+    return plain(`${figures} Miles uses this same figure for the budget check. Source: ${source}.${band.milesShortfall ? ` ${band.milesShortfall}.` : ''}`);
+  }
+  return plain(`${figures} These are the published Google Ads figures for people who are not searching a company by name. Miles uses this same range for the budget check. Source: ${source}.${short}`);
 }
 
 function planningLine(trade: string): string {
@@ -134,7 +146,7 @@ export function buildSkillsBoard(input: SkillsBoardInput = {}): SkillsBoard {
       yours: yours === trade.key,
       lines: [
         { label: 'What Miles does', text: 'Miles builds a paused Google Search campaign from the business details you saved. This playbook also describes a Meta campaign with the groups below. Miles cannot launch Meta or Local Services Ads in this build.' },
-        { label: 'Cost per lead Miles uses', text: studyLine(trade.label) },
+        { label: 'Cost per lead Miles uses', text: studyLine(trade.label, input.cohortRows) },
         { label: 'Playbook planning range', text: planningLine(trade.label) },
         { label: 'Season', text: plain(trade.season) },
         { label: 'Campaign structure', text: structureLines(trade.structure) },
@@ -348,7 +360,7 @@ function factsFor(card: DraftCard): string[] {
   if (card.group === 'playbook') {
     const cpl = card.lines.find((line) => line.label === 'Cost per lead Miles uses')?.text || '';
     const season = card.lines.find((line) => line.label === 'Season')?.text || '';
-    const range = cpl.match(/\$[\d,]+(?: to \$[\d,]+)?/);
+    const range = cpl.match(/\$[\d,]+(?:\.\d+)?(?: to \$[\d,]+(?:\.\d+)?)?/);
     return [
       range ? `Cost per lead ${range[0]}` : 'Cost per lead is not listed',
       season ? `Season: ${season}` : '',

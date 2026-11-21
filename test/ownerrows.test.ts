@@ -67,9 +67,9 @@ describe('launch row checks', () => {
     expect(decision.effect).not.toBe('apply');
   });
 
-  it('does not say Searchlight to the owner', () => {
+  it('names Searchlight as the plumbing cost-per-lead source', () => {
     const text = feasibility({ dailyBudget: 20, leadsPerDay: 2, trade: 'plumbing' }).message;
-    expect(text.toLowerCase()).not.toContain('searchlight');
+    expect(text).toMatch(/Searchlight, Q1 2026/);
     expect(text).toMatch(/not a reasonable expectation/);
   });
 

@@ -3559,8 +3559,7 @@ async function refreshMilesSurface(){
   await openOverview();
 }
 function hideProvider(s){
-  const name='search'+'light';
-  return String(s||'').replace(/\u2014/g,' - ').replace(/\u2013/g,'-').replace(new RegExp(name+'\\s*digital','gi'),'the published study').replace(new RegExp(name,'gi'),'the published study');
+  return String(s||'').replace(/\u2014/g,' - ').replace(/\u2013/g,'-');
 }
 function modeBlurb(mode, caps){
   const daily=(caps&&caps.dailyBudget)||20, month=(caps&&caps.monthlyCeiling)||600, pct=(caps&&caps.maxChangePct)!=null?caps.maxChangePct:10;
@@ -8661,7 +8660,27 @@ function setAccount(box){
   const danger=el('div','ui-section');
   danger.innerHTML='<h3>Delete account</h3><p class="mdesc">This disconnects integrations, cancels a paid plan, and deletes this workspace.</p><label>Type DELETE</label><input id="set-delete" autocomplete="off">';
   const del=el('button','ghost','Delete account'); del.type='button'; const dnote=el('span','appsub'); const drow=el('div','ui-actions'); drow.append(del, dnote); danger.append(drow);
-  card.append(alerts, legal, danger);
+  const share=el('div','ui-section');
+  share.append(el('h3',null,'Anonymous benchmarks'));
+  share.append(el('p','mdesc','Miles can include this account in anonymous trade benchmarks. The published number is a group median. It does not include your business name, phone, email, or address. You can turn this off. Turning it off removes your numbers from future benchmarks.'));
+  const shareLab=el('label'); shareLab.style.cssText='display:flex;gap:8px;align-items:center;margin:8px 0;font-size:13px;font-weight:500';
+  const shareOn=!(SETTINGS&&SETTINGS.benchmarkShare===false);
+  shareLab.innerHTML='<input id="set-bench-share" type="checkbox" style="width:auto;margin:0"'+(shareOn?' checked':'')+'> <span>Include this account in anonymous benchmarks</span>';
+  share.append(shareLab);
+  const shareBtn=el('button','pf-save','Save benchmark setting'); shareBtn.type='button'; const shareNote=el('span','appsub'); const shareRow=el('div','ui-actions'); shareRow.append(shareBtn, shareNote); share.append(shareRow);
+  shareBtn.onclick=async()=>{
+    if(!REMOTE) return;
+    shareBtn.disabled=true; shareNote.textContent='Saving...';
+    const on=$('#set-bench-share').checked;
+    try{
+      const r=await fetch('/api/benchmarks/sharing',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({share:on})});
+      const d=await r.json().catch(()=>({}));
+      shareNote.textContent=r.ok?(on?'Included.':'Removed from future benchmarks.'):(d.error||'Could not save.');
+      if(r.ok) SETTINGS.benchmarkShare=on;
+    }catch(e){ shareNote.textContent='Could not save.'; }
+    shareBtn.disabled=false;
+  };
+  card.append(alerts, share, legal, danger);
   alertSave.onclick=async()=>{ const body={}; alerts.querySelectorAll('[data-note]').forEach(i=>{ body[i.dataset.note]=i.checked; }); const r=await fetch('/api/notifications',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); alertNote.textContent=r.ok?'Saved ✓':'Could not save'; };
   del.onclick=async()=>{ if($('#set-delete').value!=='DELETE'){ dnote.textContent='Type DELETE to confirm.'; return; } const r=await fetch('/api/account/delete',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:'DELETE'})}); if(r.ok) location.href='/login'; else { const d=await r.json().catch(()=>({})); dnote.textContent=d.error||'Could not delete.'; } };
 }
@@ -8787,6 +8806,31 @@ async function renderOwnerAdmin(){
     };
     page.append(lc);
   })();
+  const benchCard=el('div','mcard'); benchCard.style.cssText='margin-bottom:14px;max-width:980px';
+  benchCard.append(el('div','sect-label','LIVING PLAYBOOK'));
+  benchCard.append(el('p','mdesc','Each trade and platform: how many accounts are connected, how many are required before Miles data is published, and which source the number uses. No business is listed.'));
+  const benchOut=el('div'); benchCard.append(benchOut);
+  page.append(benchCard);
+  try{
+    const br=await fetchJson('/api/admin/benchmarks', null, 12000);
+    const cohorts=(br.data&&br.data.cohorts)||[];
+    if(!br.ok){ benchOut.append(el('p','appsub',(br.data&&br.data.error)||'The benchmark list did not load.')); }
+    else if(!cohorts.length){ benchOut.append(el('p','appsub','No cohorts yet.')); }
+    else {
+      const table=el('table'); table.style.cssText='width:100%;border-collapse:collapse;font-size:12.5px';
+      const head=el('tr');
+      ['Trade','Platform','Metric','N','Required','Contributors','Published','Source'].forEach(label=>{ const th=el('th',null,label); th.style.cssText='text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)'; head.append(th); });
+      table.append(head);
+      cohorts.filter(row=>row.metric==='cpl').forEach(row=>{
+        const tr=el('tr');
+        [row.trade, row.platform, row.metric, String(row.n), String(row.required), String(row.contributors), row.published?'Yes':'No', row.source].forEach(cell=>{
+          const td=el('td',null,cell); td.style.cssText='padding:6px 8px;border-bottom:1px solid var(--line)'; tr.append(td);
+        });
+        table.append(tr);
+      });
+      benchOut.append(table);
+    }
+  }catch(e){ benchOut.append(el('p','appsub','The benchmark list did not load.')); }
   const res=await fetchJson('/api/admin/business?period='+encodeURIComponent(window.adminPeriod||'month'), null, 12000);
   const view=res.data;
   if(!res.ok || !view || !view.totals){ page.append(el('p','md-explain', (res.data&&res.data.error)||'The business list did not load.')); box.append(page); return; }

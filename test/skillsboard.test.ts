@@ -24,14 +24,14 @@ describe('skills and playbooks board', () => {
     expect(painting.status).toBe('Your trade');
     const study = painting.lines.find((line) => line.label === 'Cost per lead Miles uses')!.text;
     const planning = painting.lines.find((line) => line.label === 'Playbook planning range')!.text;
-    expect(study).toMatch(/\$104 to \$149/);
-    expect(study).toMatch(/similar home-services trades/);
+    expect(study).toMatch(/\$138\.38/);
+    expect(study).toMatch(/LocaliQ 2025/);
     expect(study).toMatch(/budget check/);
     expect(planning).toMatch(/\$40 to \$90/);
     expect(planning).toMatch(/does not use it/);
     expect(painting.lines.find((line) => line.label === 'Season')!.text).toMatch(/spring/);
     expect(painting.summary).toMatch(/paused Google Search/);
-    expect(painting.facts.join(' ')).toMatch(/\$104 to \$149/);
+    expect(painting.facts.join(' ')).toMatch(/\$138\.38/);
     expect(painting.facts.join(' ')).toMatch(/Season:/);
     expect(painting.badge).toBe('Available');
     expect(board.cards.filter((card) => card.group === 'playbook' || card.group === 'pack').every((card) => card.badge === 'Active' || card.badge === 'Available')).toBe(true);
@@ -40,7 +40,7 @@ describe('skills and playbooks board', () => {
     expect(roofing.lines.find((line) => line.label === 'Campaign structure')!.text).toMatch(/pitched and shingle/);
     expect(roofing.lines.find((line) => line.label === 'Cost per lead Miles uses')!.text).toMatch(/\$124/);
     const copy = text(board);
-    expect(copy.toLowerCase()).not.toContain('searchlight');
+    expect(copy.toLowerCase()).not.toContain('searchlightdigital');
     expect(copy).not.toContain('\u2014');
   });
 
@@ -88,7 +88,7 @@ describe('skills and playbooks board', () => {
     expect(on.cards.filter((card) => card.group === 'schedule')).toHaveLength(SEVEN_SKILLS.length);
     expect(on.cards.filter((card) => card.group === 'toolkit')).toHaveLength(SKILL_CATALOG.length);
     expect(on.cards.find((card) => card.id === 'playbook-plumbing')!.active).toBe(true);
-    expect(text(on).toLowerCase()).not.toContain('searchlight');
+    expect(text(on).toLowerCase()).not.toContain('searchlightdigital');
     expect(text(on)).not.toContain('\u2014');
   });
 });
@@ -118,7 +118,7 @@ describe('skills board route and nav', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.cards.find((card: { id: string }) => card.id === 'playbook-painting').yours).toBe(true);
-    expect(JSON.stringify(body).toLowerCase()).not.toContain('searchlight');
+    expect(JSON.stringify(body).toLowerCase()).not.toContain('searchlightdigital');
     expect(JSON.stringify(body)).not.toContain('\u2014');
     await app.close();
   });

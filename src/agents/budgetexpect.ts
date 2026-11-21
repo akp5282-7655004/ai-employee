@@ -5,11 +5,12 @@
  * booked jobs = leads x book rate
  *
  * The cost per lead is the same band the goal check uses, so the two cannot
- * disagree. A trade with no row uses the published blended and non-brand
- * figures and is labeled as an estimate from similar home-services trades.
- * Customer copy uses BENCHMARK_META.source and never names the study's publisher.
+ * disagree. Miles data replaces that band when the minimum is met. A trade
+ * with no Miles row uses Searchlight, then a verified external figure, then
+ * the playbook estimate. A missing row stays missing.
  */
-import { BENCHMARK_HUB, BENCHMARK_META, LSA_BLENDED, LSA_TRADES } from '../packs/benchmarks.js';
+import type { MilesCohort } from '../benchmarks/types.js';
+import { BENCHMARK_HUB, LSA_BLENDED, LSA_TRADES } from '../packs/benchmarks.js';
 import {
   cplBandForGoal,
   googleAdsEnds,
@@ -24,7 +25,7 @@ import { tradeKey } from './feasibility.js';
 export interface ProjectionEnd {
   kind: 'non_brand' | 'blended' | 'trade' | 'lsa';
   cpl: number;
-  bookRatePct: number;
+  bookRatePct: number | null;
   /** Published cost per customer for this end. Null when that row does not list one. */
   costPerCustomer: number | null;
   leadsExact: number;
@@ -43,6 +44,7 @@ export interface BudgetExpectation {
     rowLabel: string;
     fallback: boolean;
     sourceLabel: string;
+    milesShortfall: string | null;
     /** Set when the trade has no row of its own. */
     estimateLabel: string | null;
     /** Fewer leads. Higher cost per lead. */
@@ -84,14 +86,15 @@ function plain(s: string): string {
   return s
     .replace(/\u2014/g, ', ')
     .replace(/\u2013/g, '-')
-    .replace(/searchlight\s*digital/gi, 'the published study')
-    .replace(/searchlight/gi, 'the published study')
+    .replace(/searchlightdigital\.io\S*/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
 
 function money(n: number): string {
-  return `$${Math.round(n).toLocaleString('en-US')}`;
+  const rounded = Math.round(n * 100) / 100;
+  if (Number.isInteger(rounded)) return `$${rounded.toLocaleString('en-US')}`;
+  return `$${rounded.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function round1(n: number): number {
@@ -150,9 +153,9 @@ function lsaBook(trade: string, label: string): { bookRatePct: number; costPerCu
   return { bookRatePct: LSA_BLENDED.bookRate, costPerCustomer: LSA_BLENDED.costPerCustomer, own: false };
 }
 
-function endOf(kind: ProjectionEnd['kind'], cpl: number, bookRatePct: number, costPerCustomer: number | null, monthly: number): ProjectionEnd {
+function endOf(kind: ProjectionEnd['kind'], cpl: number, bookRatePct: number | null, costPerCustomer: number | null, monthly: number): ProjectionEnd {
   const leadsExact = cpl > 0 ? monthly / cpl : 0;
-  const jobsExact = leadsExact * (bookRatePct / 100);
+  const jobsExact = bookRatePct != null ? leadsExact * (bookRatePct / 100) : 0;
   return { kind, cpl, bookRatePct, costPerCustomer, leadsExact, jobsExact };
 }
 
@@ -163,14 +166,16 @@ function capSentence(monthly: number): string {
   return ` The daily cap rounds to ${money(daily)}, which is ${money(across)} over 30 days. This projection uses the ${money(monthly)} you typed.`;
 }
 
-function copyFor(input: { monthly: number; city: string; label: string; fallback: boolean; channel: GoalChannel; high: ProjectionEnd; low: ProjectionEnd; channelCost: { blended: number; nonBrand: number } | null }): string {
+function copyFor(input: { monthly: number; city: string; label: string; fallback: boolean; channel: GoalChannel; high: ProjectionEnd; low: ProjectionEnd; channelCost: { blended: number; nonBrand: number } | null; sourceLabel: string; milesShortfall: string | null; bookKnown: boolean }): string {
   const leads = leadPhrase(Math.round(input.high.leadsExact), Math.round(input.low.leadsExact));
   const jobs = jobPhrase(input.high.jobsExact, input.low.jobsExact);
   const place = input.city.trim();
   const where = place ? ` No separate figure is published for ${place}.` : '';
   const same = input.high.cpl === input.low.cpl && input.high.bookRatePct === input.low.bookRatePct;
   let rates: string;
-  if (same) {
+  if (!input.bookKnown) {
+    rates = `A lead costs about ${money(input.high.cpl)}. This study does not publish how often a lead books, so Miles will not guess booked jobs.`;
+  } else if (same) {
     rates = `A lead costs about ${money(input.high.cpl)}. About ${input.high.bookRatePct}% of leads book a job.`;
   } else if (input.fallback && input.channel === 'google_ads') {
     rates = `A lead costs about ${money(input.low.cpl)} when the study includes people who search a company by name, and about ${money(input.high.cpl)} for everyone else. About ${input.low.bookRatePct}% of the cheaper leads book a job, and about ${input.high.bookRatePct}% of the others.`;
@@ -197,7 +202,9 @@ function copyFor(input: { monthly: number; city: string; label: string; fallback
     : (!input.fallback && input.channel === 'lsa' && input.high.costPerCustomer == null && input.high.bookRatePct === LSA_BLENDED.bookRate
       ? ` ${input.label}'s row does not list how often a lead books, so this uses the all-trades figure of ${LSA_BLENDED.bookRate}%.`
       : '');
-  return plain(`On ${money(input.monthly)} a month, expect ${leads}. ${jobs.charAt(0).toUpperCase()}${jobs.slice(1)} from those leads. ${rates}${bookNote}${customer}${estimate}${where}${capSentence(input.monthly)} This is not a promise. Source: ${BENCHMARK_META.source}.`);
+  const jobsSentence = input.bookKnown ? `${jobs.charAt(0).toUpperCase()}${jobs.slice(1)} from those leads. ` : '';
+  const short = input.milesShortfall ? ` ${input.milesShortfall}.` : '';
+  return plain(`On ${money(input.monthly)} a month, expect ${leads}. ${jobsSentence}${rates}${bookNote}${customer}${estimate}${where}${capSentence(input.monthly)} This is not a promise. Source: ${input.sourceLabel}.${short}`);
 }
 
 export function projectBudget(input: {
@@ -206,13 +213,14 @@ export function projectBudget(input: {
   monthlyBudget?: number;
   channel?: GoalChannel;
   now?: Date;
+  cohort?: MilesCohort | null;
 }): BudgetExpectation | null {
   const monthly = Number(input.monthlyBudget);
   if (!(monthly > 0) || !Number.isFinite(monthly)) return null;
   const channel: GoalChannel = input.channel === 'lsa' ? 'lsa' : 'google_ads';
   const trade = (input.trade || '').trim();
   const city = (input.city || '').trim();
-  const band = trade ? cplBandForGoal(trade, channel) : null;
+  const band = trade ? cplBandForGoal(trade, channel, input.cohort) : null;
   if (!band) return null;
   const ends = channel === 'google_ads' ? googleAdsEnds() : null;
   const built = endsFor(trade, band, monthly, ends);
@@ -220,6 +228,7 @@ export function projectBudget(input: {
   const counts = leadCountsForBudget(monthly, band);
   const jobsLow = round1(built.high.jobsExact);
   const jobsHigh = round1(built.low.jobsExact);
+  const bookKnown = built.high.bookRatePct != null && built.low.bookRatePct != null;
   const copy = copyFor({
     monthly,
     city,
@@ -229,6 +238,9 @@ export function projectBudget(input: {
     high: built.high,
     low: built.low,
     channelCost: ends ? { blended: ends.blended.costPerCustomer, nonBrand: ends.nonBrand.costPerCustomer } : null,
+    sourceLabel: band.sourceLabel,
+    milesShortfall: band.milesShortfall,
+    bookKnown,
   });
   return {
     inputs: { trade: band.label, city, monthlyBudget: monthly, channel },
@@ -236,8 +248,9 @@ export function projectBudget(input: {
       channel,
       rowLabel: band.label,
       fallback: band.source === 'similar',
-      sourceLabel: BENCHMARK_META.source,
-      estimateLabel: band.source === 'similar' ? 'Estimate from similar home-services trades' : null,
+      sourceLabel: band.sourceLabel,
+      milesShortfall: band.milesShortfall,
+      estimateLabel: band.source === 'external' ? band.sourceLabel : band.source === 'playbook' ? 'Playbook estimate' : band.source === 'miles' ? band.sourceLabel : null,
       highCpl: built.high,
       lowCpl: built.low,
       channelCostPerCustomer: ends ? { blended: ends.blended.costPerCustomer, nonBrand: ends.nonBrand.costPerCustomer } : null,
@@ -257,6 +270,10 @@ function endsFor(
   monthly: number,
   google: ReturnType<typeof googleAdsEnds>,
 ): { high: ProjectionEnd; low: ProjectionEnd } | null {
+  if (band.source === 'miles' || band.source === 'external' || band.source === 'playbook') {
+    const one = endOf(band.channel === 'lsa' ? 'lsa' : 'trade', band.typical, null, null, monthly);
+    return { high: one, low: one };
+  }
   if (band.channel === 'lsa') {
     const book = lsaBook(trade, band.label);
     const kind: ProjectionEnd['kind'] = 'lsa';
@@ -287,7 +304,7 @@ function isEnd(value: unknown): value is ProjectionEnd {
   if (!value || typeof value !== 'object') return false;
   const row = value as ProjectionEnd;
   return typeof row.cpl === 'number' && row.cpl > 0
-    && typeof row.bookRatePct === 'number'
+    && (row.bookRatePct == null || typeof row.bookRatePct === 'number')
     && typeof row.leadsExact === 'number'
     && typeof row.jobsExact === 'number';
 }
@@ -328,6 +345,9 @@ export function liveDaysFromEvents(
 }
 
 function closesFrom(leads: number, stored: BudgetExpectation): string {
+  if (stored.benchmark.highCpl.bookRatePct == null || stored.benchmark.lowCpl.bookRatePct == null) {
+    return 'Not published for this benchmark';
+  }
   const low = leads * (stored.benchmark.highCpl.bookRatePct / 100);
   const high = leads * (stored.benchmark.lowCpl.bookRatePct / 100);
   return jobPhrase(low, high);
@@ -335,7 +355,8 @@ function closesFrom(leads: number, stored: BudgetExpectation): string {
 
 function paceSentence(stored: BudgetExpectation, actuals: ExpectationActuals, leads: number | null): string {
   const planned = leadPhrase(stored.range.leads.low, stored.range.leads.high);
-  const jobs = jobPhrase(stored.range.jobs.low, stored.range.jobs.high);
+  const jobsKnown = stored.benchmark.highCpl.bookRatePct != null;
+  const jobs = jobsKnown ? jobPhrase(stored.range.jobs.low, stored.range.jobs.high) : 'booked jobs are not estimated';
   const spent = actuals.spend == null ? '' : ` You have spent ${money(actuals.spend)} of the ${money(stored.inputs.monthlyBudget)} you planned.`;
   const leadBit = leads == null
     ? ' No tracked leads yet, so cost per lead stays blank. Google conversion counts are not used as leads.'

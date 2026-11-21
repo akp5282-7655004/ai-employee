@@ -13,6 +13,9 @@
  * lead. A month is 30 days. A week is 7 days.
  */
 import { BENCHMARK_HUB, BENCHMARK_META, LSA_BLENDED, LSA_TRADES, LSA_VS_GOOGLE } from '../packs/benchmarks.js';
+import { resolveBenchmark } from '../benchmarks/resolve.js';
+import { tradeKey as benchmarkTradeKey } from '../benchmarks/trades.js';
+import type { MilesCohort } from '../benchmarks/types.js';
 import { tradeKey } from './feasibility.js';
 import { homeServicesPack } from '../packs/homeServices.js';
 
@@ -57,9 +60,11 @@ export interface CplBand {
   typical: number;
   high: number;
   single: boolean;
-  /** published = a row for this trade. similar = the general study, not this trade. */
-  source: 'published' | 'similar';
+  /** published = Searchlight for this trade. miles / external / playbook come from the resolver. similar is no longer produced. */
+  source: 'published' | 'similar' | 'miles' | 'external' | 'playbook';
   channel: GoalChannel;
+  sourceLabel: string;
+  milesShortfall: string | null;
 }
 
 export interface GoalCaps {
@@ -100,7 +105,9 @@ function plain(s: string): string {
 }
 
 function money(n: number): string {
-  return `$${Math.round(n).toLocaleString('en-US')}`;
+  const rounded = Math.round(n * 100) / 100;
+  if (Number.isInteger(rounded)) return `$${rounded.toLocaleString('en-US')}`;
+  return `$${rounded.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function leadNoun(n: number, spread: boolean): string {
@@ -213,21 +220,19 @@ export function lsaBandForGoal(trade: string): CplBand | null {
   const label = tradeLabelFor(trade);
   const named = LSA_TRADES.find((row) => row.trade.toLowerCase() === label.toLowerCase());
   if (named) {
-    return { key: key || 'lsa', label: named.trade, low: named.cpl, typical: named.cpl, high: named.cpl, single: true, source: 'published', channel: 'lsa' };
+    return { key: key || 'lsa', label: named.trade, low: named.cpl, typical: named.cpl, high: named.cpl, single: true, source: 'published', channel: 'lsa', sourceLabel: '', milesShortfall: null };
   }
   if (key === 'roofing') {
     const cpl = lsaHubCpl('Roofing');
     if (cpl == null) return null;
-    return { key, label: 'Roofing', low: cpl, typical: cpl, high: cpl, single: true, source: 'published', channel: 'lsa' };
+    return { key, label: 'Roofing', low: cpl, typical: cpl, high: cpl, single: true, source: 'published', channel: 'lsa', sourceLabel: '', milesShortfall: null };
   }
   if (key === 'garage_door') {
     const cpl = lsaHubCpl('Garage Door');
     if (cpl == null) return null;
-    return { key, label: 'Garage Door', low: cpl, typical: cpl, high: cpl, single: true, source: 'published', channel: 'lsa' };
+    return { key, label: 'Garage Door', low: cpl, typical: cpl, high: cpl, single: true, source: 'published', channel: 'lsa', sourceLabel: '', milesShortfall: null };
   }
-  const cpl = LSA_BLENDED.cpl;
-  if (!(cpl > 0)) return null;
-  return { key: key || 'similar', label, low: cpl, typical: cpl, high: cpl, single: true, source: 'similar', channel: 'lsa' };
+  return null;
 }
 
 /**
@@ -252,31 +257,74 @@ export function nationalSearchCpl(trade: string): CplBand | null {
     single: spec.low === spec.high,
     source: 'published',
     channel: 'google_ads',
+    sourceLabel: '',
+    milesShortfall: null,
   };
 }
 
-function similarGoogleBand(trade: string): CplBand | null {
-  const ends = googleAdsEnds();
-  if (!ends) return null;
-  const key = tradeKey(trade);
+function withSource(band: CplBand, label: string, shortfall: string | null, source: CplBand['source']): CplBand {
+  return { ...band, source, sourceLabel: label, milesShortfall: shortfall };
+}
+
+/**
+ * The cost per lead the budget check uses. Miles wins outright when its
+ * minimum is met. Otherwise Searchlight, then a verified external figure,
+ * then the playbook estimate. A missing row stays missing.
+ */
+export function cplBandForGoal(trade: string, channel: GoalChannel = 'google_ads', cohort?: MilesCohort | null): CplBand | null {
+  const platform = channel === 'lsa' ? 'google_lsa' : 'google_ads';
+  const resolved = resolveBenchmark({ trade: benchmarkTradeKey(trade) || trade, platform, metric: 'cpl', cohort });
+  if (resolved.kind === 'none' || (resolved.value == null && resolved.low == null)) return null;
+  const label = tradeLabelFor(trade);
+  if (resolved.kind === 'miles' && resolved.value != null) {
+    const low = resolved.low ?? resolved.value;
+    const high = resolved.high ?? resolved.value;
+    return {
+      key: benchmarkTradeKey(trade) || tradeKey(trade) || 'miles',
+      label,
+      low,
+      typical: resolved.value,
+      high,
+      single: low === high,
+      source: 'miles',
+      channel,
+      sourceLabel: resolved.sourceLabel,
+      milesShortfall: null,
+    };
+  }
+  if (resolved.kind === 'searchlight') {
+    const published = channel === 'lsa' ? lsaBandForGoal(trade) : nationalSearchCpl(trade);
+    if (published) return withSource(published, resolved.sourceLabel, resolved.milesShortfall, 'published');
+    if (resolved.value == null) return null;
+    return {
+      key: benchmarkTradeKey(trade) || 'searchlight',
+      label,
+      low: resolved.value,
+      typical: resolved.value,
+      high: resolved.value,
+      single: true,
+      source: 'published',
+      channel,
+      sourceLabel: resolved.sourceLabel,
+      milesShortfall: resolved.milesShortfall,
+    };
+  }
+  const value = resolved.value ?? resolved.low ?? resolved.high;
+  if (value == null) return null;
+  const low = resolved.low ?? value;
+  const high = resolved.high ?? value;
   return {
-    key: key || 'similar',
-    label: tradeLabelFor(trade),
-    low: ends.blended.cpl,
-    typical: ends.nonBrand.cpl,
-    high: ends.nonBrand.cpl,
-    single: ends.blended.cpl === ends.nonBrand.cpl,
-    source: 'similar',
-    channel: 'google_ads',
+    key: benchmarkTradeKey(trade) || tradeKey(trade) || resolved.kind,
+    label,
+    low,
+    typical: resolved.value ?? value,
+    high,
+    single: low === high,
+    source: resolved.kind === 'playbook' ? 'playbook' : 'external',
+    channel,
+    sourceLabel: resolved.sourceLabel,
+    milesShortfall: resolved.milesShortfall,
   };
-}
-
-/** Published row for this trade and channel, otherwise the general study for that channel. */
-export function cplBandForGoal(trade: string, channel: GoalChannel = 'google_ads'): CplBand | null {
-  if (channel === 'lsa') return lsaBandForGoal(trade);
-  const published = nationalSearchCpl(trade);
-  if (published) return published;
-  return similarGoogleBand(trade);
 }
 
 /** Lead counts for a budget already scaled to the goal's period. Low is fewer leads. */
@@ -296,11 +344,17 @@ function cityLine(tradeLabel: string, city: string, single: boolean): string {
   return `No published cost per lead for ${tradeLabel} in ${place}. This uses the ${what}.`;
 }
 
+function sourceSentence(band: CplBand | null): string {
+  if (!band) return `Source: ${BENCHMARK_META.source}. Not enough Miles data yet (0 of 5 accounts).`;
+  const short = band.milesShortfall ? ` ${band.milesShortfall}.` : '';
+  return `Source: ${band.sourceLabel || BENCHMARK_META.source}.${short}`;
+}
+
 function assumptionFor(band: CplBand | null, tradeLabel: string, cityNote: string): string {
   if (!band) {
-    return plain(`${cityNote} Miles does not have a cost per lead for ${tradeLabel}, so it will not guess one. Source: ${BENCHMARK_META.source}.`);
+    return plain(`${cityNote} Miles does not have a cost per lead for ${tradeLabel}, so it will not guess one. ${sourceSentence(null)}`);
   }
-  const source = `Source: ${BENCHMARK_META.source}.`;
+  const source = sourceSentence(band);
   if (band.source === 'similar') {
     const figures = band.single ? money(band.typical) : `${money(Math.min(band.low, band.high))} to ${money(Math.max(band.low, band.high))}`;
     const which = band.channel === 'lsa'
@@ -312,9 +366,15 @@ function assumptionFor(band: CplBand | null, tradeLabel: string, cityNote: strin
   const figures = band.single
     ? `${money(band.typical)}`
     : `${money(band.low)}, ${money(band.typical)}, and ${money(band.high)}`;
-  const spread = band.single
-    ? `The published study lists one ${channelName} figure for ${tradeLabel}, not a spread.`
-    : `Those are the published ${channelName} figures for ${tradeLabel}. The middle one is the figure the study lists for the trade.`;
+  const spread = band.source === 'miles'
+    ? `That is Miles data for ${tradeLabel}. The low and high are the 25th and 75th percentile. Other sources are not blended in.`
+    : band.source === 'external'
+      ? `That is the verified published figure for ${tradeLabel}. Miles does not blend it with another study.`
+      : band.source === 'playbook'
+        ? `That is the trade playbook's own estimate for ${tradeLabel}, not a measured study.`
+        : band.single
+          ? `The published study lists one ${channelName} figure for ${tradeLabel}, not a spread.`
+          : `Those are the published ${channelName} figures for ${tradeLabel}. The middle one is the figure the study lists for the trade.`;
   return plain(`Cost per lead used here: ${figures}. ${spread} ${cityNote} ${source}`);
 }
 
@@ -327,6 +387,8 @@ export interface GoalInput {
   leadPeriod?: LeadPeriod;
   caps?: GoalCaps | null;
   channel?: GoalChannel;
+  /** Miles cohort for this trade and channel. Omit for an empty cohort. */
+  cohort?: MilesCohort | null;
 }
 
 export function goalCheck(input: GoalInput): GoalCheck {
@@ -339,7 +401,7 @@ export function goalCheck(input: GoalInput): GoalCheck {
   const trade = (input.trade || '').trim();
   const city = (input.city || '').trim();
   const channel: GoalChannel = input.channel === 'lsa' ? 'lsa' : 'google_ads';
-  const band = trade ? cplBandForGoal(trade, channel) : null;
+  const band = trade ? cplBandForGoal(trade, channel, input.cohort) : null;
   const tradeLabel = band?.label || trade || 'this trade';
   const place = city.trim();
   const channelWord = channel === 'lsa' ? 'Local Services Ads' : 'Google Ads';
@@ -355,7 +417,7 @@ export function goalCheck(input: GoalInput): GoalCheck {
   const caps = input.caps ?? { daily: null, monthly: null };
   const savedDaily = caps.daily != null && caps.daily > 0 ? caps.daily : null;
   const savedMonthly = caps.monthly != null && caps.monthly > 0 ? caps.monthly : null;
-  const sourceLabel = BENCHMARK_META.source;
+  const sourceLabel = band?.sourceLabel || 'No benchmark';
 
   const base = {
     trade: tradeLabel,

@@ -4,6 +4,7 @@
  * (accounts, sessions, and per-user data) goes through this interface, so the
  * app doesn't care whether it's backed by memory (dev) or Postgres (production).
  */
+import type { AggregateRow, DailyRow, Membership } from '../benchmarks/types.js';
 export interface User {
   id: string;
   email: string;
@@ -55,6 +56,17 @@ export interface Store {
   listUserIds(): Promise<string[]>;
   /** All accounts (for the owner's admin screen), oldest first. */
   listUsers(): Promise<Array<{ id: string; email: string; name?: string; createdAt: string }>>;
-  /** Fully remove a user — their sessions, data, and account. */
+  /** Fully remove a user — their sessions, data, account, and benchmark rows. */
   deleteUser(id: string): Promise<void>;
+
+  /** Per-account daily benchmark rows. Internal. Not returned by a public API. */
+  upsertBenchmarkDaily(rows: DailyRow[]): Promise<void>;
+  /** Drop one account's daily rows. Membership stays so N still counts them. */
+  deleteBenchmarkDaily(accountId: string): Promise<void>;
+  listBenchmarkDaily(): Promise<DailyRow[]>;
+  upsertBenchmarkMembership(row: Membership): Promise<void>;
+  listBenchmarkMembership(): Promise<Membership[]>;
+  /** Replace the published aggregate table. Rows have no account id. */
+  replaceBenchmarkAggregates(rows: AggregateRow[]): Promise<void>;
+  listBenchmarkAggregates(): Promise<AggregateRow[]>;
 }

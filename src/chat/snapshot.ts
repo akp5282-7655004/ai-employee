@@ -91,6 +91,8 @@ export interface AccountSnapshot {
   leads: SnapshotLead[];
   /** Connected tool names and the credit balance. Reads use this and do not call the model. */
   account: AccountFacts;
+  /** Trade benchmarks with a source label. No other business's numbers. */
+  benchmarkLines?: string[];
 }
 
 export interface ChatSources {
@@ -126,6 +128,7 @@ export interface ChatSources {
   creditsRemaining?: number | null;
   /** True once this business was granted the launch credit. */
   launchGranted?: boolean;
+  benchmarkLines?: string[];
 }
 
 const META_NOTE = 'Meta ads are coming later. A Facebook Page is not an ad account, and this build cannot launch Meta campaigns.';
@@ -321,6 +324,7 @@ export function buildAccountSnapshot(sources: ChatSources): AccountSnapshot {
       sample: leadSample,
     })),
     account: accountFacts(listedApps(sources), clean(p.website, 180), sources.creditsRemaining ?? null, sources.launchGranted === true),
+    benchmarkLines: (sources.benchmarkLines || []).map((line) => clean(line, 300)).filter(Boolean).slice(0, 16),
   };
 }
 
@@ -383,6 +387,9 @@ export function renderSnapshot(snapshot: AccountSnapshot): string {
     lines.push(`Spend rows: ${rows.join('; ')}.`);
   }
   lines.push(`Booked jobs: ${numText(snapshot.performance.bookedJobs)}. ${snapshot.performance.bookedJobs.note}`);
+  if (snapshot.benchmarkLines?.length) {
+    lines.push(`Trade benchmarks (not this account's results): ${snapshot.benchmarkLines.join(' | ')}`);
+  }
   const google = snapshot.integrations.google;
   const googleId = google.ready && google.customerId ? `Customer id ${google.customerId} is resolved.` : 'Customer id is not resolved.';
   lines.push(`Google Ads: ${google.oauth ? 'signed in' : 'not connected'}. Ready: ${google.ready ? 'yes' : 'no'}. ${googleId} ${google.error || google.note || ''}`.trim());
