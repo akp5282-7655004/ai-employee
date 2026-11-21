@@ -70,12 +70,12 @@ export function searchSpecCheck(s: CampaignSpec): SpecCheckItem[] {
   const deLow = Math.min(...(deCounts.length ? deCounts : [0]));
   items.push({
     item: `Headlines (${hlMin}–${hlMax} per ad)`,
-    status: hlLow < hlMin ? 'missing' : hlLow < hlMax ? 'warn' : 'ok',
+    status: hlLow < hlMin ? 'missing' : hlLow < 8 ? 'warn' : 'ok',
     detail: hlLow < hlMin
-      ? `An ad group has only ${hlLow} — Google requires ${hlMin}.`
-      : hlLow < hlMax
-        ? `${hlLow}/${hlMax} — serves fine, but Google performs best with all ${hlMax} filled.`
-        : `All ad groups max out ${hlMax} headlines.`,
+      ? `An ad group has only ${hlLow}. Google requires ${hlMin}.`
+      : hlLow < 8
+        ? `${hlLow} headlines. SOP 130 asks for 8 to 10, and Google allows up to ${hlMax}.`
+        : `${hlLow} headlines. SOP 130 asks for 8 to 10. Google allows up to ${hlMax}, and Miles does not invent lines to fill that.`,
   });
   items.push({
     item: `Descriptions (${deMin}–${deMax} per ad)`,

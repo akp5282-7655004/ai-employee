@@ -15,6 +15,9 @@
  * The owner is not asked to review keywords, skipped searches, ads, or
  * bidding. Miles fills those from the playbook. The full plan stays available
  * as an optional read.
+ *
+ * Elements in a complete build are listed in docs/reference/BUILD-GUIDANCE.md.
+ * Agency checklist tier numbers are not caps on this plan.
  */
 import {
   buildCampaignSpec,
@@ -26,6 +29,8 @@ import {
   type VerifiedClaims,
 } from './campaign.js';
 import { resolveAreas } from './geotarget.js';
+import { includeBuildElements } from './ppclimits.js';
+import { reviewSearchPlan, type SopReview } from './prelaunch.js';
 import { enforceRulebook, fixAdCapitalization, hoursRange, RULEBOOK_DEFAULTS } from './rulebook.js';
 
 export const AUTOMATE_PLAN_RULE =
@@ -74,6 +79,12 @@ export interface SearchPlan {
   preapproved: boolean;
   /** Set when the service area did not match a Google location. Launch stays off. */
   locationBlock: string;
+  /** SOP 147. The same review chat uses before it shows an approval card. */
+  sopReview: SopReview;
+  /** Branded campaign when the owner has a brand name. See docs/reference/BUILD-GUIDANCE.md. */
+  brand: CampaignSpec | null;
+  /** Which checklist elements this draft includes. Not a tier cap. */
+  limitsNote: string;
 }
 
 const BOOK: Record<string, string[]> = {
@@ -204,7 +215,7 @@ function sectionsOf(spec: CampaignSpec): PlanSection[] {
     {
       id: 'keywords',
       title: 'Keywords',
-      reason: 'Phrase and exact match, with the city, one tight ad group per service.',
+      reason: 'SOP 144 and SOP 145. Exact for a specific buyer task, phrase when the page can answer added words. The same phrase is not saved twice.',
       body: keywords || 'No keywords yet.',
     },
     {
@@ -232,9 +243,9 @@ function sectionsOf(spec: CampaignSpec): PlanSection[] {
     {
       id: 'budget',
       title: 'Budget and bidding',
-      reason: spec.bidPlan?.stage === 'MAXIMIZE_CLICKS'
-        ? 'No conversion history yet, so this is Maximize Clicks with a CPC cap. It is a default, not a promise.'
-        : 'Bidding follows the conversions already on the account. It is a default, not a promise.',
+      reason: spec.trafficTest
+        ? 'The owner asked for a traffic test, so this is Maximize Clicks with a CPC cap. It is not a lead plan.'
+        : 'SOP 146. Planned Maximize conversions for a lead, with no target CPA. The draft stays paused until the lead is confirmed.',
       body: `$${spec.dailyBudget}/day. ${bid}. Ads ${spec.targeting?.schedule.startHour ?? 7}:00 to ${spec.targeting?.schedule.endHour ?? 20}:00, all week.`,
     },
   ];
@@ -272,17 +283,20 @@ export function buildSearchPlan(profile: PlanProfile, opts?: { preapproved?: boo
     const seen = new Set(group.keywords.map((row) => row.text));
     for (const text of focus) {
       if (seen.has(text)) continue;
-      group.keywords.unshift({ text, match: 'exact' });
-      group.keywords.unshift({ text, match: 'phrase' });
+      const specific = text.split(/\s+/).length >= 3;
+      group.keywords.unshift({ text, match: specific ? 'exact' : 'phrase' });
       seen.add(text);
     }
     group.keywords = group.keywords.filter((row) => row.match === 'phrase' || row.match === 'exact').slice(0, RULEBOOK_DEFAULTS.maxKeywordsPerAdGroup);
   }
   spec.status = 'PAUSED';
   spec.biddingStrategy = spec.bidPlan?.stage === 'MAXIMIZE_CONVERSIONS' ? 'MAXIMIZE_CONVERSIONS' : 'MAXIMIZE_CLICKS';
-  const geo = resolveAreas(profile.serviceAreas || spec.locations.join('; '));
-  spec.geoTargets = geo.targets;
-  const sections = sectionsOf(spec);
+  const fit = includeBuildElements(spec, profile.businessName);
+  const limited = fit.spec;
+  const geo = resolveAreas(profile.serviceAreas || limited.locations.join('; '));
+  limited.geoTargets = geo.targets;
+  if (fit.brand) fit.brand.geoTargets = geo.targets;
+  const sections = sectionsOf(limited);
   const places = sections.find((section) => section.id === 'locations');
   if (places) {
     places.body = geo.targets.length
@@ -292,7 +306,20 @@ export function buildSearchPlan(profile: PlanProfile, opts?: { preapproved?: boo
       ? 'People physically in these Google locations. Interest outside them is off.'
       : geo.block;
   }
-  return { questions, spec, sections, preapproved: !!opts?.preapproved, locationBlock: geo.block };
+  const ads = sections.find((section) => section.id === 'ads');
+  if (ads && fit.brand) ads.body = `${ads.body}\n${fit.note}`;
+  const budget = sections.find((section) => section.id === 'budget');
+  if (budget) budget.body = `${budget.body} ${fit.checklist[0]}`;
+  return {
+    questions,
+    spec: limited,
+    sections,
+    preapproved: !!opts?.preapproved,
+    locationBlock: geo.block,
+    sopReview: reviewSearchPlan(limited),
+    brand: fit.brand,
+    limitsNote: fit.note,
+  };
 }
 
 /** Keep the owner's approved spec. Force paused, drop broad match, fix capitalization. */

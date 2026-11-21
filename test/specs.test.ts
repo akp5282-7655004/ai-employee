@@ -46,7 +46,7 @@ describe('searchSpecCheck — audit against Google launch checklist', () => {
     expect(byItem('keywords')!.status).toBe('ok');
     expect(byItem('sitelinks')!.status).toBe('ok');
     expect(byItem('negative')!.status).toBe('ok');
-    expect(byItem('headlines')!.status).toBe('ok'); // generator now fills all 15
+    expect(byItem('headlines')!.status).toBe('ok'); // SOP 130: 8 to 10, not 15 invented lines
   });
 
   it('flags UI-only assets as manual, never pretending Miles created them', () => {

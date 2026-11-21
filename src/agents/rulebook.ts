@@ -1,10 +1,12 @@
 /**
  * Campaign rulebook. These are launch defaults, not measured benchmarks and
  * not a promise of Quality Score, CPC, or cost per lead.
+ * Elements: docs/reference/BUILD-GUIDANCE.md. Checklist tiers are not caps.
  *
  * Defaults:
- * - 8 keywords per ad group
- * - 15 headlines, 4 descriptions, 30 and 90 character limits
+ * - up to 8 close keywords in one ad group, so one intent stays together. This is not a Starter, Growth, or Scale allotment.
+ * - 8 to 10 headlines (SOP 130), 4 descriptions, 30 and 90 character limits
+ * - the same keyword is not saved as both phrase and exact (SOP 145)
  * - at least 3 headlines mention the service or the city, and 2 mention the city when it fits
  * - exact and phrase match only
  * - 15 mile presence radius
@@ -19,7 +21,9 @@ import { defaultCallouts, licensedAndInsured, type CampaignSpec, type KeywordSpe
 
 export const RULEBOOK_DEFAULTS = {
   maxKeywordsPerAdGroup: 8,
-  headlines: 15,
+  /** SOP 130 asks for 8–10. Google allows 15. Miles does not invent lines to reach 15. */
+  headlines: 10,
+  headlineMin: 8,
   descriptions: 4,
   headlineChars: 30,
   descriptionChars: 90,
@@ -38,7 +42,7 @@ export const RULEBOOK_DEFAULTS = {
 
 export const STANDARD_NEGATIVES = [
   'jobs', 'careers', 'salary', 'hiring', 'diy', 'how to', 'free', 'cheap', 'training', 'school',
-  'course', 'supplies', 'wholesale', 'used', 'colors', 'colour', 'home depot', 'lowes', "lowe's",
+  'course', 'courses', 'supplies', 'wholesale', 'used', 'colors', 'colour', 'home depot', 'lowes', "lowe's",
   'sherwin', 'benjamin moore', 'behr', 'valspar', 'ppg',
 ];
 
@@ -151,6 +155,8 @@ export function enforceRulebook(spec: CampaignSpec, ctx: RulebookContext = {}): 
   const next: CampaignSpec = {
     ...spec,
     networks: ['Google Search'],
+    copyControls: { aiMax: false, textCustomization: false, finalUrlExpansion: false },
+    requiredWording: (spec.requiredWording || '').trim(),
     negatives: [...new Set([...(spec.negatives ?? []), ...STANDARD_NEGATIVES, ...(TRADE_NEGATIVES[(ctx.trade || '').toLowerCase()] ?? [])])],
     targeting: {
       presence: 'PRESENCE',
@@ -163,7 +169,11 @@ export function enforceRulebook(spec: CampaignSpec, ctx: RulebookContext = {}): 
         endHour: hours?.endHour ?? savedSchedule?.endHour ?? d.scheduleEndHour,
       },
     },
-    bidPlan: { stage: 'MAXIMIZE_CLICKS', maxCpc: d.maxCpc },
+    trafficTest: spec.trafficTest === true,
+    biddingStrategy: spec.trafficTest === true ? 'MAXIMIZE_CLICKS' : 'MAXIMIZE_CONVERSIONS',
+    bidPlan: spec.trafficTest === true
+      ? { stage: 'MAXIMIZE_CLICKS', maxCpc: d.maxCpc }
+      : { stage: 'MAXIMIZE_CONVERSIONS', maxCpc: d.maxCpc },
     callAsset: ctx.phone && /\d{7,}/.test(ctx.phone.replace(/\D/g, '')) ? { phone: ctx.phone } : null,
     locationAsset: ctx.gbpUrl && /^https:\/\//i.test(ctx.gbpUrl) ? { gbpUrl: ctx.gbpUrl } : null,
     structuredSnippet: spec.structuredSnippet?.header === 'Service catalog' && (spec.structuredSnippet.values?.length ?? 0) >= 3
@@ -171,7 +181,9 @@ export function enforceRulebook(spec: CampaignSpec, ctx: RulebookContext = {}): 
       : { header: 'Service catalog', values: [...new Set([...(spec.structuredSnippet?.values ?? []), ...spec.adGroups.map((g) => fit(g.name, 25)).filter(Boolean)])].slice(0, 10) },
   };
   if (JSON.stringify(spec.networks) !== '["Google Search"]') fixes.push('Networks set to Google Search only. No Display and no Search partners.');
-  fixes.push(`Bid plan set to Maximize Clicks with a $${d.maxCpc} max CPC. That cap is a default, not a benchmark.`);
+  fixes.push(spec.trafficTest === true
+    ? `Bid plan set to Maximize Clicks with a $${d.maxCpc} max CPC because the owner asked for a traffic test.`
+    : 'Bid plan set to Maximize conversions with no target CPA. SOP 146. The draft stays paused until the lead is confirmed.');
   fixes.push(`Targeting set to presence only, ${d.radiusMiles} miles, ${d.scheduleStartHour}:00 to ${d.scheduleEndHour}:00. Those are defaults, not a benchmark.`);
 
   if ((next.structuredSnippet?.values.length ?? 0) < 3) {
@@ -191,13 +203,15 @@ export function enforceRulebook(spec: CampaignSpec, ctx: RulebookContext = {}): 
       .filter((row) => row.match === 'phrase' || row.match === 'exact')
       .filter((row) => !/\b(best|free|quote|cheap)\b/.test(row.text))
       .filter((row) => !stem || row.text.includes(stem));
-    const seenKw = new Set<string>();
-    keywords = keywords.filter((row) => {
-      const key = `${row.match}:${row.text}`;
-      if (!row.text || seenKw.has(key)) return false;
-      seenKw.add(key);
-      return true;
-    }).slice(0, d.maxKeywordsPerAdGroup);
+    const seenKw = new Map<string, KeywordSpec>();
+    for (const row of keywords) {
+      if (!row.text) continue;
+      const prev = seenKw.get(row.text);
+      if (!prev) { seenKw.set(row.text, row); continue; }
+      const specific = row.text.split(/\s+/).length >= 3 || (city && row.text.includes(city.toLowerCase()));
+      seenKw.set(row.text, { text: row.text, match: specific ? 'exact' : 'phrase' });
+    }
+    keywords = [...seenKw.values()].slice(0, d.maxKeywordsPerAdGroup);
     if (keywords.length !== group.keywords.length) fixes.push(`Keywords for ${name} were limited to close ${keywords.length ? 'phrase and exact' : ''} variants.`);
     if (!keywords.length) blocks.push(`${name} has no close-variant keywords left. Miles will not create a mixed or empty ad group.`);
 
@@ -234,11 +248,15 @@ export function enforceRulebook(spec: CampaignSpec, ctx: RulebookContext = {}): 
     ], d.descriptionChars, d.descriptions);
     const mentions = headlines.filter((line) => line.toLowerCase().includes(stem) || (cityOk && line.toLowerCase().includes(cityOk.toLowerCase()))).length;
     const withCity = cityOk ? headlines.filter((line) => line.toLowerCase().includes(cityOk.toLowerCase())).length : d.headlinesWithCity;
-    if (headlines.length < d.headlines || descriptions.length < d.descriptions) blocks.push(`${name} could not be filled to ${d.headlines} headlines and ${d.descriptions} descriptions without cutting a line in half.`);
+    if (headlines.length > d.headlines) headlines = headlines.slice(0, d.headlines);
+    if (headlines.length < d.headlineMin || descriptions.length < 2) blocks.push(`${name} could not be filled to ${d.headlineMin} headlines and 2 descriptions without inventing a line. SOP 130 keeps a shorter ad rather than a made-up one.`);
     if (mentions < d.headlinesWithServiceOrCity) blocks.push(`${name} needs the service or the city in at least ${d.headlinesWithServiceOrCity} headlines.`);
     if (withCity < d.headlinesWithCity) blocks.push(`${name} needs the city in at least ${d.headlinesWithCity} headlines.`);
     if ([...headlines, ...descriptions, name].some((line) => JUNK.test(line))) blocks.push(`${name} still has junk from the crawl. Miles will not use it.`);
-    return { ...group, name, keywords, rsa: { headlines, descriptions }, finalUrl: group.finalUrl || next.finalUrl };
+    const required = (next.requiredWording || '').trim();
+    const pin = required.length > 0 && descriptions[0]?.toLowerCase().includes(required.toLowerCase()) === true;
+    if (required && !pin) blocks.push(`${name} is missing the required wording in description 1, so SOP 130 will not pin it.`);
+    return { ...group, name, keywords, rsa: { headlines, descriptions, pinDescription1: pin }, finalUrl: group.finalUrl || next.finalUrl };
   });
 
   if ((next.callouts?.length ?? 0) < 4) {

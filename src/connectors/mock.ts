@@ -145,6 +145,23 @@ export class MockConnector implements Connector {
     return [{ id: '1234567890', login: '1234567890', name: 'Demo Google Ads account', label: 'Demo Google Ads account (123-456-7890) — not a real account' }];
   }
 
+  googleWrites: { op: string; detail: string }[] = [];
+
+  async setGoogleCampaignStatus(_externalUserId: string, args: { campaignResource: string; status: 'ENABLED' | 'PAUSED' }): Promise<{ ok: boolean; live: boolean; called: boolean; note: string }> {
+    this.googleWrites.push({ op: 'status', detail: args.status });
+    return { ok: false, live: false, called: false, note: 'Preview connector. Google Ads was not changed.' };
+  }
+
+  async updateGoogleDailyBudget(_externalUserId: string, args: { campaignResource: string; dailyBudget: number }): Promise<{ ok: boolean; live: boolean; called: boolean; note: string }> {
+    this.googleWrites.push({ op: 'budget', detail: String(args.dailyBudget) });
+    return { ok: false, live: false, called: false, note: 'Preview connector. Google Ads was not changed.' };
+  }
+
+  async addGoogleNegativeKeywords(_externalUserId: string, args: { campaignResource: string; keywords: string[]; remove?: boolean }): Promise<{ ok: boolean; live: boolean; called: boolean; note: string }> {
+    this.googleWrites.push({ op: args.remove ? 'negatives-remove' : 'negatives', detail: args.keywords.join(',') });
+    return { ok: false, live: false, called: false, note: 'Preview connector. Google Ads was not changed.' };
+  }
+
   async readGoogleCampaignStatus(): Promise<import('../agents/enablecheck.js').GoogleCampaignRead> {
     return {
       live: false,

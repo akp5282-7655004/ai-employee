@@ -217,6 +217,10 @@ export interface Connector {
   launchCampaign?(externalUserId: string, spec: import('../agents/campaign.js').CampaignSpec, targetCustomerId?: string): Promise<CampaignLaunchResult>;
   /** Set one Google campaign to ENABLED or PAUSED. Never any other status. */
   setGoogleCampaignStatus?(externalUserId: string, args: { campaignResource: string; status: 'ENABLED' | 'PAUSED'; adGroupResources?: string[]; adResources?: string[] }): Promise<{ ok: boolean; live: boolean; called: boolean; missing?: boolean; note: string; readback?: import('../agents/enablecheck.js').EnableReadback }>;
+  /** Change one campaign's daily budget. Uses the same budget component as launch. */
+  updateGoogleDailyBudget?(externalUserId: string, args: { campaignResource: string; dailyBudget: number }): Promise<{ ok: boolean; live: boolean; called: boolean; note: string }>;
+  /** Add or remove phrase negatives. Uses the same criterion component as launch. */
+  addGoogleNegativeKeywords?(externalUserId: string, args: { campaignResource: string; keywords: string[]; remove?: boolean }): Promise<{ ok: boolean; live: boolean; called: boolean; note: string }>;
   /** The Google Ads accounts a launch can write into (id + human label), so
    *  an MCC owner can pick the client account instead of Miles guessing. */
   listAdTargets?(externalUserId: string): Promise<{ id: string; login: string; name?: string; label: string }[]>;

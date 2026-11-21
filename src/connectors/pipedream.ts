@@ -1669,6 +1669,70 @@ export class PipedreamConnector implements Connector {
     };
   }
 
+  private async googleWriteAccount(externalUserId: string, campaignResource: string): Promise<{ accountId: string; acct: Record<string, unknown>; campaignId: string } | { note: string }> {
+    const campaignId = (campaignResource.match(/campaigns\/(\d+)/) || [])[1];
+    if (!campaignId) return { note: 'That is not a Google campaign resource. Nothing was changed.' };
+    const accts = await this.listAccounts(externalUserId, 'google_ads');
+    const account = healthyAccount(accts);
+    if (!account) return { note: 'Google Ads is not connected for this account. Nothing was changed.' };
+    const rows = await this.listComponents('google_ads');
+    const targets = await this.resolveGadsTargets(externalUserId, account.id, rows);
+    const target = this.preferTargets(externalUserId, targets)[0];
+    const pair = customerPair({ resource: campaignResource, login: target?.login, client: target?.client });
+    const acct: Record<string, unknown> = { accountId: pair.accountId };
+    if (pair.customerClientId) acct.customerClientId = pair.customerClientId;
+    return { accountId: account.id, acct, campaignId };
+  }
+
+  /** Same budget component the launch path uses, aimed at the saved campaign. */
+  async updateGoogleDailyBudget(externalUserId: string, args: { campaignResource: string; dailyBudget: number }): Promise<{ ok: boolean; live: boolean; called: boolean; note: string }> {
+    if (!(args.dailyBudget > 0)) return { ok: false, live: false, called: false, note: 'The daily budget has to be above $0. Nothing was changed.' };
+    const ready = await this.googleWriteAccount(externalUserId, args.campaignResource);
+    if ('note' in ready) return { ok: false, live: false, called: false, note: ready.note };
+    const budget = await this.writeComponent(externalUserId, 'google_ads-create-or-update-campaign-budget', ready.accountId, {}, {
+      ...ready.acct,
+      operationType: 'update',
+      campaignId: ready.campaignId,
+      amountMicros: String(Math.round(args.dailyBudget * 1_000_000)),
+      updateMask: 'amount_micros',
+    });
+    return {
+      ok: budget.ok,
+      live: true,
+      called: true,
+      note: budget.ok ? `Google daily budget is now $${args.dailyBudget}.` : (budget.error || 'Google did not change the budget. Nothing else was changed.'),
+    };
+  }
+
+  /** Same negative-keyword component the launch path uses. Phrase match, one word at a time. */
+  async addGoogleNegativeKeywords(externalUserId: string, args: { campaignResource: string; keywords: string[]; remove?: boolean }): Promise<{ ok: boolean; live: boolean; called: boolean; note: string }> {
+    const words = [...new Set(args.keywords.map((word) => word.trim().toLowerCase()).filter(Boolean))].slice(0, 40);
+    if (!words.length) return { ok: false, live: false, called: false, note: 'There is no negative keyword to save. Nothing was changed.' };
+    const ready = await this.googleWriteAccount(externalUserId, args.campaignResource);
+    if ('note' in ready) return { ok: false, live: false, called: false, note: ready.note };
+    let done = 0;
+    let error = '';
+    for (const text of words) {
+      const wrote = await this.writeComponent(externalUserId, 'google_ads-create-or-remove-campaign-criteria', ready.accountId, {}, {
+        ...ready.acct,
+        operationType: args.remove ? 'remove' : 'create',
+        campaignId: ready.campaignId,
+        negative: true,
+        keywordText: text,
+        keywordMatchType: 'PHRASE',
+      });
+      if (wrote.ok) done++;
+      else error = error || wrote.error || 'Google did not save that negative.';
+    }
+    const verb = args.remove ? 'removed' : 'added';
+    return {
+      ok: done === words.length,
+      live: true,
+      called: true,
+      note: done === words.length ? `Google ${verb} ${done} phrase negative${done === 1 ? '' : 's'}.` : `${done}/${words.length} ${verb}. ${error}`,
+    };
+  }
+
   /**
    * Read campaign status through google_ads-list-campaigns. This is the same
    * list the enable path uses for read-back, and it does not update anything.
