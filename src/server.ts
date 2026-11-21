@@ -89,7 +89,7 @@ import { decidePolicy, overDailyCap } from './agents/policy.js';
 import { dueSkills, periodKey } from './agents/skillclock.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { facebookDaily, META_NOT_CONNECTED, publicImage } from './agents/metalaunch.js';
-import { abPlanFromBilling, buildMetaPlan, buildTikTokPlan, reviewBlocked, reviewMetaPlan, reviewTikTokPlan, type MetaPlan, type TikTokPlan } from './agents/paidstructure.js';
+import { abPlanFromBilling, buildMetaPlan, buildTikTokPlan, reviewBlocked, reviewMetaPlan, reviewTikTokPlan, scaleIncreaseAllowed, type MetaPlan, type TikTokPlan } from './agents/paidstructure.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
 import { emptyReviewState, reviewAskText, parseRating, type ReviewRequestState } from './agents/reviewrequest.js';
 import { emptyAutomationsState, noShowText, onboardingText, type AutomationsState } from './agents/automations.js';
@@ -7816,6 +7816,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const next = Math.round(Number(req.body?.dailyBudget));
     const refused = budgetMoveAllowed(row.daily, next, data);
     if (refused) return reply.code(409).send({ ok: false, error: refused });
+    const lastRaise = (Array.isArray(data.socialChanges) ? data.socialChanges as SocialChange[] : []).find((change) => change.campaignId === row.campaignId && change.kind === 'budget' && !change.undone && Number(change.after) > Number(change.before));
+    const paced = scaleIncreaseAllowed(row.daily, next, lastRaise?.ts ?? null);
+    if (paced) return reply.code(409).send({ ok: false, error: paced });
     if (connector.name === 'mock' || !connector.setMetaBudget) return reply.code(409).send({ ok: false, error: 'Preview mode. The budget was not changed.' });
     const shares = row.mode === 'abo' && row.shares.length ? row.shares.map((share) => Math.max(1, Math.round(share * (next / (row.daily || next))))) : undefined;
     const result = await connector.setMetaBudget(u.id, { campaignId: row.campaignId, adSetIds: row.adSetIds, mode: row.mode === 'cbo' ? 'cbo' : 'abo', daily: next, shares });
@@ -7866,6 +7869,9 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const next = Math.round(Number(req.body?.dailyBudget));
     const refused = budgetMoveAllowed(row.daily, next, data);
     if (refused) return reply.code(409).send({ ok: false, error: refused });
+    const lastRaise = (Array.isArray(data.socialChanges) ? data.socialChanges as SocialChange[] : []).find((change) => change.campaignId === row.campaignId && change.kind === 'budget' && !change.undone && Number(change.after) > Number(change.before));
+    const paced = scaleIncreaseAllowed(row.daily, next, lastRaise?.ts ?? null);
+    if (paced) return reply.code(409).send({ ok: false, error: paced });
     if (connector.name === 'mock' || !connector.setTikTokBudget) return reply.code(409).send({ ok: false, error: 'Preview mode. The budget was not changed.' });
     const shares = row.adSetIds.map((_, index) => {
       const weight = row.shares[index] || 1;

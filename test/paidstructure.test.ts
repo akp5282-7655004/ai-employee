@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildServer } from '../src/server.js';
 import { MemoryStore } from '../src/db/index.js';
-import { abPlanFromBilling, abVariationLimit, buildMetaPlan, buildTikTokPlan, reviewBlocked } from '../src/agents/paidstructure.js';
+import { abPlanFromBilling, abVariationLimit, buildMetaPlan, buildTikTokPlan, reviewBlocked, scaleIncreaseAllowed } from '../src/agents/paidstructure.js';
 import { launchMetaStructure, setMetaBudget, setMetaTreeStatus, type MetaGraph } from '../src/agents/metalaunch.js';
 import { idFrom, launchTikTokStructure, setTikTokBudget, setTikTokStatus, TIKTOK_AD_ACTION, TIKTOK_ADGROUP_ACTION, TIKTOK_CAMPAIGN_ACTION, TIKTOK_UPLOAD_ACTION, type TikTokRunner } from '../src/agents/tiktoklaunch.js';
 import type { Connector } from '../src/connectors/types.js';
@@ -49,6 +49,20 @@ describe('home-services Meta structure', () => {
     expect(plan.elements.find((row) => row.id === 'ab_test')!.detail).toMatch(/allowance is 1 variation/);
     expect(plan.elements.find((row) => row.id === 'report')!.label).toBe('Monthly performance report');
     expect(plan.elements.find((row) => row.id === 'geography')!.label).toBe('Geography targeting');
+    const text = plan.elements.map((row) => row.detail).join(' ');
+    expect(text).toMatch(/Campaign budget optimization/);
+    expect(text).toMatch(/Lowest Cost/);
+    expect(text).toMatch(/last 30 days/);
+    expect(text).toMatch(/1%/);
+    expect(text).toMatch(/2-5%/);
+    expect(text).toMatch(/frequency above 3/i);
+    expect(text).toMatch(/frequency above 5/i);
+    expect(text).toMatch(/20% image-text rule is retired/);
+    expect(text).toMatch(/not a 3x return on ad spend/);
+    expect(text).toMatch(/Cart abandoners, catalogs, and dynamic product ads are not used/);
+    expect(scaleIncreaseAllowed(80, 100, null)).toMatch(/20%/);
+    expect(scaleIncreaseAllowed(80, 90, new Date().toISOString())).toMatch(/48 hours/);
+    expect(scaleIncreaseAllowed(80, 90, null)).toBeNull();
     expect(JSON.stringify(plan)).not.toMatch(/\u2014/);
   });
 
@@ -87,7 +101,7 @@ describe('home-services Meta structure', () => {
     expect(byName('No heat / no AC').included).toBe(false);
     expect(byName('Tune-up and membership').included).toBe(false);
     expect(byName('System replacement').included).toBe(true);
-    expect(plan.budgetMode).toBe('abo');
+    expect(plan.budgetMode).toBe('cbo');
     expect(byName('System replacement').dailyBudget).toBe(80);
   });
 

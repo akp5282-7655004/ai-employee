@@ -482,8 +482,23 @@ function buildSets(args: {
   return [...included, ...held];
 }
 
-function budgetMode(sets: PaidAdSet[]): 'cbo' | 'abo' {
-  return sets.filter((set) => set.included).length > 1 ? 'cbo' : 'abo';
+function budgetMode(): 'cbo' {
+  return 'cbo';
+}
+
+/** Notion scaling SOP: raise spend 10-20% and wait 48 hours. Cuts are not held to that clock. */
+export function scaleIncreaseAllowed(current: number, next: number, lastIncreaseAt: string | null, now = Date.now()): string | null {
+  if (!(next > current)) return null;
+  if (lastIncreaseAt) {
+    const then = Date.parse(lastIncreaseAt);
+    if (Number.isFinite(then) && now - then < 48 * 60 * 60 * 1000) {
+      return 'A budget increase waits 48 hours after the last one. Nothing was changed.';
+    }
+  }
+  if (current > 0 && next > current * 1.2 + 0.001) {
+    return 'A budget increase is limited to 20% at a time. Nothing was changed.';
+  }
+  return null;
 }
 
 function buildElements(args: {
@@ -512,22 +527,28 @@ function buildElements(args: {
         ? 'Scale allows up to 3 A/B variations.'
         : 'No Starter, Growth, or Scale plan is on this account, so the allowance is 1 variation.';
   const where = args.city || 'the service area';
+  const meta = args.channel === 'meta';
+  const cap = args.cpl > 0 ? `$${Math.round(args.cpl)}` : 'the playbook cost per lead';
   const competitorDetail = names.length
     ? `Saved competitor names: ${names.join(', ')}. The messages come from the trade playbook. Miles did not copy their ads and did not invent claims from their names.`
     : 'No competitor names are saved. This plan does not invent any. Add them on the business profile when you have them, then rebuild.';
   return [
-    { id: 'strategy', label: 'Strategy summary', detail: plain(`${args.business} runs a leads campaign for ${args.trade} in ${where}. ${args.budgetNote} ${args.destinationNote}`) },
+    { id: 'strategy', label: 'Strategy summary', detail: plain(`${args.business} runs a leads campaign for ${args.trade} in ${where}. Local trades use the Leads objective. ${args.budgetNote} ${meta ? `Bidding starts at Lowest Cost. After enough leads, a separate approval can set a Cost Cap at ${cap}, the high end of the playbook band.` : ''} ${args.destinationNote}`) },
     { id: 'competitors', label: 'Competitor research', detail: competitorDetail },
     { id: 'campaign', label: 'Campaign creation', detail: `Create ${included.length} paused ${args.channel === 'tiktok' ? 'ad group' : 'ad set'}${included.length === 1 ? '' : 's'} and ${ads.length} paused ad${ads.length === 1 ? '' : 's'}. Going live is a separate approval.` },
-    { id: 'creatives', label: 'Creatives', detail: ads.length
+    { id: 'creatives', label: 'Creatives', detail: (ads.length
       ? `${ads.length} ad${ads.length === 1 ? '' : 's'} in this create. The only difference between them is the message.`
-      : 'No ad is included yet. Add the creative the channel requires.' },
+      : 'No ad is included yet. Add the creative the channel requires.') + (meta ? ' The old 20% image-text rule is retired and is not checked.' : '') },
     { id: 'geography', label: 'Geography targeting', detail: included[0]?.locationNote || 'No service area is saved.' },
-    { id: 'budget', label: 'Budget management', detail: `${args.budgetNote} A later budget change has to stay inside the daily cap and the max percent change. Undo puts the previous amount back. Status is not changed by a budget edit.` },
-    { id: 'ab_test', label: 'A/B test', detail: `${tierLine} This plan creates ${variations} of ${limit}. One variable: the message. Image, audience, and destination stay the same.` },
-    { id: 'retargeting', label: 'Retargeting', detail: 'Retargeting is part of this build: site visitors, video viewers, and people who opened the form, with past customers excluded once a list is connected. No list is connected, so no retargeting ad set is created and no audience is invented.' },
+    { id: 'budget', label: 'Budget management', detail: `${args.budgetNote} ${meta ? 'A scale is 10-20% and waits 48 hours, and only after cost per lead is inside the playbook band and frequency is under 3. ' : ''}A later change also stays inside the daily cap and the max percent change. Undo puts the previous amount back.` },
+    { id: 'ab_test', label: 'A/B test', detail: `${tierLine} This plan creates ${variations} of ${limit}. One variable: the message. Leave the test for 5 to 7 days and do not change a second setting. The variations share the first ad set, so Miles does not give them separate equal budgets.` },
+    { id: 'retargeting', label: 'Retargeting', detail: meta
+      ? 'When a pixel, page, or CRM list exists: site visitors from the last 30 days, engagers, and the customer list. Refresh those audiences every 30 to 60 days. Exclude people who already became leads. Keep overlap under 20% before adding another retargeting set. Prospecting lookalikes start at 1%, then 2-5%, and only from a real source list. None of these audiences are created now. Cart abandoners, catalogs, and dynamic product ads are not used.'
+      : 'Retargeting is part of this build: site visitors, video viewers, and people who opened the form, with past customers excluded once a list is connected. No list is connected, so no retargeting ad set is created and no audience is invented.' },
     { id: 'form', label: 'Landing page and lead form', detail: args.destinationNote },
-    { id: 'report', label: 'Monthly performance report', detail: 'The monthly marketing report on Reports shows spend and leads for this channel. After the campaign is turned on, the weekly check leaves it alone for three days, then reads cost per lead. Those reads do not change the budget.' },
+    { id: 'report', label: 'Monthly performance report', detail: meta
+      ? 'The monthly marketing report shows spend and leads for this channel. Judge it on cost per lead against the playbook, not a 3x return on ad spend. Weekly: frequency above 3 means fatigue, so do not scale. Frequency above 5 means refresh the creative. Those reads do not change the budget.'
+      : 'The monthly marketing report on Reports shows spend and leads for this channel. After the campaign is turned on, the weekly check leaves it alone for three days, then reads cost per lead. Those reads do not change the budget.' },
   ];
 }
 
@@ -557,7 +578,7 @@ export function buildMetaPlan(input: PaidPlanInput): { plan: MetaPlan; checklist
     placements: 'Advantage+ placements',
     image,
   });
-  const mode = budgetMode(sets);
+  const mode = budgetMode();
   const included = sets.filter((set) => set.included);
   const plan: MetaPlan = {
     channel: 'meta',
@@ -567,9 +588,7 @@ export function buildMetaPlan(input: PaidPlanInput): { plan: MetaPlan; checklist
     specialAdCategories: [],
     specialAdNote: 'No special ad category. Home-services repair and replacement are not in Meta\'s housing examples (listings, insurance, mortgages, appraisals). Financing copy is not declared as a financial product unless the ad itself is the loan.',
     budgetMode: mode,
-    budgetNote: mode === 'cbo'
-      ? `Advantage+ campaign budget. $${daily} a day sits on the campaign. The ad set amounts are the intended weights, not separate caps.`
-      : `One ad set, so the $${daily} daily amount sits on that ad set.`,
+    budgetNote: `Campaign budget optimization. $${daily} a day sits on the campaign. Lowest Cost at create. A later Cost Cap uses the playbook cost per lead, not a return-on-ad-spend multiple.`,
     dailyBudget: daily,
     status: 'PAUSED',
     advantageAudience: true,
@@ -585,9 +604,7 @@ export function buildMetaPlan(input: PaidPlanInput): { plan: MetaPlan; checklist
       trade,
       city: geo.city,
       daily,
-      budgetNote: mode === 'cbo'
-        ? `$${daily} a day is a campaign budget Miles lets Meta distribute.`
-        : `$${daily} a day sits on the one ad set.`,
+      budgetNote: `Campaign budget optimization. $${daily} a day sits on the campaign. Meta distributes it across ad sets.`,
       destinationNote: destination === 'website' ? 'People who click go to the website, and the pixel is the lead event.' : 'People who click open a higher-intent instant form.',
       sets,
       competitors: input.competitors,

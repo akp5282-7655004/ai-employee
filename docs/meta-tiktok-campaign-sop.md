@@ -2,7 +2,7 @@
 
 Reviewed 21 November 2026. This is the build Miles follows for Facebook, Instagram, and TikTok. It is written in the same shape as a pre-launch review: what the plan must contain, what blocks creation, and what an approval does.
 
-The ClickMinded ad-platform inventory has no Meta or TikTok SOP. The baseline is the in-repo Meta spec, the trade playbooks, and the audience files. Current platform docs were checked where they change a setting. Disagreements are listed at the end, with the choice Miles uses.
+The ClickMinded ad-platform inventory has no Meta or TikTok SOP. The Meta baseline is the owner's Notion set, Meta Ads Specialist SOPs, March 2025, read with the in-repo Meta spec, the trade playbooks, and the audience files. Current platform docs were checked where a March 2025 line is out of date. Disagreements are listed at the end, with the choice Miles uses.
 
 ## This covers
 
@@ -31,12 +31,9 @@ The ClickMinded ad-platform inventory has no Meta or TikTok SOP. The baseline is
 
 **Meta.** Objective `OUTCOME_LEADS`. Buying type auction. Special ad categories empty. See the disagreement note before changing that.
 
-Budget mode:
+Budget mode is campaign budget optimization, including when there is one ad set. The daily amount sits on the campaign. Ad set amounts on the plan are weights. Notion's setup SOP (March 2025) starts bidding at Lowest Cost. The scaling SOP moves to a Cost Cap once the campaign is profitable. For these trades the cap is the high end of the playbook cost-per-lead band, not a 3x return on ad spend. Create sends Lowest Cost only. A Cost Cap is a later approval.
 
-- One ad set: the daily amount sits on the ad set (ABO). Campaign budget optimization would not change delivery.
-- Two or more ad sets that can each hold at least $10 a day: Advantage+ campaign budget (CBO). The daily amount sits on the campaign. Meta distributes it. The plan still shows each ad set's weight so the owner can see the intended split.
-
-Daily budget, not lifetime. Dayparting needs a lifetime budget, and Miles does not guess a timezone.
+Daily budget, not lifetime. Dayparting needs a lifetime budget, and Miles does not guess a timezone. A scale is 10-20% and waits 48 hours (Notion scaling SOP). It also stays inside the owner's max percent change when that cap is tighter. Frequency above 3 means do not scale.
 
 **TikTok.** Objective `LEAD_GENERATION`. Daily budget. Campaign budget optimization off, so each ad group has its own budget. Smart+ is not used: a contractor's service area has to stay a real location, and full automation can widen it.
 
@@ -78,9 +75,9 @@ Names:
 - Meta ad set / TikTok ad group: `{Trade} | {Segment} | {ZIPs or radius}`
 - Ad: `{Segment} | {Angle}`
 
-The primary message is always created. Extra messages are A/B variations, and the allowance comes from the account plan: Starter none, Growth up to 1, Scale up to 3. If no Starter, Growth, or Scale plan is on the account, the allowance is 1 variation. "Up to" also stops at the learning ceiling `(daily budget × 14) / (2 × the playbook's high cost per lead)`. The test changes one variable, the message. Image, audience, and destination stay the same. The variation sits on the first ad set so a second ad set does not also change the audience. The playbook can write two alternate messages, so Scale's allowance of 3 includes those two and says the third is not available.
+The primary message is always created. Extra messages are A/B variations. The allowance is Starter none, Growth up to 1, Scale up to 3, or 1 variation when no paid plan is on the account. "Up to" also stops at the learning ceiling `(daily budget × 14) / (2 × the playbook's high cost per lead)`. Notion's A/B SOP (March 2025) says one variable, equal budgets, and 5 to 7 days. Miles changes only the message, leaves the test for 5 to 7 days, and puts the variation on the first ad set. The variations share that ad set, so Miles does not assign them separate equal budgets. The playbook can write two alternate messages, so Scale's allowance of 3 includes those two and the plan says the third is not available.
 
-**Meta creative.** One https image can be reused. The review warns when every ad shares it. Primary text, headline, and description come from the trade and the offer. No "best", no star rating, no "licensed and insured" unless the profile says so. CTA is Get Quote, or Call Now on an emergency segment that is actually included.
+**Meta creative.** One https image can be reused. The review warns when every ad shares it. Primary text, headline, and description come from the trade and the offer. No "best", no star rating, no "licensed and insured" unless the profile says so. CTA is Get Quote, or Call Now on an emergency segment that is actually included. Notion's creative SOP and compliance SOP still say to keep text under 20% of the image. The in-repo spec, verified August 2026, says that rule is retired. Miles does not check it and does not reject an image for text.
 
 **Meta form.** Higher intent (`is_optimized_for_quality`). Prefill name, phone, email, and ZIP. Two custom questions: "Do you own this home?" and one trade question (roof type, what is broken, interior or exterior, and so on). Privacy policy URL is the website. The playbook lists more questions, including a typed phone number and a timeline. More than three custom questions hurts completion, so those two stay off the form and on the review as a follow-up the owner can add.
 
@@ -131,8 +128,26 @@ Each line is pass, warn, or block. Any block stops the create. Nothing is sent t
 5. A budget change has to stay inside the daily cap and inside the saved max percent change. Undo puts the previous daily amount back.
 6. Undo of a go-live pauses the campaign again. Undo of a create does not call a delete.
 
+## Notion Meta Ads Specialist SOPs, March 2025
+
+Cited by title. E-commerce lines are not used for these trades.
+
+| SOP | What Miles uses | What Miles does not use |
+|---|---|---|
+| Setting Up a Meta Ads Campaign | Leads, because that is the funnel stage for a local trade. Daily budget. Lowest Cost at create. Advantage+ placements. | Catalog sales and store traffic. |
+| Audience Targeting & Custom Audiences Setup | Core location from the service area. Custom audiences: site visitors 30 days, engagers, CRM list, refreshed every 30-60 days. Lookalikes at 1%, then 2-5%. | Creating any of those audiences before a pixel, page, or list exists. |
+| Creating High-Converting Ad Creatives | Image or video, short primary text, one message test. | The 20% image-text rule. Collection ads. |
+| Optimizing Meta Ads for Performance | Overlap under 20%. Advantage+ placements. | A 3x return-on-ad-spend kill rule. Miles uses the playbook cost per lead. |
+| Meta Ads Reporting & Analysis | Monthly report. Weekly read of cost per lead and frequency. | Scaling because return on ad spend is above 3x. |
+| Scaling Meta Ad Campaigns Successfully | CBO. 10-20% every 48 hours. Do not scale when frequency is above 3. Cost Cap after the cost per lead is inside the playbook band. 50-100 conversions in 7 days is the Notion bar for "enough". Miles states that bar and does not invent the count. | The 3x return rule and the automated rule that raises budget from it. |
+| Retargeting Strategies for Maximum Conversions | Exclusions for people who already became leads. Overlap under 20%. Frequency above 5 means refresh the creative. | Cart abandoners, dynamic product ads, and catalogs. |
+| A/B Testing Strategies for Meta Ads | One variable. 5 to 7 days. | A second change during the test. Equal budgets per variation, because these variations share one ad set. |
+| Using Meta Advantage+ Campaigns | Advantage+ placements and Advantage+ audience, with location kept as a hard control. | Advantage+ Shopping. |
+| Managing Meta Ad Accounts & Compliance | No misleading claims. Privacy policy on the lead form. | The 20% text rule in section D. |
+
 ## Sources
 
+- Notion, Meta Ads Specialist SOPs, March 2025. Ten SOPs, titled in the table above. Supplied by the owner. Not a public URL.
 - In-repo: `docs/specs/meta-ads-specs-master.md` (verified August 2026), `specs/meta_ads.json`, `skills-library/ads/references/meta-decision-system.md`, `platform-setup-checklists.md`, `audience-targeting.md`, `ad-copy-templates.md`, `conversion-tracking.md`, `skills-library/tools/integrations/meta-ads.md`, `skills-library/tools/integrations/tiktok-ads.md`, `src/agents/playbook.ts`, `src/playbooks/audiences/miles_audiences_*.json`.
 - Meta, Special Ad Categories, Marketing API (read 21 November 2026): https://developers.facebook.com/docs/marketing-api/audiences/special-ad-category/
 - Meta, Advantage+ audience, Marketing API, updated 26 June 2026: https://developers.facebook.com/docs/marketing-api/audiences/reference/targeting-expansion/advantage-audience/
@@ -158,4 +173,12 @@ Each line is pass, warn, or block. Any block stops the create. Nothing is sent t
 
 **TikTok Smart+ versus manual.** TikTok is moving lead generation toward Upgraded Smart+. Smart+ can set the location loosely and asks for more creative than a local budget can feed. Miles uses a manual lead campaign with an explicit location and TikTok placement only. The July 2026 budget minimums still apply.
 
-**City radius.** The in-repo spec allows a radius from 1 mile. A 2026 targeting guide says Meta's city radius runs about 10 to 50 miles. Miles uses 15 miles, which is inside that range and above the spec's minimum. It does not use 1 mile.
+**City radius.** The in-repo spec allows a radius from 1 mile. The March 2025 audience SOP gives a 10-mile store radius as an example. A 2026 targeting guide says Meta's city radius runs about 10 to 50 miles. Miles uses 15 miles, inside the 2026 range and above both the spec minimum and the SOP example.
+
+**20% image text.** The March 2025 creative SOP and compliance SOP still tell the specialist to stay under 20% text and to use the text overlay tool. The in-repo spec says that rule is retired. Miles does not apply it.
+
+**Return on ad spend.** The March 2025 optimization, reporting, scaling, and retargeting SOPs use a 3x or 4x return as the scale line, and they use cart abandoners, catalogs, and dynamic product ads. Those are e-commerce. For these trades Miles uses the playbook cost-per-lead band.
+
+**Equal A/B budgets.** The March 2025 setup SOP and A/B SOP say each variation gets the same budget. A message test inside one ad set does not have a per-ad budget. Miles keeps one audience and one budget for that test, and says so on the plan.
+
+**Lookalikes and custom audiences.** The March 2025 audience and scaling SOPs say to build them. Miles names the 30-day site visitors, engagers, CRM list, 1% lookalike, and later 2-5% lookalikes. It does not create them until the pixel, page, or list is actually connected.
