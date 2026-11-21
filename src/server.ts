@@ -4144,7 +4144,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const id = String(req.body?.id || '');
     const source = req.body?.source === 'run' ? 'run' : 'automation';
     const data = await authStore.getUserData(u.id);
-    const chatUndo = (Array.isArray(data.chatUndos) ? data.chatUndos : []).find((row) => (row as { id?: string }).id === id) as { id: string; kind?: string; previousDaily?: number; keywords?: string[]; previousStatus?: 'PAUSED' | 'ENABLED'; campaignResource?: string } | undefined;
+    const chatUndo = (Array.isArray(data.chatUndos) ? data.chatUndos : []).find((row) => (row as { id?: string }).id === id) as { id: string; kind?: string; previousDaily?: number; keywords?: string[]; previousStatus?: 'PAUSED' | 'ENABLED'; campaignResource?: string; created?: Array<{ channel: 'google' | 'meta' | 'tiktok'; campaignResource?: string; campaignId?: string; advertiserId?: string; adSetIds?: string[]; adIds?: string[] }>; social?: { channel: 'meta' | 'tiktok'; campaignId: string; action: 'pause' | 'live' | 'budget'; daily?: number; previousDaily?: number; advertiserId?: string; adSetIds: string[]; adIds: string[]; mode: 'cbo' | 'abo' | 'ad_group'; shares: number[] } } | undefined;
     if (chatUndo && source !== 'run') {
       const miles = milesOf(data);
       const resource = chatUndo.campaignResource || miles.campaignResource || '';
@@ -4164,6 +4164,50 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         } else if (chatUndo.kind === 'add_negatives' && connector.addGoogleNegativeKeywords && chatUndo.keywords?.length) {
           const wrote = await connector.addGoogleNegativeKeywords(u.id, { campaignResource: resource, keywords: chatUndo.keywords, remove: true });
           note = wrote.note;
+        }
+      }
+      if (chatUndo.kind === 'launch_plan' && connector.name !== 'mock') {
+        const parts: string[] = [];
+        for (const created of chatUndo.created || []) {
+          if (created.channel === 'google' && created.campaignResource && connector.setGoogleCampaignStatus) {
+            const turned = await connector.setGoogleCampaignStatus(u.id, { campaignResource: created.campaignResource, status: 'PAUSED' });
+            parts.push(turned.note || 'Google paused.');
+            miles.activation = 'paused';
+          } else if (created.channel === 'meta' && created.campaignId && connector.setMetaTreeStatus) {
+            const turned = await connector.setMetaTreeStatus(u.id, { campaignId: created.campaignId, adSetIds: created.adSetIds || [], adIds: created.adIds || [], status: 'PAUSED' });
+            parts.push(turned.note || 'Meta paused.');
+          } else if (created.channel === 'tiktok' && created.campaignId && created.advertiserId && connector.setTikTokStatus) {
+            const turned = await connector.setTikTokStatus(u.id, { advertiserId: created.advertiserId, campaignId: created.campaignId, adGroupIds: created.adSetIds || [], adIds: created.adIds || [], status: 'DISABLE' });
+            parts.push(turned.note || 'TikTok disabled.');
+          }
+        }
+        note = parts.length ? `Paused again. Nothing was deleted. ${parts.join(' ')}` : 'Nothing was deleted. There was no created campaign to pause.';
+      }
+      if (chatUndo.kind === 'social_change' && chatUndo.social && connector.name !== 'mock') {
+        const social = chatUndo.social;
+        const row = socialRows(data).find((item) => item.channel === social.channel && item.campaignId === social.campaignId);
+        if (social.action === 'budget' && (chatUndo.previousDaily || 0) > 0 && row) {
+          if (social.channel === 'meta' && connector.setMetaBudget) {
+            const turned = await connector.setMetaBudget(u.id, { campaignId: social.campaignId, adSetIds: social.adSetIds, mode: row.mode === 'cbo' ? 'cbo' : 'abo', daily: chatUndo.previousDaily! });
+            row.daily = chatUndo.previousDaily!;
+            note = turned.note || 'Meta budget restored.';
+          } else if (social.channel === 'tiktok' && connector.setTikTokBudget && row.advertiserId) {
+            const turned = await connector.setTikTokBudget(u.id, { advertiserId: row.advertiserId, campaignId: social.campaignId, adGroupIds: row.adSetIds, daily: chatUndo.previousDaily!, shares: row.shares });
+            row.daily = chatUndo.previousDaily!;
+            note = turned.note || 'TikTok budget restored.';
+          }
+          if (row) saveSocial(data, row);
+        } else if (row && chatUndo.previousStatus) {
+          const back = chatUndo.previousStatus === 'ENABLED' ? 'live' : 'paused';
+          if (social.channel === 'meta' && connector.setMetaTreeStatus) {
+            const turned = await connector.setMetaTreeStatus(u.id, { campaignId: row.campaignId, adSetIds: row.adSetIds, adIds: row.adIds, status: back === 'live' ? 'ACTIVE' : 'PAUSED' });
+            note = turned.note || 'Meta status restored.';
+          } else if (social.channel === 'tiktok' && connector.setTikTokStatus && row.advertiserId) {
+            const turned = await connector.setTikTokStatus(u.id, { advertiserId: row.advertiserId, campaignId: row.campaignId, adGroupIds: row.adSetIds, adIds: row.adIds, status: back === 'live' ? 'ENABLE' : 'DISABLE' });
+            note = turned.note || 'TikTok status restored.';
+          }
+          row.status = back;
+          saveSocial(data, row);
         }
       }
       data.miles = miles;
@@ -9059,11 +9103,19 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       activation: miles.activation,
       trackingLead: proof.leadConversion === true,
       protectTerms: (spec?.adGroups ?? []).flatMap((group) => (group.keywords ?? []).map((keyword) => keyword.text)),
+      imageUrl: ((data.assets as { photos?: { url?: string }[] } | undefined)?.photos || []).map((row) => row?.url || '').find((url) => /^https:\/\//i.test(url)) || '',
+      videoUrl: ((data.assets as { videos?: { url?: string }[] } | undefined)?.videos || []).map((row) => row?.url || '').find((url) => /^https:\/\//i.test(url)) || '',
+      savedPlatforms: Array.isArray(data.launchPreference) ? (data.launchPreference as unknown[]).filter((id): id is string => typeof id === 'string') : [],
+      social: socialRows(data).map((row) => {
+        const raises = Array.isArray(data.socialChanges) ? data.socialChanges as { campaignId?: string; kind?: string; ts?: string; undone?: boolean; before?: string; after?: string }[] : [];
+        const last = raises.find((change) => change.campaignId === row.campaignId && change.kind === 'budget' && !change.undone && Number(change.after) > Number(change.before));
+        return { ...row, lastRaiseAt: last?.ts || null };
+      }),
     };
   };
 
   // Chat with Miles. Every turn gets this tenant's current account snapshot.
-  app.post<{ Body: { messages?: Array<{ role?: string; text?: string }>; mode?: string; revision?: string | null } }>('/api/chat/ask', async (req, reply) => {
+  app.post<{ Body: { messages?: Array<{ role?: string; text?: string }>; mode?: string; revision?: string | null; launchChoice?: { accept?: boolean; decline?: boolean; platforms?: Array<'google' | 'meta' | 'tiktok' | 'lsa'>; budgets?: Record<string, number> } } }>('/api/chat/ask', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
     const pace = chatByUser.check(u.id);
@@ -9094,7 +9146,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       });
     };
     const actAccount = chatActAccount(before);
-    const drafted = draftChatAction(question, actAccount, messages);
+    const drafted = draftChatAction(question, actAccount, messages, req.body?.launchChoice);
     if (drafted.kind !== 'none') {
       if (confirmsLead(question)) {
         const prior = [...messages].reverse().find((message) => message?.role !== 'user' && typeof message?.text === 'string' && message.text.includes('SOP 147 holds the approval card'));
@@ -9107,13 +9159,15 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       }
       let approval: ChatApproval | null = null;
       if (drafted.kind === 'card') {
-        approval = { ...drafted.approval, id: newToken().slice(0, 12) };
+        const card: ChatApproval = { ...drafted.approval, id: newToken().slice(0, 12) };
+        approval = card;
         await authStore.mutateUserData(u.id, (saved) => {
           const pending = Array.isArray(saved.chatPending) ? saved.chatPending as ChatApproval[] : [];
-          saved.chatPending = [{ ...approval, status: 'pending' }, ...pending].slice(0, 20);
+          saved.chatPending = [{ ...card, status: 'pending' }, ...pending].slice(0, 20);
+          if (card.kind === 'launch_plan') saved.launchPreference = (card.payload.launch || []).map((row) => row.id);
         });
       }
-      const plan = drafted.plan ?? null;
+      const plan = 'plan' in drafted ? drafted.plan ?? null : null;
       if (plan) {
         await authStore.mutateUserData(u.id, (saved) => {
           const prior = Array.isArray(saved.agentIntents) ? saved.agentIntents as unknown[] : [];
@@ -9130,6 +9184,8 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         next: null,
         action: null,
         approval: approval ? { id: approval.id, title: approval.title, before: approval.before, after: approval.after, dailyCost: approval.dailyCost, lines: approval.lines } : null,
+        choices: drafted.kind === 'suggest' ? 'suggest' : drafted.kind === 'choose' ? 'picker' : null,
+        picker: drafted.kind === 'choose' ? drafted.picker : null,
       };
     }
     if (!afford.ok && !answersWithoutModel(question)) {
@@ -9188,7 +9244,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const pending = (Array.isArray(data.chatPending) ? data.chatPending : []) as Array<ChatApproval & { status?: string }>;
     const hit = pending.find((row) => row.id === id);
     if (!hit || hit.status !== 'pending') return reply.code(400).send({ error: 'That approval is not waiting. Nothing was changed.' });
-    const finish = async (note: string, undo?: { kind: ChatApproval['kind']; previousDaily?: number; keywords?: string[]; previousStatus?: 'PAUSED' | 'ENABLED' }) => {
+    const finish = async (note: string, undo?: { kind: ChatApproval['kind']; previousDaily?: number; keywords?: string[]; previousStatus?: 'PAUSED' | 'ENABLED'; created?: Array<{ channel: 'google' | 'meta' | 'tiktok'; campaignResource?: string; campaignId?: string; advertiserId?: string; adSetIds?: string[]; adIds?: string[] }>; social?: ChatApproval['payload']['social'] }) => {
       hit.status = decision === 'approve' ? 'done' : 'cancelled';
       data.chatPending = pending;
       if (decision === 'approve') {
@@ -9298,6 +9354,128 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         return finish(wrote.note, { kind: 'add_negatives', keywords: words });
       }
       return finish('Preview connector. The words were saved on the plan. Google Ads was not changed.', { kind: 'add_negatives', keywords: words });
+    }
+    if (hit.kind === 'launch_plan') {
+      const slices = hit.payload.launch || [];
+      const total = slices.reduce((sum, row) => sum + (Number(row.daily) || 0), 0);
+      const account = chatActAccount(data);
+      if (account.kill) return reply.code(400).send({ error: 'The kill switch is on. Nothing was changed.' });
+      if (account.mode === 'manual') return reply.code(400).send({ error: 'Ask me first is on. Nothing was created.' });
+      const over = overDailyCap(total, account.dailyCap);
+      if (over) return reply.code(400).send({ error: over });
+      if (account.monthlyCeiling > 0 && total * 30 > account.monthlyCeiling) {
+        return reply.code(400).send({ error: `$${total}/day is about $${total * 30} in 30 days, above your $${account.monthlyCeiling} monthly ceiling. Nothing was changed.` });
+      }
+      if (await denyAdSpend(u.id, reply)) return;
+      if (isDemoAccount(u.email) && connector.name !== 'mock') return reply.code(403).send({ error: 'The public demo cannot create a campaign in a live ad account.' });
+      const notes: string[] = [];
+      const created: Array<{ channel: 'google' | 'meta' | 'tiktok'; campaignResource?: string; campaignId?: string; advertiserId?: string; adSetIds?: string[]; adIds?: string[] }> = [];
+      for (const slice of slices) {
+        if (slice.id === 'lsa' || !slice.create) {
+          notes.push(slice.reason || `${slice.label}: nothing was created.`);
+          continue;
+        }
+        if (slice.id === 'google' && slice.spec) {
+          const spec = { ...slice.spec, status: 'PAUSED' as const };
+          const gate = runSopGate('campaign_create', { mode, spec, trade: (data.profile as { industry?: string } | undefined)?.industry, city: spec.locations?.[0], tracking: data.trackingProof as { leadConversion?: boolean } | undefined });
+          appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: gate.disposition === 'block' ? 'dismissal' : 'action', actor: u.email, source: 'sop-gate', title: 'campaign_create', detail: formatSopLog(gate) });
+          if (gate.disposition === 'block') { notes.push(gate.blocks.join(' ')); continue; }
+          if (!connector.launchCampaign || connector.name === 'mock') {
+            notes.push('Preview connector. Google Ads was not created.');
+            continue;
+          }
+          const targets = connector.listAdTargets ? await connector.listAdTargets(u.id).catch(() => []) : [];
+          if (!targets.length) { notes.push('Google Ads is not connected. Nothing was created there.'); continue; }
+          const result = await connector.launchCampaign(u.id, gate.subject.spec || spec, targets[0]!.id);
+          if (!result.campaignResource) { notes.push(result.note || 'Google did not create the campaign.'); continue; }
+          miles.campaignResource = result.campaignResource;
+          miles.activation = 'paused';
+          if (miles.bundle) miles.bundle.spec = gate.subject.spec || spec;
+          data.miles = miles;
+          created.push({ channel: 'google', campaignResource: result.campaignResource });
+          notes.push(result.note || 'Google Search created paused.');
+          continue;
+        }
+        if (slice.id === 'meta' && slice.metaPlan) {
+          const plan: MetaPlan = { ...(slice.metaPlan as MetaPlan), status: 'PAUSED', objective: 'OUTCOME_LEADS', specialAdCategories: [] };
+          const blocked = reviewBlocked(reviewMetaPlan(plan, { dailyCap: account.dailyCap, monthlyCap: account.monthlyCeiling }));
+          if (blocked) { notes.push(blocked); continue; }
+          if (connector.name === 'mock' || !connector.launchMetaStructure) { notes.push('Preview connector. Meta was not created.'); continue; }
+          const result = await connector.launchMetaStructure(u.id, plan);
+          if (!result.ok || !result.campaignId) { notes.push(result.note || 'Meta did not create the campaign.'); continue; }
+          const included = plan.adSets.filter((set) => set.included);
+          saveSocial(data, { id: newToken().slice(0, 10), channel: 'meta', name: plan.name, campaignId: result.campaignId, daily: plan.dailyBudget, mode: plan.budgetMode, status: 'paused', adSetIds: result.adSetIds || [], adIds: result.adIds || [], shares: included.map((set) => set.dailyBudget) });
+          created.push({ channel: 'meta', campaignId: result.campaignId, adSetIds: result.adSetIds || [], adIds: result.adIds || [] });
+          notes.push(result.note || 'Meta created paused.');
+          continue;
+        }
+        if (slice.id === 'tiktok' && slice.tiktokPlan) {
+          const plan: TikTokPlan = { ...(slice.tiktokPlan as TikTokPlan), status: 'DISABLE', objective: 'LEAD_GENERATION', destination: 'website' };
+          const blocked = reviewBlocked(reviewTikTokPlan(plan, { dailyCap: account.dailyCap, monthlyCap: account.monthlyCeiling }));
+          if (blocked) { notes.push(blocked); continue; }
+          if (connector.name === 'mock' || !connector.launchTikTokStructure) { notes.push('Preview connector. TikTok was not created.'); continue; }
+          const result = await connector.launchTikTokStructure(u.id, plan);
+          if (!result.ok || !result.campaignId) { notes.push(result.note || 'TikTok did not create the campaign.'); continue; }
+          const included = plan.adSets.filter((set) => set.included);
+          saveSocial(data, { id: newToken().slice(0, 10), channel: 'tiktok', name: plan.name, campaignId: result.campaignId, advertiserId: result.advertiserId, daily: plan.dailyBudget, mode: 'ad_group', status: 'paused', adSetIds: result.adGroupIds || [], adIds: result.adIds || [], shares: included.map((set) => set.dailyBudget) });
+          created.push({ channel: 'tiktok', campaignId: result.campaignId, advertiserId: result.advertiserId, adSetIds: result.adGroupIds || [], adIds: result.adIds || [] });
+          notes.push(result.note || 'TikTok created disabled.');
+        }
+      }
+      return finish(notes.join(' ') || 'Nothing was created.', { kind: 'launch_plan', created });
+    }
+    if (hit.kind === 'social_change' && hit.payload.social) {
+      const social = hit.payload.social;
+      const row = socialRows(data).find((item) => item.channel === social.channel && item.campaignId === social.campaignId);
+      if (!row) return reply.code(400).send({ error: 'That campaign is not on this account. Nothing was changed.' });
+      const account = chatActAccount(data);
+      if (account.kill) return reply.code(400).send({ error: 'The kill switch is on. Nothing was changed.' });
+      if (account.mode === 'manual') return reply.code(400).send({ error: 'Ask me first is on. Nothing was changed.' });
+      if (social.action === 'live' || social.action === 'budget') {
+        const next = social.action === 'budget' ? Number(social.daily) || 0 : row.daily;
+        const googleLive = miles.activation === 'enabled' ? account.currentDaily : 0;
+        const others = socialRows(data).filter((item) => item.status === 'live' && item.campaignId !== row.campaignId).reduce((sum, item) => sum + item.daily, 0);
+        const over = overDailyCap(googleLive + others + next, account.dailyCap);
+        if (over) return reply.code(400).send({ error: over });
+        if (social.action === 'budget') {
+          const lastRaise = (Array.isArray(data.socialChanges) ? data.socialChanges as SocialChange[] : []).find((change) => change.campaignId === row.campaignId && change.kind === 'budget' && !change.undone && Number(change.after) > Number(change.before));
+          const paced = scaleIncreaseAllowed(row.daily, next, lastRaise?.ts ?? null);
+          if (paced) return reply.code(400).send({ error: paced });
+        }
+      }
+      if (connector.name === 'mock') return finish('Preview connector. Nothing was changed in the ad account.');
+      if (social.action === 'pause' || social.action === 'live') {
+        const next = social.action === 'live' ? 'live' : 'paused';
+        if (social.channel === 'meta') {
+          if (!connector.setMetaTreeStatus) return finish('Meta status changes are not connected. Nothing was changed.');
+          const result = await connector.setMetaTreeStatus(u.id, { campaignId: row.campaignId, adSetIds: row.adSetIds, adIds: row.adIds, status: next === 'live' ? 'ACTIVE' : 'PAUSED' });
+          if (!result.ok) return finish(result.note || 'Meta did not change the campaign.');
+        } else {
+          if (!connector.setTikTokStatus || !row.advertiserId) return finish('TikTok status changes are not connected. Nothing was changed.');
+          const result = await connector.setTikTokStatus(u.id, { advertiserId: row.advertiserId, campaignId: row.campaignId, adGroupIds: row.adSetIds, adIds: row.adIds, status: next === 'live' ? 'ENABLE' : 'DISABLE' });
+          if (!result.ok) return finish(result.note || 'TikTok did not change the campaign.');
+        }
+        const before = row.status;
+        row.status = next;
+        saveSocial(data, row);
+        pushSocialChange(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), channel: social.channel, kind: 'status', campaignId: row.campaignId, before, after: next, title: hit.title });
+        return finish(next === 'live' ? 'Turned on. Spend can start.' : 'Paused. Spend stops.', { kind: 'social_change', social, previousStatus: before === 'live' ? 'ENABLED' : 'PAUSED' });
+      }
+      const next = Math.round(Number(social.daily));
+      if (social.channel === 'meta') {
+        if (!connector.setMetaBudget) return finish('Meta budget changes are not connected. Nothing was changed.');
+        const result = await connector.setMetaBudget(u.id, { campaignId: row.campaignId, adSetIds: row.adSetIds, mode: row.mode === 'cbo' ? 'cbo' : 'abo', daily: next });
+        if (!result.ok) return finish(result.note || 'Meta did not change the budget.');
+      } else {
+        if (!connector.setTikTokBudget || !row.advertiserId) return finish('TikTok budget changes are not connected. Nothing was changed.');
+        const result = await connector.setTikTokBudget(u.id, { advertiserId: row.advertiserId, campaignId: row.campaignId, adGroupIds: row.adSetIds, daily: next, shares: row.shares.length ? row.shares : row.adSetIds.map(() => next) });
+        if (!result.ok) return finish(result.note || 'TikTok did not change the budget.');
+      }
+      const before = String(row.daily);
+      row.daily = next;
+      saveSocial(data, row);
+      pushSocialChange(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), channel: social.channel, kind: 'budget', campaignId: row.campaignId, before, after: String(next), title: hit.title });
+      return finish(`Daily budget is now $${next}.`, { kind: 'social_change', social, previousDaily: Number(before) });
     }
     return reply.code(400).send({ error: 'That action is not available. Nothing was changed.' });
   });

@@ -10311,7 +10311,52 @@ function chatConnectClick(slug, label, body){
   }
   connectApp(slug, popup);
 }
-async function send(text,silent){
+function appendLaunchChoices(bubble, data){
+  if(!data || (data.choices!=='suggest' && data.choices!=='picker')) return;
+  const box=el('div');
+  box.className='chat-launch-picker';
+  box.style.cssText='display:flex;flex-direction:column;gap:8px;margin-top:8px';
+  if(data.choices==='suggest'){
+    const bar=el('div'); bar.style.cssText='display:flex;gap:8px;flex-wrap:wrap';
+    const yes=el('button','go','Yes, use that split');
+    const no=el('button','ghost','No, I will choose');
+    yes.type='button'; no.type='button';
+    yes.onclick=function(){ send('Yes, use that split', false, {accept:true}); };
+    no.onclick=function(){ send('No, I will choose', false, {decline:true}); };
+    bar.append(yes, no); box.append(bar);
+  }
+  if(data.choices==='picker' && data.picker){
+    const row=el('div'); row.style.cssText='display:flex;gap:8px;flex-wrap:wrap';
+    (data.picker.options||[]).forEach(function(opt){
+      const button=el('button', opt.selected?'go':'ghost', opt.label);
+      button.type='button';
+      button.onclick=function(){ send(opt.label, false, {platforms: opt.platforms, budgets: data.picker.budgets||{}}); };
+      row.append(button);
+    });
+    box.append(row);
+    const budgets=data.picker.budgets||{};
+    const keys=Object.keys(budgets);
+    if(keys.length){
+      const form=el('div'); form.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end';
+      const inputs={};
+      keys.forEach(function(key){
+        const wrap=el('label'); wrap.style.cssText='display:flex;flex-direction:column;gap:4px;font-size:12px';
+        wrap.append(document.createTextNode(key));
+        const input=el('input'); input.type='number'; input.min='0'; input.value=String(budgets[key]||0); input.style.width='88px';
+        inputs[key]=input; wrap.append(input); form.append(wrap);
+      });
+      const use=el('button','go','Use this split'); use.type='button';
+      use.onclick=function(){
+        const next={};
+        keys.forEach(function(key){ next[key]=Number(inputs[key].value)||0; });
+        send('Use this split', false, {platforms: keys.filter(function(key){ return next[key]>0; }), budgets: next});
+      };
+      form.append(use); box.append(form);
+    }
+  }
+  bubble.append(box);
+}
+async function send(text,silent,launchChoice){
   if(chatResetting) return;
   const msg=(text!=null?text:cinput.value).trim(); if(!msg) return;
   if(!silent) say('user',msg);
@@ -10323,7 +10368,7 @@ async function send(text,silent){
   const b=addRow('emp'); const typ=el('div','typing'); typ.innerHTML='<span></span><span></span><span></span>'; b.append(typ);
   try{
     const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(),30000);
-    const r=await fetch('/api/chat/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-16),mode:chatMode,revision:chatRevision}),signal:ctrl.signal});
+    const r=await fetch('/api/chat/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:CHAT_LOG.slice(-16),mode:chatMode,revision:chatRevision,launchChoice:launchChoice||null}),signal:ctrl.signal});
     clearTimeout(timer);
     const d=await r.json();
     if(!b.isConnected) return;
@@ -10354,6 +10399,7 @@ async function send(text,silent){
     if(d.next&&d.next.label){ const go=el('button','go', d.next.label); go.type='button'; go.style.marginTop='8px'; go.onclick=()=>setPage(d.next.page||'integrations'); b.append(go); }
     if(d.action&&d.action.kind==='connect') appendConnectButton(b, body, d.action);
     if(d.approval&&d.approval.id) appendApprovalCard(b, d.approval);
+    appendLaunchChoices(b, d);
     logChat('emp', said, d.action); chat.scrollTop=chat.scrollHeight;
   }catch(e){ b.textContent=e&&e.name==='AbortError'?'That took too long. Try again in a moment. Nothing was changed.':'I could not reach the server just now. Try again.'; }
 }
