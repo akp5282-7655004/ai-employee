@@ -3,6 +3,8 @@
  * A missing row stays missing. The home-services pack is a playbook, not a
  * measured Google Ads cost per lead.
  */
+import { resolveBenchmark } from '../benchmarks/resolve.js';
+import { tradeKey as benchmarkTradeKey } from '../benchmarks/trades.js';
 import { BENCHMARK_HUB } from '../packs/benchmarks.js';
 import { homeServicesPack } from '../packs/homeServices.js';
 import { seasonFocus } from './contractorloop.js';
@@ -42,7 +44,9 @@ export function playbookCard(trade: string, now = new Date()): PlaybookCard {
   const key = tradeKey(trade);
   const label = homeServicesPack.categories.find((c) => c.id === key)?.label || trade || 'Home services';
   const season = key ? seasonFocus(key, now.getMonth()) : { line: '', note: 'No seasonal shift is loaded for this trade.' };
-  const bench = searchlightGoogleCpl(label);
+  const resolved = resolveBenchmark({ trade: benchmarkTradeKey(trade) || key, platform: 'google_ads', metric: 'cpl' });
+  const bench = resolved.value;
+  const short = resolved.milesShortfall ? ` ${resolved.milesShortfall}.` : '';
   return {
     title: `Running the ${label.toLowerCase()} playbook`,
     pack: homeServicesPack.label,
@@ -51,10 +55,10 @@ export function playbookCard(trade: string, now = new Date()): PlaybookCard {
     services: deriveServiceLines(season.line, label),
     suggestedGoogleShare: 1,
     splitNote: 'The home services playbook would put most of a small budget on Local Services Ads, then Search. Miles cannot create Local Services Ads or Meta campaigns yet, so the budget you can actually run is Google Search. Any share you assign to other channels stays a plan until a create action exists.',
-    benchmarkCpl: bench?.value ?? null,
-    benchmarkNote: bench
-      ? `Industry benchmarks, aggregated from public sources, put the Google Ads cost per lead for ${label} at $${bench.value}. ${bench.note}`
-      : `There is no published Google Ads cost-per-lead row for ${label}. Miles will not invent one. The home services pack median ($${homeServicesPack.economics.cpaBenchmark.median}) is a planning range for the vertical, not a measured result for this trade.`,
+    benchmarkCpl: bench,
+    benchmarkNote: bench != null
+      ? `${resolved.sourceLabel} puts the Google Ads cost per lead for ${label} at $${bench}.${short}`
+      : `There is no published Google Ads cost-per-lead row for ${label}. Miles will not invent one. The home services pack median ($${homeServicesPack.economics.cpaBenchmark.median}) is a planning range for the vertical, not a measured result for this trade.${short}`,
   };
 }
 
@@ -89,7 +93,7 @@ export function feasibility(args: { dailyBudget: number; leadsPerDay: number; tr
     realistic: unlikely ? 'unlikely' : 'in_range',
     playbook,
     message: unlikely
-      ? `At $${args.dailyBudget} a day and ${leads} lead${leads === 1 ? '' : 's'} a day, the math needs about $${required} per lead. The published Google Ads figure for this trade is $${playbook.benchmarkCpl}. That target is well below the benchmark, so those leads are not a reasonable expectation. You can still run a paused, or in-cap, Search campaign. This is not a guarantee.`
-      : `At $${args.dailyBudget} a day and ${leads} lead${leads === 1 ? '' : 's'} a day, the math needs about $${required} per lead. The published Google Ads figure for this trade is $${playbook.benchmarkCpl}. Being near the benchmark is not a promise of leads.`,
+      ? `At $${args.dailyBudget} a day and ${leads} lead${leads === 1 ? '' : 's'} a day, the math needs about $${required} per lead. The published Google Ads figure for this trade is $${playbook.benchmarkCpl}. ${playbook.benchmarkNote} That target is well below the benchmark, so those leads are not a reasonable expectation. You can still run a paused, or in-cap, Search campaign. This is not a guarantee.`
+      : `At $${args.dailyBudget} a day and ${leads} lead${leads === 1 ? '' : 's'} a day, the math needs about $${required} per lead. The published Google Ads figure for this trade is $${playbook.benchmarkCpl}. ${playbook.benchmarkNote} Being near the benchmark is not a promise of leads.`,
   };
 }

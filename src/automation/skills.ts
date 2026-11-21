@@ -225,7 +225,12 @@ export function weeklyReport(input: DailyInput, findings: Finding[], write?: Sum
     `Spend on file is ${money(spend)}. Leads ${input.leads}. Booked jobs ${input.bookedJobs}.`,
     actions.length ? `Miles prepared ${actions.length} change${actions.length === 1 ? '' : 's'}.` : 'Miles found no account changes to make.',
   ];
-  if (band) parts.push(`Published cost per lead for this check is ${money(band.low)} to ${money(band.high)}.`);
+  if (band) {
+    const figure = band.low === band.high ? money(band.typical) : `${money(band.low)} to ${money(band.high)}`;
+    const source = band.sourceLabel ? ` Source: ${band.sourceLabel}.` : '';
+    const short = band.milesShortfall ? ` ${band.milesShortfall}.` : '';
+    parts.push(`Published cost per lead for this check is ${figure}.${source}${short}`);
+  }
   if (cpl != null && band && cpl > band.high) parts.push(`Cost per lead on file is ${money(cpl)}, above that range.`);
   else if (cpl == null && spend > 0) parts.push('Cost per lead is not tracked yet because no conversions are on file.');
   if (input.channels.meta && input.metaSpend != null) parts.push(`Meta spend on file is ${money(input.metaSpend)}.`);

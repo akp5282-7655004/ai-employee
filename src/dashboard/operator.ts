@@ -7,6 +7,9 @@
  */
 import type { Recommendation } from '../agents/recommend.js';
 import type { MilesMode } from '../agents/policy.js';
+import { resolveBenchmark } from '../benchmarks/resolve.js';
+import { tradeKey as benchmarkTradeKey, tradeLabel } from '../benchmarks/trades.js';
+import type { MilesCohort } from '../benchmarks/types.js';
 import { BENCHMARK_META, LSA_BLENDED } from '../packs/benchmarks.js';
 
 export const MODE_PILLS: { id: MilesMode; label: string }[] = [
@@ -43,6 +46,8 @@ export interface OperatorCampaign {
 export interface OperatorInput {
   mode: MilesMode | null;
   trade: string;
+  /** Miles Local Services Ads cohort for this trade, when the server has one. */
+  lsaCohort?: MilesCohort | null;
   market: string;
   /** Saved daily cap. Null when the owner has not saved a plan. */
   dailyBudget: number | null;
@@ -178,8 +183,6 @@ function plain(s: string): string {
   return s
     .replace(/\u2014/g, ' - ')
     .replace(/\u2013/g, '-')
-    .replace(/searchlight\s*digital/gi, 'the published study')
-    .replace(/searchlight/gi, 'the published study')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
@@ -443,23 +446,35 @@ function moneyBlock(input: OperatorInput): OperatorView['money'] {
   };
 }
 
-function compareBlock(): OperatorView['compare'] {
-  const cpl = LSA_BLENDED.cpl;
-  const roas = LSA_BLENDED.roas;
-  const revPerLead = Math.round(roas * cpl);
+function compareBlock(trade: string, cohort?: MilesCohort | null): OperatorView['compare'] {
+  const key = benchmarkTradeKey(trade);
+  const resolved = key ? resolveBenchmark({ trade: key, platform: 'google_lsa', metric: 'cpl', cohort }) : null;
+  const roas = key ? resolveBenchmark({ trade: key, platform: 'google_lsa', metric: 'roas', cohort }) : null;
+  const named = !!key;
+  const cpl = named ? (resolved?.value ?? null) : LSA_BLENDED.cpl;
+  const roasValue = named ? (roas?.value ?? null) : LSA_BLENDED.roas;
+  const shown = (value: number | null, suffix = '') => (value == null ? 'No benchmark' : `${suffix === 'x' ? value : money(value)}${suffix === 'x' ? 'x' : ''}`);
+  const revPerLead = cpl != null && roasValue != null ? money(Math.round(roasValue * cpl)) : 'No benchmark';
   const spend = BENCHMARK_META.spend >= 1_000_000
     ? `$${(BENCHMARK_META.spend / 1_000_000).toFixed(2).replace(/\.00$/, '')}M`
     : money(BENCHMARK_META.spend);
+  const label = resolved && resolved.kind !== 'none' ? resolved.sourceLabel : 'Searchlight, Feb 2026';
+  const short = resolved?.milesShortfall || 'Not enough Miles data yet (0 of 5 accounts)';
+  const whose = !named
+    ? `${label}. ${BENCHMARK_META.period}. ${BENCHMARK_META.contractors.toLocaleString('en-US')} contractors. ${spend} tracked spend. ${BENCHMARK_META.leads.toLocaleString('en-US')} leads. ${short}. Not your account.`
+    : resolved?.value != null
+      ? `${label}. ${short}. Not your account.`
+      : `No Local Services Ads benchmark for ${tradeLabel(key)}. ${short}. Not your account.`;
   return {
     headline: 'Not graded yet',
     badge: 'Not connected',
     sub: 'Local Services Ads are not connected, so Miles will not grade you against this benchmark.',
-    sourceLine: plain(`${BENCHMARK_META.source}. ${BENCHMARK_META.period}. ${BENCHMARK_META.contractors.toLocaleString('en-US')} contractors. ${spend} tracked spend. ${BENCHMARK_META.leads.toLocaleString('en-US')} leads. Not your account.`),
+    sourceLine: plain(whose),
     rows: [
-      { measure: 'LSA cost per lead', hint: 'Lower is better', you: 'n/a', benchmark: money(cpl), verdict: 'Not connected' },
-      { measure: 'LSA revenue per lead', hint: 'Published return times cost per lead. Higher is better.', you: 'n/a', benchmark: money(revPerLead), verdict: 'Not connected' },
-      { measure: 'LSA revenue per $1 of ads', hint: 'Higher is better', you: 'n/a', benchmark: `${roas}x`, verdict: 'Not connected' },
-      { measure: 'Cost per lead, all paid channels', hint: 'Compared with the published LSA cost per lead', you: 'n/a', benchmark: money(cpl), verdict: 'Not connected' },
+      { measure: 'LSA cost per lead', hint: 'Lower is better', you: 'n/a', benchmark: shown(cpl), verdict: 'Not connected' },
+      { measure: 'LSA revenue per lead', hint: 'Published return times cost per lead. Higher is better.', you: 'n/a', benchmark: revPerLead, verdict: 'Not connected' },
+      { measure: 'LSA revenue per $1 of ads', hint: 'Higher is better', you: 'n/a', benchmark: shown(roasValue, 'x'), verdict: 'Not connected' },
+      { measure: 'Cost per lead, all paid channels', hint: 'Compared with the published LSA cost per lead', you: 'n/a', benchmark: shown(cpl), verdict: 'Not connected' },
     ],
   };
 }
@@ -720,7 +735,7 @@ export function buildOperatorView(input: OperatorInput): OperatorView {
     sampleLegend: 'SAMPLE = example numbers until that source connects',
     onTrack: onTrack(shown, decisions),
     money: moneyBlock(shown),
-    compare: compareBlock(),
+    compare: compareBlock(shown.trade, shown.lsaCohort),
     decisions,
     playbooks: playbooksOf(shown),
     playbookNote: 'Run builds or queues the saved Google Search plan and still follows your mode. In Hybrid, Miles asks before it spends. Meta and Local Services Ads are not launched from here.',

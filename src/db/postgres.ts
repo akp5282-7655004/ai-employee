@@ -1,3 +1,5 @@
+import { LIVING_PLAYBOOK_SQL } from '../benchmarks/schema.js';
+import type { AggregateRow, DailyRow, Membership, Platform } from '../benchmarks/types.js';
 import { mergeCredits, stripCreditBase } from '../billing/merge.js';
 import type { AuthSession, Store, User } from './store.js';
 
@@ -38,6 +40,7 @@ export class PostgresStore implements Store {
         claimed_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
     `);
+    await this.pool.query(LIVING_PLAYBOOK_SQL);
   }
 
   async createUser(u: User): Promise<void> {
@@ -173,6 +176,112 @@ export class PostgresStore implements Store {
   async deleteUser(id: string): Promise<void> {
     await this.pool.query('DELETE FROM sessions WHERE user_id=$1', [id]);
     await this.pool.query('DELETE FROM user_data WHERE user_id=$1', [id]);
+    await this.pool.query('DELETE FROM benchmark_daily WHERE account_id=$1', [id]);
+    await this.pool.query('DELETE FROM benchmark_membership WHERE account_id=$1', [id]);
     await this.pool.query('DELETE FROM users WHERE id=$1', [id]);
+  }
+
+  async upsertBenchmarkDaily(rows: DailyRow[]): Promise<void> {
+    for (const row of rows) {
+      await this.pool.query(
+        `INSERT INTO benchmark_daily(account_id, day, platform, campaign_type, trade, tracking_verified, account_active, consent, spend, clicks, impressions, leads, conversions, booked_jobs, revenue, cpl, cpc, cpa, roas)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+         ON CONFLICT (account_id, day, platform, campaign_type) DO UPDATE SET
+           trade=EXCLUDED.trade, tracking_verified=EXCLUDED.tracking_verified, account_active=EXCLUDED.account_active, consent=EXCLUDED.consent,
+           spend=EXCLUDED.spend, clicks=EXCLUDED.clicks, impressions=EXCLUDED.impressions, leads=EXCLUDED.leads, conversions=EXCLUDED.conversions,
+           booked_jobs=EXCLUDED.booked_jobs, revenue=EXCLUDED.revenue, cpl=EXCLUDED.cpl, cpc=EXCLUDED.cpc, cpa=EXCLUDED.cpa, roas=EXCLUDED.roas`,
+        [row.accountId, row.day, row.platform, row.campaignType, row.trade, row.trackingVerified, row.accountActive, row.consent, row.spend, row.clicks, row.impressions, row.leads, row.conversions, row.bookedJobs, row.revenue, row.cpl, row.cpc, row.cpa, row.roas],
+      );
+    }
+  }
+  async deleteBenchmarkDaily(accountId: string): Promise<void> {
+    await this.pool.query('DELETE FROM benchmark_daily WHERE account_id=$1', [accountId]);
+  }
+  async listBenchmarkDaily(): Promise<DailyRow[]> {
+    const r = await this.pool.query('SELECT * FROM benchmark_daily');
+    return r.rows.map((row: Record<string, unknown>) => this.mapDaily(row));
+  }
+  async upsertBenchmarkMembership(row: Membership): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO benchmark_membership(account_id, trade, active, consent, tracking_verified, platforms)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb)
+       ON CONFLICT (account_id) DO UPDATE SET trade=EXCLUDED.trade, active=EXCLUDED.active, consent=EXCLUDED.consent, tracking_verified=EXCLUDED.tracking_verified, platforms=EXCLUDED.platforms`,
+      [row.accountId, row.trade, row.active, row.consent, row.trackingVerified, JSON.stringify(row.platforms)],
+    );
+  }
+  async listBenchmarkMembership(): Promise<Membership[]> {
+    const r = await this.pool.query('SELECT * FROM benchmark_membership');
+    return r.rows.map((row: Record<string, unknown>) => ({
+      accountId: String(row.account_id),
+      trade: String(row.trade),
+      active: row.active === true,
+      consent: row.consent === true,
+      trackingVerified: row.tracking_verified === true,
+      platforms: (Array.isArray(row.platforms) ? row.platforms : []) as Platform[],
+    }));
+  }
+  async replaceBenchmarkAggregates(rows: AggregateRow[]): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM benchmark_aggregate');
+      for (const row of rows) {
+        await client.query(
+          `INSERT INTO benchmark_aggregate(trade, platform, metric, window_days, as_of, median, p25, p75, contributor_count, cohort_n, required_count, published, spend_cap_ok, total_spend, reason)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+          [row.trade, row.platform, row.metric, row.windowDays, row.asOf, row.median, row.p25, row.p75, row.contributorCount, row.cohortN, row.requiredCount, row.published, row.spendCapOk, row.totalSpend, row.reason],
+        );
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* already closed */ }
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+  async listBenchmarkAggregates(): Promise<AggregateRow[]> {
+    const r = await this.pool.query('SELECT * FROM benchmark_aggregate');
+    return r.rows.map((row: Record<string, unknown>) => ({
+      trade: String(row.trade),
+      platform: row.platform as AggregateRow['platform'],
+      metric: row.metric as AggregateRow['metric'],
+      windowDays: Number(row.window_days),
+      asOf: String(row.as_of),
+      median: row.median == null ? null : Number(row.median),
+      p25: row.p25 == null ? null : Number(row.p25),
+      p75: row.p75 == null ? null : Number(row.p75),
+      contributorCount: Number(row.contributor_count),
+      cohortN: Number(row.cohort_n),
+      requiredCount: Number(row.required_count),
+      published: row.published === true,
+      spendCapOk: row.spend_cap_ok === true,
+      totalSpend: Number(row.total_spend),
+      reason: row.reason as AggregateRow['reason'],
+    }));
+  }
+  private mapDaily(row: Record<string, unknown>): DailyRow {
+    const num = (value: unknown) => (value == null ? null : Number(value));
+    return {
+      accountId: String(row.account_id),
+      day: String(row.day),
+      platform: row.platform as DailyRow['platform'],
+      campaignType: String(row.campaign_type),
+      trade: String(row.trade),
+      trackingVerified: row.tracking_verified === true,
+      accountActive: row.account_active === true,
+      consent: row.consent === true,
+      spend: Number(row.spend) || 0,
+      clicks: Number(row.clicks) || 0,
+      impressions: Number(row.impressions) || 0,
+      leads: Number(row.leads) || 0,
+      conversions: Number(row.conversions) || 0,
+      bookedJobs: Number(row.booked_jobs) || 0,
+      revenue: Number(row.revenue) || 0,
+      cpl: num(row.cpl),
+      cpc: num(row.cpc),
+      cpa: num(row.cpa),
+      roas: num(row.roas),
+    };
   }
 }

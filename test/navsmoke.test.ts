@@ -114,7 +114,8 @@ describe('every nav tab loads', () => {
     const dash = await page.locator('#overview-body').innerText();
     expect(dash).toMatch(/Coming later/);
     expect(dash).not.toMatch(/\$100 goal|25 goal/);
-    expect(dash.toLowerCase()).not.toContain('searchlight');
+    expect(dash).toMatch(/Searchlight, Feb 2026/);
+    expect(dash.toLowerCase()).not.toContain('searchlightdigital');
     expect(dash).not.toContain('\u2014');
 
     const seeded = await page.evaluate(async () => {

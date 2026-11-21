@@ -78,6 +78,12 @@ export interface HubEntry {
   /** The SearchLight article this figure comes from (or should be read from). */
   source: string;
   note?: string;
+  /**
+   * True when the figure is stored but was not found on the cited source page.
+   * The living-playbook resolver skips these. HVAC Google Ads 4.37x is the
+   * known case: it is not on the Searchlight HVAC Google Ads page.
+   */
+  unverified?: boolean;
 }
 
 export interface HubChannel {
@@ -122,7 +128,7 @@ export function buildBenchmarkHub(): HubChannel[] {
         { trade: 'Roofing', metric: 'CPL', value: 124, unit: 'usd', source: SL + 'roofing-google-ads-cost-per-lead/', note: 'Non-branded · branded $44 · PMax $64' },
         { trade: 'Garage Door', metric: 'CPL', value: 173, unit: 'usd', source: SL + 'garage-door-google-ads-cost-per-lead/', note: 'Non-branded · blended $145 · branded $66' },
         { trade: 'Electrical', metric: 'CPL', value: 163, unit: 'usd', source: SL + 'what-is-a-good-cost-per-lead-for-hvac-google-ads/', note: 'Non-branded · Jan 2026 · 173 accts · book rate 41.2% · avg ticket $2,491 · ROAS 2.92x · newer Q1 2026 comparison reports $128 (271 accts)' },
-        { trade: 'HVAC', metric: 'ROAS', value: 4.37, unit: 'x', source: SL + 'what-is-a-good-roas-for-hvac-google-ads', note: 'Blended MEDIAN · top quartile 10.24x · non-branded 2.95x is spend-weighted (non-brand account median just 0.99x — methods differ)' },
+        { trade: 'HVAC', metric: 'ROAS', value: 4.37, unit: 'x', source: SL + 'what-is-a-good-roas-for-hvac-google-ads', unverified: true, note: 'UNVERIFIED. A 4.37x median was not on the Searchlight HVAC Google Ads page (checked 21 Nov 2026). Do not use this as a benchmark. Top quartile 10.24x and non-branded 2.95x were also not confirmed as the trade figure.' },
         { trade: 'Garage Door', metric: 'ROAS', value: 3.51, unit: 'x', source: SL + 'what-is-a-good-roas-for-garage-door-google-ads/', note: 'Blended · median 2.90x · top quartile 11.37x' },
       ],
     },

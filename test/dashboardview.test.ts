@@ -73,7 +73,8 @@ describe('operator honesty', () => {
     expect(view.money.headline.startsWith('SAMPLE.')).toBe(true);
     expect(text).not.toMatch(/25 goal|\$100/);
     expect(text).not.toMatch(/\u2014/);
-    expect(text.toLowerCase()).not.toContain('searchlight');
+    expect(text).toMatch(/Searchlight, Feb 2026/);
+    expect(text.toLowerCase()).not.toContain('searchlightdigital');
   });
 
   it('shows the lead goal against actual leads only when a count is running', () => {
@@ -140,7 +141,9 @@ describe('operator honesty', () => {
     expect(view.compare.rows.every((r) => r.you === 'n/a' && r.verdict === 'Not connected')).toBe(true);
     expect(view.compare.headline).not.toMatch(/better than/i);
     expect(view.compare.sourceLine).toMatch(/888/);
-    expect(view.compare.sourceLine).not.toMatch(/searchlight/i);
+    expect(view.compare.sourceLine).toMatch(/Searchlight, Feb 2026/);
+    expect(view.compare.sourceLine).toMatch(/Not enough Miles data yet/);
+    expect(view.compare.sourceLine).not.toMatch(/searchlightdigital/i);
   });
 
   it('labels preview Google rows as SAMPLE and does not call leads booked jobs', () => {
@@ -168,7 +171,7 @@ describe('operator honesty', () => {
     expect(view.onTrack.explain).not.toMatch(/No budget projection|No monthly job goal/);
     const sentences = view.onTrack.explain.split('.').map((part) => part.trim()).filter(Boolean);
     expect(sentences.length).toBeLessThanOrEqual(2);
-    expect(copy(view)).not.toMatch(/\u2014|searchlight/i);
+    expect(copy(view)).not.toMatch(/\u2014|searchlightdigital/i);
   });
 
   it('turns a no-spend budget shift into one line and does not ask for approval', () => {
@@ -289,7 +292,7 @@ describe('operator route', () => {
     expect(view.connections.find((c) => c.name === 'GoHighLevel')!.detail).toMatch(/not connected/i);
     expect(view.money.tone).toBe('sample');
     expect(view.money.costPerLead).toBe('Not tracked yet');
-    expect(copy(view)).not.toMatch(/\u2014|searchlight/i);
+    expect(copy(view)).not.toMatch(/\u2014|searchlightdigital/i);
     expect(copy(view)).not.toMatch(/\$100 goal|25 goal/);
     await app.close();
   });

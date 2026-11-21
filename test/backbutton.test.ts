@@ -20,8 +20,14 @@ describe('Back, Forward and Refresh inside the app', () => {
     const app = buildServer({ authStore: new MemoryStore() });
     const base = await app.listen({ port: 0, host: '127.0.0.1' });
     await app.inject({ method: 'POST', url: '/auth/signup', payload: { email: 'back@example.com', password: PASSWORD, tos: true } });
-    browser = await chromium.launch();
+    browser = await chromium.launch({ headless: true });
     const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    page.on('dialog', (dialog) => dialog.accept());
+    // These moves only change the hash. Waiting for a full document load never
+    // finishes while the dashboard is still reading, so wait until the history
+    // entry commits.
+    const back = () => page.goBack({ waitUntil: 'commit', timeout: 10000 });
+    const forward = () => page.goForward({ waitUntil: 'commit', timeout: 10000 });
     const current = () => page.locator('.page.on').first().getAttribute('id');
 
     // Sign in through the form, as an owner does.
@@ -37,13 +43,13 @@ describe('Back, Forward and Refresh inside the app', () => {
     await page.evaluate(() => (globalThis as unknown as W).setPage('settings'));
     await expect.poll(current).toBe('page-settings');
 
-    await page.goBack();
+    await back();
     await expect.poll(current).toBe('page-library');
-    await page.goBack();
+    await back();
     await expect.poll(current).toBe('page-overview');
-    await page.goForward();
+    await forward();
     await expect.poll(current).toBe('page-library');
-    await page.goForward();
+    await forward();
     await expect.poll(current).toBe('page-settings');
 
     await page.reload();
@@ -52,13 +58,13 @@ describe('Back, Forward and Refresh inside the app', () => {
     expect(await page.evaluate(() => (globalThis as unknown as W).location.hash)).toBe('#settings');
 
     // Back from the first page of the app does not show a login form to a signed-in owner.
-    await page.goBack(); // library
+    await back(); // library
     await expect.poll(current).toBe('page-library');
-    await page.goBack(); // overview
+    await back(); // overview
     await expect.poll(current).toBe('page-overview');
     // One more step leaves the app for whatever came before it. A blank tab has
     // nothing to load, so do not wait on it: only the address matters here.
-    await page.goBack({ timeout: 5000 }).catch(() => null);
+    await page.goBack({ waitUntil: 'commit', timeout: 5000 }).catch(() => null);
     expect(page.url()).not.toMatch(/\/login/);
     await app.close();
   }, 60_000);

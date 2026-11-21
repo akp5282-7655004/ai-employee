@@ -20,32 +20,28 @@ const painting = () => projectBudget({
 })!;
 
 describe('budget projection math', () => {
-  it('projects a $608 painting month in Philadelphia from the Google Ads blended and non-brand figures', () => {
+  it('projects a $608 painting month in Philadelphia from the LocaliQ cost per lead', () => {
     const projection = painting();
-    expect(projection.benchmark.fallback).toBe(true);
-    expect(projection.benchmark.estimateLabel).toMatch(/similar home-services trades/i);
-    expect(projection.benchmark.sourceLabel).toBe('Industry benchmarks, aggregated from public sources');
-    expect(projection.benchmark.highCpl).toMatchObject({ kind: 'non_brand', cpl: 149, bookRatePct: 37.6, costPerCustomer: 804 });
-    expect(projection.benchmark.lowCpl).toMatchObject({ kind: 'blended', cpl: 104, bookRatePct: 41.7, costPerCustomer: 472 });
-    expect(projection.benchmark.highCpl.leadsExact).toBeCloseTo(608 / 149, 6);
-    expect(projection.benchmark.lowCpl.leadsExact).toBeCloseTo(608 / 104, 6);
-    expect(projection.benchmark.highCpl.jobsExact).toBeCloseTo((608 / 149) * 0.376, 6);
-    expect(projection.benchmark.lowCpl.jobsExact).toBeCloseTo((608 / 104) * 0.417, 6);
-    expect(projection.range.leads).toEqual({ low: 4, high: 6 });
-    expect(projection.range.jobs).toEqual({ low: 1.5, high: 2.4 });
+    expect(projection.benchmark.fallback).toBe(false);
+    expect(projection.benchmark.sourceLabel).toBe('LocaliQ 2025');
+    expect(projection.benchmark.milesShortfall).toMatch(/0 of 5 accounts/);
+    expect(projection.benchmark.highCpl).toMatchObject({ kind: 'trade', cpl: 138.38, bookRatePct: null, costPerCustomer: null });
+    expect(projection.benchmark.lowCpl.cpl).toBe(138.38);
+    expect(projection.benchmark.highCpl.leadsExact).toBeCloseTo(608 / 138.38, 6);
+    expect(projection.range.leads).toEqual({ low: 4, high: 4 });
+    expect(projection.range.jobs).toEqual({ low: 0, high: 0 });
     expect(projection.inputs).toMatchObject({ city: 'Philadelphia', monthlyBudget: 608, channel: 'google_ads' });
     expect(projection.computedAt).toBe('2026-11-12T16:00:00.000Z');
     expect(projection.copy).toMatch(/\$608/);
-    expect(projection.copy).toMatch(/about 4 to 6 leads/);
-    expect(projection.copy).toMatch(/1\.5 to 2\.4 booked jobs/);
-    expect(projection.copy).toMatch(/similar home-services trades/);
+    expect(projection.copy).toMatch(/about 4 leads/);
+    expect(projection.copy).toMatch(/will not guess booked jobs/);
+    expect(projection.copy).toMatch(/LocaliQ 2025/);
     expect(projection.copy).toMatch(/Philadelphia/);
-    expect(projection.copy).toMatch(/\$472 to \$804/);
-    expect(projection.copy).not.toMatch(/\$40/);
-    expect(projection.copy.toLowerCase()).not.toContain('searchlight');
+    expect(projection.copy).not.toMatch(/\$40 to \$90/);
+    expect(projection.copy.toLowerCase()).not.toContain('searchlightdigital');
     expect(projection.copy).not.toContain('\u2014');
     const check = goalCheck({ trade: 'Painting', city: 'Philadelphia', budgetAmount: 608, budgetPeriod: 'month', leadGoal: 2, leadPeriod: 'month' });
-    expect(check.leads).toEqual({ low: 4, typical: 4, high: 6 });
+    expect(check.leads).toEqual({ low: 4, typical: 4, high: 4 });
     expect(check.leads && { low: check.leads.low, high: check.leads.high }).toEqual(projection.range.leads);
   });
 
@@ -60,7 +56,8 @@ describe('budget projection math', () => {
     const check = goalCheck({ trade: 'Plumbing', city: 'Philadelphia', budgetAmount: 20, budgetPeriod: 'day', leadGoal: 3, leadPeriod: 'month' });
     expect(check.leads && { low: check.leads.low, high: check.leads.high }).toEqual(projection.range.leads);
     expect(projection.copy).toMatch(/does not list its own/);
-    expect(projection.copy.toLowerCase()).not.toContain('searchlight');
+    expect(projection.copy).toMatch(/Searchlight, Q1 2026/);
+    expect(projection.copy.toLowerCase()).not.toContain('searchlightdigital');
   });
 
   it('uses the electrical book rate published on that row', () => {
@@ -81,11 +78,7 @@ describe('budget projection math', () => {
     expect(lsa.benchmark.fallback).toBe(false);
     expect(lsa.benchmark.highCpl.cpl).toBe(57);
     expect(lsa.benchmark.highCpl.bookRatePct).toBe(44.5);
-    const paintingLsa = projectBudget({ trade: 'Painting', monthlyBudget: 608, channel: 'lsa' })!;
-    expect(paintingLsa.benchmark.fallback).toBe(true);
-    expect(paintingLsa.benchmark.highCpl).toMatchObject({ cpl: 53, bookRatePct: 43.9, costPerCustomer: 233 });
-    expect(paintingLsa.copy).toMatch(/similar home-services trades/);
-    expect(paintingLsa.copy).toMatch(/Local Services Ads/);
+    expect(projectBudget({ trade: 'Painting', monthlyBudget: 608, channel: 'lsa' })).toBeNull();
   });
 });
 
@@ -124,7 +117,7 @@ describe('live readout', () => {
     expect(readout.headline).toMatch(/nothing to compare/i);
     expect(readout.detail).toMatch(/\$0 spent/);
     expect(readout.detail).toMatch(/0 tracked leads/);
-    expect(readout.detail).toMatch(/about 4 to 6 leads/);
+    expect(readout.detail).toMatch(/about 4 leads/);
   });
 
   it('compares real spend and tracked leads with the saved projection', () => {
@@ -134,7 +127,7 @@ describe('live readout', () => {
     expect(readout.lines[0]!.value).toBe('$180');
     expect(readout.lines[1]!.value).toBe('3');
     expect(readout.lines[2]!.value).toBe('$60');
-    expect(readout.lines[3]!.value).toMatch(/1\.1 to 1\.3/);
+    expect(readout.lines[3]!.value).toMatch(/Not published for this benchmark/);
     expect(readout.detail).toMatch(/behind the projection/);
     expect(readout.detail).toMatch(/\$608/);
     const partial = expectationReadout(stored, { live: true, sample: false, spend: 180, leads: 1, liveDays: 6 });
@@ -160,12 +153,12 @@ describe('goal route stores the projection', () => {
     await app.inject({ method: 'POST', url: '/api/miles/crawl', headers, payload: { businessName: 'Painters In Philly', location: 'Philadelphia, PA', website: 'https://painters.example', html } });
     const posted = await app.inject({ method: 'POST', url: '/api/miles/goal', headers, payload: { budgetAmount: 608, budgetPeriod: 'month', leadGoal: 2, leadPeriod: 'month' } });
     expect(posted.statusCode).toBe(200);
-    expect(posted.json().check.projection.range.leads).toEqual({ low: 4, high: 6 });
-    expect(posted.json().check.projection.copy).toMatch(/similar home-services trades/);
-    expect(JSON.stringify(posted.json()).toLowerCase()).not.toContain('searchlight');
+    expect(posted.json().check.projection.range.leads).toEqual({ low: 4, high: 4 });
+    expect(posted.json().check.projection.copy).toMatch(/LocaliQ 2025/);
+    expect(JSON.stringify(posted.json()).toLowerCase()).not.toContain('searchlightdigital');
     const saved = await app.inject({ method: 'GET', url: '/api/miles/goal', headers });
     expect(saved.json().expectation.inputs.monthlyBudget).toBe(608);
-    expect(saved.json().expectation.benchmark.highCpl.cpl).toBe(149);
+    expect(saved.json().expectation.benchmark.highCpl.cpl).toBe(138.38);
     expect(saved.json().expectation.computedAt).toBeTruthy();
     await app.close();
   });
