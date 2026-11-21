@@ -1,5 +1,7 @@
 /**
  * Paused TikTok lead structure. Tests pass a fake runner. No network here.
+ * Plan rules: docs/meta-tiktok-campaign-sop.md and docs/reference/BUILD-GUIDANCE.md.
+ * No TikTok SOP is in docs/reference/clickminded/. Counts follow the budget, not a tier.
  * Action keys match Pipedream's TikTok Ads Manager actions, rechecked 21 Nov 2026.
  * Status and budget updates are not prebuilt as separate "set status" tools, so
  * the runner may map those two ids onto the Business API.

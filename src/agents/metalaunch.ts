@@ -1,5 +1,7 @@
 /**
  * Paused Facebook and Instagram campaign create.
+ * Plan rules: docs/meta-tiktok-campaign-sop.md and docs/reference/BUILD-GUIDANCE.md.
+ * Notion baseline: docs/reference/meta/notion-meta-ads-sops.md.
  *
  * Pipedream has no Meta campaign action. Miles calls the Marketing API through
  * Pipedream Connect's proxy, which attaches the owner's connected Facebook

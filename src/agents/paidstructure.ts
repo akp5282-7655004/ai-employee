@@ -1,7 +1,13 @@
 /**
  * Meta and TikTok leads structures for home-services contractors.
- * The rules live in docs/meta-tiktok-campaign-sop.md. This file only builds
- * the plan and the pre-launch review. It does not call an ad platform.
+ *
+ * Binding rule: docs/reference/BUILD-GUIDANCE.md. A checklist names the
+ * elements a build includes. It does not set a Starter, Growth, or Scale cap.
+ * This file's element list and Meta defaults: docs/meta-tiktok-campaign-sop.md.
+ * Notion baseline: docs/reference/meta/notion-meta-ads-sops.md.
+ * Paid-social element list: docs/reference/checklists/social-media-paid-checklist.md.
+ *
+ * This file only builds the plan and the pre-launch review. It does not call an ad platform.
  */
 import { audiencesFor, tradeKeyOf, tradePlaybook, type AudienceSegment } from '../playbooks/load.js';
 import { applyAudienceRules, guardCopy, usesProtectedTrait } from '../playbooks/guard.js';
@@ -14,24 +20,6 @@ export const TIKTOK_CAMPAIGN_MIN = 50;
 export const TIKTOK_ADGROUP_MIN = 20;
 export const AGE_CONTROL = 25;
 
-export type AbPlan = 'starter' | 'growth' | 'scale';
-
-/** A/B variations allowed on top of the primary ad. No plan on the account defaults to 1. */
-export function abVariationLimit(plan?: AbPlan | null): number {
-  if (plan === 'starter') return 0;
-  if (plan === 'scale') return 3;
-  return 1;
-}
-
-/** The paid plan only counts when Starter, Growth, or Scale is actually on the account. */
-export function abPlanFromBilling(billing?: { band?: string; status?: string } | null): AbPlan | null {
-  const status = billing?.status;
-  const live = status === 'active' || status === 'trialing' || status === 'past_due';
-  if (!live) return null;
-  if (billing?.band === 'starter' || billing?.band === 'growth' || billing?.band === 'scale') return billing.band;
-  return null;
-}
-
 export type ReviewState = 'pass' | 'warn' | 'block';
 
 export interface ReviewItem {
@@ -41,8 +29,8 @@ export interface ReviewItem {
   detail: string;
 }
 
-/** Every Meta and TikTok build includes these. None of them depend on a package tier. */
-export const BUILD_ELEMENT_IDS = ['strategy', 'competitors', 'campaign', 'creatives', 'geography', 'budget', 'ab_test', 'retargeting', 'form', 'report'] as const;
+/** Every Meta and TikTok build includes these. Counts are not tier caps. See docs/reference/BUILD-GUIDANCE.md. */
+export const BUILD_ELEMENT_IDS = ['strategy', 'competitors', 'campaign', 'creatives', 'geography', 'budget', 'ab_test', 'retargeting', 'form', 'weekly', 'report'] as const;
 
 export interface BuildElement {
   id: (typeof BUILD_ELEMENT_IDS)[number];
@@ -160,8 +148,6 @@ export interface PaidPlanInput {
   claims?: VerifiedClaims;
   /** Names the owner already saved. Empty means the plan says so and does not invent any. */
   competitors?: string[];
-  /** Paid plan when one is on the account. Unset defaults the A/B allowance to 1 variation. */
-  abPlan?: AbPlan | null;
 }
 
 const SERVICE_QUESTION: Record<string, FormQuestion> = {
@@ -358,22 +344,19 @@ function rankedSegments(trade?: string): Ranked[] {
     .sort((a, b) => demandWeight(b.segment.demand) - demandWeight(a.segment.demand));
 }
 
-function keepAd(angle: PaidAd['angle'], setIndex: number, box: { slots: number; variationsLeft: number; limit: number; plan: AbPlan | null }): { keep: boolean; heldReason?: string } {
-  if (angle === 'offer') {
-    if (box.slots <= 0) return { keep: false, heldReason: 'The daily budget cannot feed the primary ad on this ad set.' };
-    box.slots -= 1;
-    return { keep: true };
+function keepAd(angle: PaidAd['angle'], setIndex: number, box: { slots: number }): { keep: boolean; heldReason?: string } {
+  if (angle !== 'offer' && setIndex > 0) {
+    return { keep: false, heldReason: 'The extra message is on the first ad set, so the test changes the message and not the audience.' };
   }
-  if (box.variationsLeft <= 0) {
-    const reason = box.plan === 'starter'
-      ? 'Starter does not include an A/B variation. This message is listed and not created.'
-      : `This plan allows up to ${box.limit} A/B variation${box.limit === 1 ? '' : 's'}. This message is past that.`;
-    return { keep: false, heldReason: reason };
+  if (box.slots <= 0) {
+    return {
+      keep: false,
+      heldReason: angle === 'offer'
+        ? 'The daily budget cannot feed the primary ad on this ad set.'
+        : 'The daily budget cannot feed another message. The count is the learning ceiling, not a package cap.',
+    };
   }
-  if (setIndex > 0) return { keep: false, heldReason: 'The A/B variation is on the first ad set, so the test changes the message and not the audience.' };
-  if (box.slots <= 0) return { keep: false, heldReason: 'The daily budget cannot feed another ad.' };
   box.slots -= 1;
-  box.variationsLeft -= 1;
   return { keep: true };
 }
 
@@ -397,8 +380,7 @@ function buildSets(args: {
   const weights = chosen.map((row) => demandWeight(row.segment.demand));
   const shares = args.daily > 0 ? allocate(args.daily, weights) : chosen.map(() => 0);
   const cpl = playbookCplBand(args.input.trade)?.high ?? 80;
-  const variationLimit = abVariationLimit(args.input.abPlan);
-  const allowance = { slots: adCeiling(args.daily, cpl), variationsLeft: variationLimit, limit: variationLimit, plan: args.input.abPlan ?? null };
+  const allowance = { slots: adCeiling(args.daily, cpl) };
   const trade = tradeLabel(args.input.trade);
   const business = plain(args.input.business || trade);
   const offer = plain(args.input.offer || '');
@@ -512,20 +494,12 @@ function buildElements(args: {
   sets: PaidAdSet[];
   competitors?: string[];
   cpl: number;
-  abPlan?: AbPlan | null;
 }): BuildElement[] {
   const included = args.sets.filter((set) => set.included);
   const ads = included.flatMap((set) => set.ads.filter((ad) => ad.included));
   const variations = ads.filter((ad) => ad.angle !== 'offer').length;
   const names = (args.competitors || []).map((name) => plain(name)).filter(Boolean).slice(0, 8);
-  const limit = abVariationLimit(args.abPlan);
-  const tierLine = args.abPlan === 'starter'
-    ? 'Starter includes no A/B variations.'
-    : args.abPlan === 'growth'
-      ? 'Growth allows up to 1 A/B variation.'
-      : args.abPlan === 'scale'
-        ? 'Scale allows up to 3 A/B variations.'
-        : 'No Starter, Growth, or Scale plan is on this account, so the allowance is 1 variation.';
+  const ceiling = adCeiling(args.daily, args.cpl);
   const where = args.city || 'the service area';
   const meta = args.channel === 'meta';
   const cap = args.cpl > 0 ? `$${Math.round(args.cpl)}` : 'the playbook cost per lead';
@@ -541,11 +515,14 @@ function buildElements(args: {
       : 'No ad is included yet. Add the creative the channel requires.') + (meta ? ' The old 20% image-text rule is retired and is not checked.' : '') },
     { id: 'geography', label: 'Geography targeting', detail: included[0]?.locationNote || 'No service area is saved.' },
     { id: 'budget', label: 'Budget management', detail: `${args.budgetNote} ${meta ? 'A scale is 10-20% and waits 48 hours, and only after cost per lead is inside the playbook band and frequency is under 3. ' : ''}A later change also stays inside the daily cap and the max percent change. Undo puts the previous amount back.` },
-    { id: 'ab_test', label: 'A/B test', detail: `${tierLine} This plan creates ${variations} of ${limit}. One variable: the message. Leave the test for 5 to 7 days and do not change a second setting. The variations share the first ad set, so Miles does not give them separate equal budgets.` },
+    { id: 'ab_test', label: 'A/B test', detail: `One variable at a time: the message. This budget's learning ceiling is ${ceiling} ad${ceiling === 1 ? '' : 's'}, and this plan adds ${variations} extra message${variations === 1 ? '' : 's'}. That count comes from the budget and the playbook messages, not from a Starter, Growth, or Scale cap. Leave the test for 5 to 7 days. The extra message is on the first ad set, so the audience does not also change.` },
     { id: 'retargeting', label: 'Retargeting', detail: meta
       ? 'When a pixel, page, or CRM list exists: site visitors from the last 30 days, engagers, and the customer list. Refresh those audiences every 30 to 60 days. Exclude people who already became leads. Keep overlap under 20% before adding another retargeting set. Prospecting lookalikes start at 1%, then 2-5%, and only from a real source list. None of these audiences are created now. Cart abandoners, catalogs, and dynamic product ads are not used.'
       : 'Retargeting is part of this build: site visitors, video viewers, and people who opened the form, with past customers excluded once a list is connected. No list is connected, so no retargeting ad set is created and no audience is invented.' },
     { id: 'form', label: 'Landing page and lead form', detail: args.destinationNote },
+    { id: 'weekly', label: 'Weekly optimization check', detail: meta
+      ? 'After the campaign is turned on, leave it alone for three days. Then each week read cost per lead and frequency. Frequency above 3 means fatigue, so do not scale. Frequency above 5 means refresh the creative. The check does not change the budget.'
+      : 'After the campaign is turned on, leave it alone for three days, then read cost per lead each week. The check does not change the budget.' },
     { id: 'report', label: 'Monthly performance report', detail: meta
       ? 'The monthly marketing report shows spend and leads for this channel. Judge it on cost per lead against the playbook, not a 3x return on ad spend. Weekly: frequency above 3 means fatigue, so do not scale. Frequency above 5 means refresh the creative. Those reads do not change the budget.'
       : 'The monthly marketing report on Reports shows spend and leads for this channel. After the campaign is turned on, the weekly check leaves it alone for three days, then reads cost per lead. Those reads do not change the budget.' },
@@ -609,7 +586,6 @@ export function buildMetaPlan(input: PaidPlanInput): { plan: MetaPlan; checklist
       sets,
       competitors: input.competitors,
       cpl: playbookCplBand(input.trade)?.high ?? 80,
-      abPlan: input.abPlan,
     }),
   };
   if (wantSite && !pixel) {
@@ -664,7 +640,6 @@ export function buildTikTokPlan(input: PaidPlanInput): { plan: TikTokPlan; check
       sets,
       competitors: input.competitors,
       cpl: playbookCplBand(input.trade)?.high ?? 80,
-      abPlan: input.abPlan,
     }),
   };
   return { plan, checklist: reviewTikTokPlan(plan, { dailyCap: input.dailyCap, monthlyCap: input.monthlyCap, financing: input.financing, cpl: playbookCplBand(input.trade)?.high ?? 80 }) };

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildServer } from '../src/server.js';
 import { MemoryStore } from '../src/db/index.js';
-import { abPlanFromBilling, abVariationLimit, buildMetaPlan, buildTikTokPlan, reviewBlocked, scaleIncreaseAllowed } from '../src/agents/paidstructure.js';
+import { BUILD_ELEMENT_IDS, buildMetaPlan, buildTikTokPlan, reviewBlocked, scaleIncreaseAllowed } from '../src/agents/paidstructure.js';
 import { launchMetaStructure, setMetaBudget, setMetaTreeStatus, type MetaGraph } from '../src/agents/metalaunch.js';
 import { idFrom, launchTikTokStructure, setTikTokBudget, setTikTokStatus, TIKTOK_AD_ACTION, TIKTOK_ADGROUP_ACTION, TIKTOK_CAMPAIGN_ACTION, TIKTOK_UPLOAD_ACTION, type TikTokRunner } from '../src/agents/tiktoklaunch.js';
 import type { Connector } from '../src/connectors/types.js';
@@ -45,8 +45,9 @@ describe('home-services Meta structure', () => {
     expect(JSON.stringify(plan)).not.toContain('"ACTIVE"');
     expect(reviewBlocked(checklist)).toBeNull();
     expect(checklist.find((row) => row.id === 'learning')!.state).toBe('warn');
-    expect(plan.elements.map((row) => row.id)).toEqual(['strategy', 'competitors', 'campaign', 'creatives', 'geography', 'budget', 'ab_test', 'retargeting', 'form', 'report']);
-    expect(plan.elements.find((row) => row.id === 'ab_test')!.detail).toMatch(/allowance is 1 variation/);
+    expect(plan.elements.map((row) => row.id)).toEqual([...BUILD_ELEMENT_IDS]);
+    expect(plan.elements.find((row) => row.id === 'ab_test')!.detail).toMatch(/not from a Starter, Growth, or Scale cap/);
+    expect(plan.elements.find((row) => row.id === 'weekly')!.label).toBe('Weekly optimization check');
     expect(plan.elements.find((row) => row.id === 'report')!.label).toBe('Monthly performance report');
     expect(plan.elements.find((row) => row.id === 'geography')!.label).toBe('Geography targeting');
     const text = plan.elements.map((row) => row.detail).join(' ');
@@ -66,23 +67,13 @@ describe('home-services Meta structure', () => {
     expect(JSON.stringify(plan)).not.toMatch(/\u2014/);
   });
 
-  it('sets A/B variations from Starter, Growth, and Scale, and defaults to 1', () => {
+  it('does not change the message count for a package tier', () => {
     const variations = (plan: { adSets: { ads: { included: boolean; angle: string }[] }[] }) => plan.adSets.flatMap((set) => set.ads).filter((ad) => ad.included && ad.angle !== 'offer').length;
     const base = { dailyBudget: 80, website: 'https://crew.example', imageUrls: [image], business: 'Local Crew', trade: 'Roofing', city: 'Philadelphia', serviceAreas: 'Philadelphia, 19103' };
-    expect(variations(buildMetaPlan({ ...base, abPlan: 'starter' }).plan)).toBe(0);
-    expect(variations(buildMetaPlan({ ...base, abPlan: 'growth' }).plan)).toBe(1);
-    expect(variations(buildMetaPlan({ ...base, abPlan: 'scale' }).plan)).toBe(2);
-    expect(variations(buildMetaPlan(base).plan)).toBe(1);
-    expect(buildMetaPlan({ ...base, abPlan: 'starter' }).plan.elements.find((row) => row.id === 'ab_test')!.detail).toMatch(/Starter includes no A\/B variations/);
-    expect(buildMetaPlan({ ...base, abPlan: 'scale' }).plan.elements.find((row) => row.id === 'ab_test')!.detail).toMatch(/up to 3/);
-    expect(abVariationLimit(null)).toBe(1);
-    expect(abVariationLimit('starter')).toBe(0);
-    expect(abVariationLimit('growth')).toBe(1);
-    expect(abVariationLimit('scale')).toBe(3);
-    expect(abPlanFromBilling(undefined)).toBeNull();
-    expect(abPlanFromBilling({ band: 'growth', status: 'active' })).toBe('growth');
-    expect(abPlanFromBilling({ band: 'scale', status: 'canceled' })).toBeNull();
-    expect(abPlanFromBilling({ band: 'launch', status: 'active' })).toBeNull();
+    const plan = buildMetaPlan(base).plan;
+    expect(variations(plan)).toBeGreaterThan(0);
+    expect(JSON.stringify(plan)).not.toMatch(/Starter includes no|Growth allows|Scale allows/);
+    expect(plan.elements.find((row) => row.id === 'ab_test')!.detail).toMatch(/learning ceiling/);
   });
 
   it('uses the budget ceiling for message count, not a fixed variation package', () => {
@@ -91,8 +82,8 @@ describe('home-services Meta structure', () => {
     const count = (built: ReturnType<typeof meta>) => built.plan.adSets.filter((set) => set.included).flatMap((set) => set.ads.filter((ad) => ad.included)).length;
     expect(count(small)).toBeLessThan(count(large));
     expect(count(small)).toBeGreaterThan(0);
-    expect(small.plan.elements).toHaveLength(10);
-    expect(large.plan.elements).toHaveLength(10);
+    expect(small.plan.elements).toHaveLength(BUILD_ELEMENT_IDS.length);
+    expect(large.plan.elements).toHaveLength(BUILD_ELEMENT_IDS.length);
   });
 
   it('holds HVAC emergency and membership, and keeps one replacement ad set', () => {

@@ -89,7 +89,7 @@ import { decidePolicy, overDailyCap } from './agents/policy.js';
 import { dueSkills, periodKey } from './agents/skillclock.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { facebookDaily, META_NOT_CONNECTED, publicImage } from './agents/metalaunch.js';
-import { abPlanFromBilling, buildMetaPlan, buildTikTokPlan, reviewBlocked, reviewMetaPlan, reviewTikTokPlan, scaleIncreaseAllowed, type MetaPlan, type TikTokPlan } from './agents/paidstructure.js';
+import { buildMetaPlan, buildTikTokPlan, reviewBlocked, reviewMetaPlan, reviewTikTokPlan, scaleIncreaseAllowed, type MetaPlan, type TikTokPlan } from './agents/paidstructure.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
 import { emptyReviewState, reviewAskText, parseRating, type ReviewRequestState } from './agents/reviewrequest.js';
 import { emptyAutomationsState, noShowText, onboardingText, type AutomationsState } from './agents/automations.js';
@@ -5459,7 +5459,6 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       services: p.services,
       claims: claimsFromText(miles.crawl?.text),
       competitors: (p.competitors || '').split(/[,\n]/).map((name) => name.trim()).filter(Boolean),
-      abPlan: abPlanFromBilling(billingState(data)),
     });
     const issues = validateMetaCampaignSpec(spec);
     if (cap > 0 && spec.dailyBudget > cap) issues.push(`Daily budget $${spec.dailyBudget} is above your $${cap} daily cap.`);
@@ -7723,7 +7722,6 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       services: p.services,
       claims: claimsFromText(miles.crawl?.text),
       competitors: (p.competitors || '').split(/[,\n]/).map((name) => name.trim()).filter(Boolean),
-      abPlan: abPlanFromBilling(billingState(data)),
     };
   };
 

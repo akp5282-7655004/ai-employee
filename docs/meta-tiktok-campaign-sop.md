@@ -75,7 +75,7 @@ Names:
 - Meta ad set / TikTok ad group: `{Trade} | {Segment} | {ZIPs or radius}`
 - Ad: `{Segment} | {Angle}`
 
-The primary message is always created. Extra messages are A/B variations. The allowance is Starter none, Growth up to 1, Scale up to 3, or 1 variation when no paid plan is on the account. "Up to" also stops at the learning ceiling `(daily budget × 14) / (2 × the playbook's high cost per lead)`. Notion's A/B SOP (March 2025) says one variable, equal budgets, and 5 to 7 days. Miles changes only the message, leaves the test for 5 to 7 days, and puts the variation on the first ad set. The variations share that ad set, so Miles does not assign them separate equal budgets. The playbook can write two alternate messages, so Scale's allowance of 3 includes those two and the plan says the third is not available.
+The primary message is always created. Extra messages are A/B variations. How many run is the learning ceiling `(daily budget × 14) / (2 × the playbook's high cost per lead)` and the messages the playbook can write. It is not a Starter, Growth, or Scale cap. Notion's A/B SOP (March 2025) says one variable, equal budgets, and 5 to 7 days. Miles changes only the message, leaves the test for 5 to 7 days, and puts the extra message on the first ad set. Those messages share that ad set, so Miles does not assign them separate equal budgets.
 
 **Meta creative.** One https image can be reused. The review warns when every ad shares it. Primary text, headline, and description come from the trade and the offer. No "best", no star rating, no "licensed and insured" unless the profile says so. CTA is Get Quote, or Call Now on an emergency segment that is actually included. Notion's creative SOP and compliance SOP still say to keep text under 20% of the image. The in-repo spec, verified August 2026, says that rule is retired. Miles does not check it and does not reject an image for text.
 
@@ -85,20 +85,29 @@ The primary message is always created. Extra messages are A/B variations. The al
 
 **TikTok destination.** The website. TikTok instant forms exist, and Pipedream has no verified create-form action, so Miles does not pretend to create one. The same two qualifying questions are printed on the plan for the landing page. A pixel id, when saved, is the optimization event. Without it, the ad group optimizes for the click.
 
-## What every build includes
+## Binding rule
 
-Every Meta plan and every TikTok plan states these items. A/B testing is the one item that follows the paid plan.
+Checklists name the elements a complete build includes. They do not set how many of those elements to create.
+
+The Social Media paid checklist has columns that read as no A/B test, up to 1 variation, and up to 3 variations. Those columns are agency package limits (Starter, Growth, and Scale). Miles does not enforce them. The same is true of any other tier count on a checklist, such as a fixed number of campaigns, ad sets, or keywords.
+
+How many campaigns, ad sets, and messages this build creates comes from the trade playbook, the owner's services, locations, and budget, and from the Meta SOPs. A/B testing is one element. The variant count follows the budget and the one-variable, 5-to-7-day test rule. It does not follow a tier.
+
+This section stands on its own. The same rule is written in `docs/reference/BUILD-GUIDANCE.md`.
+
+## Elements every Meta and TikTok build includes
 
 1. Strategy summary. Who the campaign is for, the leads objective, the budget, and where the click goes.
 2. Competitor research. Names the owner already saved. If none are saved, the plan says so and does not invent competitors or copy their ads.
-3. Monthly performance report. Reports shows spend and leads for the channel. A weekly check, after the campaign is turned on, does not change the budget by itself.
-4. Campaign creation. The paused campaign, ad sets or ad groups, and ads.
-5. Creatives. The primary message, plus any A/B messages the allowance includes.
-6. Geography targeting. Service-area ZIPs, or the city plus 15 miles.
-7. Budget management. Where the daily amount sits, the cap, and that a later change is a separate approval with undo.
-8. A/B testing. Starter: no variations. Growth: up to 1. Scale: up to 3. No plan on the account: 1 variation. One variable, the message.
-
-The lead form or landing page, and retargeting, stay on the plan as well. Retargeting is named and is not created until a real list is connected.
+3. Campaign creation. The paused campaign, ad sets or ad groups, and ads.
+4. Creatives. The primary message, plus any extra messages the budget can feed.
+5. Geography targeting. Service-area ZIPs, or the city plus 15 miles.
+6. Budget management. Where the daily amount sits, the cap, and that a later change is a separate approval with undo. A scale is 10-20% and waits 48 hours.
+7. A/B testing. One variable, the message, for 5 to 7 days. The count is the learning ceiling, not a package cap.
+8. Retargeting. Named on the plan. Not created until a pixel, page, or customer list exists. Exclusions and overlap under 20% apply when it is created.
+9. Lead form or landing page. Meta creates the higher-intent form. TikTok sends people to the website and prints the questions for that page.
+10. Weekly optimization check. After the campaign is turned on, read cost per lead and frequency. The check does not change the budget.
+11. Monthly performance report. Reports shows spend and leads for the channel. Judge Meta on cost per lead, not a 3x return on ad spend.
 
 ## 4. Pre-launch review
 
@@ -147,8 +156,15 @@ Cited by title. E-commerce lines are not used for these trades.
 
 ## Sources
 
-- Notion, Meta Ads Specialist SOPs, March 2025. Ten SOPs, titled in the table above. Supplied by the owner. Not a public URL.
-- In-repo: `docs/specs/meta-ads-specs-master.md` (verified August 2026), `specs/meta_ads.json`, `skills-library/ads/references/meta-decision-system.md`, `platform-setup-checklists.md`, `audience-targeting.md`, `ad-copy-templates.md`, `conversion-tracking.md`, `skills-library/tools/integrations/meta-ads.md`, `skills-library/tools/integrations/tiktok-ads.md`, `src/agents/playbook.ts`, `src/playbooks/audiences/miles_audiences_*.json`.
+Reference files live under `docs/reference/`. This SOP does not copy them.
+
+- `docs/reference/BUILD-GUIDANCE.md`. Binding rule: checklists list elements and do not set tier caps.
+- `docs/reference/checklists/social-media-paid-checklist.md`. Element list for paid social. The variation columns are package scope and are not enforced.
+- `docs/reference/meta/notion-meta-ads-sops.md`. Notion Meta Ads Specialist SOPs, March 2025. Ten SOPs, titled in the table above.
+- `docs/reference/clickminded/ad-platform-inventory.md`. ClickMinded has no Meta or TikTok SOP.
+- `docs/reference/clickminded/paid-acquisition-sops.md`. The shape of a pre-launch review. Google only.
+- `docs/reference/clickminded/google-ads-sops.md`, `docs/reference/clickminded/tracking-measurement-sops.md`, and `docs/reference/clickminded/index.md`. Stored with the reference set. Not the structure for these campaigns.
+- In-repo specs and playbooks: `docs/specs/meta-ads-specs-master.md` (verified August 2026), `specs/meta_ads.json`, `skills-library/ads/references/meta-decision-system.md`, `platform-setup-checklists.md`, `audience-targeting.md`, `ad-copy-templates.md`, `conversion-tracking.md`, `skills-library/tools/integrations/meta-ads.md`, `skills-library/tools/integrations/tiktok-ads.md`, `src/agents/playbook.ts`, `src/playbooks/audiences/miles_audiences_*.json`.
 - Meta, Special Ad Categories, Marketing API (read 21 November 2026): https://developers.facebook.com/docs/marketing-api/audiences/special-ad-category/
 - Meta, Advantage+ audience, Marketing API, updated 26 June 2026: https://developers.facebook.com/docs/marketing-api/audiences/reference/targeting-expansion/advantage-audience/
 - Meta, About ads for housing: https://www.facebook.com/business/help/837655677217892
