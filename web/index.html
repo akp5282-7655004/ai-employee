@@ -1826,7 +1826,7 @@
 
     <!-- INTEGRATIONS -->
     <section class="page" id="page-int">
-      <p class="mdesc" style="margin:-8px 0 16px">Connect the accounts this version can use. Google Ads, GoHighLevel, and the Facebook and TikTok connections Miles already uses for paused leads plans. Local Services Ads are coming later. The rest of the catalogue is a preview until a connector is verified.</p>
+      <p class="mdesc" style="margin:-8px 0 16px">Connect the accounts this version can use. Google Ads and GoHighLevel connect here. Meta and TikTok connect through Pipedream, and their paused plans are on Launch. Local Services Ads are an owner action. Miles does not buy them. The rest of the catalogue is a preview until a connector is verified.</p>
       <div id="int-banner"></div>
       <div id="int-connected"></div>
       <div id="int-stack"></div>
@@ -3573,9 +3573,14 @@ function modeBlurb(mode, caps){
   if(mode==='hybrid') return 'Hybrid is on. Miles will build the Google plan and wait for your approval. Choosing a mode does not create or enable anything by itself.';
   return 'Pick a mode. Nothing is created until you start the Google plan.';
 }
-function launchModeNote(mode, caps){
+function launchModeNote(mode, caps, activation){
   const daily=(caps&&caps.dailyBudget)||20, month=(caps&&caps.monthlyCeiling)||600;
-  if(mode==='automate') return 'Do everything is on. Miles can run Google Search inside $'+daily+'/day and $'+month+'/month. Picking a mode does not create or enable anything.';
+  if(mode==='automate'){
+    const paused=activation==='paused'||(caps&&caps.paused);
+    if(paused) return 'Do everything is on. The campaign is paused. Miles will not turn it on or spend until you approve going live. The cap is $'+daily+'/day and $'+month+'/month.';
+    if(activation!=='enabled') return 'Do everything is on. Nothing is running. Miles creates campaigns paused and does not spend until you approve going live. The cap is $'+daily+'/day and $'+month+'/month.';
+    return 'Do everything is on. Miles can run Google Search inside $'+daily+'/day and $'+month+'/month. Picking a mode does not create or enable anything.';
+  }
   if(mode==='manual') return 'Ask me first is on. Miles will not create or change a campaign until you say so.';
   if(mode==='hybrid') return 'Hybrid is on. Miles builds the Google plan and waits for your approval.';
   return 'Pick a mode. Nothing is created until you start the Google plan.';
@@ -5561,12 +5566,12 @@ function renderLaunchPage(){
   const ctrl=el('div','md-controls');
   ctrl.append(el('span','md-modelab','Miles mode'));
   const pills=el('div','md-pills');
-  const note=el('div','md-note', launchModeNote(miles.mode, miles.caps)); note.id='launch-mode-note';
+  const note=el('div','md-note', launchModeNote(miles.mode, miles.caps, miles.activation)); note.id='launch-mode-note';
   [['manual','Ask me first'],['hybrid','Hybrid'],['automate','Do everything']].forEach(([id,label])=>{
     const b=el('button', miles.mode===id?'on':'', label);
     b.type='button';
     b.dataset.mode=id;
-    b.onclick=async()=>{ const r=await milesPost(b, note, 'Saving...', '/api/miles/mode', {mode:id}); if(r){ if(LN.miles) LN.miles.mode=id; note.textContent=launchModeNote(id, miles.caps); renderLaunchPage(); } };
+    b.onclick=async()=>{ const r=await milesPost(b, note, 'Saving...', '/api/miles/mode', {mode:id}); if(r){ if(LN.miles) LN.miles.mode=id; note.textContent=launchModeNote(id, miles.caps, miles.activation); renderLaunchPage(); } };
     pills.append(b);
   });
   const ask=el('button','md-ask','Ask Miles');
@@ -10037,7 +10042,7 @@ function renderStack(connected){
   if(!groups.length) return;
   host.append(el('div','sect-label','RECOMMENDED FOR YOUR BUSINESS, CONNECT YOUR STACK'));
   const sub=el('div','appsub'); sub.style.cssText='margin:-6px 0 14px;max-width:640px';
-  sub.textContent='Suggested tools. One click starts a connect flow only when that app is actually wired. Meta, TikTok, and Local Services Ads are coming later.';
+  sub.textContent='Suggested tools. One click starts a connect flow only when that app is actually wired. Meta and TikTok connect through Pipedream. Local Services Ads are an owner action. Miles does not buy them.';
   host.append(sub);
   for(const group of groups){
     host.append(el('div','sect-label',group.cat));
@@ -10093,7 +10098,7 @@ function renderInts(){
     ? '⚠️ Connections aren’t live yet, this is a preview of the app catalogue.'
     : !prod
       ? '🟡 Dev mode, only your own Pipedream login can connect accounts here. To let customers connect their own, set PIPEDREAM_ENVIRONMENT=production on the server.'
-      : '✅ Live for customers. Google Ads and GoHighLevel can be connected here. Meta, TikTok, and Local Services Ads are coming later. Other catalogue apps stay a preview until a connector is verified.';
+      : '✅ Live for customers. Google Ads and GoHighLevel connect here. Meta and TikTok connect through Pipedream. Local Services Ads are an owner action. Miles does not buy them. Other catalogue apps stay a preview until a connector is verified.';
   banner.append(b);
 
   // Connected section, always pinned to the top, each with a ✓.
@@ -10325,7 +10330,7 @@ function appendLaunchChoices(bubble, data){
     no.onclick=function(){ send('No, I will choose', false, {decline:true}); };
     bar.append(yes, no); box.append(bar);
   }
-  if(data.choices==='picker' && data.picker){
+  if(data.picker && (data.choices==='picker' || data.choices==='suggest')){
     const row=el('div'); row.style.cssText='display:flex;gap:8px;flex-wrap:wrap';
     (data.picker.options||[]).forEach(function(opt){
       const button=el('button', opt.selected?'go':'ghost', opt.label);

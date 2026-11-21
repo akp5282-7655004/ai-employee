@@ -108,7 +108,8 @@ describe('every nav tab loads', () => {
     await page.evaluate(() => { (globalThis as unknown as { setPage: (id: string) => void }).setPage('integrations'); });
     const intro = await page.locator('#page-int').innerText();
     expect(intro).not.toMatch(/runs across all/i);
-    expect(intro).toMatch(/coming later/i);
+    expect(intro).toMatch(/Pipedream/i);
+    expect(intro).toMatch(/owner action/i);
     await page.evaluate(() => { (globalThis as unknown as { setPage: (id: string) => void }).setPage('overview'); });
     await page.locator('#overview-body').getByText('SAMPLE').first().waitFor();
     const dash = await page.locator('#overview-body').innerText();

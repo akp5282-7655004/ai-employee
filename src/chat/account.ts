@@ -7,7 +7,7 @@ import { contradictoryAsk } from '../qa/ownerrows.js';
 import { parseConnectAsk } from './connect.js';
 import { unlockLine, type AccountFacts } from './facts.js';
 import { asksMode } from './prompt.js';
-import type { AccountSnapshot } from './snapshot.js';
+import { googleAdsConnected, type AccountSnapshot } from './snapshot.js';
 
 function dollars(n: number): string {
   const rounded = Math.round(n * 100) / 100;
@@ -80,7 +80,7 @@ function has(facts: AccountFacts, label: string): boolean {
 function googleStatus(snapshot: AccountSnapshot, q: string): string {
   const facts = snapshot.account;
   // Same name list as "what's connected". Google readiness is a different check and is not used here.
-  const ads = has(facts, 'Google Ads');
+  const ads = googleAdsConnected(snapshot);
   const gbp = has(facts, 'Google Business Profile');
   const analytics = has(facts, 'Google Analytics');
   if (/analytics|\bga4\b/.test(q)) {

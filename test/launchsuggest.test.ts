@@ -250,7 +250,7 @@ describe('suggestion buttons', () => {
     await picker.waitFor({ timeout: 15000 });
     await expect.poll(async () => page.locator('.bubble.md').last().innerText()).toContain('Searchlight');
     await picker.locator('button.ghost', { hasText: 'No, I will choose' }).click();
-    await page.locator('.chat-launch-picker button', { hasText: 'Google only' }).waitFor({ timeout: 15000 });
+    await page.locator('.chat-launch-picker').last().locator('button', { hasText: 'Google only' }).waitFor({ timeout: 15000 });
     const labels = await page.locator('.chat-launch-picker').last().locator('button').allInnerTexts();
     expect(labels.join(' ')).toMatch(/Google only/);
     expect(labels.join(' ')).toMatch(/Meta only/);
