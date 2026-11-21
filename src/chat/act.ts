@@ -8,8 +8,9 @@ import { buildSearchPlan, type PlanProfile } from '../agents/campaignplan.js';
 import { overDailyCap, type MilesMode } from '../agents/policy.js';
 import { reviewSearchPlan } from '../agents/prelaunch.js';
 import type { CampaignSpec } from '../agents/campaign.js';
+import { draftLaunch, draftSocialTurn, type LaunchChoice } from './launch.js';
 
-export type ChatActKind = 'create_campaign' | 'set_budget' | 'pause_campaign' | 'resume_campaign' | 'add_negatives';
+export type ChatActKind = 'create_campaign' | 'set_budget' | 'pause_campaign' | 'resume_campaign' | 'add_negatives' | 'launch_plan' | 'social_change';
 
 export interface ActAccount {
   business: string;
@@ -31,6 +32,49 @@ export interface ActAccount {
   trackingLead: boolean;
   /** Keyword texts already on the plan, so a negative cannot block them. */
   protectTerms: string[];
+  imageUrl?: string;
+  videoUrl?: string;
+  savedPlatforms?: string[];
+  social?: SocialCampaign[];
+}
+
+export interface SocialCampaign {
+  channel: 'meta' | 'tiktok';
+  campaignId: string;
+  name: string;
+  daily: number;
+  status: 'paused' | 'live';
+  adSetIds: string[];
+  adIds: string[];
+  advertiserId?: string;
+  mode: 'cbo' | 'abo' | 'ad_group';
+  shares: number[];
+  lastRaiseAt?: string | null;
+}
+
+export interface LaunchSlicePayload {
+  id: 'google' | 'meta' | 'tiktok' | 'lsa';
+  label: string;
+  daily: number;
+  create: boolean;
+  reason: string;
+  spec?: CampaignSpec;
+  metaPlan?: unknown;
+  tiktokPlan?: unknown;
+}
+
+export interface SocialChangePayload {
+  channel: 'meta' | 'tiktok';
+  campaignId: string;
+  name: string;
+  action: 'pause' | 'live' | 'budget';
+  daily?: number;
+  previousDaily?: number;
+  advertiserId?: string;
+  adSetIds: string[];
+  adIds: string[];
+  mode: 'cbo' | 'abo' | 'ad_group';
+  shares: number[];
 }
 
 export interface ChatApproval {
@@ -48,6 +92,8 @@ export interface ChatApproval {
     goLive?: boolean;
     spec?: CampaignSpec;
     status?: 'PAUSED' | 'ENABLED';
+    launch?: LaunchSlicePayload[];
+    social?: SocialChangePayload;
   };
 }
 
@@ -60,10 +106,18 @@ export interface ChatPlanSummary {
   note: string;
 }
 
+export interface LaunchPickerShape {
+  options: { id: string; label: string; platforms: string[]; selected: boolean }[];
+  budgets: Record<string, number>;
+  daily: number;
+}
+
 export type ChatDraft =
   | { kind: 'none' }
   | { kind: 'ask'; text: string; plan?: ChatPlanSummary }
   | { kind: 'refuse'; text: string; plan?: ChatPlanSummary }
+  | { kind: 'suggest'; text: string }
+  | { kind: 'choose'; text: string; picker: LaunchPickerShape }
   | { kind: 'card'; text: string; approval: Omit<ChatApproval, 'id'>; plan?: ChatPlanSummary };
 
 const SETUP = /\b(set up|setup|launch|create|start|build)\b/i;
@@ -258,17 +312,21 @@ export function confirmsLead(text: string): boolean {
   return /^(y|yes|yep|calls?|forms?|calls or forms)\b/i.test(text.trim());
 }
 
-export function draftChatAction(text: string, account: ActAccount, history: Array<{ role?: string; text?: string }> = []): ChatDraft {
+export function draftChatAction(text: string, account: ActAccount, history: Array<{ role?: string; text?: string }> = [], choice?: LaunchChoice): ChatDraft {
   const raw = text.trim();
   const prior = [...history].reverse().find((message) => message.role !== 'user' && message.text)?.text || '';
   if (confirmsLead(raw) && prior.includes(TRACKING_ASK)) {
     const earlier = [...history].reverse().find((message) => message.role === 'user' && SETUP.test(message.text || '') && /\b(campaign|ads)\b/i.test(message.text || ''));
     if (earlier?.text) return draftCreate(earlier.text, { ...account, trackingLead: true });
   }
+  const social = draftSocialTurn(raw, account);
+  if (social.kind !== 'none') return social;
   if (/\bnegative keywords?\b/i.test(raw) || /\bas negatives?\b/i.test(raw)) return draftNegatives(raw, account);
   if (/\bpause\b/i.test(raw) && /\bcampaign\b/i.test(raw)) return draftPause(account);
   if (/\b(resume|unpause|go live|turn (it |the campaign )?on|enable (my |the )?campaign)\b/i.test(raw) && !SETUP.test(raw)) return draftResume(account);
   if (BUDGET.test(raw) && DAY.test(raw) && !SETUP.test(raw)) return draftBudget(raw, account);
+  const launch = draftLaunch(raw, account, history, choice);
+  if (launch.kind !== 'none') return launch;
   if (SETUP.test(raw) && /\b(google ads|campaign|ads)\b/i.test(raw)) {
     if (/\bmeta\b|\bfacebook\b/i.test(raw) && !/\bgoogle\b/i.test(raw)) return { kind: 'none' };
     return draftCreate(raw, account);
