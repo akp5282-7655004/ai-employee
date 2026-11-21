@@ -5,6 +5,9 @@
  * and negatives — that the owner reviews setting-by-setting before anything goes
  * live. Deterministic so it always produces a full spec; copy can be enriched by
  * the LLM but the structure never depends on it.
+ *
+ * Which elements a complete build includes: docs/reference/BUILD-GUIDANCE.md.
+ * Checklist tier numbers are not caps on ad groups, keywords, or campaigns.
  */
 
 import { tradePlaybook } from '../playbooks/load.js';

@@ -1,6 +1,7 @@
 /**
  * Campaign rulebook. These are launch defaults, not measured benchmarks and
  * not a promise of Quality Score, CPC, or cost per lead.
+ * Elements: docs/reference/BUILD-GUIDANCE.md. Checklist tiers are not caps.
  *
  * Defaults:
  * - up to 8 close keywords in one ad group, so one intent stays together. This is not a Starter, Growth, or Scale allotment.

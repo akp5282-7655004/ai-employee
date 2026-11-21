@@ -1,5 +1,7 @@
 # GOOGLE ADS CAMPAIGN BUILD SPECIFICATIONS — MASTER REFERENCE
 Last verified: August 2026
+
+Which elements a Miles build includes, and the rule that agency checklist tiers are not caps: [docs/reference/BUILD-GUIDANCE.md](../reference/BUILD-GUIDANCE.md).
 Purpose: Complete parameter reference for AI-driven campaign builds. Every asset type, count, character limit, dimension, and campaign setting required to construct and launch each Google Ads campaign type.
 
 Character limits are display-width based. Double-width languages (Chinese, Japanese, Korean) count each character as 2.

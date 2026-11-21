@@ -25,28 +25,19 @@ The licensed SOP text is not copied here. SOP 146 is the backbone of the shared 
 | 039 | Turning a campaign on waits for the same lead confirmation. | `draftResume` and `sop039-lead` on `campaign_enable` |
 | 018 | A budget change is logged and stays inside the approved cap and the daily change percent. | `sop018-loop` on `budget_change`; `capBlock` in `src/chat/act.ts` |
 
-Starter, Growth, and Scale set how much of that structure goes in one draft. An unknown plan uses Starter. The numbers are limits on the draft, not a block: services past the limit are named and left off. A branded campaign is added when the owner has a brand name, on top of the service-campaign limit.
-
-| Plan | Service campaigns | Ad groups per campaign | Keywords | Display and retargeting | Landing page creation | A/B ads |
-| --- | --- | --- | --- | --- | --- | --- |
-| Starter | 1 | 5 | 50 | No | No | No |
-| Growth | 5 | 10 | 100 | Yes | Yes | No |
-| Scale | 10 | 20 | 200 | Yes | Yes | Yes |
-
-Every plan still includes keyword competition (left as not available when Keyword Planner did not return a score), negatives, headlines and descriptions, bid management, weekly optimization, keyword performance, monitoring, and the monthly report. `applyPpcLimits` in `src/agents/ppclimits.ts` applies the table. Ad groups still come from the owner's services, up to that plan's number.
+The binding note is [docs/reference/BUILD-GUIDANCE.md](reference/BUILD-GUIDANCE.md). Agency checklist numbers are not caps. A draft includes a branded campaign when the owner has a brand name, plus one ad group per named service. Keyword counts follow SOP 144 and SOP 145. Starter, Growth, and Scale do not remove services, ad groups, or keywords.
 
 A complete Google build includes the elements below. Miles builds the ones the Search SOPs cover and says when an element is not in this draft.
 
 | Element | In this Search draft |
 | --- | --- |
-| Branded campaign beside the service campaign | Not created on its own. SOP 144 keeps brand searches separate only when the owner asks. A brand campaign needs its own budget, and Miles does not invent one. |
+| Branded campaign beside the service campaign | Included when a brand name is saved. It does not add a second daily budget. |
 | Keyword competition | Not available. Miles does not invent a CPC, a competition score, or a Keyword Planner bid. |
 | Negative keywords | Phrase negatives from the trade list, checked so they do not block a wanted service. `course` and `courses` are separate because negatives do not expand. |
-| Headlines and descriptions | One responsive Search ad per ad group, 8 to 10 headlines and 2 to 4 descriptions, from confirmed facts. |
+| Headlines and descriptions | 8 to 10 headlines and 2 to 4 descriptions, from confirmed facts, plus a second responsive ad for testing. |
 | Bid management | Planned Maximize conversions with no target CPA. Maximize clicks only when the owner asks for a traffic test. |
-| Retargeting and Display | Off. SOP 146 keeps the first campaign on Google Search. |
+| Retargeting and Display | Off inside this Search campaign. SOP 146 keeps the first campaign on Google Search. |
 | Landing page per ad group | The crawled page for that service when one exists. Otherwise the saved website. Miles does not invent a URL. |
-| A/B ad testing | One RSA per ad group. Google rotates its headlines and descriptions. A second RSA is not written. |
 | Weekly optimization | Later search-term and keyword proposals. They do not change Google until the owner approves. |
 | Monthly performance report | The existing report, for a named period. |
 

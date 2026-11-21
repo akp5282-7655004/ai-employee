@@ -15,6 +15,9 @@
  * The owner is not asked to review keywords, skipped searches, ads, or
  * bidding. Miles fills those from the playbook. The full plan stays available
  * as an optional read.
+ *
+ * Elements in a complete build are listed in docs/reference/BUILD-GUIDANCE.md.
+ * Agency checklist tier numbers are not caps on this plan.
  */
 import {
   buildCampaignSpec,
@@ -26,7 +29,7 @@ import {
   type VerifiedClaims,
 } from './campaign.js';
 import { resolveAreas } from './geotarget.js';
-import { applyPpcLimits, type PlanTier } from './ppclimits.js';
+import { includeBuildElements } from './ppclimits.js';
 import { reviewSearchPlan, type SopReview } from './prelaunch.js';
 import { enforceRulebook, fixAdCapitalization, hoursRange, RULEBOOK_DEFAULTS } from './rulebook.js';
 
@@ -78,11 +81,9 @@ export interface SearchPlan {
   locationBlock: string;
   /** SOP 147. The same review chat uses before it shows an approval card. */
   sopReview: SopReview;
-  /** Starter when the account has no paid plan. */
-  tier: PlanTier;
-  /** Service campaign plus this branded campaign when the owner has a brand name. */
+  /** Branded campaign when the owner has a brand name. See docs/reference/BUILD-GUIDANCE.md. */
   brand: CampaignSpec | null;
-  /** What the plan limit left out. Not a block. */
+  /** Which checklist elements this draft includes. Not a tier cap. */
   limitsNote: string;
 }
 
@@ -250,7 +251,7 @@ function sectionsOf(spec: CampaignSpec): PlanSection[] {
   ];
 }
 
-export function buildSearchPlan(profile: PlanProfile, opts?: { preapproved?: boolean; tier?: PlanTier }): SearchPlan {
+export function buildSearchPlan(profile: PlanProfile, opts?: { preapproved?: boolean }): SearchPlan {
   const questions = opts?.preapproved ? [] : planQuestions(profile);
   const city = (profile.serviceAreas || '').split(',')[0]?.trim() || 'Your area';
   const services = servicesFromCrawl(profile.services, profile.trade)
@@ -290,8 +291,7 @@ export function buildSearchPlan(profile: PlanProfile, opts?: { preapproved?: boo
   }
   spec.status = 'PAUSED';
   spec.biddingStrategy = spec.bidPlan?.stage === 'MAXIMIZE_CONVERSIONS' ? 'MAXIMIZE_CONVERSIONS' : 'MAXIMIZE_CLICKS';
-  const tier = opts?.tier || 'starter';
-  const fit = applyPpcLimits(spec, tier, profile.businessName);
+  const fit = includeBuildElements(spec, profile.businessName);
   const limited = fit.spec;
   const geo = resolveAreas(profile.serviceAreas || limited.locations.join('; '));
   limited.geoTargets = geo.targets;
@@ -317,7 +317,6 @@ export function buildSearchPlan(profile: PlanProfile, opts?: { preapproved?: boo
     preapproved: !!opts?.preapproved,
     locationBlock: geo.block,
     sopReview: reviewSearchPlan(limited),
-    tier,
     brand: fit.brand,
     limitsNote: fit.note,
   };
