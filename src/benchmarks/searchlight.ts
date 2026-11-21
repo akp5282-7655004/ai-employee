@@ -4,7 +4,7 @@
  * pages in the 21 Nov 2026 notes. A combined sample is not used as one trade.
  * The HVAC Google Ads 4.37x ROAS cell is flagged unverified on the hub and skipped.
  */
-import { BENCHMARK_HUB, type HubEntry } from '../packs/benchmarks.js';
+import { BENCHMARK_HUB, LSA_TRADES, type HubEntry } from '../packs/benchmarks.js';
 import type { Metric, Platform } from './types.js';
 import { tradeKey } from './trades.js';
 
@@ -17,6 +17,8 @@ export interface SearchlightFigure {
   period: string;
   sourceUrl: string;
   note: string;
+  /** Published account count when the source lists one. Null when it does not. */
+  sampleSize: number | null;
 }
 
 const PERIOD: Record<string, string> = {
@@ -54,6 +56,11 @@ function metricOf(entry: HubEntry): Metric | null {
   return null;
 }
 
+function lsaSample(trade: string): number | null {
+  const row = LSA_TRADES.find((item) => tradeKey(item.trade) === trade);
+  return row && row.accounts > 0 ? row.accounts : null;
+}
+
 export function searchlightFigures(): SearchlightFigure[] {
   const out: SearchlightFigure[] = [];
   for (const channel of BENCHMARK_HUB) {
@@ -76,6 +83,7 @@ export function searchlightFigures(): SearchlightFigure[] {
         label: period ? `Searchlight, ${period}` : 'Searchlight',
         sourceUrl: entry.source,
         note: entry.note || '',
+        sampleSize: platform === 'google_lsa' ? lsaSample(trade) : null,
       });
     }
   }

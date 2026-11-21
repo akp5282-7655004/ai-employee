@@ -149,9 +149,16 @@ describe('resolver priority', () => {
     };
     const row = resolveBenchmark({ trade: 'plumbing', platform: 'google_ads', metric: 'cpl', cohort });
     expect(row.kind).toBe('miles');
+    expect(row.source).toBe('miles');
     expect(row.value).toBe(80);
-    expect(row.sourceLabel).toBe('Miles data, 82 plumbing accounts, last 90 days');
+    expect(row.label).toBe('Miles data, 82 plumbing accounts, last 90 days');
+    expect(row.sampleSize).toBe(82);
+    expect(row.minimumMet).toBe(true);
     expect(row.milesShortfall).toBeNull();
+    const emergency = resolveBenchmark({ trade: 'plumbing', platform: 'google_ads', metric: 'roas', leadType: 'replacement', cohort });
+    expect(emergency.value).toBe(80);
+    expect(emergency.minimumMet).toBe(true);
+    expect(emergency.label).toMatch(/Trade-level figure. No separate benchmark for replacement leads/);
     const check = goalCheck({ trade: 'Plumbing', city: 'Austin', budgetAmount: 20, budgetPeriod: 'day', leadGoal: 4, leadPeriod: 'month', cohort });
     expect(check.sourceLabel).toMatch(/Miles data, 82 plumbing accounts/);
     expect(check.assumption).toMatch(/\$80/);
@@ -186,7 +193,28 @@ describe('resolver priority', () => {
     expect(meta.high).toBe(95);
 
     const roofCpa = resolveBenchmark({ trade: 'roofing', platform: 'google_ads', metric: 'cpa' });
-    expect(roofCpa).toMatchObject({ kind: 'playbook', value: 2000, sourceLabel: 'Playbook estimate' });
+    expect(roofCpa).toMatchObject({ kind: 'playbook', value: 2000, source: 'playbook', sourceLabel: 'Playbook estimate', minimumMet: false, sampleSize: null });
+
+    const lsa = resolveBenchmark({ trade: 'plumbing', platform: 'google_lsa', metric: 'cpl' });
+    expect(lsa).toMatchObject({ value: 57, source: 'searchlight', sampleSize: 230, minimumMet: false });
+
+    const cpc = resolveBenchmark({ trade: 'painting', platform: 'google_ads', metric: 'cpc' });
+    expect(cpc).toMatchObject({ value: 13.74, source: 'localiq', sampleSize: 3211, minimumMet: false });
+  });
+
+  it('falls back to the trade figure when a lead type is asked for', () => {
+    const row = resolveBenchmark({ trade: 'plumbing', platform: 'google_ads', metric: 'cpl', leadType: 'emergency' });
+    expect(row.value).toBe(183);
+    expect(row.source).toBe('searchlight');
+    expect(row.label).toBe('Searchlight, Q1 2026. Trade-level figure. No separate benchmark for emergency leads.');
+    expect(row.sourceLabel).toBe(row.label);
+    expect(row.minimumMet).toBe(false);
+    expect(row.sampleSize).toBeNull();
+    const plain = resolveBenchmark({ trade: 'plumbing', platform: 'google_ads', metric: 'cpl' });
+    expect(plain.label).toBe('Searchlight, Q1 2026');
+    expect(plain.label).not.toMatch(/Trade-level/);
+    const unknown = resolveBenchmark({ trade: 'plumbing', platform: 'google_ads', metric: 'ctr' });
+    expect(unknown).toMatchObject({ value: null, source: 'none', minimumMet: false });
   });
 
   it('flags the HVAC Google 4.37x ROAS cell as unverified', () => {

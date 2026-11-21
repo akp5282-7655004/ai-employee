@@ -24,6 +24,10 @@ export interface PublicAggregate {
   p25: number | null;
   p75: number | null;
   sourceLabel: string;
+  source: string;
+  label: string;
+  sampleSize: number | null;
+  minimumMet: boolean;
   milesShortfall: string | null;
 }
 
@@ -47,7 +51,11 @@ export function publicAggregate(row: AggregateRow): PublicAggregate {
     median: row.published ? row.median : null,
     p25: row.published ? row.p25 : null,
     p75: row.published ? row.p75 : null,
-    sourceLabel: resolved.sourceLabel,
+    sourceLabel: resolved.label,
+    source: resolved.source,
+    label: resolved.label,
+    sampleSize: resolved.sampleSize,
+    minimumMet: resolved.minimumMet,
     milesShortfall: resolved.milesShortfall,
   };
 }
@@ -59,6 +67,10 @@ export function publicResolution(row: ResolvedBenchmark): Record<string, unknown
     metric: row.metric,
     kind: row.kind,
     value: row.value,
+    source: row.source,
+    label: row.label,
+    sampleSize: row.sampleSize,
+    minimumMet: row.minimumMet,
     low: row.low,
     high: row.high,
     sourceLabel: row.sourceLabel,

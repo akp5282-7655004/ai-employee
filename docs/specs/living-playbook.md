@@ -75,6 +75,8 @@ For each trade, platform, and metric, in order. The first hit is the whole numbe
 4. The trade playbook's own estimate. Plumbing's $110 cost per lead (Search, LSA, and Meta). Roofing's $2,000 allowable cost per booked job. The older Meta planning range in `src/agents/playbook.ts` is a range for Meta only, not a midpoint, and not a Google Ads number. Label: `Playbook estimate`.
 5. No benchmark. Solar has no verified CPL or ROAS on these platforms, and the playbook does not state one, so the answer is no benchmark.
 
+The function the chat launcher calls is `resolveBenchmark({ trade, platform, metric, leadType? })`. Metrics are `cpl`, `cpc`, `cpa`, and `roas`. The result always has `value`, `source`, `label`, `sampleSize`, and `minimumMet`. `source` is `miles`, `searchlight`, `localiq`, `wordstream`, `playbook`, or `none`. `minimumMet` is true only when the value is a published Miles median. `sampleSize` is the published sample when the source states one, and null when it does not. `leadType` is optional. There is no separate published cut by lead type, so a lead type uses the trade figure and the label says "Trade-level figure. No separate benchmark for {lead type} leads."
+
 Category averages (home-services $90.92, Home & Home Improvement Meta $42.95) are not used as a trade's number. The two LocaliQ HVAC rows (air conditioning $127.74, heating $129.02) are not averaged into one HVAC cost per lead. Stale 2020-2021 LocaliQ rows are stored with `current: false` and are not used.
 
 When Miles is not the source, the screen also says `Not enough Miles data yet (x of y accounts)`, where x is clean contributors and y is required. If the count is met but one account is over 40% of spend, the line says that instead, and the next source is used.
