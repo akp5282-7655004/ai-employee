@@ -26,6 +26,7 @@ import {
   type VerifiedClaims,
 } from './campaign.js';
 import { resolveAreas } from './geotarget.js';
+import { applyPpcLimits, type PlanTier } from './ppclimits.js';
 import { reviewSearchPlan, type SopReview } from './prelaunch.js';
 import { enforceRulebook, fixAdCapitalization, hoursRange, RULEBOOK_DEFAULTS } from './rulebook.js';
 
@@ -77,6 +78,12 @@ export interface SearchPlan {
   locationBlock: string;
   /** SOP 147. The same review chat uses before it shows an approval card. */
   sopReview: SopReview;
+  /** Starter when the account has no paid plan. */
+  tier: PlanTier;
+  /** Service campaign plus this branded campaign when the owner has a brand name. */
+  brand: CampaignSpec | null;
+  /** What the plan limit left out. Not a block. */
+  limitsNote: string;
 }
 
 const BOOK: Record<string, string[]> = {
@@ -243,7 +250,7 @@ function sectionsOf(spec: CampaignSpec): PlanSection[] {
   ];
 }
 
-export function buildSearchPlan(profile: PlanProfile, opts?: { preapproved?: boolean }): SearchPlan {
+export function buildSearchPlan(profile: PlanProfile, opts?: { preapproved?: boolean; tier?: PlanTier }): SearchPlan {
   const questions = opts?.preapproved ? [] : planQuestions(profile);
   const city = (profile.serviceAreas || '').split(',')[0]?.trim() || 'Your area';
   const services = servicesFromCrawl(profile.services, profile.trade)
@@ -283,9 +290,13 @@ export function buildSearchPlan(profile: PlanProfile, opts?: { preapproved?: boo
   }
   spec.status = 'PAUSED';
   spec.biddingStrategy = spec.bidPlan?.stage === 'MAXIMIZE_CONVERSIONS' ? 'MAXIMIZE_CONVERSIONS' : 'MAXIMIZE_CLICKS';
-  const geo = resolveAreas(profile.serviceAreas || spec.locations.join('; '));
-  spec.geoTargets = geo.targets;
-  const sections = sectionsOf(spec);
+  const tier = opts?.tier || 'starter';
+  const fit = applyPpcLimits(spec, tier, profile.businessName);
+  const limited = fit.spec;
+  const geo = resolveAreas(profile.serviceAreas || limited.locations.join('; '));
+  limited.geoTargets = geo.targets;
+  if (fit.brand) fit.brand.geoTargets = geo.targets;
+  const sections = sectionsOf(limited);
   const places = sections.find((section) => section.id === 'locations');
   if (places) {
     places.body = geo.targets.length
@@ -295,7 +306,21 @@ export function buildSearchPlan(profile: PlanProfile, opts?: { preapproved?: boo
       ? 'People physically in these Google locations. Interest outside them is off.'
       : geo.block;
   }
-  return { questions, spec, sections, preapproved: !!opts?.preapproved, locationBlock: geo.block, sopReview: reviewSearchPlan(spec) };
+  const ads = sections.find((section) => section.id === 'ads');
+  if (ads && fit.brand) ads.body = `${ads.body}\n${fit.note}`;
+  const budget = sections.find((section) => section.id === 'budget');
+  if (budget) budget.body = `${budget.body} ${fit.checklist[0]}`;
+  return {
+    questions,
+    spec: limited,
+    sections,
+    preapproved: !!opts?.preapproved,
+    locationBlock: geo.block,
+    sopReview: reviewSearchPlan(limited),
+    tier,
+    brand: fit.brand,
+    limitsNote: fit.note,
+  };
 }
 
 /** Keep the owner's approved spec. Force paused, drop broad match, fix capitalization. */

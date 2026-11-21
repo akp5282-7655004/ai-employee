@@ -5,6 +5,7 @@
  * launch, status, budget, and negative services after Approve.
  */
 import { buildSearchPlan, type PlanProfile } from '../agents/campaignplan.js';
+import type { PlanTier } from '../agents/ppclimits.js';
 import { overDailyCap, type MilesMode } from '../agents/policy.js';
 import { reviewSearchPlan } from '../agents/prelaunch.js';
 import type { CampaignSpec } from '../agents/campaign.js';
@@ -31,6 +32,8 @@ export interface ActAccount {
   trackingLead: boolean;
   /** Keyword texts already on the plan, so a negative cannot block them. */
   protectTerms: string[];
+  /** Missing or unknown uses Starter. */
+  tier?: PlanTier;
 }
 
 export interface ChatApproval {
@@ -162,7 +165,7 @@ export function draftCreate(text: string, account: ActAccount): ChatDraft {
     goal: 'Get more calls',
     dailyBudget: daily,
   };
-  const plan = buildSearchPlan(profile);
+  const plan = buildSearchPlan(profile, { tier: account.tier });
   plan.spec.dailyBudget = daily;
   plan.spec.status = 'PAUSED';
   if (/\btraffic test\b/i.test(text)) {

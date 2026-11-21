@@ -25,7 +25,15 @@ The licensed SOP text is not copied here. SOP 146 is the backbone of the shared 
 | 039 | Turning a campaign on waits for the same lead confirmation. | `draftResume` and `sop039-lead` on `campaign_enable` |
 | 018 | A budget change is logged and stays inside the approved cap and the daily change percent. | `sop018-loop` on `budget_change`; `capBlock` in `src/chat/act.ts` |
 
-Subscription tiers do not decide the shape of a campaign. Starter, Growth, and Scale are billing plans. They do not cap campaigns at 1, 5, or 10, ad groups at 5, 10, or 20, or keywords at 50, 100, or 200. Ad groups come from the services the owner named. Locations come from the service area. Keywords come from those services and locations under SOP 144 and SOP 145.
+Starter, Growth, and Scale set how much of that structure goes in one draft. An unknown plan uses Starter. The numbers are limits on the draft, not a block: services past the limit are named and left off. A branded campaign is added when the owner has a brand name, on top of the service-campaign limit.
+
+| Plan | Service campaigns | Ad groups per campaign | Keywords | Display and retargeting | Landing page creation | A/B ads |
+| --- | --- | --- | --- | --- | --- | --- |
+| Starter | 1 | 5 | 50 | No | No | No |
+| Growth | 5 | 10 | 100 | Yes | Yes | No |
+| Scale | 10 | 20 | 200 | Yes | Yes | Yes |
+
+Every plan still includes keyword competition (left as not available when Keyword Planner did not return a score), negatives, headlines and descriptions, bid management, weekly optimization, keyword performance, monitoring, and the monthly report. `applyPpcLimits` in `src/agents/ppclimits.ts` applies the table. Ad groups still come from the owner's services, up to that plan's number.
 
 A complete Google build includes the elements below. Miles builds the ones the Search SOPs cover and says when an element is not in this draft.
 

@@ -25,6 +25,8 @@ export interface AdGroupSpec {
   name: string;
   keywords: KeywordSpec[];
   rsa: RsaSpec;
+  /** Second RSA. Present on Scale only, for A/B testing. */
+  rsaVariant?: RsaSpec;
   /** Landing page for this ad group. Homepage when no crawled service page matches. */
   finalUrl?: string;
 }

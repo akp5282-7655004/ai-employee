@@ -34,6 +34,7 @@ import { buildCampaignSpec, claimsFromText, validateCampaignSpec, campaignSummar
 import { googleResourceMissing, judgeEnableReadback, scrubStatusText, statusWords } from './agents/enablecheck.js';
 import { housekeepingProposals } from './agents/rulebook.js';
 import { acceptApprovedPlan, applyPlanAnswer, areaGuess, buildSearchPlan, type PlanProfile } from './agents/campaignplan.js';
+import { planTierOf } from './agents/ppclimits.js';
 import { choiceById, goalCheck, LAUNCH_LINE, MONTH_DAYS, type BudgetPeriod, type GoalChannel, type GoalChoiceId, type GoalCheck, type LeadPeriod } from './agents/goalcheck.js';
 import { expectationReadout, liveDaysFromEvents, projectBudget, readExpectation, storeExpectation } from './agents/budgetexpect.js';
 import { dashboardRates } from './reports/rates.js';
@@ -1970,7 +1971,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     miles.approvedPlan = undefined;
     miles.planApproved = false;
     data.miles = miles;
-    bundle.spec = buildSearchPlan(planProfileOf(data, miles)).spec;
+    bundle.spec = buildSearchPlan(planProfileOf(data, miles), { tier: planTierOf(bandOf(data).key) }).spec;
     notes.push(hadApproval ? 'The Google plan was redrafted. Approve it again before Miles launches.' : 'The Google plan was redrafted.');
     rememberMiles(data, miles, notes.join(' '));
   };
@@ -2622,7 +2623,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
   const searchPlanFor = (data: Record<string, unknown>, miles: MilesFile) => {
     const mode = miles.bundle?.setup.mode || miles.pendingMode;
     const preapproved = mode === 'automate' && miles.planApproved === true && !!miles.approvedPlan;
-    return buildSearchPlan(planProfileOf(data, miles), { preapproved });
+    return buildSearchPlan(planProfileOf(data, miles), { preapproved, tier: planTierOf(bandOf(data).key) });
   };
   app.get('/api/miles/plan', async (req, reply) => {
     const u = await requireUser(req, reply);
@@ -2666,7 +2667,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       if (google) google.daily = next.dailyBudget;
     }
     miles.bundle.profile = { ...miles.bundle.profile, ...profile };
-    miles.bundle.spec = buildSearchPlan(planProfileOf(data, miles)).spec;
+    miles.bundle.spec = buildSearchPlan(planProfileOf(data, miles), { tier: planTierOf(bandOf(data).key) }).spec;
     data.miles = miles;
     await authStore.setUserData(u.id, data);
     const plan = searchPlanFor(data, miles);
@@ -8649,6 +8650,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       activation: miles.activation,
       trackingLead: proof.leadConversion === true,
       protectTerms: (spec?.adGroups ?? []).flatMap((group) => (group.keywords ?? []).map((keyword) => keyword.text)),
+      tier: planTierOf(bandOf(data).key),
     };
   };
 

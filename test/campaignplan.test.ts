@@ -59,10 +59,13 @@ describe('campaign plan generation', () => {
       website: 'https://paintersinphilly.com',
       dailyBudget: 30,
     });
+    expect(five.tier).toBe('starter');
     expect(five.spec.adGroups.map((group) => group.name)).toEqual([
       'Interior Painting', 'Exterior Painting', 'Cabinet Painting', 'Commercial Painting', 'House Painting',
     ]);
-    expect(JSON.stringify(five.spec)).not.toMatch(/starter|growth|scale/i);
+    expect(five.brand?.name).toMatch(/Brand/);
+    expect(five.brand?.adGroups[0]?.keywords.some((row) => row.match === 'exact' && row.text.includes('painters'))).toBe(true);
+    expect(five.limitsNote).toMatch(/Starter plan limit/);
     expect(plan.sections.every((section) => section.reason && !section.reason.includes('\u2014'))).toBe(true);
   });
 
