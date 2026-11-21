@@ -1416,7 +1416,7 @@
         <button class="navhead"><span class="hlabel">Marketing</span><svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="navkids">
           <a data-page="library" data-pages="library" data-tabs="Skills &amp; Playbooks">Skills &amp; Playbooks</a>
-          <a data-page="launch" data-pages="playbook,launch,fblaunch,adstudio" data-tabs="Plan|Google Ads|Facebook|Ad Copy">Launch</a>
+          <a data-page="launch" data-pages="playbook,launch,fblaunch,ttlaunch,adstudio" data-tabs="Plan|Google Ads|Facebook|TikTok|Ad Copy">Launch</a>
           <a data-page="reports" data-pages="reports" data-tabs="Reports">Reports</a>
           <a data-page="studio" data-pages="studio,editor,calendar" data-tabs="Create|Edit|Schedule">Studio</a>
           <a data-page="adsmgr" data-pages="adsmgr" data-tabs="Ads Manager">Ads Manager</a>
@@ -1629,6 +1629,9 @@
     <section class="page" id="page-fblaunch">
       <div id="fblaunch-body" style="max-width:900px"></div>
     </section>
+    <section class="page" id="page-ttlaunch">
+      <div id="ttlaunch-body" style="max-width:900px"></div>
+    </section>
 
     <!-- SYSTEM HEALTH (what's actually working, at a glance) -->
     <section class="page" id="page-health">
@@ -1823,7 +1826,7 @@
 
     <!-- INTEGRATIONS -->
     <section class="page" id="page-int">
-      <p class="mdesc" style="margin:-8px 0 16px">Connect the accounts this version can use. Google Ads and GoHighLevel are the ones Miles runs. Meta, TikTok, and Local Services Ads are coming later. The rest of the catalogue is a preview until a connector is verified.</p>
+      <p class="mdesc" style="margin:-8px 0 16px">Connect the accounts this version can use. Google Ads, GoHighLevel, and the Facebook and TikTok connections Miles already uses for paused leads plans. Local Services Ads are coming later. The rest of the catalogue is a preview until a connector is verified.</p>
       <div id="int-banner"></div>
       <div id="int-connected"></div>
       <div id="int-stack"></div>
@@ -2300,7 +2303,7 @@ function renderCards(){
 }
 
 // ═══ pages ═══
-const TITLES={home:'Home',overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled',wireframe:'Agent Wireframe',autopilot:'Autonomy',skills:'Playbooks',library:'Skills & Playbooks',meters:'Benchmarks',analytics:'Analytics',recs:'Recommendations',cads:'Competitors',research:'Demographics',weather:'Weather',adstudio:'Ad Copy',playbook:'Plan',playdetail:'Playbook',launch:'Launch',localpresence:'Local Presence',approvals:'Approvals',billing:'Plan & Credits',fblaunch:'Facebook',reports:'Reports',autohub:'Automations',health:'System Health',ghl:'CRM workflows',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Edit',studio:'Studio',hub:'Projects',brand:'Brand',assets:'Assets',audit:'Audits',calendar:'Schedule',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',owneradmin:'ADMIN',market:'Marketplace',chat:'Chat with Miles','business-profile':'Business Profile'};
+const TITLES={home:'Home',overview:'Dashboard',team:'Campaigns',agents:'What Miles Does',schedules:'Scheduled',wireframe:'Agent Wireframe',autopilot:'Autonomy',skills:'Playbooks',library:'Skills & Playbooks',meters:'Benchmarks',analytics:'Analytics',recs:'Recommendations',cads:'Competitors',research:'Demographics',weather:'Weather',adstudio:'Ad Copy',playbook:'Plan',playdetail:'Playbook',launch:'Launch',localpresence:'Local Presence',approvals:'Approvals',billing:'Plan & Credits',fblaunch:'Facebook',reports:'Reports',autohub:'Automations',health:'System Health',ghl:'CRM workflows',adsmgr:'Ads Manager',growth:'Growth Autopilot',affluence:'Market Map',editor:'Edit',studio:'Studio',hub:'Projects',brand:'Brand',assets:'Assets',audit:'Audits',calendar:'Schedule',deploy:'Deploy',logs:'Change Log',integrations:'Integrations',profile:'Business Profile',settings:'Settings',owneradmin:'ADMIN',market:'Marketplace',chat:'Chat with Miles','business-profile':'Business Profile',ttlaunch:'TikTok'};
 // A destination can own several pages, Launch owns the plan, both channel
 // launchers and the ad-copy writer. The nav lists the destination; its pages
 // become a tab strip, so a four-step job stops looking like four unrelated
@@ -2373,7 +2376,7 @@ function renderSubTabs(id){
 }
 function setPage(id, campaignDraft){
   document.body.classList.toggle('on-dash', id==='overview' || id==='launch' || id==='library' || id==='reports');
-  document.body.classList.toggle('on-launch', id==='launch' || id==='playbook' || id==='fblaunch' || id==='adstudio');
+  document.body.classList.toggle('on-launch', id==='launch' || id==='playbook' || id==='fblaunch' || id==='ttlaunch' || id==='adstudio');
   document.body.classList.toggle('on-admin', id==='owneradmin');
   const adminSub=document.getElementById('admin-sub'); if(adminSub) adminSub.hidden=id!=='owneradmin';
   document.body.classList.toggle('on-biz', id==='profile');
@@ -2409,6 +2412,7 @@ function setPage(id, campaignDraft){
   $('#page-adstudio').classList.toggle('on',id==='adstudio');
   $('#page-launch').classList.toggle('on',id==='launch');
   $('#page-fblaunch').classList.toggle('on',id==='fblaunch');
+  $('#page-ttlaunch').classList.toggle('on',id==='ttlaunch');
   $('#page-autohub').classList.toggle('on',id==='autohub');
   $('#page-health').classList.toggle('on',id==='health');
   $('#page-localpresence').classList.toggle('on',id==='localpresence');
@@ -2455,6 +2459,7 @@ function setPage(id, campaignDraft){
     else openLaunch();
   }
   if(id==='fblaunch') openFbLaunch();
+  if(id==='ttlaunch') openTtLaunch();
   if(id==='autohub') openAutoHub();
   if(id==='health') openHealth();
   if(id==='localpresence') openLocalPresence();
@@ -6631,7 +6636,56 @@ function ghlRecipeRow(r){
   head.onclick=()=>{ const open=body.style.display!=='none'; body.style.display=open?'none':'block'; chev.style.transform=open?'':'rotate(90deg)'; };
   return row;
 }
-// Facebook campaign plan. Created paused, only after approval.
+// Facebook and TikTok campaign plans. Created paused, only after approval.
+function reviewList(items){
+  const box=el('div'); box.style.marginTop='8px';
+  (items||[]).forEach(row=>{
+    const line=el('div','appsub',(row.state==='block'?'Block. ':row.state==='warn'?'Check. ':'OK. ')+row.label+': '+row.detail);
+    if(row.state==='block') line.style.color='var(--bad)';
+    box.append(line);
+  });
+  return box;
+}
+function structureCard(plan){
+  const card=el('div','mcard'); card.style.marginTop='14px';
+  card.append(el('div','sect-label','CAMPAIGN STRUCTURE'));
+  card.append(el('p','appsub',(plan.name||'')+' · '+(plan.budgetMode==='cbo'?'Campaign budget':'Ad set budget')+' · $'+(plan.dailyBudget||0)+'/day · '+(plan.status==='DISABLE'?'Paused (TikTok DISABLE)':'Paused')));
+  if(plan.budgetNote) card.append(el('p','appsub',plan.budgetNote));
+  if(plan.specialAdNote) card.append(el('p','appsub',plan.specialAdNote));
+  if(plan.destinationNote) card.append(el('p','appsub',plan.destinationNote));
+  (plan.adSets||[]).forEach(set=>{
+    const block=el('div'); block.style.cssText='border-top:1px solid var(--line,#e5e7eb);padding:10px 0';
+    const unit=plan.channel==='tiktok'?'Ad group':'Ad set';
+    block.append(el('b',null,(set.included?unit+': ':'Held: ')+set.name));
+    const meta=el('div','appsub', set.included
+      ? ('$'+(set.dailyBudget||0)+'/day · '+(set.locationNote||'')+' · age minimum '+(set.ageMin||25)+', suggestion '+(set.ageSuggestion||'')+' · '+(set.optimization||'')+' · '+(set.placements||''))
+      : (set.heldReason||'Not created.'));
+    meta.style.marginTop='4px';
+    block.append(meta);
+    (set.ads||[]).forEach(ad=>{
+      const line=el('div','appsub',(ad.included?'Ad: ':'Held ad: ')+ad.name+' · '+ad.headline);
+      line.style.marginLeft='12px';
+      block.append(line);
+      if(ad.included&&ad.primaryText){ const copy=el('div','appsub',ad.primaryText); copy.style.cssText='margin-left:12px;white-space:pre-line'; block.append(copy); }
+    });
+    card.append(block);
+  });
+  if(plan.form){
+    card.append(el('div','sect-label','LEAD FORM'));
+    card.append(el('p','appsub','Higher intent. Prefill: '+(plan.form.prefill||[]).join(', ')+'.'));
+    (plan.form.questions||[]).forEach(q=>card.append(el('p','appsub',q.label+' ('+(q.options||[]).join(' / ')+')')));
+    (plan.form.heldQuestions||[]).forEach(q=>card.append(el('p','appsub',q)));
+  }
+  if(plan.exclusionsNote) card.append(el('p','appsub',plan.exclusionsNote));
+  if((plan.elements||[]).length){
+    card.append(el('div','sect-label','IN EVERY BUILD'));
+    (plan.elements||[]).forEach(row=>{
+      const line=el('p','appsub',row.label+': '+row.detail);
+      card.append(line);
+    });
+  }
+  return card;
+}
 function fbConnBanner(status){
   const c=el('div','mcard');
   if(status&&status.ready){
@@ -6686,6 +6740,8 @@ function renderFbReview(built){
   s.append(grid);
   if(built.budgetNote) s.append(el('p','appsub',built.budgetNote));
   box.append(s);
+  if(built.structure) box.append(structureCard(built.structure));
+  if((built.checklist||[]).length){ const ck=el('div','mcard'); ck.style.marginTop='14px'; ck.append(el('div','sect-label','PRE-LAUNCH REVIEW')); ck.append(reviewList(built.checklist)); box.append(ck); }
   const ap=el('div','mcard'); ap.style.marginTop='14px'; ap.append(el('div','sect-label','AD COPY'));
   const card=el('div'); card.style.cssText='border:1px solid var(--line,#e5e7eb);border-radius:12px;overflow:hidden;max-width:400px;margin-top:8px';
   if(spec.imageUrl){ const img=el('img'); img.src=spec.imageUrl; img.alt='Ad image from Creative Studio'; img.style.cssText='width:100%;height:160px;object-fit:cover;display:block'; card.append(img); }
@@ -6707,18 +6763,19 @@ function renderFbReview(built){
   rebuild.onclick=async()=>{ rebuild.disabled=true; try{ const r=await(await fetch('/api/meta/build',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({offer:offer.value,website:website.value,dailyBudget:budget.value===''?undefined:Number(budget.value)})})).json(); if(r&&r.error){ toast(r.error); rebuild.disabled=false; return; } renderFbReview(r); }catch(e){ toast('Could not update the plan.'); rebuild.disabled=false; } };
   f.append(rebuild); box.append(f);
   const bar=el('div','mcard'); bar.style.marginTop='14px';
-  const ready=!!(status.ready&&!issues.length);
-  const go=el('button','go', ready?'Approve paused campaign':'Connect Facebook before approval');
+  const blocked=((built.checklist)||[]).some(row=>row.state==='block');
+  const ready=!!(status.ready&&!issues.length&&!blocked);
+  const go=el('button','go', ready?'Approve paused campaign':(blocked?'Fix the review before approval':'Connect Facebook before approval'));
   if(!ready) go.disabled=true;
-  go.onclick=()=>doFbLaunch(spec, go);
+  go.onclick=()=>doFbLaunch(spec, built.structure, go);
   bar.append(go);
   bar.append(el('p','appsub','Approval creates the campaign paused. It does not turn spend on.'));
   box.append(bar);
 }
-async function doFbLaunch(spec, go){
+async function doFbLaunch(spec, structure, go){
   if(go){ go.disabled=true; go.textContent='Creating the paused campaign'; }
   let r={ok:false,steps:[],note:'No response.'};
-  try{ r=await(await fetch('/api/meta/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({spec,confirm:true})})).json(); }
+  try{ r=await(await fetch('/api/meta/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(structure?{structure,confirm:true}:{spec,confirm:true})})).json(); }
   catch(e){ r={ok:false,steps:[],note:'The request failed. Nothing was created.'}; }
   const box=$('#fblaunch-body'); if(!box) return;
   const res=el('div','mcard'); res.style.marginTop='14px'; res.style.borderLeft='3px solid '+(r.ok?'var(--good,var(--good))':'var(--bad)');
@@ -6732,6 +6789,61 @@ async function doFbLaunch(spec, go){
   box.append(res);
   if(go){ go.textContent=r.ok?'Created paused':'Try again'; if(!r.ok) go.disabled=false; }
   if(r.ok) toast('Paused Facebook campaign created. Nothing is spending.');
+}
+async function openTtLaunch(){
+  const box=$('#ttlaunch-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading the TikTok plan.</p>';
+  let built=null;
+  if(REMOTE){
+    try{ built=await(await fetch('/api/tiktok/build',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).json(); }
+    catch(e){ built=null; }
+  }
+  renderTtReview(built);
+}
+function renderTtReview(built){
+  const box=$('#ttlaunch-body'); if(!box) return; box.innerHTML='';
+  const plan=built&&built.plan;
+  const checklist=(built&&built.checklist)||[];
+  const h=el('div','mcard');
+  h.innerHTML='<h3 style="margin:0">TikTok campaign</h3><p class="mdesc" style="margin:6px 0 0">A lead generation campaign for the service area. Miles creates it disabled, only after you approve it. Turning it on is a separate approval. Nothing spends on this step.</p>';
+  box.append(h);
+  if(!plan){ box.append(el('p','appsub','Miles could not build a TikTok plan yet. Save a trade, a city, and a website, then open this tab again.')); return; }
+  const grid=el('div','mcard'); grid.style.marginTop='14px'; grid.append(el('div','sect-label','SUGGESTED PLAN'));
+  const wrap=el('div'); wrap.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:8px';
+  const cell=(k,v)=>{ const c=el('div'); c.style.cssText='border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:10px'; c.append(el('div','appsub',k)); const b=el('div',null,v); b.style.fontWeight='600'; c.append(b); return c; };
+  wrap.append(cell('Objective','Leads'), cell('Daily budget','$'+Number(plan.dailyBudget||0).toLocaleString()+' a day'), cell('Placement','TikTok'), cell('Status','Paused'));
+  grid.append(wrap);
+  box.append(grid);
+  box.append(structureCard(plan));
+  const ck=el('div','mcard'); ck.style.marginTop='14px'; ck.append(el('div','sect-label','PRE-LAUNCH REVIEW')); ck.append(reviewList(checklist)); box.append(ck);
+  const f=el('div','mcard'); f.style.marginTop='14px'; f.append(el('div','sect-label','VIDEO'));
+  f.append(el('p','appsub','Public https link to a vertical video. Miles does not check the length or the ratio.'));
+  const video=el('input','f'); video.placeholder='https://.../job.mp4'; video.value=plan.videoUrl||''; video.style.width='100%';
+  f.append(video);
+  const rebuild=el('button','ghost','Update the plan'); rebuild.style.marginTop='8px';
+  rebuild.onclick=async()=>{ rebuild.disabled=true; try{ const r=await(await fetch('/api/tiktok/build',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({videoUrl:video.value})})).json(); renderTtReview(r); }catch(e){ toast('Could not update the plan.'); rebuild.disabled=false; } };
+  f.append(rebuild);
+  box.append(f);
+  const blocked=checklist.some(row=>row.state==='block');
+  const bar=el('div','mcard'); bar.style.marginTop='14px';
+  const go=el('button','go', blocked?'Fix the review before approval':'Approve paused campaign');
+  if(blocked) go.disabled=true;
+  go.onclick=async()=>{
+    go.disabled=true; go.textContent='Creating the paused campaign';
+    let r={ok:false,note:'No response.',steps:[]};
+    try{ r=await(await fetch('/api/tiktok/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({plan,confirm:true})})).json(); }
+    catch(e){ r={ok:false,note:'The request failed. Nothing was created.',steps:[]}; }
+    const res=el('div','mcard'); res.style.marginTop='14px'; res.style.borderLeft='3px solid '+(r.ok?'var(--good)':'var(--bad)');
+    res.append(el('div','sect-label', r.ok?'CREATED PAUSED':'NOT CREATED'));
+    if(r.note||r.error) res.append(el('p','appsub', r.note||r.error));
+    (r.steps||[]).forEach(st=>{ const row=el('div','appsub',(st.ok?'Done: ':'Not done: ')+st.step+(st.error?('. '+st.error):'')); if(!st.ok) row.style.color='var(--bad)'; res.append(row); });
+    box.append(res);
+    go.textContent=r.ok?'Created paused':'Try again';
+    if(!r.ok) go.disabled=false;
+    if(r.ok) toast('Paused TikTok campaign created. Nothing is spending.');
+  };
+  bar.append(go);
+  bar.append(el('p','appsub','Approval creates the campaign disabled. It does not turn spend on.'));
+  box.append(bar);
 }
 async function openPlaybook(){
   const box=$('#playbook-body'); if(!box) return; box.innerHTML='<p class="appsub">Loading the saved plan...</p>';

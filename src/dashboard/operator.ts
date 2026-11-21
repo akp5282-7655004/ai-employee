@@ -503,8 +503,8 @@ function playbooksOf(input: OperatorInput): OperatorView['playbooks'] {
       id: 'later',
       eyebrow: 'Coming later',
       outcome: 'Not available',
-      title: 'Local Services Ads and Meta',
-      body: 'This build cannot launch Local Services Ads or Meta campaigns. Run does nothing for this card.',
+      title: 'Local Services Ads',
+      body: 'Miles does not buy Local Services Ads. Meta and TikTok leads plans are on Launch and are created paused.',
       budget: 'No budget is set aside',
       runnable: false,
       runKind: 'unavailable',
@@ -679,7 +679,7 @@ function connectionsOf(input: OperatorInput): OperatorView['connections'] {
     {
       name: 'Meta',
       state: 'later',
-      detail: 'Not connected. Coming later. A Facebook Page is not an ad account.',
+      detail: 'Open Launch, then Facebook, for a paused leads plan. A Facebook Page is not an ad account. Local Services Ads are coming later.',
     },
     {
       name: 'Facebook, Instagram, LinkedIn',

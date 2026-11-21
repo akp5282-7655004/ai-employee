@@ -261,7 +261,8 @@ describe('operator honesty', () => {
     expect(kinds).toEqual(['google_plan', 'review', 'speed', 'unavailable']);
     const later = view.playbooks.find((p) => p.id === 'later')!;
     expect(later.runnable).toBe(false);
-    expect(later.body).toMatch(/cannot launch Local Services Ads or Meta/);
+    expect(later.body).toMatch(/does not buy Local Services Ads/);
+    expect(later.body).toMatch(/created paused/);
     expect(view.playbookNote).toMatch(/Hybrid/);
     expect(copy(view)).not.toMatch(/\+4 jobs|\$300\/mo|\$150\/mo/);
   });

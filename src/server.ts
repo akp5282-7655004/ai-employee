@@ -43,7 +43,7 @@ import { resolveAreas } from './agents/geotarget.js';
 import { formatSopLog, runSopGate } from './agents/sopgate.js';
 import { forcePausedSearchSpec, isDemoAccount, judgeSearchLaunch, plainStepErrors, resourcesFromSteps, searchLaunchNote } from './agents/googlelaunch.js';
 import { buildLoopPlan, decideLead, ghlUpsertProps, GHL_UPSERT_ACTION, judgeActivation, normalizeLead, type ObservedAd } from './agents/plumberloop.js';
-import { judgeTikTokCreate, planFollowUp, proposeOptimizations, rollupJobs, stageOpportunity, TIKTOK_CREATE_ACTION, type JobMark } from './agents/contractorloop.js';
+import { planFollowUp, proposeOptimizations, rollupJobs, stageOpportunity, type JobMark } from './agents/contractorloop.js';
 import { PIPEDREAM_APPS, pipedreamConfigPresence, CATALOG_READ_ON } from './connectors/pipedreamCatalog.js';
 import { claimableGhlAccount, externalIdCandidates, ghlSlugOf as ghlSlugFromApps, GHL_SLUGS } from './connectors/ghlstatus.js';
 import { SPEC_PLATFORMS, loadSpec, searchSpecCheck, type SpecPlatform } from './specs/index.js';
@@ -89,6 +89,7 @@ import { decidePolicy, overDailyCap } from './agents/policy.js';
 import { dueSkills, periodKey } from './agents/skillclock.js';
 import { buildMetaCampaignSpec, validateMetaCampaignSpec, type MetaCampaignSpec } from './agents/metacampaign.js';
 import { facebookDaily, META_NOT_CONNECTED, publicImage } from './agents/metalaunch.js';
+import { buildMetaPlan, buildTikTokPlan, reviewBlocked, reviewMetaPlan, reviewTikTokPlan, scaleIncreaseAllowed, type MetaPlan, type TikTokPlan } from './agents/paidstructure.js';
 import { buildGhlPlaybook } from './agents/ghlplaybook.js';
 import { emptyReviewState, reviewAskText, parseRating, type ReviewRequestState } from './agents/reviewrequest.js';
 import { emptyAutomationsState, noShowText, onboardingText, type AutomationsState } from './agents/automations.js';
@@ -2968,10 +2969,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       mode: miles.bundle?.setup.mode || miles.pendingMode || null,
       playbook: miles.bundle?.playbook ?? null,
       channels: miles.bundle?.channels ?? [
-        { id: 'google', label: 'Google Search', status: 'runnable', note: 'The only channel in this build.' },
-        { id: 'meta', label: 'Meta', status: 'coming_later', note: 'Coming later.' },
-        { id: 'tiktok', label: 'TikTok', status: 'coming_later', note: 'Coming later.' },
-        { id: 'lsa', label: 'Local Services Ads', status: 'coming_later', note: 'Coming later.' },
+        { id: 'google', label: 'Google Search', status: 'runnable', note: 'Search is created from Launch, paused until you approve going live.' },
+        { id: 'meta', label: 'Meta', status: 'plan', note: 'The Facebook tab builds a separate paused leads plan. This Google approval does not create it.' },
+        { id: 'tiktok', label: 'TikTok', status: 'plan', note: 'The TikTok tab builds a separate disabled leads plan. This Google approval does not create it.' },
+        { id: 'lsa', label: 'Local Services Ads', status: 'coming_later', note: 'Local Services Ads are coming later. Miles does not buy them.' },
       ],
       ghl: {
         connected: ghl,
@@ -5470,6 +5471,25 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       },
       { business: p.businessName, industry: p.industry, city, serviceAreas: p.serviceAreas, services: p.services, claims: claimsFromText(miles.crawl?.text) },
     );
+    const photos = (assets.photos || []).map((row) => row?.url || '').filter((url) => publicImage(url));
+    const built = buildMetaPlan({
+      dailyBudget: spec.dailyBudget,
+      dailyCap: cap || undefined,
+      monthlyCap: miles.bundle?.setup.caps.monthlyCeiling || undefined,
+      website: spec.website,
+      imageUrls: photos,
+      offer: offer || undefined,
+      financing: !!req.body?.financing,
+      pixelId: typeof (p as { metaPixelId?: string }).metaPixelId === 'string' ? (p as { metaPixelId?: string }).metaPixelId : undefined,
+      destination: req.body && (req.body as { destination?: string }).destination === 'website' ? 'website' : 'instant_form',
+      business: p.businessName,
+      trade: p.industry,
+      city,
+      serviceAreas: p.serviceAreas,
+      services: p.services,
+      claims: claimsFromText(miles.crawl?.text),
+      competitors: (p.competitors || '').split(/[,\n]/).map((name) => name.trim()).filter(Boolean),
+    });
     const issues = validateMetaCampaignSpec(spec);
     if (cap > 0 && spec.dailyBudget > cap) issues.push(`Daily budget $${spec.dailyBudget} is above your $${cap} daily cap.`);
     const monthly = miles.bundle?.setup.caps.monthlyCeiling || 0;
@@ -5494,13 +5514,66 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         primaryText: spec.ad.primaryText,
         imageUrl: spec.imageUrl || '',
       },
+      structure: built.plan,
+      checklist: built.checklist,
       status,
     };
   });
 
-  app.post<{ Body: { spec?: MetaCampaignSpec; confirm?: boolean } }>('/api/meta/launch', async (req, reply) => {
+  type SocialRow = {
+    id: string;
+    channel: 'meta' | 'tiktok';
+    name: string;
+    campaignId: string;
+    advertiserId?: string;
+    daily: number;
+    mode: 'cbo' | 'abo' | 'ad_group';
+    status: 'paused' | 'live';
+    adSetIds: string[];
+    adIds: string[];
+    shares: number[];
+  };
+  type SocialChange = { id: string; ts: string; channel: 'meta' | 'tiktok'; kind: 'status' | 'budget'; campaignId: string; before: string; after: string; undone?: boolean; title: string };
+  const socialRows = (data: Record<string, unknown>): SocialRow[] => (Array.isArray(data.paidSocial) ? data.paidSocial as SocialRow[] : []);
+  const saveSocial = (data: Record<string, unknown>, row: SocialRow) => {
+    const rows = socialRows(data).filter((item) => item.campaignId !== row.campaignId);
+    data.paidSocial = [row, ...rows].slice(0, 40);
+  };
+  const pushSocialChange = (data: Record<string, unknown>, change: SocialChange) => {
+    const rows = Array.isArray(data.socialChanges) ? data.socialChanges as SocialChange[] : [];
+    data.socialChanges = [change, ...rows].slice(0, 80);
+    appendApproval(data, { id: change.id, ts: change.ts, kind: 'action', actor: 'miles', source: `${change.channel}-campaign`, title: change.title, detail: `Before: ${change.before}. After: ${change.after}.` });
+  };
+
+  app.post<{ Body: { spec?: MetaCampaignSpec; structure?: MetaPlan; confirm?: boolean } }>('/api/meta/launch', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
+    const structure = req.body?.structure;
+    if (structure && typeof structure === 'object') {
+      if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Confirm the plan first. Nothing was created.' });
+      const plan: MetaPlan = { ...structure, status: 'PAUSED', objective: 'OUTCOME_LEADS', specialAdCategories: [] };
+      const data = await authStore.getUserData(u.id);
+      const caps = milesOf(data).bundle?.setup.caps;
+      const checklist = reviewMetaPlan(plan, { dailyCap: accountDailyCap(data) || undefined, monthlyCap: caps?.monthlyCeiling || undefined, financing: /financing/i.test(JSON.stringify(plan.form || '')) });
+      const blockedReason = caps?.paused ? 'Your account is paused. Nothing was created.' : reviewBlocked(checklist);
+      const blocked = (error: string) => reply.code(409).send({ ok: false, live: false, status: 'PAUSED', created: false, error, note: error, checklist });
+      if (blockedReason) return blocked(blockedReason);
+      if (isDemoAccount(u.email) && connector.name !== 'mock') return reply.code(403).send({ ok: false, live: false, status: 'PAUSED', error: 'The public demo cannot create a campaign in a live ad account.' });
+      if (await denyAdSpend(u.id, reply)) return;
+      if (connector.name === 'mock' || !connector.launchMetaStructure) return blocked('Preview mode. No Facebook ad account is connected. Nothing was created.');
+      const result = await connector.launchMetaStructure(u.id, plan);
+      if (!result.ok || !result.campaignId) return blocked(result.note || 'Meta did not create the campaign. Nothing is spending.');
+      const included = plan.adSets.filter((set) => set.included);
+      saveSocial(data, {
+        id: newToken().slice(0, 10), channel: 'meta', name: plan.name, campaignId: result.campaignId,
+        daily: plan.dailyBudget, mode: plan.budgetMode, status: 'paused',
+        adSetIds: result.adSetIds || [], adIds: result.adIds || [], shares: included.map((set) => set.dailyBudget),
+      });
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'meta-launcher', title: `Approved paused Meta campaign "${plan.name}" at $${plan.dailyBudget}/day` });
+      appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'meta-launcher', title: `Created PAUSED, "${plan.name}"`, detail: result.note });
+      await authStore.setUserData(u.id, data);
+      return { ok: true, live: false, created: true, status: 'PAUSED', activation: 'disabled', note: result.note, campaignId: result.campaignId, adSetIds: result.adSetIds, adIds: result.adIds, steps: result.steps, link: result.link, checklist };
+    }
     const incoming = req.body?.spec;
     if (!incoming || typeof incoming !== 'object') return reply.code(400).send({ error: 'spec is required' });
     if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Confirm the plan first. Nothing was created.' });
@@ -6634,7 +6707,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const keys = [
       { name: 'GoHighLevel (CRM + SMS)', done: ghl, note: ghl ? `Connected as ${ghlApp}` : 'Connect in Integrations — powers every automation' },
       { name: 'Google Ads', done: gads, note: gads ? 'Connected' : 'Connect in Integrations — ad spend + ROI' },
-      { name: 'Meta, TikTok, and Local Services Ads', done: false, note: 'Coming later. This version runs Google Ads only.' },
+      { name: 'Meta and TikTok', done: false, note: 'Plans are on Launch. They are created paused. Going live is a separate approval. Local Services Ads are coming later.' },
       { name: 'AI copywriting', done: textLlmReady(), note: textLlmReady() ? 'On (OpenRouter)' : 'Add OPENROUTER_API_KEY on Render for AI-written copy' },
       { name: 'Image generation', done: falReady(), note: falReady() ? 'On (FAL)' : 'Add FAL_KEY on Render for generated ad images' },
       { name: 'Census (Market Map)', done: !!process.env.CENSUS_API_KEY, note: process.env.CENSUS_API_KEY ? 'On' : 'Add CENSUS_API_KEY on Render for income targeting' },
@@ -7657,33 +7730,235 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     });
   });
 
-  app.post<{ Body: { confirm?: boolean; advertiserId?: string; campaignName?: string; dailyBudget?: number } }>('/api/tiktok/launch', async (req, reply) => {
+  const socialPlanInput = (data: Record<string, unknown>, body: { offer?: string; website?: string; dailyBudget?: number; videoUrl?: string; financing?: boolean }) => {
+    const p = (data.profile ?? {}) as Record<string, string>;
+    const miles = milesOf(data);
+    const cap = accountDailyCap(data);
+    const assets = (data.assets ?? {}) as { photos?: { url?: string }[]; videos?: { url?: string }[] };
+    const video = body.videoUrl || (assets.videos || []).map((row) => row?.url || '').find((url) => /^https:\/\//i.test(url)) || '';
+    return {
+      dailyBudget: body.dailyBudget != null && body.dailyBudget > 0 ? Math.round(body.dailyBudget) : (Number(p.dailyBudget) || cap || 0),
+      dailyCap: cap || undefined,
+      monthlyCap: miles.bundle?.setup.caps.monthlyCeiling || undefined,
+      website: body.website || p.website,
+      videoUrl: video,
+      offer: body.offer || p.currentOffers,
+      financing: !!body.financing,
+      pixelId: p.tiktokPixelId || p.metaPixelId,
+      business: p.businessName,
+      trade: p.industry,
+      city: (p.serviceAreas || p.city || '').split(',')[0]?.trim(),
+      serviceAreas: p.serviceAreas,
+      services: p.services,
+      claims: claimsFromText(miles.crawl?.text),
+      competitors: (p.competitors || '').split(/[,\n]/).map((name) => name.trim()).filter(Boolean),
+    };
+  };
+
+  app.post<{ Body: { offer?: string; website?: string; dailyBudget?: number; videoUrl?: string; financing?: boolean } }>('/api/tiktok/build', async (req, reply) => {
     const u = await requireUser(req, reply);
     if (!u) return;
+    const data = await authStore.getUserData(u.id);
+    const built = buildTikTokPlan(socialPlanInput(data, req.body ?? {}));
+    return { ok: true, plan: built.plan, checklist: built.checklist };
+  });
+
+  app.post<{ Body: { confirm?: boolean; plan?: TikTokPlan } }>('/api/tiktok/launch', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (req.body?.confirm !== true) return reply.code(400).send({ ok: false, created: false, error: 'Confirm the plan first. Nothing was created.' });
+    const incoming = req.body?.plan;
+    if (!incoming || typeof incoming !== 'object') return reply.code(400).send({ ok: false, created: false, error: 'A TikTok plan is required. Nothing was created.' });
+    const plan: TikTokPlan = { ...incoming, status: 'DISABLE', objective: 'LEAD_GENERATION', destination: 'website' };
+    const data = await authStore.getUserData(u.id);
+    const caps = milesOf(data).bundle?.setup.caps;
+    const checklist = reviewTikTokPlan(plan, { dailyCap: accountDailyCap(data) || undefined, monthlyCap: caps?.monthlyCeiling || undefined });
+    const blockedReason = caps?.paused ? 'Your account is paused. Nothing was created.' : reviewBlocked(checklist);
+    if (blockedReason) return reply.code(409).send({ ok: false, live: false, created: false, status: 'DISABLE', error: blockedReason, note: blockedReason, checklist });
+    if (isDemoAccount(u.email) && connector.name !== 'mock') return reply.code(403).send({ ok: false, created: false, error: 'The public demo cannot create a campaign.' });
     if (await denyAdSpend(u.id, reply)) return;
-    let connected = false;
-    let authId = '';
-    try {
-      const accounts = await accountsList(u.id, 'tiktok_ads_manager');
-      const mine = accounts.find((a) => a.app === 'tiktok_ads_manager' && a.externalUserId === u.id && a.healthy);
-      connected = !!mine;
-      authId = mine?.id ?? '';
-    } catch { connected = false; }
-    const saved = await authStore.getUserData(u.id);
-    const cap = Number((saved.plumberLoop as { approvedDaily?: number } | undefined)?.approvedDaily) || Number((saved.profile as { dailyBudget?: string } | undefined)?.dailyBudget) || 0;
-    const judged = judgeTikTokCreate({
-      confirm: req.body?.confirm === true,
-      advertiserId: req.body?.advertiserId,
-      campaignName: req.body?.campaignName,
-      dailyBudget: req.body?.dailyBudget,
-      approvedDailyCap: cap,
-      connected,
+    if (connector.name === 'mock' || !connector.launchTikTokStructure) {
+      return reply.code(409).send({ ok: false, live: false, created: false, status: 'DISABLE', error: 'Preview mode. TikTok Ads is not connected. Nothing was created.', checklist });
+    }
+    const result = await connector.launchTikTokStructure(u.id, plan);
+    if (!result.ok || !result.campaignId) return reply.code(409).send({ ok: false, live: false, created: false, status: 'DISABLE', error: result.note, note: result.note, steps: result.steps, checklist });
+    const included = plan.adSets.filter((set) => set.included);
+    saveSocial(data, {
+      id: newToken().slice(0, 10), channel: 'tiktok', name: plan.name, campaignId: result.campaignId, advertiserId: result.advertiserId,
+      daily: plan.dailyBudget, mode: 'ad_group', status: 'paused',
+      adSetIds: result.adGroupIds || [], adIds: result.adIds || [], shares: included.map((set) => set.dailyBudget),
     });
-    if (!judged.allowed || !judged.configuredProps) return reply.code(409).send({ ok: false, live: false, created: false, reason: judged.reason });
-    if (judged.configuredProps.operationStatus !== 'DISABLE') return reply.code(409).send({ ok: false, live: false, created: false, reason: 'TikTok creates stay disabled. Nothing was created.' });
-    const props = { ...judged.configuredProps, tiktok_ads_manager: { authProvisionId: authId } };
-    const result = await connector.runAction({ externalUserId: u.id, actionId: TIKTOK_CREATE_ACTION, configuredProps: props });
-    return { ok: result.ok, live: connector.name !== 'mock' && result.ok, created: result.ok, status: 'DISABLE', actionId: TIKTOK_CREATE_ACTION, reason: result.note || judged.reason };
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'approval', actor: u.email, source: 'tiktok-launcher', title: `Approved disabled TikTok campaign "${plan.name}" at $${plan.dailyBudget}/day` });
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: 'miles', source: 'tiktok-launcher', title: `Created DISABLE, "${plan.name}"`, detail: result.note });
+    await authStore.setUserData(u.id, data);
+    return { ok: true, live: false, created: true, status: 'DISABLE', note: result.note, campaignId: result.campaignId, adGroupIds: result.adGroupIds, adIds: result.adIds, steps: result.steps, checklist };
+  });
+
+  const budgetMoveAllowed = (current: number, next: number, data: Record<string, unknown>): string | null => {
+    const caps = milesOf(data).bundle?.setup.caps;
+    if (caps?.paused) return 'Your account is paused. Nothing was changed.';
+    const cap = accountDailyCap(data);
+    const over = overDailyCap(next, cap);
+    if (over) return over;
+    const max = caps?.maxChangePct;
+    if (current > 0 && typeof max === 'number' && max >= 0) {
+      const pct = Math.abs(next - current) / current * 100;
+      if (pct > max + 0.001) return `That change is ${Math.round(pct)}%, above your ${max}% max change. Nothing was changed.`;
+    }
+    return null;
+  };
+
+  app.post<{ Body: { confirm?: boolean; campaignId?: string; status?: 'paused' | 'live' } }>('/api/meta/delivery', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Confirm required. Nothing was changed.' });
+    const data = await authStore.getUserData(u.id);
+    const row = socialRows(data).find((item) => item.channel === 'meta' && item.campaignId === req.body?.campaignId);
+    if (!row) return reply.code(404).send({ error: 'That Meta campaign is not on this account. Nothing was changed.' });
+    const next = req.body?.status === 'live' ? 'live' : req.body?.status === 'paused' ? 'paused' : '';
+    if (!next) return reply.code(400).send({ error: 'Status must be paused or live. Nothing was changed.' });
+    if (next === 'live') {
+      const over = overDailyCap(row.daily, accountDailyCap(data));
+      if (milesOf(data).bundle?.setup.caps?.paused) return reply.code(409).send({ ok: false, error: 'Your account is paused. Nothing was turned on.' });
+      if (over) return reply.code(409).send({ ok: false, error: over });
+    }
+    if (connector.name === 'mock' || !connector.setMetaTreeStatus) return reply.code(409).send({ ok: false, error: 'Preview mode. Meta was not changed.' });
+    const result = await connector.setMetaTreeStatus(u.id, { campaignId: row.campaignId, adSetIds: row.adSetIds, adIds: row.adIds, status: next === 'live' ? 'ACTIVE' : 'PAUSED' });
+    if (!result.ok) return reply.code(409).send({ ok: false, error: result.note, note: result.note });
+    const before = row.status;
+    row.status = next;
+    saveSocial(data, row);
+    const changeId = newToken().slice(0, 10);
+    pushSocialChange(data, { id: changeId, ts: new Date().toISOString(), channel: 'meta', kind: 'status', campaignId: row.campaignId, before, after: next, title: next === 'live' ? `Turned on Meta campaign "${row.name}"` : `Paused Meta campaign "${row.name}"` });
+    await authStore.setUserData(u.id, data);
+    return { ok: true, status: next, note: result.note, undoId: changeId };
+  });
+
+  app.post<{ Body: { confirm?: boolean; campaignId?: string; dailyBudget?: number } }>('/api/meta/budget', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Confirm required. Nothing was changed.' });
+    const data = await authStore.getUserData(u.id);
+    const row = socialRows(data).find((item) => item.channel === 'meta' && item.campaignId === req.body?.campaignId);
+    if (!row) return reply.code(404).send({ error: 'That Meta campaign is not on this account. Nothing was changed.' });
+    const next = Math.round(Number(req.body?.dailyBudget));
+    const refused = budgetMoveAllowed(row.daily, next, data);
+    if (refused) return reply.code(409).send({ ok: false, error: refused });
+    const lastRaise = (Array.isArray(data.socialChanges) ? data.socialChanges as SocialChange[] : []).find((change) => change.campaignId === row.campaignId && change.kind === 'budget' && !change.undone && Number(change.after) > Number(change.before));
+    const paced = scaleIncreaseAllowed(row.daily, next, lastRaise?.ts ?? null);
+    if (paced) return reply.code(409).send({ ok: false, error: paced });
+    if (connector.name === 'mock' || !connector.setMetaBudget) return reply.code(409).send({ ok: false, error: 'Preview mode. The budget was not changed.' });
+    const shares = row.mode === 'abo' && row.shares.length ? row.shares.map((share) => Math.max(1, Math.round(share * (next / (row.daily || next))))) : undefined;
+    const result = await connector.setMetaBudget(u.id, { campaignId: row.campaignId, adSetIds: row.adSetIds, mode: row.mode === 'cbo' ? 'cbo' : 'abo', daily: next, shares });
+    if (!result.ok) return reply.code(409).send({ ok: false, error: result.note });
+    const before = String(row.daily);
+    row.daily = next;
+    if (shares) row.shares = shares;
+    saveSocial(data, row);
+    const changeId = newToken().slice(0, 10);
+    pushSocialChange(data, { id: changeId, ts: new Date().toISOString(), channel: 'meta', kind: 'budget', campaignId: row.campaignId, before, after: String(next), title: `Meta budget for "${row.name}" is now $${next}/day` });
+    await authStore.setUserData(u.id, data);
+    return { ok: true, daily: next, note: result.note, undoId: changeId };
+  });
+
+  app.post<{ Body: { confirm?: boolean; campaignId?: string; status?: 'paused' | 'live' } }>('/api/tiktok/delivery', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Confirm required. Nothing was changed.' });
+    const data = await authStore.getUserData(u.id);
+    const row = socialRows(data).find((item) => item.channel === 'tiktok' && item.campaignId === req.body?.campaignId);
+    if (!row || !row.advertiserId) return reply.code(404).send({ error: 'That TikTok campaign is not on this account. Nothing was changed.' });
+    const next = req.body?.status === 'live' ? 'live' : req.body?.status === 'paused' ? 'paused' : '';
+    if (!next) return reply.code(400).send({ error: 'Status must be paused or live. Nothing was changed.' });
+    if (next === 'live') {
+      if (milesOf(data).bundle?.setup.caps?.paused) return reply.code(409).send({ ok: false, error: 'Your account is paused. Nothing was turned on.' });
+      const over = overDailyCap(row.daily, accountDailyCap(data));
+      if (over) return reply.code(409).send({ ok: false, error: over });
+    }
+    if (connector.name === 'mock' || !connector.setTikTokStatus) return reply.code(409).send({ ok: false, error: 'Preview mode. TikTok was not changed.' });
+    const result = await connector.setTikTokStatus(u.id, { advertiserId: row.advertiserId, campaignId: row.campaignId, adGroupIds: row.adSetIds, adIds: row.adIds, status: next === 'live' ? 'ENABLE' : 'DISABLE' });
+    if (!result.ok) return reply.code(409).send({ ok: false, error: result.note });
+    const before = row.status;
+    row.status = next;
+    saveSocial(data, row);
+    const changeId = newToken().slice(0, 10);
+    pushSocialChange(data, { id: changeId, ts: new Date().toISOString(), channel: 'tiktok', kind: 'status', campaignId: row.campaignId, before, after: next, title: next === 'live' ? `Turned on TikTok campaign "${row.name}"` : `Paused TikTok campaign "${row.name}"` });
+    await authStore.setUserData(u.id, data);
+    return { ok: true, status: next, note: result.note, undoId: changeId };
+  });
+
+  app.post<{ Body: { confirm?: boolean; campaignId?: string; dailyBudget?: number } }>('/api/tiktok/budget', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Confirm required. Nothing was changed.' });
+    const data = await authStore.getUserData(u.id);
+    const row = socialRows(data).find((item) => item.channel === 'tiktok' && item.campaignId === req.body?.campaignId);
+    if (!row || !row.advertiserId) return reply.code(404).send({ error: 'That TikTok campaign is not on this account. Nothing was changed.' });
+    const next = Math.round(Number(req.body?.dailyBudget));
+    const refused = budgetMoveAllowed(row.daily, next, data);
+    if (refused) return reply.code(409).send({ ok: false, error: refused });
+    const lastRaise = (Array.isArray(data.socialChanges) ? data.socialChanges as SocialChange[] : []).find((change) => change.campaignId === row.campaignId && change.kind === 'budget' && !change.undone && Number(change.after) > Number(change.before));
+    const paced = scaleIncreaseAllowed(row.daily, next, lastRaise?.ts ?? null);
+    if (paced) return reply.code(409).send({ ok: false, error: paced });
+    if (connector.name === 'mock' || !connector.setTikTokBudget) return reply.code(409).send({ ok: false, error: 'Preview mode. The budget was not changed.' });
+    const shares = row.adSetIds.map((_, index) => {
+      const weight = row.shares[index] || 1;
+      const total = row.shares.reduce((sum, n) => sum + n, 0) || row.adSetIds.length;
+      return Math.max(21, Math.round(next * (weight / total)));
+    });
+    const result = await connector.setTikTokBudget(u.id, { advertiserId: row.advertiserId, campaignId: row.campaignId, adGroupIds: row.adSetIds, daily: next, shares });
+    if (!result.ok) return reply.code(409).send({ ok: false, error: result.note });
+    const before = String(row.daily);
+    row.daily = next;
+    row.shares = shares;
+    saveSocial(data, row);
+    const changeId = newToken().slice(0, 10);
+    pushSocialChange(data, { id: changeId, ts: new Date().toISOString(), channel: 'tiktok', kind: 'budget', campaignId: row.campaignId, before, after: String(next), title: `TikTok budget for "${row.name}" is now $${next}/day` });
+    await authStore.setUserData(u.id, data);
+    return { ok: true, daily: next, note: result.note, undoId: changeId };
+  });
+
+  app.post<{ Body: { confirm?: boolean; id?: string } }>('/api/social/undo', async (req, reply) => {
+    const u = await requireUser(req, reply);
+    if (!u) return;
+    if (req.body?.confirm !== true) return reply.code(400).send({ error: 'Confirm required. Nothing was undone.' });
+    const data = await authStore.getUserData(u.id);
+    const changes = Array.isArray(data.socialChanges) ? data.socialChanges as SocialChange[] : [];
+    const change = changes.find((row) => row.id === req.body?.id);
+    if (!change || change.undone) return reply.code(404).send({ error: 'That change is not waiting to be undone. A create is not deleted.' });
+    const row = socialRows(data).find((item) => item.campaignId === change.campaignId && item.channel === change.channel);
+    if (!row) return reply.code(404).send({ error: 'The campaign is no longer on file. Nothing was changed.' });
+    if (change.kind === 'status') {
+      const back = change.before === 'live' ? 'live' : 'paused';
+      if (change.channel === 'meta') {
+        if (!connector.setMetaTreeStatus || connector.name === 'mock') return reply.code(409).send({ error: 'Preview mode. Nothing was undone in Meta.' });
+        const result = await connector.setMetaTreeStatus(u.id, { campaignId: row.campaignId, adSetIds: row.adSetIds, adIds: row.adIds, status: back === 'live' ? 'ACTIVE' : 'PAUSED' });
+        if (!result.ok) return reply.code(409).send({ error: result.note });
+      } else {
+        if (!connector.setTikTokStatus || connector.name === 'mock' || !row.advertiserId) return reply.code(409).send({ error: 'Preview mode. Nothing was undone in TikTok.' });
+        const result = await connector.setTikTokStatus(u.id, { advertiserId: row.advertiserId, campaignId: row.campaignId, adGroupIds: row.adSetIds, adIds: row.adIds, status: back === 'live' ? 'ENABLE' : 'DISABLE' });
+        if (!result.ok) return reply.code(409).send({ error: result.note });
+      }
+      row.status = back;
+    } else {
+      const back = Math.round(Number(change.before));
+      if (change.channel === 'meta') {
+        if (!connector.setMetaBudget || connector.name === 'mock') return reply.code(409).send({ error: 'Preview mode. Nothing was undone in Meta.' });
+        const result = await connector.setMetaBudget(u.id, { campaignId: row.campaignId, adSetIds: row.adSetIds, mode: row.mode === 'cbo' ? 'cbo' : 'abo', daily: back });
+        if (!result.ok) return reply.code(409).send({ error: result.note });
+      } else {
+        if (!connector.setTikTokBudget || connector.name === 'mock' || !row.advertiserId) return reply.code(409).send({ error: 'Preview mode. Nothing was undone in TikTok.' });
+        const result = await connector.setTikTokBudget(u.id, { advertiserId: row.advertiserId, campaignId: row.campaignId, adGroupIds: row.adSetIds, daily: back, shares: row.adSetIds.map(() => back) });
+        if (!result.ok) return reply.code(409).send({ error: result.note });
+      }
+      row.daily = back;
+    }
+    change.undone = true;
+    saveSocial(data, row);
+    data.socialChanges = changes;
+    appendApproval(data, { id: newToken().slice(0, 10), ts: new Date().toISOString(), kind: 'action', actor: u.email, source: 'social-undo', title: `Undid ${change.title}` });
+    await authStore.setUserData(u.id, data);
+    return { ok: true, note: 'Undone. The previous status or budget was sent back.' };
   });
 
   // ── Post-Job Review Request (recipe #14) — config + status ───────────────────

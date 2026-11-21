@@ -243,6 +243,14 @@ export interface Connector {
    *  creative → ad — as a PAUSED draft in the owner's Ads Manager. Money-safe:
    *  nothing spends until the owner flips it live. Returns each step. */
   launchMetaCampaign?(externalUserId: string, spec: import('../agents/metacampaign.js').MetaCampaignSpec): Promise<CampaignLaunchResult>;
+  /** Create the reviewed Meta structure paused. Tests fake this. No shared token. */
+  launchMetaStructure?(externalUserId: string, plan: import('../agents/paidstructure.js').MetaPlan): Promise<import('../agents/metalaunch.js').MetaLaunchResult>;
+  setMetaTreeStatus?(externalUserId: string, args: { campaignId: string; adSetIds: string[]; adIds: string[]; status: 'PAUSED' | 'ACTIVE' }): Promise<import('../agents/metalaunch.js').MetaLaunchResult>;
+  setMetaBudget?(externalUserId: string, args: { campaignId: string; adSetIds: string[]; mode: 'cbo' | 'abo'; daily: number; shares?: number[] }): Promise<import('../agents/metalaunch.js').MetaLaunchResult>;
+  /** Create the reviewed TikTok structure disabled. Tests fake this. */
+  launchTikTokStructure?(externalUserId: string, plan: import('../agents/paidstructure.js').TikTokPlan): Promise<import('../agents/tiktoklaunch.js').TikTokLaunchResult>;
+  setTikTokStatus?(externalUserId: string, args: { advertiserId: string; campaignId: string; adGroupIds: string[]; adIds: string[]; status: 'DISABLE' | 'ENABLE' }): Promise<import('../agents/tiktoklaunch.js').TikTokLaunchResult>;
+  setTikTokBudget?(externalUserId: string, args: { advertiserId: string; campaignId: string; adGroupIds: string[]; daily: number; shares: number[] }): Promise<import('../agents/tiktoklaunch.js').TikTokLaunchResult>;
   /** Whether this owner's Facebook ad account and Page can take a paused campaign. */
   metaStatus?(externalUserId: string, campaignId?: string): Promise<{ ready: boolean; account?: string; page?: string; note: string; readback?: { id: string; name?: string; status: string } }>;
   /** Whether a Meta ad account is connected and ready to receive a campaign. */
