@@ -116,12 +116,12 @@ export type ChatDraft =
   | { kind: 'none' }
   | { kind: 'ask'; text: string; plan?: ChatPlanSummary }
   | { kind: 'refuse'; text: string; plan?: ChatPlanSummary }
-  | { kind: 'suggest'; text: string }
+  | { kind: 'suggest'; text: string; picker: LaunchPickerShape }
   | { kind: 'choose'; text: string; picker: LaunchPickerShape }
   | { kind: 'card'; text: string; approval: Omit<ChatApproval, 'id'>; plan?: ChatPlanSummary };
 
 const SETUP = /\b(set up|setup|launch|create|start|build)\b/i;
-const BUDGET = /\b(raise|lower|set|change|increase|decrease|update)\b/i;
+const BUDGET = /\b(raise|lower|set|chang\w*|increase|decrease|update|adjust)\b/i;
 const DAY = /(?:\$?\d+(?:\.\d+)?)\s*(?:dollars?\s*)?(?:(?:a|per)\s+|\/\s*)day\b|budget/i;
 
 function money(text: string): number | null {

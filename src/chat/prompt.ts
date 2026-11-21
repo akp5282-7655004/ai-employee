@@ -3,8 +3,7 @@
  * The account snapshot is the source of truth for numbers and statuses.
  */
 import { STATUS_NOT_READ } from '../agents/enablecheck.js';
-import type { AccountSnapshot } from './snapshot.js';
-import { renderSnapshot } from './snapshot.js';
+import { googleAdsConnected, renderSnapshot, type AccountSnapshot } from './snapshot.js';
 
 export function plainSpeech(text: string): string {
   return text
@@ -66,7 +65,7 @@ function campaignAnswer(snapshot: AccountSnapshot): string {
       ? `SAMPLE. ${perf.bookedJobs.value} example booked jobs, not live jobs.`
       : `${perf.bookedJobs.value} booked job${perf.bookedJobs.value === 1 ? '' : 's'} on file.`;
   const google = snapshot.integrations.google;
-  const next = !google.oauth
+  const next = !googleAdsConnected(snapshot)
     ? 'Google Ads is not connected, so I will not read or create a campaign until it is.'
     : !google.ready
       ? `The Google Ads customer id is not resolved. ${google.note || google.error || 'I will not treat a sample link as a live ad account.'}`
@@ -83,7 +82,7 @@ function nameList(items: string[]): string {
 function integrationAnswer(snapshot: AccountSnapshot): string {
   const who = snapshot.business.name ? `For ${snapshot.business.name}: ` : '';
   const google = snapshot.integrations.google;
-  const googleLine = !google.oauth
+  const googleLine = !googleAdsConnected(snapshot)
     ? 'Google Ads is not connected. I will not read spend until it is.'
     : google.ready && google.customerId
       ? `Google Ads is connected and customer id ${google.customerId} is resolved.`
@@ -190,7 +189,7 @@ export interface ChatNext {
 export function adsPerformanceAnswer(snapshot: AccountSnapshot): { text: string; next: ChatNext | null } {
   const google = snapshot.integrations.google;
   const perf = snapshot.performance;
-  if (!google.oauth) {
+  if (!googleAdsConnected(snapshot)) {
     return {
       text: 'Google Ads is not connected yet, so I cannot see spend or leads this month.',
       next: { label: 'Connect Google Ads', page: 'integrations' },

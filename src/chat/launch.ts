@@ -246,17 +246,23 @@ function dollars(text: string): number | null {
   return Number.isFinite(raw) && raw > 0 ? raw : null;
 }
 
-export function launchFacts(text: string, account: ActAccount): { daily: number | null; city: string; services: string; missing: string | null } {
-  const daily = dollars(text) ?? (account.dailyCap > 0 ? null : null);
+function workingDaily(text: string, account: ActAccount): { daily: number; assumed: boolean } {
   const typed = dollars(text);
+  if (typed) return { daily: typed, assumed: false };
+  const fallback = account.currentDaily > 0 ? account.currentDaily : 30;
+  const daily = account.dailyCap > 0 ? Math.min(fallback, account.dailyCap) : fallback;
+  return { daily: daily > 0 ? daily : 30, assumed: true };
+}
+
+export function launchFacts(text: string, account: ActAccount): { daily: number; assumed: boolean; city: string; services: string; missing: string | null } {
+  const budget = workingDaily(text, account);
   const cityMatch = text.match(/\bin\s+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)/);
   const city = cityMatch?.[1]?.trim() || account.serviceAreas.split(/[,;]/)[0]?.trim() || '';
-  const services = text.match(/\b((?:interior|exterior|cabinet|house)\s+painting|painting|plumbing|roofing|hvac)\b/i)?.[0] || account.services.trim();
-  const missing = !typed ? 'What daily budget should I use? I would use $30 a day.'
-    : !city ? 'Which area should this cover? I would use your saved service area.'
-      : !services ? 'Which service should the ads cover? I would use the services on your profile.'
-        : null;
-  return { daily: typed, city, services, missing };
+  const services = text.match(/\b((?:interior|exterior|cabinet|house)\s+painting|painting|plumbing|roofing|hvac|solar)\b/i)?.[0] || account.services.trim();
+  const missing = !city ? 'Which area should this cover? I would use your saved service area.'
+    : !services ? 'Which service should the ads cover? I would use the services on your profile.'
+      : null;
+  return { daily: budget.daily, assumed: budget.assumed, city, services, missing };
 }
 
 export interface BuiltPlatform {
@@ -272,7 +278,7 @@ export interface BuiltPlatform {
 
 export function buildLaunchCard(text: string, account: ActAccount & { imageUrl?: string; videoUrl?: string }, platforms: PlatformSlice[]): ChatDraft {
   const facts = launchFacts(text, account);
-  if (facts.missing || facts.daily == null) return { kind: 'ask', text: facts.missing || 'What daily budget should I use? I would use $30 a day.' };
+  if (facts.missing) return { kind: 'ask', text: facts.missing };
   const total = platforms.reduce((sum, row) => sum + row.daily, 0) || facts.daily;
   const blocked = capText(total, account);
   if (blocked) return { kind: 'refuse', text: blocked };
@@ -393,6 +399,14 @@ function isLaunchSentence(text: string): boolean {
   return LAUNCH_SENTENCE.test(text) && /\b(campaign|ads|meta|facebook|instagram|tiktok|local services|lsa)\b/i.test(text);
 }
 
+function isPlatformAsk(text: string): boolean {
+  return /\bplatforms?\b/i.test(text) && /\b(run|use|should|which|what|best|recommend)\b/i.test(text);
+}
+
+function withAssumption(text: string, facts: { daily: number; assumed: boolean }): string {
+  return facts.assumed ? `I'll use $${facts.daily} a day. ${text}` : text;
+}
+
 function earlierLaunch(text: string, history: Array<{ role?: string; text?: string }>): string {
   const earlier = [...history].reverse().find((message) => message.role === 'user' && message.text && message.text !== text && isLaunchSentence(message.text));
   return earlier?.text || '';
@@ -450,13 +464,13 @@ export function draftLaunch(text: string, account: ActAccount, history: Array<{ 
   if (choice?.decline || (NO.test(text) && offered)) {
     const source = base || text;
     const facts = launchFacts(source, account);
-    if (facts.missing || facts.daily == null) return { kind: 'ask', text: facts.missing || 'What daily budget should I use? I would use $30 a day.' };
+    if (facts.missing) return { kind: 'ask', text: facts.missing };
     return chooseDraft(suggestLaunch(source, account, facts.daily), account.savedPlatforms);
   }
   if (choice?.accept || (YES.test(text) && offered)) {
     if (!base) return { kind: 'ask', text: 'Which launch should I use that split for?' };
     const facts = launchFacts(base, account);
-    if (facts.missing || facts.daily == null) return { kind: 'ask', text: facts.missing || 'What daily budget should I use? I would use $30 a day.' };
+    if (facts.missing) return { kind: 'ask', text: facts.missing };
     const suggestion = suggestLaunch(base, account, facts.daily);
     if (!suggestion.platforms.length) return chooseDraft(suggestion, account.savedPlatforms);
     return buildLaunchCard(base, account, suggestion.platforms);
@@ -464,20 +478,23 @@ export function draftLaunch(text: string, account: ActAccount, history: Array<{ 
   if (choice?.platforms?.length) {
     const source = base || text;
     const facts = launchFacts(source, account);
-    if (facts.missing || facts.daily == null) return { kind: 'ask', text: facts.missing || 'What daily budget should I use? I would use $30 a day.' };
+    if (facts.missing) return { kind: 'ask', text: facts.missing };
     const ids = choice.platforms.filter((id): id is LaunchPlatform => id === 'google' || id === 'meta' || id === 'tiktok' || id === 'lsa');
     if (!ids.length) return { kind: 'ask', text: 'Pick Google, Meta, TikTok, Local Services Ads, or a mix.' };
     return buildLaunchCard(source, account, slicesFromBudgets(ids, facts.daily, choice.budgets));
   }
-  if (!isLaunchSentence(text)) return { kind: 'none' };
+  const platformAsk = isPlatformAsk(text);
+  if (!isLaunchSentence(text) && !platformAsk) return { kind: 'none' };
   const named = namedPlatforms(text);
-  if (named.length === 1 && named[0] === 'google') return { kind: 'none' };
+  if (!platformAsk && named.length === 1 && named[0] === 'google') return { kind: 'none' };
   const facts = launchFacts(text, account);
-  if (facts.missing || facts.daily == null) return { kind: 'ask', text: facts.missing || 'What daily budget should I use? I would use $30 a day.' };
-  if (named.length) return buildLaunchCard(text, account, slicesFor(named, facts.daily, tradeOf(text, account.trade)));
+  if (facts.missing) return { kind: 'ask', text: facts.missing };
+  if (!platformAsk && named.length) return buildLaunchCard(text, account, slicesFor(named, facts.daily, tradeOf(text, account.trade)));
   const suggestion = suggestLaunch(text, account, facts.daily);
-  if (!suggestion.platforms.length) return chooseDraft(suggestion, account.savedPlatforms);
-  return { kind: 'suggest', text: suggestion.text };
+  const picked = chooseDraft(suggestion, account.savedPlatforms);
+  if (!suggestion.platforms.length) return picked;
+  if (picked.kind !== 'choose') return picked;
+  return { kind: 'suggest', text: withAssumption(suggestion.text, facts), picker: picked.picker };
 }
 
 function socialOf(text: string, account: ActAccount): SocialCampaign | null {

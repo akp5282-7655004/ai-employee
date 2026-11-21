@@ -3003,7 +3003,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         { id: 'google', label: 'Google Search', status: 'runnable', note: 'Search is created from Launch, paused until you approve going live.' },
         { id: 'meta', label: 'Meta', status: 'plan', note: 'The Facebook tab builds a separate paused leads plan. This Google approval does not create it.' },
         { id: 'tiktok', label: 'TikTok', status: 'plan', note: 'The TikTok tab builds a separate disabled leads plan. This Google approval does not create it.' },
-        { id: 'lsa', label: 'Local Services Ads', status: 'coming_later', note: 'Local Services Ads are coming later. Miles does not buy them.' },
+        { id: 'lsa', label: 'Local Services Ads', status: 'owner_action', note: 'Local Services Ads are an owner action. Miles does not buy them.' },
       ],
       ghl: {
         connected: ghl,
@@ -5513,12 +5513,15 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     let daily: number | undefined = explicit;
     let budgetNote = '';
     if (daily == null && share != null && cap > 0) {
-      daily = facebookDaily(cap, share);
-      budgetNote = share >= 1
-        ? `Your saved split puts the whole $${cap} daily cap on Google. Set a Facebook daily amount. It cannot go above that cap.`
-        : `Your saved split leaves ${Math.round((1 - share) * 100)}% of the $${cap} daily cap for Facebook, so this plan uses $${daily} a day.`;
-    } else if (daily == null) {
-      budgetNote = 'No channel split is saved yet. This plan uses the playbook test budget until you set a daily cap.';
+      const split = facebookDaily(cap, share);
+      if (split > 0) {
+        daily = split;
+        budgetNote = `Your saved split leaves ${Math.round((1 - share) * 100)}% of the $${cap} daily cap for Facebook, so this plan uses $${daily} a day.`;
+      }
+    }
+    if (!(daily != null && daily > 0)) {
+      daily = undefined;
+      budgetNote = 'No Facebook amount is saved, so this plan uses the suggested daily budget. Nothing is created until you approve.';
     } else if (cap > 0 && daily > cap) {
       budgetNote = `That daily amount is above your $${cap} daily cap. Lower it before you approve.`;
     }
@@ -5538,7 +5541,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
     const strip = (s: string) => s.replace(/[ \t]*\u2014[ \t]*/g, ', ').replace(/\u2013/g, '-').replace(/\u2019/g, "'").trim();
     const assets = (data.assets ?? {}) as { photos?: { url?: string }[] };
     const photo = (assets.photos || []).map((row) => row?.url || '').find((url) => publicImage(url)) || '';
-    const spec = buildMetaCampaignSpec(
+    let spec = buildMetaCampaignSpec(
       {
         offer: offer || undefined,
         website: req.body?.website || p.website,
@@ -5552,6 +5555,10 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       },
       { business: p.businessName, industry: p.industry, city, serviceAreas: p.serviceAreas, services: p.services, claims: claimsFromText(miles.crawl?.text) },
     );
+    if (cap > 0 && spec.dailyBudget > cap) {
+      spec = { ...spec, dailyBudget: cap };
+      budgetNote = `The suggestion is $${cap} a day, inside your daily cap. Nothing is created until you approve.`;
+    }
     const photos = (assets.photos || []).map((row) => row?.url || '').filter((url) => publicImage(url));
     const built = buildMetaPlan({
       dailyBudget: spec.dailyBudget,
@@ -8878,7 +8885,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
       spendReadAt: snap?.ts ?? null,
       bookedFromJobs: jobs.length ? jobs.filter((job) => job.stage === 'booked' || job.stage === 'won').length : null,
       bookedFromDeals: deals.length ? deals.filter((deal) => deal.won).length : null,
-      google: { oauth: google.oauth, ready: google.ready, customerId, note: google.note, error: googleError },
+      google: { oauth: linked.has('google_ads') || google.oauth, ready: google.ready, customerId, note: google.note, error: googleError },
       ghl: {
         connected: ghlNow.connected,
         detail: ghlNow.connected
@@ -9185,7 +9192,7 @@ a{display:inline-block;background:#111112;color:#fff;text-decoration:none;paddin
         action: null,
         approval: approval ? { id: approval.id, title: approval.title, before: approval.before, after: approval.after, dailyCost: approval.dailyCost, lines: approval.lines } : null,
         choices: drafted.kind === 'suggest' ? 'suggest' : drafted.kind === 'choose' ? 'picker' : null,
-        picker: drafted.kind === 'choose' ? drafted.picker : null,
+        picker: drafted.kind === 'choose' || drafted.kind === 'suggest' ? drafted.picker : null,
       };
     }
     if (!afford.ok && !answersWithoutModel(question)) {

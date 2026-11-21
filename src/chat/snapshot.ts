@@ -131,7 +131,7 @@ export interface ChatSources {
   benchmarkLines?: string[];
 }
 
-const META_NOTE = 'Meta and TikTok leads plans are reviewed on Launch and created paused. A Facebook Page is not an ad account. Local Services Ads are coming later.';
+const META_NOTE = 'Meta and TikTok connect through Pipedream. Their leads plans are on Launch and are created paused. A Facebook Page is not an ad account. Local Services Ads are an owner action. Miles does not buy them.';
 
 function clean(value: unknown, max = 240): string {
   if (value == null) return '';
@@ -352,6 +352,11 @@ function numText(n: SnapshotNumber, asMoney = false): string {
 }
 
 /** Plain text pasted into the system prompt. Sample figures keep the SAMPLE label. */
+/** One answer for "is Google Ads connected", shared by the prompt and the status replies. */
+export function googleAdsConnected(snapshot: AccountSnapshot): boolean {
+  return snapshot.account.connectedNames.includes('Google Ads') || snapshot.integrations.google.oauth;
+}
+
 export function renderSnapshot(snapshot: AccountSnapshot): string {
   const b = snapshot.business;
   const lines: string[] = [];
@@ -392,7 +397,7 @@ export function renderSnapshot(snapshot: AccountSnapshot): string {
   }
   const google = snapshot.integrations.google;
   const googleId = google.ready && google.customerId ? `Customer id ${google.customerId} is resolved.` : 'Customer id is not resolved.';
-  lines.push(`Google Ads: ${google.oauth ? 'signed in' : 'not connected'}. Ready: ${google.ready ? 'yes' : 'no'}. ${googleId} ${google.error || google.note || ''}`.trim());
+  lines.push(`Google Ads: ${googleAdsConnected(snapshot) ? 'connected' : 'not connected'}. Ready: ${google.ready ? 'yes' : 'no'}. ${googleId} ${google.error || google.note || ''}`.trim());
   lines.push(`GoHighLevel: ${snapshot.integrations.ghl.connected ? 'connected' : 'not connected'}. ${snapshot.integrations.ghl.detail}`);
   const stl = snapshot.integrations.speedToLead;
   lines.push(`Speed-to-lead: ${stl.enabled ? 'on' : 'off'}. Can send: ${stl.canSend ? 'yes' : 'no'}. Today ${stl.today}, total ${stl.total}, held ${stl.held}.`);

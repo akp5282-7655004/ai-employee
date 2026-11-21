@@ -8,7 +8,7 @@ import { chatEmptyLine, chatSuggestions, fallbackAnswer, milesSystemPrompt } fro
 import { buildAccountSnapshot, renderSnapshot, type AccountSnapshot, type ChatSources } from '../src/chat/snapshot.js';
 import { runChatTool, type ChatReaders } from '../src/chat/tools.js';
 
-function sources(over: Partial<ChatSources> = {}): ChatSources {
+export function sources(over: Partial<ChatSources> = {}): ChatSources {
   return {
     tenantId: 'tenant-a',
     sampleConnector: false,
@@ -233,7 +233,8 @@ describe('chat turn', () => {
     expect(role).not.toMatch(/\bautomate\b|\bhybrid\b/);
     expect(role).toMatch(/\$40\/day/);
     expect(integrations).toMatch(/GoHighLevel is not connected/);
-    expect(integrations).toMatch(/coming later/i);
+    expect(integrations).toMatch(/Pipedream/i);
+    expect(integrations).toMatch(/owner action/i);
   });
 
   it('suggests questions from this account only', () => {
