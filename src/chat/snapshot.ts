@@ -128,7 +128,7 @@ export interface ChatSources {
   launchGranted?: boolean;
 }
 
-const META_NOTE = 'Meta ads are coming later. A Facebook Page is not an ad account, and this build cannot launch Meta campaigns.';
+const META_NOTE = 'Meta and TikTok leads plans are reviewed on Launch and created paused. A Facebook Page is not an ad account. Local Services Ads are coming later.';
 
 function clean(value: unknown, max = 240): string {
   if (value == null) return '';

@@ -473,7 +473,7 @@ export function buildMarketingReport(input: MarketingReportInput): MarketingRepo
   const metaNote = input.sample
     ? 'Facebook is not connected, so the charts on this tab are sample data.'
     : input.meta.connected ? input.meta.note
-      : liveAccount ? 'No Facebook ad account is connected. Facebook and Instagram ads are coming later, so nothing is shown on this tab.'
+      : liveAccount ? 'No Facebook ad account is connected, so this tab has no Meta rows. A paused leads plan can still be reviewed on Launch.'
         : (input.meta.note || 'No Facebook ad account is connected. A Page by itself is not an ad account. The charts on this tab are sample data until a real read comes back.');
   const charts = buildReportCharts({
     trade: input.trade,

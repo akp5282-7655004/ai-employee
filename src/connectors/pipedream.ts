@@ -1,6 +1,7 @@
 import type { Config } from '../config.js';
 import { META_SHARED_ACCOUNT_NOTE as _META_NOTE } from '../agents/googlelaunch.js';
-import { discoverMetaAccount, launchPausedMeta, META_GRAPH_BASE, META_NOT_CONNECTED, META_PAGE_ONLY, readMetaCampaign, type MetaGraph } from '../agents/metalaunch.js';
+import { discoverMetaAccount, launchMetaStructure, launchPausedMeta, META_GRAPH_BASE, META_NOT_CONNECTED, META_PAGE_ONLY, readMetaCampaign, setMetaBudget, setMetaTreeStatus, type MetaGraph } from '../agents/metalaunch.js';
+import { launchTikTokStructure, setTikTokBudget, setTikTokStatus, TIKTOK_AD_ACTION, TIKTOK_ADGROUP_ACTION, TIKTOK_BUDGET_ACTION, TIKTOK_CAMPAIGN_ACTION, TIKTOK_STATUS_ACTION, TIKTOK_UPLOAD_ACTION, type TikTokRunner } from '../agents/tiktoklaunch.js';
 import { collectReadIds, googleResourceMissing, listCampaignRows, parseGoogleStatuses, retryReadback } from '../agents/enablecheck.js';
 import { actionPayload, customerPair, googleReadOutcome, httpStatusOf, marketingReportProps, mergeCampaignMetrics, metricRowHasNumbers, parseAdsPerformanceRow, plainGoogleError, publicGoogleError, statusReportProps, type AdsPerformanceRow, type AdsReportLevel } from './gadsread.js';
 import { areaTerms, chooseGeoHits, geoReportProps, locationCriterion, locationReadbackOk, parseGeoTargets, parseLocationCriteria, resolveAreas, type GeoTarget } from '../agents/geotarget.js';
@@ -1870,6 +1871,135 @@ export class PipedreamConnector implements Connector {
       const note = (err as Error).message || 'Miles could not create the Facebook campaign.';
       return { ok: false, live: false, steps: [{ step: 'Facebook campaign', ok: false, error: note }], note };
     }
+  }
+
+  async launchMetaStructure(externalUserId: string, plan: import('../agents/paidstructure.js').MetaPlan): Promise<import('../agents/metalaunch.js').MetaLaunchResult> {
+    const wired = await this.metaGraph(externalUserId);
+    if (!('graph' in wired)) {
+      const note = wired.error || META_NOT_CONNECTED;
+      return { ok: false, live: false, status: 'PAUSED', note, steps: [{ step: 'Facebook account', ok: false, error: note }] };
+    }
+    try {
+      return await launchMetaStructure(wired.graph, plan);
+    } catch (err) {
+      const note = (err as Error).message || 'Miles could not create the Facebook campaign.';
+      return { ok: false, live: false, status: 'PAUSED', note, steps: [{ step: 'Facebook campaign', ok: false, error: note }] };
+    }
+  }
+
+  async setMetaTreeStatus(externalUserId: string, args: { campaignId: string; adSetIds: string[]; adIds: string[]; status: 'PAUSED' | 'ACTIVE' }) {
+    const wired = await this.metaGraph(externalUserId);
+    if (!('graph' in wired)) return { ok: false, live: false, status: 'PAUSED' as const, note: wired.error || META_NOT_CONNECTED, steps: [] };
+    return setMetaTreeStatus(wired.graph, args);
+  }
+
+  async setMetaBudget(externalUserId: string, args: { campaignId: string; adSetIds: string[]; mode: 'cbo' | 'abo'; daily: number; shares?: number[] }) {
+    const wired = await this.metaGraph(externalUserId);
+    if (!('graph' in wired)) return { ok: false, live: false, status: 'PAUSED' as const, note: wired.error || META_NOT_CONNECTED, steps: [] };
+    return setMetaBudget(wired.graph, args);
+  }
+
+  private async tiktokRunner(externalUserId: string): Promise<TikTokRunner | { error: string }> {
+    let accounts: import('./types.js').ConnectedAccount[] = [];
+    try { accounts = await this.listAccounts(externalUserId); } catch (err) { return { error: (err as Error).message || 'Miles could not read connected accounts.' }; }
+    const account = accounts.find((row) => row.app === 'tiktok_ads_manager' && row.healthy);
+    if (!account) return { error: 'TikTok Ads is not connected for this business. Nothing was created.' };
+    let pd: any;
+    try { pd = await this.backend(); } catch (err) { return { error: (err as Error).message || 'Pipedream is not configured.' }; }
+    const proxy = async (method: 'get' | 'post', url: string, extra: Record<string, unknown>) => {
+      if (typeof pd?.proxy?.[method] !== 'function') throw new Error('This connection cannot call TikTok. Nothing was changed.');
+      const res = await pd.proxy[method]({ url, externalUserId, accountId: account.id, ...extra });
+      if (res && typeof res === 'object' && 'body' in res && (res as { body?: unknown }).body !== undefined) return (res as { body: unknown }).body;
+      return res;
+    };
+    const base = 'https://business-api.tiktok.com/open_api/v1.3';
+    const listOf = (value: unknown): Record<string, unknown>[] => {
+      const row = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+      const data = row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : row;
+      const list = data.list || data.identity_list || data.targeting_tag_list || row.list;
+      return Array.isArray(list) ? list.filter((item) => item && typeof item === 'object') as Record<string, unknown>[] : [];
+    };
+    const runner: TikTokRunner = {
+      async discoverAdvertisers() {
+        try {
+          const body = await proxy('get', `${base}/oauth2/advertiser/get/`, {});
+          const rows = listOf(body);
+          return rows.map((row) => ({ id: String(row.advertiser_id || row.advertiserId || ''), name: typeof row.advertiser_name === 'string' ? row.advertiser_name : undefined })).filter((row) => row.id);
+        } catch (err) { return { error: (err as Error).message || 'Miles could not list TikTok advertisers.' }; }
+      },
+      async lookupLocation(advertiserId, city) {
+        try {
+          const body = await proxy('get', `${base}/tool/targeting/search/`, {
+            params: { advertiser_id: advertiserId, objective_type: 'LEAD_GENERATION', placements: JSON.stringify(['PLACEMENT_TIKTOK']), search_type: 'FUZZY_SEARCH', keywords: JSON.stringify([city]) },
+          });
+          const rows = listOf(body);
+          const picked = rows.map((row) => String(row.id || row.geo_id || (row.geo as { id?: string } | undefined)?.id || '')).filter(Boolean);
+          const label = rows[0] && typeof rows[0].name === 'string' ? rows[0].name : city;
+          if (!picked.length) return { error: `TikTok did not match ${city} to a location. Nothing was created.` };
+          return { ids: picked.slice(0, 1), label };
+        } catch (err) { return { error: (err as Error).message || `TikTok did not match ${city}.` }; }
+      },
+      async lookupIdentity(advertiserId) {
+        try {
+          const body = await proxy('get', `${base}/identity/get/`, { params: { advertiser_id: advertiserId, identity_type: 'CUSTOMIZED_USER' } });
+          const rows = listOf(body);
+          const hit = rows[0];
+          const id = hit ? String(hit.identity_id || hit.identityId || '') : '';
+          if (!id) return { error: 'TikTok did not return an ad identity. Nothing was created.' };
+          return { id, type: String(hit?.identity_type || 'CUSTOMIZED_USER') };
+        } catch (err) { return { error: (err as Error).message || 'Miles could not read a TikTok identity.' }; }
+      },
+      async run(actionId, props) {
+        try {
+          if (actionId === TIKTOK_STATUS_ACTION) {
+            const status = props.operationStatus === 'ENABLE' ? 'ENABLE' : 'DISABLE';
+            const body = { advertiser_id: props.advertiserId, campaign_ids: props.campaignIds, opt_status: status };
+            const res = await proxy('post', `${base}/campaign/status/update/`, { body });
+            const adgroups = Array.isArray(props.adgroupIds) ? props.adgroupIds : [];
+            if (adgroups.length) await proxy('post', `${base}/adgroup/status/update/`, { body: { advertiser_id: props.advertiserId, adgroup_ids: adgroups, opt_status: status } });
+            const ads = Array.isArray(props.adIds) ? props.adIds : [];
+            if (ads.length) await proxy('post', `${base}/ad/status/update/`, { body: { advertiser_id: props.advertiserId, ad_ids: ads, opt_status: status } });
+            return { ok: true, output: res };
+          }
+          if (actionId === TIKTOK_BUDGET_ACTION) {
+            const groups = Array.isArray(props.adgroups) ? props.adgroups as { adgroupId: string; budget: string }[] : [];
+            const res = await proxy('post', `${base}/adgroup/budget/update/`, {
+              body: { advertiser_id: props.advertiserId, budget: groups.map((row) => ({ adgroup_id: row.adgroupId, budget: Number(row.budget) })) },
+            });
+            return { ok: true, output: res };
+          }
+          const allowed = [TIKTOK_CAMPAIGN_ACTION, TIKTOK_ADGROUP_ACTION, TIKTOK_AD_ACTION, TIKTOK_UPLOAD_ACTION];
+          if (!allowed.includes(actionId)) return { ok: false, output: null, note: 'That TikTok action is not one Miles calls.' };
+          const res = await pd.actions.run({
+            externalUserId,
+            id: actionId,
+            configuredProps: { tiktok_ads_manager: { authProvisionId: account.id }, ...props },
+          });
+          return { ok: true, output: (res && (res.ret ?? res.exports ?? res)) ?? null };
+        } catch (err) {
+          return { ok: false, output: null, note: (err as Error).message || 'TikTok rejected that step.' };
+        }
+      },
+    };
+    return runner;
+  }
+
+  async launchTikTokStructure(externalUserId: string, plan: import('../agents/paidstructure.js').TikTokPlan) {
+    const runner = await this.tiktokRunner(externalUserId);
+    if ('error' in runner) return { ok: false, live: false, status: 'DISABLE' as const, note: runner.error, steps: [{ step: 'TikTok account', ok: false, error: runner.error }] };
+    return launchTikTokStructure(runner, plan);
+  }
+
+  async setTikTokStatus(externalUserId: string, args: { advertiserId: string; campaignId: string; adGroupIds: string[]; adIds: string[]; status: 'DISABLE' | 'ENABLE' }) {
+    const runner = await this.tiktokRunner(externalUserId);
+    if ('error' in runner) return { ok: false, live: false, status: 'DISABLE' as const, note: runner.error, steps: [] };
+    return setTikTokStatus(runner, args);
+  }
+
+  async setTikTokBudget(externalUserId: string, args: { advertiserId: string; campaignId: string; adGroupIds: string[]; daily: number; shares: number[] }) {
+    const runner = await this.tiktokRunner(externalUserId);
+    if ('error' in runner) return { ok: false, live: false, status: 'DISABLE' as const, note: runner.error, steps: [] };
+    return setTikTokBudget(runner, args);
   }
 
     private async metaAccountDetails(): Promise<{ adAccount?: { id: string; name?: string; status?: string; currency?: string }; page?: { id: string; name?: string; logo?: string; link?: string } }> {

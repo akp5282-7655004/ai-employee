@@ -60,7 +60,7 @@ export const PIPEDREAM_APPS: PipedreamAppRecord[] = [
       pausedValue: 'DISABLE',
       note: 'Pipedream prop operationStatus is the status when created. TikTok campaign create docs (https://business-api.tiktok.com/portal/docs/create-a-campaign/v1.3) name DISABLE as disabled when created and ENABLE as enabled. Miles sends DISABLE only after a separate approval, and only for the signed-in user.',
     },
-    repoWiring: 'POST /api/tiktok/launch calls tiktok_ads_manager-create-or-update-campaign with operationStatus DISABLE. It is not added to a $20 Search plan.',
+    repoWiring: 'POST /api/tiktok/launch creates a disabled campaign, ad group, and ad (create-or-update-campaign, create-or-update-ad-group, create-or-update-ad, upload-creative). operationStatus is DISABLE. It is not added to a $20 Search plan.',
     ownerProject: 'unknown',
   },
   {
